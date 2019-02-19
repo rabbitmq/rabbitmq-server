@@ -30,7 +30,7 @@
 
 -spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 -spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
--spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+-spec update(rabbit_types:vhost(), fun((#vhost{}) -> #vhost{})) -> #vhost{}.
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
 -spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.

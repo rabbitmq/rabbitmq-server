@@ -107,7 +107,8 @@ publish(Delivery = #delivery{
 
 publish(X, Delivery) ->
     Qs = rabbit_amqqueue:lookup(rabbit_exchange:route(X, Delivery)),
-    rabbit_amqqueue:deliver(Qs, Delivery).
+    _QPids = rabbit_amqqueue:deliver(Qs, Delivery),
+    ok.
 
 delivery(Mandatory, Confirm, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, confirm = Confirm, sender = self(),

@@ -58,7 +58,8 @@
 
 -spec remove_from_queue
         (rabbit_amqqueue:name(), pid(), [pid()]) ->
-            {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}.
+            {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'} |
+            {'error', {'not_synced', [pid()]}}.
 -spec add_mirrors(rabbit_amqqueue:name(), [node()], 'sync' | 'async') ->
           'ok'.
 -spec store_updated_slaves(rabbit_types:amqqueue()) ->
