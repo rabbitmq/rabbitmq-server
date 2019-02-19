@@ -759,10 +759,18 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     State2 = handle_delivering_queue_down(Name, State1),
                     %% TODO: this should use dtree:take/3
                     {MXs, UC1} = dtree:take(Name, State2#ch.unconfirmed),
-                    State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
+
+                    {MXsConfirmed, MXsFailed} =
+                        lists:partition(fun({MsgSeqNo,_}) ->
+                            sets:is_element(MsgSeqNo, State2#ch.partially_confirmed)
+                        end,
+                        MXs),
+                    State3 = record_confirms(MXsConfirmed, State2#ch{unconfirmed = UC1}),
+                    State4 = record_rejects(MXsFailed, State3),
+
                     erase_queue_stats(QName),
                     noreply_coalesce(
-                      State3#ch{queue_states = maps:remove(Name, QueueStates),
+                      State4#ch{queue_states = maps:remove(Name, QueueStates),
                                 queue_names = maps:remove(Name, QNames)})
             end;
         _ ->
