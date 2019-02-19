@@ -131,9 +131,9 @@
 
 -record(amqqueue, {
           name, durable, auto_delete, exclusive_owner = none, %% immutable
-          arguments,                   %% immutable
+          arguments = [],                   %% immutable
           pid,                         %% durable (just so we know home node)
-          slave_pids, sync_slave_pids, %% transient
+          slave_pids = [], sync_slave_pids, %% transient
           recoverable_slaves,          %% durable
           policy,                      %% durable, implicit update as above
           operator_policy,             %% durable, implicit update as above

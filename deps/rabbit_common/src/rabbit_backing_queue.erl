@@ -261,7 +261,7 @@
 
 -callback set_queue_mode(queue_mode(), state()) -> state().
 
--callback zip_msgs_and_acks(delivered_publish(),
+-callback zip_msgs_and_acks([delivered_publish()],
                             [ack()], Acc, state())
                            -> Acc.
 
