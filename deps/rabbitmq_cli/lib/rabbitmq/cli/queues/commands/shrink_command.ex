@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def banner([node], _) do
-    "Shrinking queues on #{node}..."
+    "Shrinking quorum queues on #{node}..."
   end
 
   def usage, do: "shrink <node> [--errors-only]"
