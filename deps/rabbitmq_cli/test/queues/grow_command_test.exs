@@ -30,14 +30,16 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
       node: get_rabbit_hostname(),
       timeout: context[:test_timeout] || 30000,
       vhost_pattern: ".*",
-      queue_pattern: ".*"
+      queue_pattern: ".*",
+      errors_only: false
     }}
   end
 
   test "merge_defaults: defaults to reporting complete results" do
     assert @command.merge_defaults([], %{}) ==
       {[], %{vhost_pattern: ".*",
-             queue_pattern: ".*"}}
+             queue_pattern: ".*",
+             errors_only: false}}
   end
 
   test "validate: when no arguments are provided, returns a failure" do

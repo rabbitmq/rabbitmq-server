@@ -19,13 +19,15 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   defp default_opts, do: %{vhost_pattern: ".*",
-                           queue_pattern: ".*"}
+                           queue_pattern: ".*",
+                           errors_only: false}
 
   def switches(),
     do: [
-      vhost_pattern: :string,
-      queue_pattern: :string
-    ]
+    vhost_pattern: :string,
+    queue_pattern: :string,
+    errors_only: :boolean
+  ]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
@@ -52,7 +54,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   def run([node, strategy],
     %{node: node_name,
       vhost_pattern: vhost_pat,
-      queue_pattern: queue_pat}) do
+      queue_pattern: queue_pat,
+      errors_only: errors_only}) do
         case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, [
           to_atom(node),
           vhost_pat,
@@ -60,6 +63,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
           to_atom(strategy)]) do
       {:error, _}  = error -> error;
       {:badrpc, _} = error -> error;
+      results when errors_only ->
+        for {{:resource, vhost, _kind, name}, {:errors, _, _} = res} <- results,
+        do: [{:vhost, vhost},
+             {:name, name},
+             {:size, format_size res},
+             {:result, format_result res}]
       results ->
         for {{:resource, vhost, _kind, name}, res} <- results,
         do: [{:vhost, vhost},
