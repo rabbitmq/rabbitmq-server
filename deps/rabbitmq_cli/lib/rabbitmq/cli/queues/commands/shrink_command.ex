@@ -29,11 +29,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([node], %{node: node_name,
-                    errors_only: errs}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [
-           to_atom(node)
-         ]) do
+  def run([node], %{node: node_name, errors_only: errs}) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [to_atom(node)]) do
+      {:error, _}  = error -> error;
+      {:badrpc, _} = error -> error;
       results when errs ->
         for {{:resource, vhost, _kind, name}, {_errors, _, _} = res} <- results,
         do: [{:vhost, vhost},
@@ -48,6 +47,20 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
              {:result, format_result res}]
     end
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
+  def banner([node], _) do
+    "Shrinking queues on #{node}..."
+  end
+
+  def usage, do: "shrink <node> [--errors-only]"
+
+  #
+  # Implementation
+  #
 
   defp format_size({:ok, size}) do
     size
@@ -72,15 +85,4 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   defp format_result({:error, _size, err}) do
     :io.format "error: ~W", [err, 10]
   end
-
-
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
-
-  def banner([node], _) do
-    "Shrinking queues on #{node}..."
-  end
-
-  def usage, do: "shrink <node> [--errors-only]"
 end
