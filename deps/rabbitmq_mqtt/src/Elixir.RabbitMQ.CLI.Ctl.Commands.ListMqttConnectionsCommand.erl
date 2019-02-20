@@ -20,14 +20,13 @@
 
 -export([formatter/0, scopes/0, switches/0, aliases/0,
          usage/0, usage_additional/0, banner/2,
-         validate/2, merge_defaults/2, run/2, output/2]).
+         validate/2, merge_defaults/2, run/2, output/2, description/0]).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
-
 scopes() -> [ctl, diagnostics].
-
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
+description() -> <<"Lists MQTT connections on the node">>.
 
 validate(Args, _) ->
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
