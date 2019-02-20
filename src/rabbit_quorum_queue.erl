@@ -745,14 +745,14 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
 shrink_all(Node) ->
     [begin
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~s: Removing member ~w",
+         rabbit_log:info("~s: removing member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          Size = length(amqqueue:get_quorum_nodes(Q)),
          case delete_member(Q, Node) of
              ok ->
                  {QName, {ok, Size-1}};
              {error, Err} ->
-                 rabbit_log:warning("~s: Failed to remove member ~w, Error ~w",
+                 rabbit_log:warning("~s: failed to remove member (replica) on node ~w, error: ~w",
                                     [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
@@ -768,14 +768,14 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
     [begin
          Size = length(amqqueue:get_quorum_nodes(Q)),
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~s: Adding member ~w",
+         rabbit_log:info("~s: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          case add_member(Q, Node) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->
                  rabbit_log:warning(
-                   "~s: Failed to add member ~w, Error ~w",
+                   "~s: failed to add member (replica) on node ~w, error: ~w",
                    [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
