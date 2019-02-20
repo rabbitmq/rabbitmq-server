@@ -29,7 +29,8 @@ all() ->
 groups() ->
     [
         {tests, [], [
-            shrink
+            shrink,
+            grow
         ]}
     ].
 
@@ -56,7 +57,7 @@ end_per_group(tests, Config) ->
                                     rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config0) ->
-    ensure_rabbitmq_queues_cmd(
+    rabbit_ct_helpers:ensure_rabbitmq_queues_cmd(
       rabbit_ct_helpers:testcase_started(Config0, Testcase)).
 
 end_per_testcase(Testcase, Config0) ->
@@ -79,9 +80,27 @@ shrink(Config) ->
     ?assertMatch(#{{"/", "shrink1"} := {1, error}}, parse_result(Out3)),
     ok.
 
+grow(Config) ->
+    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 2),
+    Nodename2 = ?config(nodename, NodeConfig),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Nodename2),
+    %% declare a quorum queue
+    QName = "grow1",
+    Args = [{<<"x-quorum-initial-group-size">>, long, 1}],
+    #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
+    Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, Out1} = rabbitmq_queues(Config, 0, ["grow", Nodename0, "all"]),
+    ?assertMatch(#{{"/", "grow1"} := {2, ok}}, parse_result(Out1)),
+    Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    {ok, Out2} = rabbitmq_queues(Config, 0, ["grow", Nodename1, "all"]),
+    ?assertMatch(#{{"/", "grow1"} := {3, ok}}, parse_result(Out2)),
+
+    {ok, Out3} = rabbitmq_queues(Config, 0, ["grow", Nodename0, "all"]),
+    ?assertNotMatch(#{{"/", "grow1"} := _}, parse_result(Out3)),
+    ok.
+
 parse_result(S) ->
-    %% strip preamble and header
-    [_, _ |Lines] = string:split(S, "\n", all),
+    Lines = string:split(S, "\n", all),
     maps:from_list(
       [{{Vhost, QName},
         {erlang:list_to_integer(Size), case Result of
@@ -91,66 +110,14 @@ parse_result(S) ->
        || [Vhost, QName, Size, Result] <-
           [string:split(L, "\t", all) || L <- Lines]]).
 
-declare_qq(Ch, Q) ->
-    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+declare_qq(Ch, Q, Args0) ->
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}] ++ Args0,
     amqp_channel:call(Ch, #'queue.declare'{queue = list_to_binary(Q),
                                            durable = true,
                                            auto_delete = false,
                                            arguments = Args}).
-ensure_rabbitmq_queues_cmd(Config) ->
-    RabbitmqQueues = case rabbit_ct_helpers:get_config(Config, rabbitmq_queues_cmd) of
-                         undefined ->
-                             SrcDir = ?config(rabbit_srcdir, Config),
-                             R = filename:join(SrcDir, "scripts/rabbitmq-queues"),
-                             ct:pal(?LOW_IMPORTANCE, "Using rabbitmq-queues at ~p~n", [R]),
-                             case filelib:is_file(R) of
-                                 true  -> R;
-                                 false -> false
-                             end;
-                         R ->
-                             ct:pal(?LOW_IMPORTANCE,
-                                    "Using rabbitmq-queues from rabbitmq_queues_cmd: ~p~n", [R]),
-                             R
-                     end,
-    Error = {skip, "rabbitmq-queues required, " ++
-             "please set 'rabbitmqctl_cmd' in ct config"},
-    case RabbitmqQueues of
-        false ->
-            Error;
-        _ ->
-            Cmd = [RabbitmqQueues],
-            case rabbit_ct_helpers:exec(Cmd, [drop_stdout]) of
-                {error, 64, _} ->
-                    rabbit_ct_helpers:set_config(Config,
-                                                 {rabbitmq_queues_cmd,
-                                                  RabbitmqQueues});
-                {error, Code, Reason} ->
-                    ct:pal(?LOW_IMPORTANCE, "Exec failed with exit code ~d: ~p", [Code, Reason]),
-                    Error;
-                _ ->
-                    Error
-            end
-    end.
+declare_qq(Ch, Q) ->
+    declare_qq(Ch, Q, []).
 
-rabbitmq_queues(Config, Node, Args) ->
-    RabbitmqQueues = ?config(rabbitmq_queues_cmd, Config),
-    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, Node),
-    Nodename = ?config(nodename, NodeConfig),
-    Env0 = [
-      {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
-      {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
-      {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
-      {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
-    ],
-    Ret = rabbit_ct_helpers:get_config(
-            NodeConfig, enabled_feature_flags_list_file),
-    Env = case Ret of
-              undefined ->
-                  Env0;
-              EnabledFeatureFlagsFile ->
-                  Env0 ++
-                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
-          end,
-    Cmd = [RabbitmqQueues, "-n", Nodename | Args],
-    rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
+rabbitmq_queues(Config, N, Args) ->
+    rabbit_ct_broker_helpers:rabbitmq_queues(Config, N, ["--silent" | Args]).
