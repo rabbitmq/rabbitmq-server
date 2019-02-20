@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.Grow do
+defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -58,6 +58,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.Grow do
           vhost_pat,
           queue_pat,
           to_atom(strategy)]) do
+      {:error, _}  = error -> error;
+      {:badrpc, _} = error -> error;
       results ->
         for {{:resource, vhost, _kind, name}, res} <- results,
         do: [{:vhost, vhost},
