@@ -26,7 +26,8 @@
          banner/2,
          run/2,
          aliases/0,
-         output/2
+         output/2,
+         description/0
         ]).
 
 
@@ -68,6 +69,8 @@ run([Id], #{node := Node}) ->
 
 aliases() ->
     [].
+
+description() -> <<"Instructs the RabbitMQ node to restart the federation link with specified link_id">>.
 
 output(Output, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output).

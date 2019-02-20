@@ -29,7 +29,8 @@
          aliases/0,
          output/2,
          scopes/0,
-         formatter/0
+         formatter/0,
+         description/0
         ]).
 
 
@@ -71,6 +72,8 @@ switches() ->
 
 aliases() ->
     [].
+
+description() -> <<"Lists federation links on the node">>.
 
 output({stream, FederationStatus}, _) ->
     Formatted = [begin
