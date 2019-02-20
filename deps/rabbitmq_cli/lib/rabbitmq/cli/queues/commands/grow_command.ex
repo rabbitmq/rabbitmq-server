@@ -78,6 +78,20 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
+  def banner([node, strategy], _) do
+    "Growing #{strategy} quorum queues on #{node}..."
+  end
+
+  def usage, do: "shrink <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
+
+  #
+  # Implementation
+  #
+
   defp format_size({:ok, size}) do
     size
   end
@@ -98,14 +112,4 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   defp format_result({:error, _size, err}) do
     :io.format "error: ~W", [err, 10]
   end
-
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
-
-  def banner([node, strategy], _) do
-    "Growing #{strategy} quorum queues on #{node}..."
-  end
-
-  def usage, do: "shrink <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
 end
