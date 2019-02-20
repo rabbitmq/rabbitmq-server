@@ -93,7 +93,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.Grow do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def banner([node, strategy], _) do
-    "Growing #{strategy} queues on #{node}..."
+    "Growing #{strategy} quorum queues on #{node}..."
   end
 
   def usage, do: "shrink <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
