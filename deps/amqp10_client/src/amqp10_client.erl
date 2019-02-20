@@ -346,7 +346,9 @@ link_handle(#link_ref{link_handle = Handle}) -> Handle.
 -spec parse_uri(string()) ->
     {ok, connection_config()} | {error, term()}.
 parse_uri(Uri) ->
-    case http_uri:parse(Uri) of
+    case http_uri:parse(Uri, [{scheme_defaults,
+                               [{amqp, 5672},
+                                {amqps, 5671}]}]) of
         {ok, Result} ->
             try
                 {ok, parse_result(Result)}
@@ -456,6 +458,9 @@ parse_uri_test_() ->
                           port => 9876,
                           hostname => <<"my_host">>,
                           sasl => none}}, parse_uri("amqp://my_host:9876")),
+     %% port defaults
+     ?_assertMatch({ok, #{port := 5671}}, parse_uri("amqps://my_host")),
+     ?_assertMatch({ok, #{port := 5672}}, parse_uri("amqp://my_host")),
      ?_assertEqual({ok, #{address => "my_proxy",
                           port => 9876,
                           hostname => <<"my_host">>,
