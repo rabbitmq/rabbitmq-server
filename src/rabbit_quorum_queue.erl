@@ -760,23 +760,23 @@ shrink_all(Node) ->
             amqqueue:get_type(Q) == quorum,
             lists:member(Node, amqqueue:get_quorum_nodes(Q))].
 
--spec grow(node(), binary(), binary(),
-           all | even) ->
+-spec grow(node(), binary(), binary(), all | even) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
-    ConnectedNodes = [node() | nodes()],
+    Running = rabbit_mnesia:cluster_nodes(running),
     [begin
+         Size = length(amqqueue:get_quorum_nodes(Q)),
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: Adding member ~w",
                          [rabbit_misc:rs(QName), Node]),
-         Size = length(amqqueue:get_quorum_nodes(Q)),
          case add_member(Q, Node) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->
-                 rabbit_log:warning("~s: Failed to add member ~w, Error ~w",
-                                    [rabbit_misc:rs(QName), Node, Err]),
+                 rabbit_log:warning(
+                   "~s: Failed to add member ~w, Error ~w",
+                   [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
      end
@@ -784,8 +784,8 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
         amqqueue:get_type(Q) == quorum,
         %% don't add a member if there is already one on the node
         not lists:member(Node, amqqueue:get_quorum_nodes(Q)),
-        %% if the node isn't connected, best not to add it
-        lists:member(Node, ConnectedNodes),
+        %% node needs to be running
+        lists:member(Node, Running),
         matches_strategy(Strategy, amqqueue:get_quorum_nodes(Q)),
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
         is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].

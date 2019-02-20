@@ -30,7 +30,8 @@ groups() ->
     [
         {tests, [], [
             shrink,
-            grow
+            grow,
+            grow_invalid_node_filtered
         ]}
     ].
 
@@ -97,6 +98,19 @@ grow(Config) ->
 
     {ok, Out3} = rabbitmq_queues(Config, 0, ["grow", Nodename0, "all"]),
     ?assertNotMatch(#{{"/", "grow1"} := _}, parse_result(Out3)),
+    ok.
+
+grow_invalid_node_filtered(Config) ->
+    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 2),
+    Nodename2 = ?config(nodename, NodeConfig),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Nodename2),
+    %% declare a quorum queue
+    QName = "grow-err",
+    Args = [{<<"x-quorum-initial-group-size">>, long, 1}],
+    #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
+    DummyNode = not_really_a_node@nothing,
+    {ok, Out1} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
+    ?assertNotMatch(#{{"/", "grow-err"} := _}, parse_result(Out1)),
     ok.
 
 parse_result(S) ->
