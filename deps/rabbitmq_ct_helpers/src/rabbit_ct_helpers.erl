@@ -376,7 +376,7 @@ ensure_rabbitmqctl_cmd(Config) ->
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
                 {error, Code, Reason} ->
-                    ct:pal(?LOW_IMPORTANCE, "Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    ct:pal("Exec failed with exit code ~d: ~p", [Code, Reason]),
                     Error;
                 _ ->
                     Error
@@ -453,7 +453,7 @@ ensure_rabbitmq_queues_cmd(Config) ->
                              R
                      end,
     Error = {skip, "rabbitmq-queues required, " ++
-             "please set 'rabbitmq_qeuues_cmd' in ct config"},
+             "please set 'rabbitmq_queues_cmd' in ct config"},
     case RabbitmqQueues of
         false ->
             Error;
@@ -465,7 +465,7 @@ ensure_rabbitmq_queues_cmd(Config) ->
                                {rabbitmq_queues_cmd,
                                 RabbitmqQueues});
                 {error, Code, Reason} ->
-                    ct:pal(?LOW_IMPORTANCE, "Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    ct:pal("Exec failed with exit code ~d: ~p", [Code, Reason]),
                     Error;
                 _ ->
                     Error
