@@ -322,7 +322,22 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
          "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
         # We need to query the running node for the plugins directory
         # and the "enabled plugins" file.
-        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
+        for arg in "$@"; do
+          case "$arg" in
+            -n)
+              next_is_node=1
+              ;;
+            *)
+              if test "$next_is_node"; then
+                # If the executed script is being passed a remote node
+                # name, use it here to query the remote node.
+                node_arg="-n $arg"
+                break
+              fi
+              ;;
+          esac
+        done
+        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl $node_arg eval \
             '{ok, P} = application:get_env(rabbit, plugins_dir),
              {ok, E} = application:get_env(rabbit, enabled_plugins_file),
              B = os:getenv("RABBITMQ_MNESIA_BASE"),
