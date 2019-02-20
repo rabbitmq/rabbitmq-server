@@ -68,7 +68,8 @@ groups() ->
                                             delete_declare,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
-                                            consume_in_minority
+                                            consume_in_minority,
+                                            shrink_all
                                             ]},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
@@ -189,7 +190,8 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
                                            [{rmq_nodes_count, 3},
                                             {rmq_nodename_suffix, Testcase},
                                             {tcp_ports_base},
-                                            {queue_name, Q}
+                                            {queue_name, Q},
+                                            {alt_queue_name, <<Q/binary, "_alt">>}
                                            ]),
     Config3 = rabbit_ct_helpers:run_steps(
                 Config2,
@@ -209,7 +211,8 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     Q = rabbit_data_coercion:to_binary(Testcase),
     Config2 = rabbit_ct_helpers:set_config(Config1,
-                                           [{queue_name, Q}
+                                           [{queue_name, Q},
+                                            {alt_queue_name, <<Q/binary, "_alt">>}
                                            ]),
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
@@ -621,7 +624,33 @@ consume_in_minority(Config) ->
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
-                                                   no_ack = false})).
+                                                   no_ack = false})),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    ok.
+
+shrink_all(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    AQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(500),
+    Result = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
+    ?assertMatch([{_, {ok, 2}}, {_, {ok, 2}}], Result),
+    Result1 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
+    ?assertMatch([{_, {ok, 1}}, {_, {ok, 1}}], Result1),
+    Result2 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
+    ?assertMatch([{_, {error, 1, last_node}},
+                  {_, {error, 1, last_node}}], Result2),
+    ok.
+
+
 
 subscribe_should_fail_when_global_qos_true(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -640,7 +669,7 @@ subscribe_should_fail_when_global_qos_true(Config) ->
         _ -> exit(subscribe_should_not_pass)
     catch
         _:_ = Err ->
-        ct:pal("Err ~p", [Err])
+        ct:pal("subscribe_should_fail_when_global_qos_true caught an error: ~p", [Err])
     end,
     ok.
 
