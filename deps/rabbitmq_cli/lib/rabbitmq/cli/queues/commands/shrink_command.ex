@@ -34,17 +34,17 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
       {:error, _}  = error -> error;
       {:badrpc, _} = error -> error;
       results when errs ->
-        for {{:resource, vhost, _kind, name}, {_errors, _, _} = res} <- results,
+        for {{:resource, vhost, _kind, name}, {:error, _, _} = res} <- results,
         do: [{:vhost, vhost},
              {:name, name},
-             {:size, format_size res},
-             {:result, format_result res}]
+             {:size, format_size(res)},
+             {:result, format_result(res)}]
       results ->
         for {{:resource, vhost, _kind, name}, res} <- results,
         do: [{:vhost, vhost},
              {:name, name},
-             {:size, format_size res},
-             {:result, format_result res}]
+             {:size, format_size(res)},
+             {:result, format_result(res)}]
     end
   end
 
