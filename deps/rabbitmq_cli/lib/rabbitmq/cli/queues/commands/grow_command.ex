@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
      "all" -> :ok
      "even" -> :ok
      _ ->
-       {:validation_failure, {:unrecognised_strategy, s}}
+       {:validation_failure, "strategy '#{s}' is not recognised."}
    end
   end
 

@@ -60,7 +60,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
 
   test "validate: when a node and something else is provided, returns a failure" do
     assert @command.validate(["quorum-queue-a", "banana"], %{}) ==
-      {:validation_failure, {:unrecognised_strategy, "banana"}}
+      {:validation_failure, "strategy 'banana' is not recognised."}
   end
 
   test "validate: when three arguments are provided, returns a failure" do
