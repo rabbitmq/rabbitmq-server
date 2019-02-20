@@ -13,7 +13,7 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2017-2019 Pivotal Software, Inc.  All rights reserved.
 %%
--module(rabbitmq_queues_cli_SUITE).
+-module(rabbitmq_queues_cli_integration_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
