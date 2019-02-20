@@ -51,11 +51,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([node, strategy],
-    %{node: node_name,
-      vhost_pattern: vhost_pat,
-      queue_pattern: queue_pat,
-      errors_only: errors_only}) do
+  def run([node, strategy], %{node: node_name,
+                              vhost_pattern: vhost_pat,
+                              queue_pattern: queue_pat,
+                              errors_only: errors_only}) do
         case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, [
           to_atom(node),
           vhost_pat,
@@ -86,7 +85,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     "Growing #{strategy} quorum queues on #{node}..."
   end
 
-  def usage, do: "shrink <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
+  def usage, do: "grow <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
 
   #
   # Implementation
