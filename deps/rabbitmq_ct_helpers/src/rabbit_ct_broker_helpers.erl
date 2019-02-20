@@ -40,6 +40,7 @@
 
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl_list/3,
+    rabbitmq_queues/3,
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
@@ -937,6 +938,29 @@ rabbitmqctl_list(Config, Node, Args) ->
      <<"Listing", _/binary>>
      | Rows] = re:split(StdOut, <<"\n">>, [trim]),
     [re:split(Row, <<"\t">>) || Row <- Rows].
+
+rabbitmq_queues(Config, Node, Args) ->
+    RabbitmqQueues = ?config(rabbitmq_queues_cmd, Config),
+    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, Node),
+    Nodename = ?config(nodename, NodeConfig),
+    Env0 = [
+      {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
+      {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
+      {"RABBITMQ_ENABLED_PLUGINS_FILE",
+        ?config(enabled_plugins_file, NodeConfig)}
+    ],
+    Ret = rabbit_ct_helpers:get_config(
+            NodeConfig, enabled_feature_flags_list_file),
+    Env = case Ret of
+              undefined ->
+                  Env0;
+              EnabledFeatureFlagsFile ->
+                  Env0 ++
+                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
+          end,
+    Cmd = [RabbitmqQueues, "-n", Nodename | Args],
+    rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
 %% -------------------------------------------------------------------
 %% Other helpers.

@@ -31,6 +31,7 @@
     ensure_rabbitmqctl_cmd/1,
     ensure_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
+    ensure_rabbitmq_queues_cmd/1,
     start_long_running_testsuite_monitor/1,
     stop_long_running_testsuite_monitor/1,
     config_to_testcase_name/2,
@@ -375,7 +376,7 @@ ensure_rabbitmqctl_cmd(Config) ->
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
                 {error, Code, Reason} ->
-                    ct:pal(?LOW_IMPORTANCE, "Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    ct:pal("Exec failed with exit code ~d: ~p", [Code, Reason]),
                     Error;
                 _ ->
                     Error
@@ -431,6 +432,41 @@ ensure_rabbitmq_plugins_cmd(Config) ->
             case exec(Cmd, [drop_stdout]) of
                 {error, 64, _} ->
                     set_config(Config, {rabbitmq_plugins_cmd, Rabbitmqplugins});
+                _ ->
+                    Error
+            end
+    end.
+
+ensure_rabbitmq_queues_cmd(Config) ->
+    RabbitmqQueues = case get_config(Config, rabbitmq_queues_cmd) of
+                         undefined ->
+                             SrcDir = ?config(rabbit_srcdir, Config),
+                             R = filename:join(SrcDir, "scripts/rabbitmq-queues"),
+                             ct:pal(?LOW_IMPORTANCE, "Using rabbitmq-queues at ~p~n", [R]),
+                             case filelib:is_file(R) of
+                                 true  -> R;
+                                 false -> false
+                             end;
+                         R ->
+                             ct:pal(?LOW_IMPORTANCE,
+                                    "Using rabbitmq-queues from rabbitmq_queues_cmd: ~p~n", [R]),
+                             R
+                     end,
+    Error = {skip, "rabbitmq-queues required, " ++
+             "please set 'rabbitmq_queues_cmd' in ct config"},
+    case RabbitmqQueues of
+        false ->
+            Error;
+        _ ->
+            Cmd = [RabbitmqQueues],
+            case exec(Cmd, [drop_stdout]) of
+                {error, 64, _} ->
+                    set_config(Config,
+                               {rabbitmq_queues_cmd,
+                                RabbitmqQueues});
+                {error, Code, Reason} ->
+                    ct:pal("Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    Error;
                 _ ->
                     Error
             end
