@@ -509,10 +509,10 @@
 # net_ticktime = 60
 
 ## Inter-node communication port range.
+## The parameters inet_dist_listen_min and inet_dist_listen_max  
+## can be configured in the classic config format only.
 ## Related doc guide: https://www.rabbitmq.com/networking.html#epmd-inet-dist-port-range.
-##
-# inet_dist_listen_min = 25672
-# inet_dist_listen_max = 25692
+
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
