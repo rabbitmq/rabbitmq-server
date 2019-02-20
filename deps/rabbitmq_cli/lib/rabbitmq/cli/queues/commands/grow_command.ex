@@ -85,7 +85,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     "Growing #{strategy} quorum queues on #{node}..."
   end
 
-  def usage, do: "grow <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
+  def usage, do: "grow <node> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
 
   #
   # Implementation
