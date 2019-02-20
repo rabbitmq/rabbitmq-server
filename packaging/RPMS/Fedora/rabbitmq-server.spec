@@ -156,9 +156,6 @@ if test -f /var/log/rabbitmq/permissions; then
     rm -f /var/log/rabbitmq/permissions
 fi
 
-# Update profile to enable autocompletion
-. /etc/profile
-
 if [ -n "$ZSH_VERSION" ]; then
     echo "Z Shell detected.
 to enable rabbitmqctl autocompletion add the following to your .zshrc file:
