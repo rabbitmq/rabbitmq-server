@@ -61,6 +61,7 @@ groups() ->
                       {cluster_size_3, [], [
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
+                                            publishing_to_unavailable_queue,
                                             confirm_availability_on_leader_change,
                                             recover_from_single_failure,
                                             recover_from_multiple_failures,
@@ -912,6 +913,33 @@ recover_from_multiple_failures(Config) ->
     %% recovered when a quorum was restored. Not the best test perhaps.
     wait_for_messages_ready(Servers, RaName, 6),
     wait_for_messages_pending_ack(Servers, RaName, 0).
+
+publishing_to_unavailable_queue(Config) ->
+    [Server, Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    TCh = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(TCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    publish_many(Ch, QQ, 300),
+    timer:sleep(1000),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    %% check we get at least on ack
+    ok = receive
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
+         after 30000 ->
+                   exit(confirm_timeout)
+         end,
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    ok.
 
 leadership_takeover(Config) ->
     %% Kill nodes in succession forcing the takeover of leadership, and all messages that

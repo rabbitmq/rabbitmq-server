@@ -83,13 +83,15 @@ init_state({Name, _}, QName = #resource{}) ->
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
     rabbit_fifo_client:init(QName, Servers, SoftLimit,
-                            fun() -> credit_flow:block(Name), ok end,
+                            fun() -> credit_flow:block(Name) end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
--spec handle_event({'ra_event', amqqueue:ra_server_id(), any()}, rabbit_fifo_client:state()) ->
-                          {internal, Correlators :: [term()], rabbit_fifo_client:actions(), rabbit_fifo_client:state()} |
-                          {rabbit_fifo:client_msg(), rabbit_fifo_client:state()} | eol.
-
+-spec handle_event({'ra_event', amqqueue:ra_server_id(), any()},
+                   rabbit_fifo_client:state()) ->
+    {internal, Correlators :: [term()], rabbit_fifo_client:actions(),
+     rabbit_fifo_client:state()} |
+    {rabbit_fifo:client_msg(), rabbit_fifo_client:state()} |
+    eol.
 handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
