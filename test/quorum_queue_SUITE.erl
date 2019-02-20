@@ -642,13 +642,10 @@ shrink_all(Config) ->
                  declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(500),
     Result = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
-    ct:pal("shring all result ~p", [Result]),
     ?assertMatch([{_, {ok, 2}}, {_, {ok, 2}}], Result),
     Result1 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
-    ct:pal("shring all result ~p", [Result1]),
     ?assertMatch([{_, {ok, 1}}, {_, {ok, 1}}], Result1),
     Result2 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
-    ct:pal("shring all result ~p", [Result2]),
     ?assertMatch([{_, {error, 1, last_node}},
                   {_, {error, 1, last_node}}], Result2),
     ok.
@@ -672,7 +669,7 @@ subscribe_should_fail_when_global_qos_true(Config) ->
         _ -> exit(subscribe_should_not_pass)
     catch
         _:_ = Err ->
-        ct:pal("Err ~p", [Err])
+        ct:pal("subscribe_should_fail_when_global_qos_true caught an error: ~p", [Err])
     end,
     ok.
 
