@@ -1472,14 +1472,18 @@ move_to_per_vhost_stores(#resource{} = QueueName) ->
     OldQueueDir = filename:join([queues_base_dir(), "queues",
                                  queue_name_to_dir_name_legacy(QueueName)]),
     NewQueueDir = queue_dir(QueueName),
+    rabbit_log_upgrade:info("About to migrate queue directory '~s' to '~s'",
+                            [OldQueueDir, NewQueueDir]),
     case rabbit_file:is_dir(OldQueueDir) of
         true  ->
             ok = rabbit_file:ensure_dir(NewQueueDir),
             ok = rabbit_file:rename(OldQueueDir, NewQueueDir),
             ok = ensure_queue_name_stub_file(NewQueueDir, QueueName);
         false ->
-            rabbit_log:info("Queue index directory not found for queue ~p~n",
-                            [QueueName])
+            Msg  = "Queue index directory '~s' not found for ~s~n",
+            Args = [OldQueueDir, rabbit_misc:rs(QueueName)],
+            rabbit_log_upgrade:error(Msg, Args),
+            rabbit_log:error(Msg, Args)
     end,
     ok.
 
