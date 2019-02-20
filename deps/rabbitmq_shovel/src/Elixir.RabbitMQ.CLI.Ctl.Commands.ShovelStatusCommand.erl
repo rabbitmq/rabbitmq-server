@@ -29,7 +29,8 @@
          aliases/0,
          output/2,
          scopes/0,
-         formatter/0
+         formatter/0,
+         description/0
         ]).
 
 
@@ -37,7 +38,10 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"shovel_status">>.
+    <<"shovel_status">>.
+
+description() ->
+    <<"Prints a list of configured shovels">>.
 
 flags() ->
     [].

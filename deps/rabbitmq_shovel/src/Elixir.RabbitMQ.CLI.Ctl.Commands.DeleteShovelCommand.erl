@@ -26,7 +26,8 @@
          run/2,
          switches/0,
          aliases/0,
-         output/2
+         output/2,
+         description/0
         ]).
 
 
@@ -35,6 +36,9 @@
 %%----------------------------------------------------------------------------
 usage() ->
      <<"delete_shovel [-p <vhost>] <name>">>.
+
+description() ->
+    <<"Instructs the RabbitMQ node to delete the configured shovel by name">>.
 
 validate([], _Opts) ->
     {validation_failure, not_enough_args};
