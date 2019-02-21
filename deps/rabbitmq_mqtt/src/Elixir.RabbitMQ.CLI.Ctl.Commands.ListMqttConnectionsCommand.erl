@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
@@ -20,14 +20,13 @@
 
 -export([formatter/0, scopes/0, switches/0, aliases/0,
          usage/0, usage_additional/0, banner/2,
-         validate/2, merge_defaults/2, run/2, output/2]).
+         validate/2, merge_defaults/2, run/2, output/2, description/0]).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
-
 scopes() -> [ctl, diagnostics].
-
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
+description() -> <<"Lists MQTT connections on the target node">>.
 
 validate(Args, _) ->
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
@@ -50,8 +49,8 @@ usage_additional() ->
         "].">>.
 
 run(Args, #{node := NodeName,
-                    timeout := Timeout,
-                    verbose := Verbose}) ->
+            timeout := Timeout,
+            verbose := Verbose}) ->
     InfoKeys = case Verbose of
         true  -> ?INFO_ITEMS;
         false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
