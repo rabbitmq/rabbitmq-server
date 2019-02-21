@@ -78,23 +78,13 @@ decode_cert_list(Body) ->
         end,
         Certs).
 
-new_state(RespHeaders, #http_state{headers = Headers} = State) ->
-    LastModified = proplists:get_value("Last-Modified",
-                                       RespHeaders,
-                                       proplists:get_value("last-modified",
-                                                           RespHeaders,
-                                                           undefined)),
-    case LastModified of
+new_state(RespHeaders, #http_state{headers = Headers0} = State) ->
+    LastModified0 = proplists:get_value("last-modified", RespHeaders),
+    LastModified1 = proplists:get_value("Last-Modified", RespHeaders, LastModified0),
+    case LastModified1 of
         undefined -> State;
         Value     ->
-            NewHeaders = lists:ukeymerge(1, Headers,
-                                            [{"If-Modified-Since", Value}]),
+            Headers1 = lists:ukeysort(1, Headers0),
+            NewHeaders = lists:ukeymerge(1, [{"If-Modified-Since", Value}], Headers1),
             State#http_state{headers = NewHeaders}
     end.
-
-
-
-
-
-
-

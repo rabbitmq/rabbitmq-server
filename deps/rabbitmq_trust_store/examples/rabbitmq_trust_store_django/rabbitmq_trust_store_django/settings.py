@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/1.9/ref/settings/
 """
 
+import logging.config
 import os
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -27,6 +28,36 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+logging.config.dictConfig({
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+        },
+        'rabbitmq_trust_store_django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+        }
+    },
+})
 
 # Application definition
 
