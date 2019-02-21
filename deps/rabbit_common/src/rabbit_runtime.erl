@@ -23,7 +23,8 @@
 %% API
 %%
 
--export([guess_number_of_cpu_cores/0, get_gc_info/1, msacc_stats/1]).
+-export([guess_number_of_cpu_cores/0, msacc_stats/1]).
+-export([get_gc_info/1, gc_all_processes/0]).
 
 
 -spec guess_number_of_cpu_cores() -> pos_integer().
@@ -33,6 +34,13 @@ guess_number_of_cpu_cores() ->
             erlang:system_info(schedulers);
         N -> N
     end.
+
+-spec gc_all_processes() -> ok.
+gc_all_processes() ->
+  %% Run GC asynchronously. We don't care for completion notifications, so
+  %% don't use the asynchonous execution option.
+  spawn(fun() -> [erlang:garbage_collect(P, []) || P <- erlang:processes()] end),
+  ok.
 
 -spec get_gc_info(pid()) -> nonempty_list(tuple()).
 get_gc_info(Pid) ->
