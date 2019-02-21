@@ -225,14 +225,38 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       :other ->
         "Other"
       {:plugin, plugin} ->
-        snake_case_to_capitalized_string(plugin) <> " plugin"
+        plugin_section(plugin) <> " plugin"
       custom ->
         snake_case_to_capitalized_string(custom)
     end
   end
 
-  defp snake_case_to_capitalized_string(plugin) do
+  defp strip_rabbitmq_prefix(value) do
+    Regex.replace(~r/^rabbitmq_/, value, "")
+  end
+
+  defp format_known_plugin_name_fragments(value) do
+    case value do
+      ["amqp1.0"]    -> "AMQP 1.0"
+      ["amqp1", "0"] -> "AMQP 1.0"
+      ["mqtt"]       -> "MQTT"
+      ["stomp"]      -> "STOMP"
+      ["web", "mqtt"]  -> "Web MQTT"
+      ["web", "stomp"] -> "Web STOMP"
+      [other]        -> snake_case_to_capitalized_string(other)
+    end
+  end
+
+  defp plugin_section(plugin) do
     to_string(plugin)
+    # drop rabbitmq_
+    |> strip_rabbitmq_prefix()
+    |> String.split("_")
+    |> format_known_plugin_name_fragments()
+  end
+
+  defp snake_case_to_capitalized_string(value) do
+    to_string(value)
     |> String.split("_")
     |> Enum.map(&String.capitalize/1)
     |> Enum.join(" ")
