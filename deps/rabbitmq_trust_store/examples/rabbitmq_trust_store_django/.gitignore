@@ -1,3 +1,4 @@
 *.pyc
 *.sqlite3
-certs/*
+certs/
+venv/
