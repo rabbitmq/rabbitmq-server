@@ -26,7 +26,8 @@
          banner/2,
          run/2,
          aliases/0,
-         output/2
+         output/2,
+         description/0
         ]).
 
 
@@ -58,7 +59,7 @@ run([Id], #{node := Node}) ->
         {badrpc, _} = Error ->
             Error;
         not_found ->
-            {error, <<"Link with provided ID was not found">>};
+            {error, <<"Link with the given ID was not found">>};
         Obj ->
             Upstream = proplists:get_value(upstream, Obj),
             Supervisor = proplists:get_value(supervisor, Obj),
@@ -68,6 +69,8 @@ run([Id], #{node := Node}) ->
 
 aliases() ->
     [].
+
+description() -> <<"Restarts a federation link with link ID of <link_id>">>.
 
 output(Output, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output).
