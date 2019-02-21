@@ -316,11 +316,11 @@ defmodule RabbitMQCtl do
   end
 
   defp format_validation_error(:not_enough_args), do: "not enough arguments."
-  defp format_validation_error({:not_enough_args, detail}), do: "not enough arguments. #{detail}"
+  defp format_validation_error({:not_enough_args, detail}), do: "not enough arguments: #{detail}"
   defp format_validation_error(:too_many_args), do: "too many arguments."
-  defp format_validation_error({:too_many_args, detail}), do: "too many arguments. #{detail}"
+  defp format_validation_error({:too_many_args, detail}), do: "too many arguments: #{detail}"
   defp format_validation_error(:bad_argument), do: "Bad argument."
-  defp format_validation_error({:bad_argument, detail}), do: "Bad argument. #{detail}"
+  defp format_validation_error({:bad_argument, detail}), do: "Bad argument: #{detail}"
 
   defp format_validation_error({:unsupported_target, details}) do
     details
