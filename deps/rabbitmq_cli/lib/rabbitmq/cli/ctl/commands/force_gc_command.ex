@@ -30,5 +30,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceGcCommand do
 
   def usage, do: "force_gc"
 
-  def banner(args, %{node: node_name} = opts), do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
+  def banner([], %{node: node_name}), do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
 end
