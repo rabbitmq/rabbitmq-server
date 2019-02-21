@@ -18,9 +18,8 @@ alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
 defmodule RabbitMQ.CLI.Core.Parser do
   alias RabbitMQ.CLI.Core.{CommandModules, Config}
 
-  # This assumes the average word letter count in
-  # the English language is 5.
-  @levenshtein_distance_limit 5
+  # Use the same jaro distance limit as in Elixir `did_you_mean`
+  @jaro_distance_limit 0.77
 
   def default_switches() do
     [
@@ -169,19 +168,18 @@ defmodule RabbitMQ.CLI.Core.Parser do
     nil
   end
 
-  defp command_suggestion(cmd_name, module_map) do
+  defp command_suggestion(typed, module_map) do
     suggestion =
       module_map
       |> Map.keys()
-      |> Enum.map(fn cmd ->
-        {cmd, Simetric.Levenshtein.compare(cmd, cmd_name)}
+      |> Enum.map(fn existing ->
+        {existing, String.jaro_distance(existing, typed)}
       end)
-      |> Enum.min_by(fn {_, distance} -> distance end)
+      |> Enum.max_by(fn {_, distance} -> distance end)
 
     case suggestion do
-      {cmd, distance} when distance <= @levenshtein_distance_limit ->
+      {cmd, distance} when distance >= @jaro_distance_limit ->
         {:suggest, cmd}
-
       _ ->
         nil
     end

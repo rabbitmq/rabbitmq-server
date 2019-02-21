@@ -62,6 +62,11 @@ defmodule RabbitMQCtl do
     {:ok, ExitCodes.exit_ok(), HelpCommand.all_usage(parsed_options)};
   end
 
+  def exec_command(["--version"] = _unparsed_command, opts) do
+    # rewrite `--version` as `version`
+    exec_command(["version"], opts)
+  end
+
   def exec_command(unparsed_command, output_fun) do
     {command, command_name, arguments, parsed_options, invalid} = Parser.parse(unparsed_command)
 
