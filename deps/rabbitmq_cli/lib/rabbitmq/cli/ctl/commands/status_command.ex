@@ -31,5 +31,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def usage, do: "status"
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Displays broker status information"
+
   def banner(_, %{node: node_name}), do: "Status of node #{node_name} ..."
 end

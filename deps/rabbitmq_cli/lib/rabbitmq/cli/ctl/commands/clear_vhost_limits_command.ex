@@ -36,6 +36,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand do
 
   def usage, do: "clear_vhost_limits [-p <vhost>]"
 
+  def help_section(), do: :virtual_hosts
+
+  def description(), do: "Clears virtual host limits"
+
   def banner([], %{vhost: vhost}) do
     "Clearing vhost \"#{vhost}\" limits ..."
   end

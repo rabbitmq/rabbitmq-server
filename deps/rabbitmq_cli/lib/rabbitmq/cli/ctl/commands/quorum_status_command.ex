@@ -40,6 +40,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
     "quorum_status [-p <vhost>] <queuename>"
   end
 
+  def help_section(), do: :queues
+
+  def description(), do: "Displays quorum status of a quorum queue"
+
   def banner([name], %{node: node_name}),
     do: "Status of quorum queue #{name} on node #{node_name} ..."
 end

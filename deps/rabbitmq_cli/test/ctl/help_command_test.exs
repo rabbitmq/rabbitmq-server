@@ -28,7 +28,9 @@ defmodule HelpCommandTest do
   end
 
   test "run: prints basic usage info" do
-    assert @command.run([], %{}) =~ ~r/Default node is \"rabbit@server\"/
+    output = @command.run([], %{})
+    assert output =~ ~r/[-n <node>] [-t <timeout>]/
+    assert output =~ ~r/Commands/
   end
 
   test "run: ctl command usage info is printed if command is specified" do
@@ -61,22 +63,6 @@ defmodule HelpCommandTest do
       fn(command) ->
         assert @command.run([], %{}) =~ ~r/\n    #{command}.*\n/
       end)
-  end
-
-  test "run: sorts commands alphabetically" do
-    [cmd1, cmd2, cmd3] = CommandModules.module_map
-    |> Map.keys
-    |> Enum.sort
-    |> Enum.take(3)
-
-    output = @command.run([], %{})
-
-    {start1, _} = :binary.match(output, cmd1)
-    {start2, _} = :binary.match(output, cmd2)
-    {start3, _} = :binary.match(output, cmd3)
-
-    assert start1 < start2
-    assert start2 < start3
   end
 
   test "run: exits with code of OK" do

@@ -15,6 +15,7 @@
 
 alias RabbitMQ.CLI.Core.{Config, Helpers}
 alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
+alias RabbitMQ.CLI.CommandBehaviour
 
 defmodule RabbitMQ.CLI.Core.CommandModules do
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
@@ -187,17 +188,16 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   defp command_scopes(cmd) do
-    case :erlang.function_exported(cmd, :scopes, 0) do
-      true ->
-        cmd.scopes()
-
-      false ->
+    case CommandBehaviour.scopes(cmd) do
+      nil ->
         Regex.recompile!(@commands_ns)
         |> Regex.run(to_string(cmd), capture: :all_but_first)
         |> List.first()
         |> to_snake_case
         |> String.to_atom()
         |> List.wrap()
+      scopes ->
+        scopes
     end
   end
 end

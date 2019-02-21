@@ -36,6 +36,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
 
   def usage, do: "clear_policy [-p <vhost>] <key>"
 
+  def help_section(), do: :policies
+
+  def description(), do: "Clears a policy"
+
   def banner([key], %{vhost: vhost}) do
     "Clearing policy \"#{key}\" on vhost \"#{vhost}\" ..."
   end

@@ -52,5 +52,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
 
   def usage, do: "force_boot"
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Ensures that the node will start next time, even if it was not the last to shut down"
+
   def banner(_, _), do: nil
 end

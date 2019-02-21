@@ -53,6 +53,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
     "change_cluster_node_type <disc|ram>"
   end
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Changes the type of the cluster node"
+
   def banner([node_type], %{node: node_name}) do
     "Turning #{node_name} into a #{node_type} node"
   end

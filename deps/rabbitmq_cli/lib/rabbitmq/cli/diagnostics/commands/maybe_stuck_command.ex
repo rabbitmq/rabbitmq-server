@@ -26,9 +26,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MaybeStuckCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_diagnostics, :maybe_stuck, [], timeout)
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Detects Erlang processes (\"lightweight threads\") potentially not making progress on the target node"
+
+  def usage, do: "maybe_stuck"
+
   def banner(_, %{node: node_name}) do
     "Asking node #{node_name} to detect potentially stuck Erlang processes..."
   end
-
-  def usage, do: "maybe_stuck"
 end

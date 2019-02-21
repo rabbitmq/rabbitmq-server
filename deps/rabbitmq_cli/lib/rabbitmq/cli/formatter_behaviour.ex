@@ -15,6 +15,8 @@
 
 # Formats returned values e.g. to human-readable text or JSON.
 defmodule RabbitMQ.CLI.FormatterBehaviour do
+  alias RabbitMQ.CLI.Core.Helpers
+
   @callback format_output(any, map()) :: String.t() | [String.t()]
   @callback format_stream(Enumerable.t(), map()) :: Enumerable.t()
 
@@ -23,4 +25,12 @@ defmodule RabbitMQ.CLI.FormatterBehaviour do
 
   @callback switches() :: Keyword.t()
   @callback aliases() :: Keyword.t()
+
+  def switches(formatter) do
+    Helpers.apply_if_exported(formatter, :switches, [], [])
+  end
+
+  def aliases(formatter) do
+    Helpers.apply_if_exported(formatter, :aliases, [], [])
+  end
 end

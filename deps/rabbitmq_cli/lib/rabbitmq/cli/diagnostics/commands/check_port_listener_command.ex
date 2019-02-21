@@ -79,6 +79,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortListenerCommand do
        "Found listeners that use the following ports: #{ports}"}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Health check that exits with a non-zero code if target node does not have an active listener for given port"
+
   def usage, do: "check_port_listener <port>"
 
   def banner([port], %{node: node_name}) do

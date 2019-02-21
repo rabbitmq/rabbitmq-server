@@ -43,6 +43,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckRunningCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Health check that exits with a non-zero code if the RabbitMQ app on the target node is not running"
+
   def usage, do: "check_running"
 
   def banner([], %{node: node_name}) do

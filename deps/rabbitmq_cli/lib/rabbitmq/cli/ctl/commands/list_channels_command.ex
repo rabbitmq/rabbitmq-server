@@ -74,6 +74,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
     "list_channels [--no-table-headers] [<channelinfoitem> ...]"
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists all channels in the node"
+
   def usage_additional() do
     "<channelinfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
