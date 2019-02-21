@@ -177,7 +177,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
           :observability_and_health_checks -> 6
           :parameters -> 7
           :policies -> 8
-          :vhost_limits -> 9
+          :virtual_hosts -> 9
           _ -> 98
         end
       end)
@@ -201,27 +201,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       :help ->
         "Print this help and commad specific help"
       :user_management ->
-        "User management"
+        "Users"
       :cluster_management ->
-        "Cluster management"
+        "Cluster"
       :node_management ->
-        "Node management"
+        "Nodes"
       :queues ->
-        "Queue management"
+        "Queues"
       :observability_and_health_checks ->
         "Monitoring, observability and health checks"
-      :vhost_limits ->
-        "Virtual host limits"
+      :virtual_hosts ->
+          "Virtual hosts"
       :access_control ->
         "Access Control"
       :parameters ->
-        "Paramaters"
+        "Parameters"
       :policies ->
         "Policies"
-      :vhost_limits ->
-        "Virtual host limits"
-      :tracing ->
-        "Enable/disable tracing"
       :configuration ->
         "Node configuration"
       :feature_flags ->
