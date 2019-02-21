@@ -57,6 +57,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def help_section(), do: :observability_and_health_checks
 
+  def description(), do: "Lists cipher suites available (but not necessarily allowed) on the target node"
+
   def usage, do: "cipher_suites [--openssl-format] [--erlang-format]"
 
   def banner([], %{openssl_format: true}),

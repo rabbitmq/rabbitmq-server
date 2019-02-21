@@ -53,6 +53,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
 
   def help_section(), do: :observability_and_health_checks
 
+  def description(), do: "Provides a breakdown of runtime thread activity stats on the target node"
+
   def usage, do: "runtime_thread_stats [--sample-interval <interval>]"
 
   def banner([], %{node: node_name, sample_interval: interval}) do

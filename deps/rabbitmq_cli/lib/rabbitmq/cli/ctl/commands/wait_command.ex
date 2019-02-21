@@ -77,7 +77,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def help_section(), do: :node_management
 
-  def description(), do: "Waits for the RabbitMQ application to start"
+  def description(), do: "Waits for the RabbitMQ application to start by monitoring a local PID file"
 
   ## Banners are included in wait steps
   def banner(_, _), do: nil

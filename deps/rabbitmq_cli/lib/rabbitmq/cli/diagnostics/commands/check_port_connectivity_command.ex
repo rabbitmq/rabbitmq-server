@@ -15,10 +15,11 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   @moduledoc """
-  Displays all listeners on a node.
+  Checks all listeners on the target node by opening a TCP connection to each
+  and immediately closing it.
 
   Returns a code of 0 unless there were connectivity and authentication
-  errors. This command is not meant to be used in health checks.
+  errors. This command is meant to be used in health checks.
   """
 
   alias RabbitMQ.CLI.Core.Helpers
@@ -100,6 +101,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
 
     {:error, Enum.join(lines, Helpers.line_separator())}
   end
+
+  def description(), do: "Basic TCP connectivity health check for each listener's port on the target node"
 
   def help_section(), do: :observability_and_health_checks
 

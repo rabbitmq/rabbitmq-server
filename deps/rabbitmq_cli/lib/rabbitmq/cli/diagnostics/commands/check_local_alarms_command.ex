@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   @moduledoc """
   Exits with a non-zero code if the target node reports any local alarms.
 
-  This command meant to be used in health checks.
+  This command is meant to be used in health checks.
   """
 
   alias RabbitMQ.CLI.Core.Helpers
@@ -83,6 +83,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Health check that exits with a non-zero code if the target node reports any local alarms"
 
   def usage, do: "check_local_alarms"
 

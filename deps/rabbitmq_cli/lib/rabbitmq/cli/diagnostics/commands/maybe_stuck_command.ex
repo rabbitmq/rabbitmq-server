@@ -28,6 +28,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MaybeStuckCommand do
 
   def help_section(), do: :observability_and_health_checks
 
+  def description(), do: "Detects Erlang processes (\"lightweight threads\") potentially not making progress on the target node"
+
   def usage, do: "maybe_stuck"
 
   def banner(_, %{node: node_name}) do

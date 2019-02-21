@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitStartupCommand do
 
   def help_section(), do: :node_management
 
-  def description(), do: "Waits for the RabbitMQ application to start on existing node"
+  def description(), do: "Waits for the RabbitMQ application to start on the target node"
 
   def banner(_, _), do: nil
 end

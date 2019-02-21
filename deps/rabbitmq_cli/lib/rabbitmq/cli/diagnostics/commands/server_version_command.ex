@@ -32,6 +32,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
 
   def help_section(), do: :observability_and_health_checks
 
+  def description(), do: "Displays server version on the target node"
+
   def usage, do: "server_version"
 
   def banner([], %{node: node_name}) do
