@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
 
   def usage, do: "sync_queue [-p <vhost>] queue"
 
-  def help_section(), do: :queues
+  def help_section(), do: :replication
 
   def description(), do: "Instructs a mirrored queue with unsynchronised mirrors (follower replicas) to synchronise them"
 

@@ -41,9 +41,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def usage, do: "delete_member [-p <vhost>] <queuename> <node>"
+
+  def help_section, do: :replication
+
+  def description, do: "Removes a quorum queue member (replica) for a queue on the given node."
+
   def banner([name, node], _) do
     "Deleting member #{node} from quorum queue #{name} cluster..."
   end
-
-  def usage, do: "delete_member [-p <vhost>] <queuename> <node>"
 end

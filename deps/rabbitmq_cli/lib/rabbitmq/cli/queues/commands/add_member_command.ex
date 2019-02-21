@@ -41,9 +41,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def usage, do: "add_member [-p <vhost>] <queuename> <node>"
+
+  def help_section, do: :replication
+
+  def description, do: "Adds a quorum queue member (replica) for a queue on the given node."
+
   def banner([name, node], _) do
     "Adding member #{node} to quorum queue #{name} cluster..."
   end
-
-  def usage, do: "add_member [-p <vhost>] <queuename> <node>"
 end

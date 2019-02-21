@@ -81,11 +81,15 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def usage, do: "grow <node> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
+
+  def help_section, do: :cluster_management
+
+  def description, do: "Grows quorum queue clusters by adding a member (replica) to all matching quorum queues on the given node."
+
   def banner([node, strategy], _) do
     "Growing #{strategy} quorum queues on #{node}..."
   end
-
-  def usage, do: "grow <node> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
 
   #
   # Implementation
