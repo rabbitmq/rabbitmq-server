@@ -170,21 +170,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
           :other -> 100
           {:plugin, _} -> 99
           :help -> 1
-          :application_management -> 2
+          :node_management -> 2
           :cluster_management -> 3
           :user_management -> 4
           :access_control -> 5
-          :parameters -> 6
-          :policies -> 7
-          :vhost_limits -> 8
-          :report -> 9
+          :observability_and_health_checks -> 6
+          :parameters -> 7
+          :policies -> 8
+          :vhost_limits -> 9
           _ -> 98
         end
       end)
     |> Enum.map(
       fn({help_section, section_helps}) ->
         [
-          section_head(help_section) <> ":" |
+          "\n## " <> section_head(help_section) <> ":\n" |
           Enum.sort(section_helps)
           |> Enum.map(
             fn({name, {description, _}}) ->
@@ -204,28 +204,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         "User management"
       :cluster_management ->
         "Cluster management"
-      :application_management ->
-        "Application management"
+      :node_management ->
+        "Node management"
       :queues ->
         "Queue management"
-      :report ->
-        "Topology introspection"
-      :access_control ->
-        "Access control"
-      :parameters ->
-        "Paramater management"
-      :policies ->
-        "Policy management"
+      :observability_and_health_checks ->
+        "Monitoring, observability and health checks"
       :vhost_limits ->
         "Virtual host limits"
-      :trace ->
+      :access_control ->
+        "Access Control"
+      :parameters ->
+        "Paramaters"
+      :policies ->
+        "Policies"
+      :vhost_limits ->
+        "Virtual host limits"
+      :tracing ->
         "Enable/disable tracing"
-      :encode ->
-        "Encoding/decoding"
-      :settings ->
-        "Node settings"
+      :configuration ->
+        "Node configuration"
       :feature_flags ->
-        "Feature flag management"
+        "Feature flags"
       :other ->
         "Other"
       {:plugin, plugin} ->

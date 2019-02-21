@@ -70,7 +70,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def usage, do: "node_health_check"
 
-  def help_section(), do: :report
+  def help_section(), do: :observability_and_health_checks
   def description(), do: "Performs several health checks of the target node"
 
   def banner(_, %{node: node_name, timeout: timeout}) do

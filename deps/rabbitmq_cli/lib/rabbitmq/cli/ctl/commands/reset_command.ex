@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResetCommand do
 
   def usage, do: "reset"
 
-  def help_section(), do: :application_management
+  def help_section(), do: :node_management
 
   def description(), do: "Instructs a RabbitMQ node to leave the cluster and eturn to its virgin state"
 

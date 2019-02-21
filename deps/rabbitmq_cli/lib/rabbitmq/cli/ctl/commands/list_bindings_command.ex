@@ -69,7 +69,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
   end
 
-  def help_section(), do: :report
+  def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Lists all bindings on a vhost"
 

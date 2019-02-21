@@ -89,7 +89,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def usage, do: "report"
 
-  def help_section(), do: :report
+  def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Generate a server status report containing a concatenation of all server status information for support purposes"
 

@@ -63,7 +63,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def description(), do: "Stops the Erlang node on which RabbitMQ is running"
 
-  def help_section(), do: :application_management
+  def help_section(), do: :node_management
 
   def banner([pidfile_path], %{node: node_name}) do
     "Stopping and halting node #{node_name} (will monitor pid file #{pidfile_path}) ..."

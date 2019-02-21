@@ -75,7 +75,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def usage, do: "wait [<pid_file>] [--pid|-P <pid>]"
 
-  def help_section(), do: :application_management
+  def help_section(), do: :node_management
 
   def description(), do: "Waits for the RabbitMQ application to start"
 

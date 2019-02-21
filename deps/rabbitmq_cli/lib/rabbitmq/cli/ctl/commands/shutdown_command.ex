@@ -65,7 +65,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
 
   def usage, do: "shutdown [--wait]"
 
-  def help_section(), do: :application_management
+  def help_section(), do: :node_management
 
   def description(), do: "Stops the Erlang node on which RabbitMQ is running and waits for the OS process to exit"
 

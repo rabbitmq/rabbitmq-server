@@ -28,7 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
-  def help_section(), do: :report
+  def help_section(), do: :observability_and_health_checks
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
   def usage_additional(), do: "<exchangeinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."
 

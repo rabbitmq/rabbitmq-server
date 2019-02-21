@@ -112,7 +112,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
       "set_vm_memory_high_watermark absolute <value>"
     ]
 
-  def help_section(), do: :settings
+  def help_section(), do: :configuration
 
   def description(), do: "Sets the vm_memory_high_watermark setting"
 

@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
                      local: :boolean,
                      timeout: :integer ]
   def aliases(), do: [t: :timeout]
-  def help_section(), do: :report
+  def help_section(), do: :observability_and_health_checks
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
   def usage_additional(), do: ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
 

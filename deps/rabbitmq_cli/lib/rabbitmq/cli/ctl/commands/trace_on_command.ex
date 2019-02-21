@@ -34,7 +34,7 @@ use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "trace_on [-p <vhost>]"
 
-  def help_section(), do: :trace
+  def help_section(), do: :tracing
 
   def banner(_, %{vhost: vhost}), do: "Starting tracing for vhost \"#{vhost}\" ..."
 end
