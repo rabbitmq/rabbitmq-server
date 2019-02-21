@@ -70,7 +70,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
     {:ok, "Node #{node_name} reported no enabled listeners."}
   end
 
-  def output(listeners, %{formatter: "json"}) do
+  def output(listeners, %{node: node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "node" => node_name, "listeners" => listener_maps(listeners)}}
   end
 
