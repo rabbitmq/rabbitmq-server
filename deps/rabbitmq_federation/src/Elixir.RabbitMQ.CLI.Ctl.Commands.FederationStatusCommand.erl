@@ -53,10 +53,10 @@ merge_defaults(A, Opts) ->
     {A, maps:merge(#{only_down => false}, Opts)}.
 
 banner(_, #{node := Node, only_down := true}) ->
-    erlang:iolist_to_binary([<<"Listing federation links, which are down on node ">>,
+    erlang:iolist_to_binary([<<"Listing federation links which are down on node ">>,
                              atom_to_binary(Node, utf8), <<"...">>]);
 banner(_, #{node := Node, only_down := false}) ->
-    erlang:iolist_to_binary([<<"Listing federation links of node ">>,
+    erlang:iolist_to_binary([<<"Listing federation links on node ">>,
                              atom_to_binary(Node, utf8), <<"...">>]).
 
 run(_Args, #{node := Node, only_down := OnlyDown}) ->
