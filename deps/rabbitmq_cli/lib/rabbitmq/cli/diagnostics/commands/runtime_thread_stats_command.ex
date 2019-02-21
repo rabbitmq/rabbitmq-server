@@ -51,11 +51,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
     {:ok, result}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def usage, do: "runtime_thread_stats [--sample-interval <interval>]"
+
   def banner([], %{node: node_name, sample_interval: interval}) do
     "Will collect runtime thread stats on #{node_name} for #{interval} seconds..."
   end
-
-  def usage, do: "runtime_thread_stats [--sample-interval <interval>]"
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Msacc
 end

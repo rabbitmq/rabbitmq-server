@@ -37,6 +37,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
   def usage, do: "is_running"
 
   def banner([], %{node: node_name}) do

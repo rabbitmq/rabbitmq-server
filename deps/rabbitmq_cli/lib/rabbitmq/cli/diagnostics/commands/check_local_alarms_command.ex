@@ -82,6 +82,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
   def usage, do: "check_local_alarms"
 
   def banner([], %{node: node_name}) do

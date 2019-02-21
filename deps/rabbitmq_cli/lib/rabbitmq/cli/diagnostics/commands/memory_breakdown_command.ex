@@ -67,6 +67,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
     {:ok, compute_relative_values(result)}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
   def usage, do: "memory_breakdown [--unit <unit>]"
 
   def banner([], %{node: node_name}) do

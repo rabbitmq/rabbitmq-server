@@ -101,6 +101,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
     {:error, Enum.join(lines, Helpers.line_separator())}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
   def usage, do: "check_port_connectivity"
 
   def banner([], %{node: node_name}) do

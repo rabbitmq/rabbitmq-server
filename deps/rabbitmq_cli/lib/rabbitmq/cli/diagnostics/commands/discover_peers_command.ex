@@ -35,6 +35,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
   def usage, do: "discover_peers"
 
   def banner(_, _), do: "Discovering peers nodes ..."

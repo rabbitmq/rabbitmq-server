@@ -38,6 +38,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.TlsVersionsCommand do
     {:ok, vs}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
   def usage, do: "tls_versions"
 
   def formatter(), do: RabbitMQ.CLI.Formatters.StringPerLine
