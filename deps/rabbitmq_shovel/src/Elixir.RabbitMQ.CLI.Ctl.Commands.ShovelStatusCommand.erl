@@ -41,7 +41,7 @@ usage() ->
     <<"shovel_status">>.
 
 description() ->
-    <<"Prints a list of configured shovels">>.
+    <<"Lists dynamic Shovels">>.
 
 flags() ->
     [].
@@ -56,7 +56,7 @@ merge_defaults(A,O) ->
     {A, O}.
 
 banner(_, #{node := Node}) ->
-    erlang:iolist_to_binary([<<"Shovel status of node ">>,
+    erlang:iolist_to_binary([<<"Shovel status on node ">>,
                              atom_to_binary(Node, utf8)]).
 
 run(_Args, #{node := Node}) ->
