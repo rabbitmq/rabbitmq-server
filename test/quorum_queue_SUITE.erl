@@ -1523,7 +1523,7 @@ subscribe_redelivery_count(Config) ->
     end.
 
 subscribe_redelivery_limit(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -1531,10 +1531,8 @@ subscribe_redelivery_limit(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-delivery-limit">>, long, 1}])),
 
-    RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Servers, RaName, 1),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QQ, false),
 
     DTag = <<"x-delivery-count">>,
@@ -1548,8 +1546,7 @@ subscribe_redelivery_limit(Config) ->
                                                 requeue      = true})
     end,
 
-    wait_for_messages_ready(Servers, RaName, 0),
-    wait_for_messages_pending_ack(Servers, RaName, 1),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
@@ -1560,8 +1557,7 @@ subscribe_redelivery_limit(Config) ->
                                                 requeue      = true})
     end,
 
-    wait_for_messages_ready(Servers, RaName, 0),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
@@ -1570,7 +1566,7 @@ subscribe_redelivery_limit(Config) ->
     end.
 
 subscribe_redelivery_policy(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -1581,10 +1577,8 @@ subscribe_redelivery_policy(Config) ->
            Config, 0, <<"delivery-limit">>, <<".*">>, <<"queues">>,
            [{<<"delivery-limit">>, 1}]),
 
-    RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Servers, RaName, 1),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QQ, false),
 
     DTag = <<"x-delivery-count">>,
@@ -1598,8 +1592,7 @@ subscribe_redelivery_policy(Config) ->
                                                 requeue      = true})
     end,
 
-    wait_for_messages_ready(Servers, RaName, 0),
-    wait_for_messages_pending_ack(Servers, RaName, 1),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
@@ -1610,8 +1603,7 @@ subscribe_redelivery_policy(Config) ->
                                                 requeue      = true})
     end,
 
-    wait_for_messages_ready(Servers, RaName, 0),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
@@ -1621,7 +1613,7 @@ subscribe_redelivery_policy(Config) ->
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit">>).
 
 subscribe_redelivery_limit_with_dead_letter(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -1635,11 +1627,8 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
     ?assertEqual({'queue.declare_ok', DLX, 0, 0},
                  declare(Ch, DLX, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
-    RaDlxName = ra_name(DLX),
     publish(Ch, QQ),
-    wait_for_messages_ready(Servers, RaName, 1),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QQ, false),
 
     DTag = <<"x-delivery-count">>,
@@ -1653,8 +1642,7 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
                                                 requeue      = true})
     end,
 
-    wait_for_messages_ready(Servers, RaName, 0),
-    wait_for_messages_pending_ack(Servers, RaName, 1),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
@@ -1665,10 +1653,8 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
                                                 requeue      = true})
     end,
 
-    wait_for_messages_ready(Servers, RaName, 0),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
-    wait_for_messages_ready(Servers, RaDlxName, 1),
-    wait_for_messages_pending_ack(Servers, RaDlxName, 0).
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages(Config, [[DLX, <<"1">>, <<"1">>, <<"0">>]]).
 
 consume_redelivery_count(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
