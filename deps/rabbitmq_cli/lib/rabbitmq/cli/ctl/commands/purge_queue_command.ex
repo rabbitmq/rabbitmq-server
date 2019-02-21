@@ -45,6 +45,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
 
   def usage, do: "purge_queue <queue>"
 
+  def help_section(), do: :queues
+
+  def description(), do: "Purges a queue (removes all messages in it)"
+
   def banner([queue], %{vhost: vhost}) do
     "Purging queue '#{queue}' in vhost '#{vhost}' ..."
   end

@@ -42,6 +42,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
     "await_online_nodes <count>"
   end
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Waits for <count> nodes to join the cluster"
+
   def banner([count], %{node: node_name, timeout: timeout}) when is_number(timeout) do
     "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{
       trunc(timeout / 1000)

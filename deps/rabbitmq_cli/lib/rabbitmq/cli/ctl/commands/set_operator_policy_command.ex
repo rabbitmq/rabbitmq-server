@@ -60,6 +60,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
     do:
       "set_operator_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
 
+  def help_section(), do: :policies
+
+  def description(), do: "Sets an operator policy that overrides a subset of arguments in user policies"
+
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
     "Setting operator policy override \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{
       priority

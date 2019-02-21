@@ -77,6 +77,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
     do:
       "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
 
+  def description(), do: "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
+
   def banner([explanation], %{node: node_name, global: true}) do
     "Closing all connections to node #{node_name} (across all vhosts), reason: #{explanation}..."
   end

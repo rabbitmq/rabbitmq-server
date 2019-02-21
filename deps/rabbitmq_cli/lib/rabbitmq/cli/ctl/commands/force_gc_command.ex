@@ -13,26 +13,22 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
-  alias RabbitMQ.CLI.Core.Helpers
-
+defmodule RabbitMQ.CLI.Ctl.Commands.ForceGcCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
-  def run([vhost], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
+  def run([], %{node: node_name, timeout: timeout}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit_runtime, :gc_all_processes, [], timeout)
   end
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "add_vhost <vhost>"
+  def description, do: "Makes all Erlang processes on the target node perform/schedule a full sweep garbage collection"
 
-  def help_section(), do: :virtual_hosts
+  def usage, do: "force_gc"
 
-  def description(), do: "Creates a virtual host"
-
-  def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
+  def banner([], %{node: node_name}), do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
 end

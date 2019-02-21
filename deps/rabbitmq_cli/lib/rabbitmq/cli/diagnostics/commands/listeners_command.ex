@@ -84,6 +84,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
     {:ok, Enum.join(lines, Helpers.line_separator())}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists active connection listeners (ports, protocol, etc) the target node"
+
   def usage, do: "listeners"
 
   def banner([], %{node: node_name}) do

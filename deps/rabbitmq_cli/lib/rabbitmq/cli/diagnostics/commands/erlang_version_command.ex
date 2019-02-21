@@ -41,9 +41,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Displays Erlang/OTP version on the target node"
+
+  def usage, do: "erlang_version"
+
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} for its Erlang/OTP version..."
   end
-
-  def usage, do: "erlang_version"
 end
