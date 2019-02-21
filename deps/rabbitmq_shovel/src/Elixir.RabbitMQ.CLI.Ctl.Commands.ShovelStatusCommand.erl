@@ -29,7 +29,8 @@
          aliases/0,
          output/2,
          scopes/0,
-         formatter/0
+         formatter/0,
+         description/0
         ]).
 
 
@@ -37,7 +38,10 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"shovel_status">>.
+    <<"shovel_status">>.
+
+description() ->
+    <<"Lists dynamic Shovels">>.
 
 flags() ->
     [].
@@ -52,7 +56,7 @@ merge_defaults(A,O) ->
     {A, O}.
 
 banner(_, #{node := Node}) ->
-    erlang:iolist_to_binary([<<"Shovel status of node ">>,
+    erlang:iolist_to_binary([<<"Shovel status on node ">>,
                              atom_to_binary(Node, utf8)]).
 
 run(_Args, #{node := Node}) ->
