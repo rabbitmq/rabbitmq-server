@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStompConnectionsCommand').
 
@@ -29,7 +29,7 @@ scopes() -> [ctl, diagnostics].
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
-description() -> <<"Lists STOMP connections on the node">>.
+description() -> <<"Lists STOMP connections on the target node">>.
 
 validate(Args, _) ->
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
