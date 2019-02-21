@@ -683,14 +683,12 @@ add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
                     ok;
-                timeout ->
+                {timeout, _} ->
                     {error, timeout};
                 E ->
                     %% TODO should we stop the ra process here?
                     E
             end;
-        timeout ->
-            {error, timeout};
         E ->
             E
     end.
