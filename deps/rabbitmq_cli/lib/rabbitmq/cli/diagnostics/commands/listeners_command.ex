@@ -71,7 +71,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   end
 
   def output(listeners, %{formatter: "json"}) do
-    {:ok, %{"result" => "ok", "listeners" => listener_maps(listeners)}}
+    {:ok, %{"result" => "ok", "node" => node_name, "listeners" => listener_maps(listeners)}}
   end
 
   def output(listeners, %{formatter: "csv"}) do
