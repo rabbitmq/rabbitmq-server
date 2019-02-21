@@ -144,11 +144,11 @@
   %% a dtree used to track unconfirmed
   %% (to publishers) messages
   unconfirmed,
-  %% a set of tags for published messages that were
-  %% confirmed by at least one queue
+  %% a set of tags for published messages and queue names
+  %% that were confirmed by at least one queue mirror
   %% this is needed to distinguish between confirms
   %% and queue failures and make sure that at least
-  %% one queue confirmed the delivery
+  %% one mirror confirmed the delivery
   partially_confirmed,
   %% a list of tags for published messages that were
   %% delivered but are yet to be confirmed to the client
@@ -512,7 +512,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed             = dtree:empty(),
-                partially_confirmed     = sets:new(),
+                partially_confirmed     = #{},
                 rejected                = [],
                 confirmed               = [],
                 capabilities            = Capabilities,
@@ -759,14 +759,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     State2 = handle_delivering_queue_down(Name, State1),
                     %% TODO: this should use dtree:take/3
                     {MXs, UC1} = dtree:take(Name, State2#ch.unconfirmed),
-
-                    {MXsConfirmed, MXsFailed} =
-                        lists:partition(fun({MsgSeqNo,_}) ->
-                            sets:is_element(MsgSeqNo, State2#ch.partially_confirmed)
-                        end,
-                        MXs),
-                    State3 = record_confirms(MXsConfirmed, State2#ch{unconfirmed = UC1}),
-                    State4 = record_rejects(MXsFailed, State3),
+                    State4 = record_confirms(MXs, State2#ch{unconfirmed = UC1}),
 
                     erase_queue_stats(QName),
                     noreply_coalesce(
@@ -1178,25 +1171,23 @@ maybe_set_fast_reply_to(C, _State) ->
 
 record_rejects([], State) ->
     State;
-record_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
+record_rejects(MXs, State = #ch{rejected = R, tx = Tx, partially_confirmed = PC0}) ->
     Tx1 = case Tx of
         none -> none;
         _    -> failed
     end,
-    State1 = clean_partially_confirmed(MXs, State),
-    State1#ch{rejected = [MXs | R], tx = Tx1}.
+    PC1 = clean_partially_confirmed(MXs, PC0),
+    State#ch{rejected = [MXs | R], tx = Tx1, partially_confirmed = PC1}.
 
 record_confirms([], State) ->
     State;
-record_confirms(MXs, State = #ch{confirmed = C}) ->
-    State1 = clean_partially_confirmed(MXs, State),
-    State1#ch{confirmed = [MXs | C]}.
+record_confirms(MXs, State = #ch{confirmed = C, partially_confirmed = PC0}) ->
+    PC1 = clean_partially_confirmed(MXs, PC0),
+    State#ch{confirmed = [MXs | C], partially_confirmed = PC1}.
 
-clean_partially_confirmed(MXs, State = #ch{partially_confirmed = PC0}) ->
-    PC1 = lists:foldl(fun({MsgSeqNo, _}, PC) ->
-                          sets:del_element(MsgSeqNo, PC)
-                      end, PC0, MXs),
-    State#ch{partially_confirmed = PC1}.
+clean_partially_confirmed(MXs, PC) ->
+    {MsgSeqNos, _} = lists:unzip(MXs),
+    maps:without(MsgSeqNos, PC).
 
 handle_method({Method, Content}, State) ->
     handle_method(Method, Content, State).
@@ -1799,21 +1790,34 @@ track_delivering_queue(NoAck, QPid, QName,
 
 handle_publishing_queue_down(QPid, Reason,
                              State = #ch{unconfirmed = UC,
-                                         partially_confirmed = PC})
+                                         partially_confirmed = PC,
+                                         queue_names = QNames})
   when ?IS_CLASSIC(QPid) ->
-    case rabbit_misc:is_abnormal_exit(Reason) of
-        true  ->
-            {MXs, UC1} = dtree:take_all(QPid, UC),
-            record_rejects(MXs, State#ch{unconfirmed = UC1});
-        false ->
-            {MXs, UC1} = dtree:take(QPid, UC),
-            {MXsConfirmed, MXsFailed} =
-                lists:partition(fun({MsgSeqNo,_}) ->
-                    sets:is_element(MsgSeqNo, PC)
-                end,
-                MXs),
-            State1 = record_confirms(MXsConfirmed, State#ch{unconfirmed = UC1}),
-            record_rejects(MXsFailed, State1)
+    case maps:get(QPid, QNames, none) of
+        %% The queue is unknown, the confirm must have been processed already
+        none  -> State;
+        QName ->
+            case {rabbit_misc:is_abnormal_exit(Reason), Reason} of
+                {true, _} ->
+                    {MXs, UC1} = dtree:take_all(QPid, UC),
+                    record_rejects(MXs, State#ch{unconfirmed = UC1});
+                {false, normal} ->
+                    {MXs, UC1} = dtree:take(QPid, UC),
+                    record_confirms(MXs, State#ch{unconfirmed = UC1});
+                {false, _} ->
+                    {MXs, UC1} = dtree:take(QPid, UC),
+                    {MXsConfirmed, MXsFailed} =
+                        lists:partition(fun({MsgSeqNo,_}) ->
+                            case maps:get(MsgSeqNo, PC, none) of
+                                none   -> false;
+                                Queues -> maps:is_key(QName, Queues)
+                            end
+                        end,
+                        MXs),
+                    State1 = record_confirms(MXsConfirmed,
+                                             State#ch{unconfirmed = UC1}),
+                    record_rejects(MXsFailed, State1)
+            end
     end;
 handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
     error(quorum_queues_should_never_be_monitored).
@@ -2120,14 +2124,21 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     %% frequently would in fact be more expensive in the common case.
     {QNames1, QMons1} =
         lists:foldl(fun (Q, {QNames0, QMons0}) when ?is_amqqueue(Q) ->
-                            QPid = amqqueue:get_pid(Q),
-                            QRef = qpid_to_ref(QPid),
-                            QName = amqqueue:get_name(Q),
-                            {case maps:is_key(QRef, QNames0) of
-                                 true  -> QNames0;
-                                 false -> maps:put(QRef, QName, QNames0)
-                             end, maybe_monitor(QPid, QMons0)}
-                    end, {QNames, maybe_monitor_all(DeliveredQPids, QMons)}, Qs),
+            QPid = amqqueue:get_pid(Q),
+            QRef = qpid_to_ref(QPid),
+            QName = amqqueue:get_name(Q),
+            case ?IS_CLASSIC(QRef) of
+                true ->
+                    SPids = amqqueue:get_slave_pids(Q),
+                    NewQNames =
+                        maps:from_list([{Ref, QName} || Ref <- [QRef | SPids]]),
+                    {maps:merge(NewQNames, QNames0),
+                     maybe_monitor_all([QPid | SPids], QMons0)};
+                false ->
+                    {maps:put(QRef, QName, QNames0), QMons0}
+            end
+        end,
+        {QNames, QMons}, Qs),
     State1 = State#ch{queue_names    = QNames1,
                       queue_monitors = QMons1},
     %% NB: the order here is important since basic.returns must be
@@ -2161,24 +2172,44 @@ process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
     State#ch{unconfirmed = dtree:insert(MsgSeqNo, QRefs, XName,
                                         State#ch.unconfirmed)}.
 
-confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC, partially_confirmed = PC0}) ->
+confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QRef, UC),
 
-    {ConfirmedMsgSeqNos, _} = lists:unzip(MXs),
-    PartialMsgSeqNos = MsgSeqNos -- ConfirmedMsgSeqNos,
-
-    %% Add partially confirmed
-    PC1 = lists:foldl(
-        fun(MsgSeqNo, PC) ->
-            case dtree:is_pk(MsgSeqNo, UC1) of
-                true  -> sets:add_element(MsgSeqNo, PC);
-                false -> PC
-            end
-        end,
-        PC0, PartialMsgSeqNos),
-
+    State1 = maybe_add_partial_confirms(MsgSeqNos, MXs, QRef,
+                                        State#ch{unconfirmed = UC1}),
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    record_confirms(MXs, State#ch{unconfirmed = UC1, partially_confirmed = PC1}).
+    record_confirms(MXs, State1).
+
+maybe_add_partial_confirms(MsgSeqNos, MXs, QRef,
+                           State = #ch{unconfirmed = UC,
+                                       partially_confirmed = PC0,
+                                       queue_names = QNames})
+        when ?IS_CLASSIC(QRef) ->
+    case maps:get(QRef, QNames, none) of
+        none  -> State;
+        QName ->
+            {ConfirmedMsgSeqNos, _} = lists:unzip(MXs),
+            PartialMsgSeqNos = MsgSeqNos -- ConfirmedMsgSeqNos,
+
+            PC1 = lists:foldl(
+                fun(MsgSeqNo, PC) ->
+                    case dtree:is_pk(MsgSeqNo, UC) of
+                        false -> PC;
+                        true  ->
+                            maps:update_with(MsgSeqNo,
+                                             fun(Queues) ->
+                                                 maps:put(QName, ok, Queues)
+                                             end,
+                                             #{}, PC)
+                    end
+                end,
+                PC0,
+                PartialMsgSeqNos),
+            State#ch{partially_confirmed = PC1}
+    end;
+maybe_add_partial_confirms(_MsgSeqNos, _MXs, _QRef, State) ->
+    State.
+
 
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;

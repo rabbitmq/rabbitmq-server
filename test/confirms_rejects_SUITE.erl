@@ -15,7 +15,7 @@ groups() ->
       {parallel_tests, [parallel], [
           confirms_rejects_conflict,
           dead_queue_rejects,
-          mixed_dead_alive_queues_confirm
+          mixed_dead_alive_queues_reject
         ]}
     ].
 
@@ -58,11 +58,11 @@ end_per_testcase(dead_queue_rejects = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"dead_queue_rejects">>}),
     end_per_testcase0(Testcase, Config);
-end_per_testcase(mixed_dead_alive_queues_confirm = Testcase, Config) ->
+end_per_testcase(mixed_dead_alive_queues_reject = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_confirm_dead">>}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_confirm_alive">>}),
-    amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"mixed_dead_alive_queues_confirm">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_dead">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_alive">>}),
+    amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"mixed_dead_alive_queues_reject">>}),
     end_per_testcase0(Testcase, Config).
 
 end_per_testcase0(Testcase, Config) ->
@@ -109,12 +109,12 @@ dead_queue_rejects(Config) ->
         error(timeout_waiting_for_nack)
     end.
 
-mixed_dead_alive_queues_confirm(Config) ->
+mixed_dead_alive_queues_reject(Config) ->
     Conn = ?config(conn, Config),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    QueueNameDead = <<"mixed_dead_alive_queues_confirm_dead">>,
-    QueueNameAlive = <<"mixed_dead_alive_queues_confirm_alive">>,
-    ExchangeName = <<"mixed_dead_alive_queues_confirm">>,
+    QueueNameDead = <<"mixed_dead_alive_queues_reject_dead">>,
+    QueueNameAlive = <<"mixed_dead_alive_queues_reject_alive">>,
+    ExchangeName = <<"mixed_dead_alive_queues_reject">>,
 
     amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
@@ -152,8 +152,8 @@ mixed_dead_alive_queues_confirm(Config) ->
                       #amqp_msg{payload = <<"HI">>}),
 
     receive
-        {'basic.nack',_,_,_} -> error(expecting_ack_got_nack);
-        {'basic.ack',_,_} -> ok
+        {'basic.nack',_,_,_} -> ok;
+        {'basic.ack',_,_} -> error(expecting_nack_got_ack)
     after 10000 ->
         error(timeout_waiting_for_ack)
     end.
