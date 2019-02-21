@@ -172,6 +172,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
           :help -> 1
           :node_management -> 2
           :cluster_management -> 3
+          :replication -> 3
           :user_management -> 4
           :access_control -> 5
           :observability_and_health_checks -> 6
@@ -204,6 +205,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         "Users"
       :cluster_management ->
         "Cluster"
+      :replication ->
+        "Replication"
       :node_management ->
         "Nodes"
       :queues ->
