@@ -26,9 +26,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceGcCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def description, do: "Makes all Erlang processes on the target node perform/schedule garbage collections"
+  def description, do: "Makes all Erlang processes on the target node perform/schedule a full sweep garbage collection"
 
   def usage, do: "force_gc"
 
-  def banner(args, %{node: node_name} = opts), do: "Will ask all processes on node #{node_name} to perform garbage collection"
+  def banner(args, %{node: node_name} = opts), do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
 end
