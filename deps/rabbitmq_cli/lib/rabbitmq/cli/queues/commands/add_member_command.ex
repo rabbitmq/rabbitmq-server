@@ -41,6 +41,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def description, do: "Adds a quorum queue member (replica) for a queue on the given node."
+
   def banner([name, node], _) do
     "Adding member #{node} to quorum queue #{name} cluster..."
   end

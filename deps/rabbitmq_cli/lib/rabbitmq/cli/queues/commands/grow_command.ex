@@ -81,6 +81,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def description, do: "Grows quorum queue clusters by adding a member (replica) to all matching quorum queues on the given node."
+
   def banner([node, strategy], _) do
     "Growing #{strategy} quorum queues on #{node}..."
   end
