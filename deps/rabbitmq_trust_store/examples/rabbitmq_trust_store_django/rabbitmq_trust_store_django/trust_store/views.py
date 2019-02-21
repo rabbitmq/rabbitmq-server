@@ -1,14 +1,19 @@
+import logging
+import os
+
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
-import os
 from django.conf import settings
 from django.views.decorators.http import last_modified
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
 
 def latest_dir_change(request):
     timestamp = os.stat(cert_directory()).st_mtime
-    return datetime.fromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp)
+    logger.debug('latest_dir_change: %s', dt)
+    return dt
 
 @last_modified(latest_dir_change)
 def index(request):
