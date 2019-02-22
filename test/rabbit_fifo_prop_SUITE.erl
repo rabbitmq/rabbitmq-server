@@ -5,8 +5,8 @@
 -export([
          ]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %%%===================================================================
@@ -36,7 +36,9 @@ all_tests() ->
      scenario12,
      scenario13,
      scenario14,
-     scenario15
+     scenario15,
+     scenario16,
+     fake_pid
     ].
 
 groups() ->
@@ -251,20 +253,59 @@ scenario15(_Config) ->
                         delivery_limit => 1}, Commands),
     ok.
 
+scenario16(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    C2 = {<<>>, c:pid(0,882,1)},
+    E = c:pid(0,176,1),
+    Commands = [
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E, 1, msg1),
+                make_checkout(C2, {auto,1,simple_prefetch}),
+                {down, C1Pid, noproc}, %% msg1 allocated to C2
+                make_return(C2, [0]), %% msg1 returned
+                make_enqueue(E, 2, <<>>),
+                make_settle(C2, [0])
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        delivery_limit => 1}, Commands),
+    ok.
+
+fake_pid(_Config) ->
+    Pid = fake_external_pid(<<"mynode@banana">>),
+    ?assertNotEqual(node(Pid), node()),
+    ?assert(is_pid(Pid)),
+    ok.
+
+fake_external_pid(Node) when is_binary(Node) ->
+    ThisNodeSize = size(term_to_binary(node())) + 1,
+    Pid = spawn(fun () -> ok end),
+    %% drop the local node data from a local pid
+    <<_:ThisNodeSize/binary, LocalPidData/binary>> = term_to_binary(Pid),
+    S = size(Node),
+    %% replace it with the incoming node binary
+    Final = <<131,103, 100, 0, S, Node/binary, LocalPidData/binary>>,
+    binary_to_term(Final).
+
 snapshots(_Config) ->
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
                       frequency([{10, {0, 0, false, 0}},
-                                 {5, {non_neg_integer(), non_neg_integer(),
-                                      boolean(), non_neg_integer()}}]),
-                      ?FORALL(O, ?LET(Ops, log_gen(200), expand(Ops)),
-                              collect({Length, Bytes},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      boolean(),
+                                      oneof([range(1, 3), undefined])
+                                     }}]),
+                      ?FORALL(O, ?LET(Ops, log_gen(250), expand(Ops)),
+                              collect({log_size, length(O)},
                                       snapshots_prop(
                                         config(?FUNCTION_NAME,
-                                               Length, Bytes,
-                                               SingleActiveConsumer, DeliveryLimit), O))))
-      end, [], 2000).
+                                               Length,
+                                               Bytes,
+                                               SingleActiveConsumer,
+                                               DeliveryLimit), O))))
+      end, [], 2500).
 
 config(Name, Length, Bytes, SingleActive, DeliveryLimit) ->
     #{name => Name,
@@ -305,7 +346,10 @@ log_gen(Size) ->
                          ]))))).
 
 pid_gen() ->
-    ?LET(_, integer(), spawn(fun () -> ok end)).
+    ?LET(Node, oneof([atom_to_binary(node(), utf8),
+                      <<"fakenode@fake">>,
+                      <<"fakenode@fake2">>
+                      ]), fake_external_pid(Node)).
 
 down_gen(Pid) ->
     ?LET(E, {down, Pid, oneof([noconnection, noproc])}, E).
@@ -493,6 +537,7 @@ run_snapshot_test0(Conf, Commands) ->
     State = rabbit_fifo:normalize(State0),
 
     [begin
+         % ct:pal("release_cursor: ~b~n", [SnapIdx]),
          %% drop all entries below and including the snapshot
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
@@ -506,6 +551,7 @@ run_snapshot_test0(Conf, Commands) ->
                  ct:pal("Snapshot tests failed run log:~n"
                         "~p~n from ~n~p~n Entries~n~p~n",
                         [Filtered, SnapState, Entries]),
+                 ct:pal("Expected~n~p~nGot:~n~p", [State, S]),
                  ?assertEqual(State, S)
          end
      end || {release_cursor, SnapIdx, SnapState} <- Effects],
