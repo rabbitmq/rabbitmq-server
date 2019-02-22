@@ -328,8 +328,12 @@ snapshots_prop(Conf, Commands) ->
     end.
 
 log_gen(Size) ->
-    ?LET(EPids, vector(2, pid_gen()),
-         ?LET(CPids, vector(2, pid_gen()),
+    Nodes = [node(),
+             fakenode@fake,
+             fakenode@fake2
+            ],
+    ?LET(EPids, vector(2, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
               resize(Size,
                      list(
                        frequency(
@@ -342,17 +346,19 @@ log_gen(Size) ->
                           {2, checkout_gen(oneof(CPids))},
                           {1, checkout_cancel_gen(oneof(CPids))},
                           {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, nodeup_gen(Nodes)},
                           {1, purge}
                          ]))))).
 
-pid_gen() ->
-    ?LET(Node, oneof([atom_to_binary(node(), utf8),
-                      <<"fakenode@fake">>,
-                      <<"fakenode@fake2">>
-                      ]), fake_external_pid(Node)).
+pid_gen(Nodes) ->
+    ?LET(Node, oneof(Nodes),
+         fake_external_pid(atom_to_binary(Node, utf8))).
 
 down_gen(Pid) ->
     ?LET(E, {down, Pid, oneof([noconnection, noproc])}, E).
+
+nodeup_gen(Nodes) ->
+    {nodeup, oneof(Nodes)}.
 
 enqueue_gen(Pid) ->
     ?LET(E, {enqueue, Pid,
@@ -451,6 +457,8 @@ handle_op({down, Pid, Reason} = Cmd, #t{down = Down} = T) ->
             %% it is either not down or down with noconnection
             do_apply(Cmd, T#t{down = maps:put(Pid, Reason, Down)})
     end;
+handle_op({nodeup, _} = Cmd, T) ->
+    do_apply(Cmd, T);
 handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
     %% this simulates certain settlements arriving out of order
     case queue:out(Effs) of
