@@ -251,7 +251,7 @@ To do that, we'll define `output/2` to format the `run/2` return value:
 We have function clauses for every possible output of `rabbit_amqqueue:delete/3` used
 in the `run/2` function.
 
-For a run to be successul, the `output/2` function should return a pair of `{:ok, result}`,
+For a run to be successful, the `output/2` function should return a pair of `{:ok, result}`,
 and to indicate an error it should return a `{:error, exit_code, message}` tuple.
 `exit_code` must be an integer and `message` is a string or a list of strings.
 
