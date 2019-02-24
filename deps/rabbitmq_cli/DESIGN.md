@@ -211,7 +211,7 @@ For example, commands in `rabbitmq-plugins` tool and those controlling clusterin
 
 Those directories can be defined using environment options or rabbitmq environment variables.
 
-In the broker distribution the escript file is called from a shell/cmd sctipt, which loads
+In the broker distribution the escript file is called from a shell/cmd script, which loads
 broker environment and exports it into the script.
 
 Environment variables also specify the locations of the enabled plugins file
