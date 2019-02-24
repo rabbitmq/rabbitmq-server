@@ -382,7 +382,7 @@ Script names for scopes:
  * `rabbitmq-diagnostics` - `:diagnostics`
 
 This environment is extended by plugins `:scopes` environment variables,
-but cannot be overriden. Plugins scopes can override each other,
+but cannot be overridden. Plugins scopes can override each other,
 so should be used with caution.
 
 So all the commands in the `RabbitMQ.CLI.Ctl.Commands` namespace will be available
