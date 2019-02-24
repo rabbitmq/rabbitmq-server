@@ -126,7 +126,7 @@ module.
 ##### Command Aliases with Variables
 
 Aliases can also contain arguments. Command name must be the first word after the `=`.
-Arguments specified in an alias will preceed those passed from the command line.
+Arguments specified in an alias will precede those passed from the command line.
 
 For example, if you specify the alias `passwd_user1 = change_password user1`,
 you can call it with `rabbitmqctl passwd_user1 new_password`.
