@@ -303,7 +303,7 @@ defmodule ParserTest do
     garbage_gull = herring_gull -g
     complex_gull = herring_gull --herring pacific -g --formatter=erlang eat
     invalid_gull = herring_gull --invalid
-    unknown_gull = misterious_gull
+    unknown_gull = mysterious_gull
     """
 
     aliases_file_name = "aliases.ini"

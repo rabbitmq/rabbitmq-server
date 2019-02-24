@@ -94,7 +94,7 @@ defmodule ListExchangesCommandTest do
           [[name: exchange_name, type: :direct]])
   end
 
-  test "run: list multiple excahnges", context do
+  test "run: list multiple exchanges", context do
     declare_exchange("test_exchange_1", @vhost, :direct)
     declare_exchange("test_exchange_2", @vhost, :fanout)
     non_default_exchanges = run_command_to_list(@command, [["name", "type"], context[:opts]])

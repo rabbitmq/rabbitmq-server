@@ -39,7 +39,7 @@ CLI core consists of several modules implementing command execution process:
  * `RabbitMQCtl`: entry point. Generic execution logic.
  * `Parser`: responsible for command line argument parsing (drives Elixir's `OptionParser`)
  * `CommandModules`: responsible for command module discovery and loading
- * `Config`: responsible for config unification: merges enviroment variable and command argument values
+ * `Config`: responsible for config unification: merges environment variable and command argument values
  * `Output`: responsible for output formatting
  * `Helpers`: self-explanatory
 
@@ -126,7 +126,7 @@ module.
 ##### Command Aliases with Variables
 
 Aliases can also contain arguments. Command name must be the first word after the `=`.
-Arguments specified in an alias will preceed those passed from the command line.
+Arguments specified in an alias will precede those passed from the command line.
 
 For example, if you specify the alias `passwd_user1 = change_password user1`,
 you can call it with `rabbitmqctl passwd_user1 new_password`.
@@ -211,7 +211,7 @@ For example, commands in `rabbitmq-plugins` tool and those controlling clusterin
 
 Those directories can be defined using environment options or rabbitmq environment variables.
 
-In the broker distribution the escript file is called from a shell/cmd sctipt, which loads
+In the broker distribution the escript file is called from a shell/cmd script, which loads
 broker environment and exports it into the script.
 
 Environment variables also specify the locations of the enabled plugins file
@@ -382,7 +382,7 @@ Script names for scopes:
  * `rabbitmq-diagnostics` - `:diagnostics`
 
 This environment is extended by plugins `:scopes` environment variables,
-but cannot be overriden. Plugins scopes can override each other,
+but cannot be overridden. Plugins scopes can override each other,
 so should be used with caution.
 
 So all the commands in the `RabbitMQ.CLI.Ctl.Commands` namespace will be available

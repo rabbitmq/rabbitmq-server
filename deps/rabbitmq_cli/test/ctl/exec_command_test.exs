@@ -40,7 +40,7 @@ defmodule ExecCommandTest do
     {:validation_failure, _} = @command.validate(["s,f"], %{})
   end
 
-  test "validate: sucess" do
+  test "validate: success" do
     :ok = @command.validate([":ok"], %{})
   end
 

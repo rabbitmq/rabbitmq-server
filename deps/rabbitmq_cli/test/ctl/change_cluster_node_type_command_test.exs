@@ -55,7 +55,7 @@ defmodule ChangeClusterNodeTypeCommandTest do
     assert @command.validate([], context[:opts]) ==
       {:validation_failure, :not_enough_args}
   end
-  test "validate: providingg too many arguments fails validation", context do
+  test "validate: providing too many arguments fails validation", context do
     assert @command.validate(["a", "b", "c"], context[:opts]) ==
       {:validation_failure, :too_many_args}
   end

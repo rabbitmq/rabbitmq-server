@@ -74,7 +74,7 @@ defmodule HelpCommandTest do
     assert @command.run([], %{}) =~ ~r/Usage:/
   end
 
-  test "run: unrecognizes arguments print general help" do
+  test "run: unrecognised arguments print general help" do
     assert @command.run(["extra1", "extra2"], %{}) =~ ~r/Usage:/
   end
 end

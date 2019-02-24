@@ -71,7 +71,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
           require Logger
 
           Logger.warn(
-            "Unable to read the enebled plugins file.\n" <>
+            "Unable to read the enabled plugins file.\n" <>
               "  Reason: #{inspect(err)}\n" <>
               "  Commands provided by plugins will not be available.\n" <>
               "  Please make sure your user has sufficient permissions to read to\n" <>
