@@ -252,7 +252,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   # Functions can return {:ok, val}, so val will be passed
   # to then next function, or {:ok, val, output} where
   # val will be passed and output will be put into the stream
-  def stream_until_error_parametrised(funs, init) do
+  def stream_until_error_parameterised(funs, init) do
     Stream.transform(funs, {:just, init}, fn
       f, {:just, val} ->
         case f.(val) do
@@ -271,7 +271,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   # Execution can be terminated by an error {:error, _}.
   # The error will be the last element in the stream.
   def stream_until_error(funs) do
-    stream_until_error_parametrised(
+    stream_until_error_parameterised(
       Enum.map(
         funs,
         fn fun ->

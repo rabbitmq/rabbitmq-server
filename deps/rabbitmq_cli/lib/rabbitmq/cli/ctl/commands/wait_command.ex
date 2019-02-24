@@ -52,7 +52,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     app_names = :rabbit_and_plugins
     quiet = opts[:quiet] || false
 
-    Helpers.stream_until_error_parametrised(
+    Helpers.stream_until_error_parameterised(
       [
         log("Waiting for pid file '#{pid_file}' to appear", quiet),
         fn _ -> wait_for_pid_file(pid_file, timeout) end,
@@ -67,7 +67,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     app_names = :rabbit_and_plugins
     quiet = opts[:quiet] || false
 
-    Helpers.stream_until_error_parametrised(
+    Helpers.stream_until_error_parameterised(
       wait_for_pid_funs(node_name, app_names, timeout, quiet),
       pid
     )
