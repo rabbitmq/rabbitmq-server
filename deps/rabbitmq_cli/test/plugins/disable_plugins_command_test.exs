@@ -102,7 +102,7 @@ defmodule DisablePluginsCommandTest do
       @command.validate_execution_environment(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
-  test "node is unaccessible, writes out enabled plugins file and returns implicitly enabled plugin list", context do
+  test "node is inaccessible, writes out enabled plugins file and returns implicitly enabled plugin list", context do
     assert {:stream, test_stream} =
       @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
     assert [[:rabbitmq_federation],
