@@ -103,7 +103,7 @@ defmodule EnablePluginsCommandTest do
       @command.validate_execution_environment(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
-  test "if node is unaccessible, writes enabled plugins file and reports implicitly enabled plugin list", context do
+  test "if node is inaccessible, writes enabled plugins file and reports implicitly enabled plugin list", context do
     # Clears enabled plugins file
     set_enabled_plugins([], :offline, :nonode, context[:opts])
 
