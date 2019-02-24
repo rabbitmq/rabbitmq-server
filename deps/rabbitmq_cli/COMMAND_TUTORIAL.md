@@ -222,7 +222,7 @@ do something on a broker (remote) node, you need to use RPC calls.
 It can be the standard Erlang `rpc:call` set of functions or `rabbit_misc:rpc_call/4`.
 The latter is used by all standard commands and is generally recommended.
 
-Target RabbitMQ node name is passsed in as the `node` option, which is
+Target RabbitMQ node name is passed in as the `node` option, which is
 a global option and is available to all commands.
 
 
