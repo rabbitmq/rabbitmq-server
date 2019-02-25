@@ -1490,12 +1490,12 @@ subscribe_redelivery_count(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
 
-    DTag = <<"x-delivery-count">>,
+    DCHeader = <<"x-delivery-count">>,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DTag, H0)),
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1505,7 +1505,7 @@ subscribe_redelivery_count(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1515,7 +1515,7 @@ subscribe_redelivery_count(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag2,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H2}}} ->
-            ?assertMatch({DTag, _, 2}, rabbit_basic:header(DTag, H2)),
+            ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag2,
                                                multiple     = false}),
             wait_for_messages_ready(Servers, RaName, 0),
@@ -1535,12 +1535,12 @@ subscribe_redelivery_limit(Config) ->
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QQ, false),
 
-    DTag = <<"x-delivery-count">>,
+    DCHeader = <<"x-delivery-count">>,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DTag, H0)),
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1551,7 +1551,7 @@ subscribe_redelivery_limit(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1581,12 +1581,12 @@ subscribe_redelivery_policy(Config) ->
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QQ, false),
 
-    DTag = <<"x-delivery-count">>,
+    DCHeader = <<"x-delivery-count">>,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DTag, H0)),
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1597,7 +1597,7 @@ subscribe_redelivery_policy(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1631,12 +1631,12 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QQ, false),
 
-    DTag = <<"x-delivery-count">>,
+    DCHeader = <<"x-delivery-count">>,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DTag, H0)),
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1647,7 +1647,7 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,
                                                 requeue      = true})
@@ -1668,14 +1668,14 @@ consume_redelivery_count(Config) ->
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
 
-    DTag = <<"x-delivery-count">>,
+    DCHeader = <<"x-delivery-count">>,
 
     {#'basic.get_ok'{delivery_tag = DeliveryTag,
                      redelivered = false},
      #amqp_msg{props = #'P_basic'{headers = H0}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                            no_ack = false}),
-    ?assertMatch({DTag, _, 0}, rabbit_basic:header(DTag, H0)),
+    ?assertMatch({DCHeader, _, 0}, rabbit_basic:header(DCHeader, H0)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = true}),
@@ -1687,7 +1687,7 @@ consume_redelivery_count(Config) ->
      #amqp_msg{props = #'P_basic'{headers = H1}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                            no_ack = false}),
-    ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+    ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                         multiple     = false,
                                         requeue      = true}),
@@ -1697,7 +1697,7 @@ consume_redelivery_count(Config) ->
      #amqp_msg{props = #'P_basic'{headers = H2}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                            no_ack = false}),
-    ?assertMatch({DTag, _, 2}, rabbit_basic:header(DTag, H2)),
+    ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
                                         multiple     = false,
                                         requeue      = true}),
