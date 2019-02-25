@@ -81,8 +81,6 @@ test_init(Name) ->
                                            atom_to_binary(Name, utf8)),
            release_cursor_interval => 0}).
 
-% To launch these tests: make eunit EUNIT_MODS="rabbit_fifo"
-
 enq_enq_checkout_test(_) ->
     Cid = {<<"enq_enq_checkout_test">>, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
