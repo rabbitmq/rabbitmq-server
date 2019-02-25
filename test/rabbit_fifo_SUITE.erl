@@ -1,638 +1,1035 @@
 -module(rabbit_fifo_SUITE).
 
+%% rabbit_fifo unit tests suite
+
 -compile(export_all).
+
+-compile({no_auto_import, [apply/3]}).
+-export([
+         ]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ra/include/ra.hrl").
+-include_lib("rabbit/src/rabbit_fifo.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+%%%===================================================================
+%%% Common Test callbacks
+%%%===================================================================
 
 all() ->
     [
      {group, tests}
     ].
 
+
+%% replicate eunit like test resultion
 all_tests() ->
-    [
-     basics,
-     return,
-     rabbit_fifo_returns_correlation,
-     resends_lost_command,
-     returns_after_down,
-     resends_after_lost_applied,
-     handles_reject_notification,
-     two_quick_enqueues,
-     detects_lost_delivery,
-     dequeue,
-     discard,
-     cancel_checkout,
-     credit,
-     untracked_enqueue,
-     flow,
-     test_queries,
-     duplicate_delivery,
-     usage
-    ].
+    [F || {F, _} <- ?MODULE:module_info(functions),
+          re:run(atom_to_list(F), "_test$") /= nomatch]
+    .
 
 groups() ->
     [
      {tests, [], all_tests()}
     ].
 
-init_per_group(_, Config) ->
-    PrivDir = ?config(priv_dir, Config),
-    _ = application:load(ra),
-    ok = application:set_env(ra, data_dir, PrivDir),
-    application:ensure_all_started(ra),
-    application:ensure_all_started(lg),
+init_per_suite(Config) ->
     Config.
 
-end_per_group(_, Config) ->
-    _ = application:stop(ra),
+end_per_suite(_Config) ->
+    ok.
+
+init_per_group(_Group, Config) ->
     Config.
 
-init_per_testcase(TestCase, Config) ->
-    meck:new(rabbit_quorum_queue, [passthrough]),
-    meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _) -> ok end),
-    meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
-                fun (_, _) -> ok end),
-    ra_server_sup_sup:remove_all(),
-    ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
-    ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
-    ClusterName = rabbit_misc:r("/", queue, atom_to_binary(TestCase, utf8)),
-    [
-     {cluster_name, ClusterName},
-     {uid, atom_to_binary(TestCase, utf8)},
-     {node_id, {TestCase, node()}},
-     {uid2, atom_to_binary(ServerName2, utf8)},
-     {node_id2, {ServerName2, node()}},
-     {uid3, atom_to_binary(ServerName3, utf8)},
-     {node_id3, {ServerName3, node()}}
-     | Config].
+end_per_group(_Group, _Config) ->
+    ok.
 
-end_per_testcase(_, Config) ->
-    meck:unload(),
+init_per_testcase(_TestCase, Config) ->
     Config.
 
-basics(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    UId = ?config(uid, Config),
-    CustomerTag = UId,
-    ok = start_cluster(ClusterName, [ServerId]),
-    FState0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, FState1} = rabbit_fifo_client:checkout(CustomerTag, 1, undefined, FState0),
-
-    ra_log_wal:force_roll_over(ra_log_wal),
-    % create segment the segment will trigger a snapshot
-    timer:sleep(1000),
-
-    {ok, FState2} = rabbit_fifo_client:enqueue(one, FState1),
-    % process ra events
-    FState3 = process_ra_event(FState2, 250),
-
-    FState5 = receive
-                  {ra_event, From, Evt} ->
-                      case rabbit_fifo_client:handle_ra_event(From, Evt, FState3) of
-                          {internal, _AcceptedSeqs, _Actions, _FState4} ->
-                              exit(unexpected_internal_event);
-                          {{delivery, C, [{MsgId, _Msg}]}, FState4} ->
-                              {ok, S} = rabbit_fifo_client:settle(C, [MsgId],
-                                                              FState4),
-                              S
-                      end
-              after 5000 ->
-                        exit(await_msg_timeout)
-              end,
-
-    % process settle applied notification
-    FState5b = process_ra_event(FState5, 250),
-    _ = ra:stop_server(ServerId),
-    _ = ra:restart_server(ServerId),
-
-    %% wait for leader change to notice server is up again
-    receive
-        {ra_event, _, {machine, leader_change}} -> ok
-    after 5000 ->
-              exit(leader_change_timeout)
-    end,
-
-    {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
-    % process applied event
-    FState6b = process_ra_event(FState6, 250),
-
-    receive
-        {ra_event, Frm, E} ->
-            case rabbit_fifo_client:handle_ra_event(Frm, E, FState6b) of
-                {internal, _, _, _FState7} ->
-                    exit({unexpected_internal_event, E});
-                {{delivery, Ctag, [{Mid, {_, two}}]}, FState7} ->
-                    {ok, _S} = rabbit_fifo_client:return(Ctag, [Mid], FState7),
-                    ok
-            end
-    after 2000 ->
-              exit(await_msg_timeout)
-    end,
-    ra:stop_server(ServerId),
+end_per_testcase(_TestCase, _Config) ->
     ok.
 
-return(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ServerId2 = ?config(node_id2, Config),
-    ok = start_cluster(ClusterName, [ServerId, ServerId2]),
+%%%===================================================================
+%%% Test cases
+%%%===================================================================
 
-    F00 = rabbit_fifo_client:init(ClusterName, [ServerId, ServerId2]),
-    {ok, F0} = rabbit_fifo_client:enqueue(1, msg1, F00),
-    {ok, F1} = rabbit_fifo_client:enqueue(2, msg2, F0),
-    {_, _, F2} = process_ra_events(F1, 100),
-    {ok, {{MsgId, _}, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
-    {ok, _F2} = rabbit_fifo_client:return(<<"tag">>, [MsgId], F),
+-define(ASSERT_EFF(EfxPat, Effects),
+        ?ASSERT_EFF(EfxPat, true, Effects)).
 
-    ra:stop_server(ServerId),
+-define(ASSERT_EFF(EfxPat, Guard, Effects),
+    ?assert(lists:any(fun (EfxPat) when Guard -> true;
+                          (_) -> false
+                      end, Effects))).
+
+-define(ASSERT_NO_EFF(EfxPat, Effects),
+    ?assert(not lists:any(fun (EfxPat) -> true;
+                          (_) -> false
+                      end, Effects))).
+
+-define(assertNoEffect(EfxPat, Effects),
+    ?assert(not lists:any(fun (EfxPat) -> true;
+                          (_) -> false
+                      end, Effects))).
+
+test_init(Name) ->
+    init(#{name => Name,
+           queue_resource => rabbit_misc:r("/", queue,
+                                           atom_to_binary(Name, utf8)),
+           release_cursor_interval => 0}).
+
+enq_enq_checkout_test(_) ->
+    Cid = {<<"enq_enq_checkout_test">>, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    {_State3, _, Effects} =
+        apply(meta(3),
+              rabbit_fifo:make_checkout(Cid, {once, 2, simple_prefetch}, #{}),
+              State2),
+    ?ASSERT_EFF({monitor, _, _}, Effects),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, Effects),
     ok.
 
-rabbit_fifo_returns_correlation(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(corr1, msg1, F0),
-    receive
-        {ra_event, Frm, E} ->
-            case rabbit_fifo_client:handle_ra_event(Frm, E, F1) of
-                {internal, [corr1], [], _F2} ->
-                    ok;
-                {Del, _} ->
-                    exit({unexpected, Del})
-            end
-    after 2000 ->
-              exit(await_msg_timeout)
-    end,
-    ra:stop_server(ServerId),
+credit_enq_enq_checkout_settled_credit_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    {State3, _, Effects} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {auto, 1, credited}, #{}), State2),
+    ?ASSERT_EFF({monitor, _, _}, Effects),
+    Deliveries = lists:filter(fun ({send_msg, _, {delivery, _, _}, _}) -> true;
+                                  (_) -> false
+                              end, Effects),
+    ?assertEqual(1, length(Deliveries)),
+    %% settle the delivery this should _not_ result in further messages being
+    %% delivered
+    {State4, SettledEffects} = settle(Cid, 4, 1, State3),
+    ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->
+                                          true;
+                                      (_) -> false
+                                  end, SettledEffects)),
+    %% granting credit (3) should deliver the second msg if the receivers
+    %% delivery count is (1)
+    {State5, CreditEffects} = credit(Cid, 5, 1, 1, false, State4),
+    % ?debugFmt("CreditEffects  ~p ~n~p", [CreditEffects, State4]),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, CreditEffects),
+    {_State6, FinalEffects} = enq(6, 3, third, State5),
+    ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->
+                                          true;
+                                      (_) -> false
+                                  end, FinalEffects)),
     ok.
 
-duplicate_delivery(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(corr1, msg1, F1),
-    Fun = fun Loop(S0) ->
-            receive
-                {ra_event, Frm, E} = Evt ->
-                    case rabbit_fifo_client:handle_ra_event(Frm, E, S0) of
-                        {internal, [corr1], [], S1} ->
-                            Loop(S1);
-                        {_Del, S1} ->
-                            %% repeat event delivery
-                            self() ! Evt,
-                            %% check that then next received delivery doesn't
-                            %% repeat or crash
-                            receive
-                                {ra_event, F, E1} ->
-                                    case rabbit_fifo_client:handle_ra_event(F, E1, S1) of
-                                        {internal, [], [], S2} ->
-                                            S2
-                                    end
-                            end
-                    end
-            after 2000 ->
-                      exit(await_msg_timeout)
-            end
-        end,
-    Fun(F2),
-    ra:stop_server(ServerId),
+credit_with_drained_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    State0 = test_init(test),
+    %% checkout with a single credit
+    {State1, _, _} =
+        apply(meta(1), rabbit_fifo:make_checkout(Cid, {auto, 1, credited},#{}),
+              State0),
+    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 1,
+                                                       delivery_count = 0}}},
+                 State1),
+    {State, Result, _} =
+         apply(meta(3), rabbit_fifo:make_credit(Cid, 0, 5, true), State1),
+    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
+                                                       delivery_count = 5}}},
+                 State),
+    ?assertEqual({multi, [{send_credit_reply, 0},
+                          {send_drained, [{?FUNCTION_NAME, 5}]}]},
+                           Result),
     ok.
 
-usage(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(corr1, msg1, F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(corr2, msg2, F2),
-    {_, _, _} = process_ra_events(F3, 50),
-    % force tick and usage stats emission
-    ServerId ! tick_timeout,
-    timer:sleep(50),
-    Use = rabbit_fifo:usage(element(1, ServerId)),
-    ra:stop_server(ServerId),
-    ?assert(Use > 0.0),
+credit_and_drain_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    %% checkout without any initial credit (like AMQP 1.0 would)
+    {State3, _, CheckEffs} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {auto, 0, credited}, #{}),
+              State2),
+
+    ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, CheckEffs),
+    {State4, {multi, [{send_credit_reply, 0},
+                      {send_drained, [{?FUNCTION_NAME, 2}]}]},
+    Effects} = apply(meta(4), rabbit_fifo:make_credit(Cid, 4, 0, true), State3),
+    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
+                                                       delivery_count = 4}}},
+                 State4),
+
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}},
+                                             {_, {_, second}}]}, _}, Effects),
+    {_State5, EnqEffs} = enq(5, 2, third, State4),
+    ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, EnqEffs),
     ok.
 
-resends_lost_command(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
 
-    ok = meck:new(ra, [passthrough]),
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
-    % lose the enqueue
-    meck:expect(ra, pipeline_command, fun (_, _, _) -> ok end),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
-    meck:unload(ra),
-    {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
-    {_, _, F4} = process_ra_events(F3, 500),
-    {ok, {{_, {_, msg1}}, _}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
-    {ok, {{_, {_, msg2}}, _}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
-    {ok, {{_, {_, msg3}}, _}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_server(ServerId),
+enq_enq_deq_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    % get returns a reply value
+    NumReady = 1,
+    {_State3, {dequeue, {0, {_, first}}, NumReady}, [{monitor, _, _}]} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State2),
     ok.
 
-two_quick_enqueues(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    F1 = element(2, rabbit_fifo_client:enqueue(msg1, F0)),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
-    _ = process_ra_events(F2, 500),
-    ra:stop_server(ServerId),
+enq_enq_deq_deq_settle_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    % get returns a reply value
+    {State3, {dequeue, {0, {_, first}}, 1}, [{monitor, _, _}]} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State2),
+    {_State4, {dequeue, empty}} =
+        apply(meta(4), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State3),
     ok.
 
-detects_lost_delivery(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-
-    F000 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F00} = rabbit_fifo_client:enqueue(msg1, F000),
-    {_, _, F0} = process_ra_events(F00, 100),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
-    % lose first delivery
-    receive
-        {ra_event, _, {machine, {delivery, _, [{_, {_, msg1}}]}}} ->
-            ok
-    after 500 ->
-              exit(await_delivery_timeout)
-    end,
-
-    % assert three deliveries were received
-    {[_, _, _], _, _} = process_ra_events(F3, 500),
-    ra:stop_server(ServerId),
+enq_enq_checkout_get_settled_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    % get returns a reply value
+    {_State2, {dequeue, {0, {_, first}}, _}, _Effs} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}),
+              State1),
     ok.
 
-returns_after_down(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
+checkout_get_empty_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    State = test_init(test),
+    {_State2, {dequeue, empty}} =
+        apply(meta(1), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), State),
+    ok.
 
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
-    {_, _, F2} = process_ra_events(F1, 500),
-    % start a customer in a separate processes
-    % that exits after checkout
+untracked_enq_deq_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    State0 = test_init(test),
+    {State1, _, _} = apply(meta(1),
+                           rabbit_fifo:make_enqueue(undefined, undefined, first),
+                           State0),
+    {_State2, {dequeue, {0, {_, first}}, _}, _} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State1),
+    ok.
+
+release_cursor_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first,  test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    {State3, _} = check(Cid, 3, 10, State2),
+    % no release cursor effect at this point
+    {State4, _} = settle(Cid, 4, 1, State3),
+    {_Final, Effects1} = settle(Cid, 5, 0, State4),
+    % empty queue forwards release cursor all the way
+    ?ASSERT_EFF({release_cursor, 5, _}, Effects1),
+    ok.
+
+checkout_enq_settle_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, [{monitor, _, _} | _]} = check(Cid, 1, test_init(test)),
+    {State2, Effects0} = enq(2, 1,  first, State1),
+    ?ASSERT_EFF({send_msg, _,
+                 {delivery, ?FUNCTION_NAME,
+                  [{0, {_, first}}]}, _},
+                Effects0),
+    {State3, [_Inactive]} = enq(3, 2, second, State2),
+    {_, _Effects} = settle(Cid, 4, 0, State3),
+    % the release cursor is the smallest raft index that does not
+    % contribute to the state of the application
+    % ?ASSERT_EFF({release_cursor, 2, _}, Effects),
+    ok.
+
+out_of_order_enqueue_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, [{monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
+    {State2, Effects2} = enq(2, 1, first, State1),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
+    % assert monitor was set up
+    ?ASSERT_EFF({monitor, _, _}, Effects2),
+    % enqueue seq num 3 and 4 before 2
+    {State3, Effects3} = enq(3, 3, third, State2),
+    ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects3),
+    {State4, Effects4} = enq(4, 4, fourth, State3),
+    % assert no further deliveries where made
+    ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects4),
+    {_State5, Effects5} = enq(5, 2, second, State4),
+    % assert two deliveries were now made
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, second}},
+                                               {_, {_, third}},
+                                               {_, {_, fourth}}]}, _},
+                Effects5),
+    ok.
+
+out_of_order_first_enqueue_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = check_n(Cid, 5, 5, test_init(test)),
+    {_State2, Effects2} = enq(2, 10, first, State1),
+    ?ASSERT_EFF({monitor, process, _}, Effects2),
+    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _},
+                    Effects2),
+    ok.
+
+duplicate_enqueue_test(_) ->
+    Cid = {<<"duplicate_enqueue_test">>, self()},
+    {State1, [{monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
+    {State2, Effects2} = enq(2, 1, first, State1),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
+    {_State3, Effects3} = enq(3, 1, first, State2),
+    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects3),
+    ok.
+
+return_non_existent_test(_) ->
+    Cid = {<<"cid">>, self()},
+    {State0, [_, _Inactive]} = enq(1, 1, second, test_init(test)),
+    % return non-existent
+    {_State2, _} = apply(meta(3), rabbit_fifo:make_return(Cid, [99]), State0),
+    ok.
+
+return_checked_out_test(_) ->
+    Cid = {<<"cid">>, self()},
+    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State1, [_Monitor,
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
+              {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+    % returning immediately checks out the same message again
+    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, ra_event},
+             {aux, active}]} =
+        apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
+    ok.
+
+return_checked_out_limit_test(_) ->
+    Cid = {<<"cid">>, self()},
+    Init = init(#{name => test,
+                  queue_resource => rabbit_misc:r("/", queue,
+                                                  atom_to_binary(test, utf8)),
+                  release_cursor_interval => 0,
+                  delivery_limit => 1}),
+    {State0, [_, _]} = enq(1, 1, first, Init),
+    {State1, [_Monitor,
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
+              {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+    % returning immediately checks out the same message again
+    {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, ra_event},
+                  {aux, active}]} =
+        apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
+    {#rabbit_fifo{ra_indexes = RaIdxs}, ok, []} =
+        apply(meta(4), rabbit_fifo:make_return(Cid, [MsgId2]), State2),
+    ?assertEqual(0, rabbit_fifo_index:size(RaIdxs)),
+    ok.
+
+return_auto_checked_out_test(_) ->
+    Cid = {<<"cid">>, self()},
+    {State00, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State0, [_]} = enq(2, 2, second, State00),
+    % it first active then inactive as the consumer took on but cannot take
+    % any more
+    {State1, [_Monitor,
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
+              {aux, active},
+              {aux, inactive}
+             ]} = check_auto(Cid, 2, State0),
+    % return should include another delivery
+    {_State2, _, Effects} = apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
+    ?ASSERT_EFF({send_msg, _,
+                 {delivery, _, [{_, {#{delivery_count := 1}, first}}]}, _},
+                Effects),
+    ok.
+
+cancelled_checkout_out_test(_) ->
+    Cid = {<<"cid">>, self()},
+    {State00, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State0, [_]} = enq(2, 2, second, State00),
+    {State1, _} = check_auto(Cid, 2, State0),
+    % cancelled checkout should not return pending messages to queue
+    {State2, _, _} = apply(meta(3), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+    ?assertEqual(1, maps:size(State2#rabbit_fifo.messages)),
+    ?assertEqual(0, lqueue:len(State2#rabbit_fifo.returns)),
+
+    {State3, {dequeue, empty}} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State2),
+    %% settle
+    {State4, ok, _} =
+        apply(meta(4), rabbit_fifo:make_settle(Cid, [0]), State3),
+
+    {_State, {dequeue, {_, {_, second}}, _}, _} =
+        apply(meta(5), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State4),
+    ok.
+
+down_with_noproc_consumer_returns_unsettled_test(_) ->
+    Cid = {<<"down_consumer_returns_unsettled_test">>, self()},
+    {State0, [_, _]} = enq(1, 1, second, test_init(test)),
+    {State1, [{monitor, process, Pid} | _]} = check(Cid, 2, State0),
+    {State2, _, _} = apply(meta(3), {down, Pid, noproc}, State1),
+    {_State, Effects} = check(Cid, 4, State2),
+    ?ASSERT_EFF({monitor, process, _}, Effects),
+    ok.
+
+down_with_noconnection_marks_suspect_and_node_is_monitored_test(_) ->
+    Pid = spawn(fun() -> ok end),
+    Cid = {<<"down_with_noconnect">>, Pid},
     Self = self(),
-    _Pid = spawn(fun () ->
-                         F = rabbit_fifo_client:init(ClusterName, [ServerId]),
-                         {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 10,
-                                                               undefined, F),
-                         Self ! checkout_done
-                 end),
-    receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
-    timer:sleep(1000),
-    % message should be available for dequeue
-    {ok, {{_, {_, msg1}}, _}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
-    ra:stop_server(ServerId),
+    Node = node(Pid),
+    {State0, Effects0} = enq(1, 1, second, test_init(test)),
+    ?ASSERT_EFF({monitor, process, P}, P =:= Self, Effects0),
+    {State1, Effects1} = check_auto(Cid, 2, State0),
+    #consumer{credit = 0} = maps:get(Cid, State1#rabbit_fifo.consumers),
+    ?ASSERT_EFF({monitor, process, P}, P =:= Pid, Effects1),
+    % monitor both enqueuer and consumer
+    % because we received a noconnection we now need to monitor the node
+    {State2a, _, _} = apply(meta(3), {down, Pid, noconnection}, State1),
+    #consumer{credit = 1} = maps:get(Cid, State2a#rabbit_fifo.consumers),
+    %% validate consumer has credit
+    {State2, _, Effects2} = apply(meta(3), {down, Self, noconnection}, State2a),
+    ?ASSERT_EFF({monitor, node, _}, Effects2),
+    ?assertNoEffect({demonitor, process, _}, Effects2),
+    % when the node comes up we need to retry the process monitors for the
+    % disconnected processes
+    {_State3, _, Effects3} = apply(meta(3), {nodeup, Node}, State2),
+    % try to re-monitor the suspect processes
+    ?ASSERT_EFF({monitor, process, P}, P =:= Pid, Effects3),
+    ?ASSERT_EFF({monitor, process, P}, P =:= Self, Effects3),
     ok.
 
-resends_after_lost_applied(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {_, _, F1} = process_ra_events(element(2, rabbit_fifo_client:enqueue(msg1, F0)),
-                           500),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
-    % lose an applied event
-    receive
-        {ra_event, _, {applied, _}} ->
-            ok
-    after 500 ->
-              exit(await_ra_event_timeout)
-    end,
-    % send another message
-    {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
-    {_, _, F4} = process_ra_events(F3, 500),
-    {ok, {{_, {_, msg1}}, _}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
-    {ok, {{_, {_, msg2}}, _}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
-    {ok, {{_, {_, msg3}}, _}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_server(ServerId),
+down_with_noconnection_returns_unack_test(_) ->
+    Pid = spawn(fun() -> ok end),
+    Cid = {<<"down_with_noconnect">>, Pid},
+    {State0, _} = enq(1, 1, second, test_init(test)),
+    ?assertEqual(1, maps:size(State0#rabbit_fifo.messages)),
+    ?assertEqual(0, lqueue:len(State0#rabbit_fifo.returns)),
+    {State1, {_, _}} = deq(2, Cid, unsettled, State0),
+    ?assertEqual(0, maps:size(State1#rabbit_fifo.messages)),
+    ?assertEqual(0, lqueue:len(State1#rabbit_fifo.returns)),
+    {State2a, _, _} = apply(meta(3), {down, Pid, noconnection}, State1),
+    ?assertEqual(0, maps:size(State2a#rabbit_fifo.messages)),
+    ?assertEqual(1, lqueue:len(State2a#rabbit_fifo.returns)),
     ok.
 
-handles_reject_notification(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId1 = ?config(node_id, Config),
-    ServerId2 = ?config(node_id2, Config),
-    UId1 = ?config(uid, Config),
-    CId = {UId1, self()},
-
-    ok = start_cluster(ClusterName, [ServerId1, ServerId2]),
-    _ = ra:process_command(ServerId1,
-                           rabbit_fifo:make_checkout(
-                             CId,
-                             {auto, 10, simple_prefetch},
-                             #{})),
-    % reverse order - should try the first node in the list first
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId2, ServerId1]),
-    {ok, F1} = rabbit_fifo_client:enqueue(one, F0),
-
-    timer:sleep(500),
-
-    % the applied notification
-    _F2 = process_ra_event(F1, 250),
-    ra:stop_server(ServerId1),
-    ra:stop_server(ServerId2),
+down_with_noproc_enqueuer_is_cleaned_up_test(_) ->
+    State00 = test_init(test),
+    Pid = spawn(fun() -> ok end),
+    {State0, _, Effects0} = apply(meta(1), rabbit_fifo:make_enqueue(Pid, 1, first), State00),
+    ?ASSERT_EFF({monitor, process, _}, Effects0),
+    {State1, _, _} = apply(meta(3), {down, Pid, noproc}, State0),
+    % ensure there are no enqueuers
+    ?assert(0 =:= maps:size(State1#rabbit_fifo.enqueuers)),
     ok.
 
-discard(Config) ->
-    PrivDir = ?config(priv_dir, Config),
-    ServerId = ?config(node_id, Config),
-    UId = ?config(uid, Config),
-    ClusterName = ?config(cluster_name, Config),
-    Conf = #{cluster_name => ClusterName#resource.name,
-             id => ServerId,
-             uid => UId,
-             log_init_args => #{data_dir => PrivDir, uid => UId},
-             initial_member => [],
-             machine => {module, rabbit_fifo,
-                         #{queue_resource => discard,
-                           dead_letter_handler =>
-                           {?MODULE, dead_letter_handler, [self()]}}}},
-    _ = ra:start_server(Conf),
-    ok = ra:trigger_election(ServerId),
-    _ = ra:members(ServerId),
-
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(msg1, F1),
-    F3 = discard_next_delivery(F2, 500),
-    {ok, empty, _F4} = rabbit_fifo_client:dequeue(<<"tag1">>, settled, F3),
-    receive
-        {dead_letter, Letters} ->
-            [{_, msg1}] = Letters,
-            ok
-    after 500 ->
-              exit(dead_letter_timeout)
-    end,
-    ra:stop_server(ServerId),
+discarded_message_without_dead_letter_handler_is_removed_test(_) ->
+    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
+    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State1, Effects1} = check_n(Cid, 2, 10, State0),
+    ?ASSERT_EFF({send_msg, _,
+                 {delivery, _, [{0, {#{}, first}}]}, _},
+                Effects1),
+    {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
+    ?assertNoEffect({send_msg, _,
+                     {delivery, _, [{0, {#{}, first}}]}, _},
+                    Effects2),
     ok.
 
-cancel_checkout(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-    {ok, F2} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F1),
-    {_, _, F3} = process_ra_events0(F2, [], [], 250, fun (_, S) -> S end),
-    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, F3),
-    {ok, F5} = rabbit_fifo_client:return(<<"tag">>, [0], F4),
-    {ok, {{_, {_, m1}}, _}, _} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F5),
+discarded_message_with_dead_letter_handler_emits_mod_call_effect_test(_) ->
+    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
+    State00 = init(#{name => test,
+                     queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+                     dead_letter_handler =>
+                     {somemod, somefun, [somearg]}}),
+    {State0, [_, _]} = enq(1, 1, first, State00),
+    {State1, Effects1} = check_n(Cid, 2, 10, State0),
+    ?ASSERT_EFF({send_msg, _,
+                 {delivery, _, [{0, {#{}, first}}]}, _},
+                Effects1),
+    {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
+    % assert mod call effect with appended reason and message
+    ?ASSERT_EFF({mod_call, somemod, somefun, [somearg, [{rejected, first}]]},
+                Effects2),
     ok.
 
-credit(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
-    {_, _, F3} = process_ra_events(F2, [], 250),
-    %% checkout with 0 prefetch
-    {ok, F4} = rabbit_fifo_client:checkout(<<"tag">>, 0, credited, undefined, F3),
-    %% assert no deliveries
-    {_, _, F5} = process_ra_events0(F4, [], [], 250,
-                                    fun
-                                        (D, _) -> error({unexpected_delivery, D})
-                                    end),
-    %% provide some credit
-    {ok, F6} = rabbit_fifo_client:credit(<<"tag">>, 1, false, F5),
-    {[{_, {_, m1}}], [{send_credit_reply, _}], F7} =
-        process_ra_events(F6, [], 250),
+tick_test(_) ->
+    Cid = {<<"c">>, self()},
+    Cid2 = {<<"c2">>, self()},
+    {S0, _} = enq(1, 1, <<"fst">>, test_init(?FUNCTION_NAME)),
+    {S1, _} = enq(2, 2, <<"snd">>, S0),
+    {S2, {MsgId, _}} = deq(3, Cid, unsettled, S1),
+    {S3, {_, _}} = deq(4, Cid2, unsettled, S2),
+    {S4, _, _} = apply(meta(5), rabbit_fifo:make_return(Cid, [MsgId]), S3),
 
-    %% credit and drain
-    {ok, F8} = rabbit_fifo_client:credit(<<"tag">>, 4, true, F7),
-    {[{_, {_, m2}}], [{send_credit_reply, _}, {send_drained, _}], F9} =
-        process_ra_events(F8, [], 250),
-    flush(),
-
-    %% enqueue another message - at this point the consumer credit should be
-    %% all used up due to the drain
-    {ok, F10} = rabbit_fifo_client:enqueue(m3, F9),
-    %% assert no deliveries
-    {_, _, F11} = process_ra_events0(F10, [], [], 250,
-                                   fun
-                                       (D, _) -> error({unexpected_delivery, D})
-                                   end),
-    %% credit again and receive the last message
-    {ok, F12} = rabbit_fifo_client:credit(<<"tag">>, 10, false, F11),
-    {[{_, {_, m3}}], _, _} = process_ra_events(F12, [], 250),
-    ok.
-
-untracked_enqueue(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-
-    ok = rabbit_fifo_client:untracked_enqueue([ServerId], msg1),
-    timer:sleep(100),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, {{_, {_, msg1}}, _}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
-    ra:stop_server(ServerId),
+    [{mod_call, _, _,
+      [#resource{},
+       {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3}]}, {aux, emit}] = rabbit_fifo:tick(1, S4),
     ok.
 
 
-flow(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 3),
-    {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-    {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
-    {ok, F3} = rabbit_fifo_client:enqueue(m3, F2),
-    {slow, F4} = rabbit_fifo_client:enqueue(m4, F3),
-    {_, _, F5} = process_ra_events(F4, 500),
-    {ok, _} = rabbit_fifo_client:enqueue(m5, F5),
-    ra:stop_server(ServerId),
+delivery_query_returns_deliveries_test(_) ->
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                rabbit_fifo:make_checkout(Cid, {auto, 5, simple_prefetch}, #{}),
+                rabbit_fifo:make_enqueue(self(), 1, one),
+                rabbit_fifo:make_enqueue(self(), 2, two),
+                rabbit_fifo:make_enqueue(self(), 3, tre),
+                rabbit_fifo:make_enqueue(self(), 4, for)
+              ],
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    {State, _Effects} = run_log(test_init(help), Entries),
+    % 3 deliveries are returned
+    [{0, {#{}, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
+    [_, _, _] = rabbit_fifo:get_checked_out(Cid, 1, 3, State),
     ok.
 
-test_queries(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    P = spawn(fun () ->
-                  F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-                  {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
-                  {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
-                  process_ra_events(F2, 100),
-                  receive stop ->  ok end
-          end),
-    F0 = rabbit_fifo_client:init(ClusterName, [ServerId], 4),
-    {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 1, undefined, F0),
-    {ok, {_, Ready}, _} = ra:local_query(ServerId,
-                                         fun rabbit_fifo:query_messages_ready/1),
-    ?assertEqual(1, Ready),
-    {ok, {_, Checked}, _} = ra:local_query(ServerId,
-                                           fun rabbit_fifo:query_messages_checked_out/1),
-    ?assertEqual(1, Checked),
-    {ok, {_, Processes}, _} = ra:local_query(ServerId,
-                                             fun rabbit_fifo:query_processes/1),
-    ?assertEqual(2, length(Processes)),
-    P !  stop,
-    ra:stop_server(ServerId),
+pending_enqueue_is_enqueued_on_down_test(_) ->
+    Cid = {<<"cid">>, self()},
+    Pid = self(),
+    {State0, _} = enq(1, 2, first, test_init(test)),
+    {State1, _, _} = apply(meta(2), {down, Pid, noproc}, State0),
+    {_State2, {dequeue, {0, {_, first}}, 0}, _} =
+        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State1),
     ok.
 
-dead_letter_handler(Pid, Msgs) ->
-    Pid ! {dead_letter, Msgs}.
-
-dequeue(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    UId = ?config(uid, Config),
-    Tag = UId,
-    ok = start_cluster(ClusterName, [ServerId]),
-    F1 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, empty, F1b} = rabbit_fifo_client:dequeue(Tag, settled, F1),
-    {ok, F2_} = rabbit_fifo_client:enqueue(msg1, F1b),
-    {_, _, F2} = process_ra_events(F2_, 100),
-
-    {ok, {{0, {_, msg1}}, _}, F3} = rabbit_fifo_client:dequeue(Tag, settled, F2),
-    {ok, F4_} = rabbit_fifo_client:enqueue(msg2, F3),
-    {_, _, F4} = process_ra_events(F4_, 100),
-    {ok, {{MsgId, {_, msg2}}, _}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
-    {ok, _F6} = rabbit_fifo_client:settle(Tag, [MsgId], F5),
-    ra:stop_server(ServerId),
+duplicate_delivery_test(_) ->
+    {State0, _} = enq(1, 1, first, test_init(test)),
+    {#rabbit_fifo{ra_indexes = RaIdxs,
+            messages = Messages}, _} = enq(2, 1, first, State0),
+    ?assertEqual(1, rabbit_fifo_index:size(RaIdxs)),
+    ?assertEqual(1, maps:size(Messages)),
     ok.
 
-enq_deq_n(N, F0) ->
-    enq_deq_n(N, F0, []).
+state_enter_test(_) ->
+    S0 = init(#{name => the_name,
+                queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+                become_leader_handler => {m, f, [a]}}),
+    [{mod_call, m, f, [a, the_name]}] = rabbit_fifo:state_enter(leader, S0),
+    ok.
 
-enq_deq_n(0, F0, Acc) ->
-    {_, _, F} = process_ra_events(F0, 100),
-    {F, Acc};
-enq_deq_n(N, F, Acc) ->
-    {ok, F1} = rabbit_fifo_client:enqueue(N, F),
-    {_, _, F2} = process_ra_events(F1, 10),
-    {ok, {{_, {_, Deq}}, _}, F3} = rabbit_fifo_client:dequeue(term_to_binary(N), settled, F2),
+state_enter_monitors_and_notifications_test(_) ->
+    Oth = spawn(fun () -> ok end),
+    {State0, _} = enq(1, 1, first, test_init(test)),
+    Cid = {<<"adf">>, self()},
+    OthCid = {<<"oth">>, Oth},
+    {State1, _} = check(Cid, 2, State0),
+    {State, _} = check(OthCid, 3, State1),
+    Self = self(),
+    Effects = rabbit_fifo:state_enter(leader, State),
 
-    {_, _, F4} = process_ra_events(F3, 5),
-    enq_deq_n(N-1, F4, [Deq | Acc]).
+    %% monitor all enqueuers and consumers
+    [{monitor, process, Self},
+     {monitor, process, Oth}] =
+        lists:filter(fun ({monitor, process, _}) -> true;
+                         (_) -> false
+                     end, Effects),
+    [{send_msg, Self, leader_change, ra_event},
+     {send_msg, Oth, leader_change, ra_event}] =
+        lists:filter(fun ({send_msg, _, leader_change, ra_event}) -> true;
+                         (_) -> false
+                     end, Effects),
+    ?ASSERT_EFF({monitor, process, _}, Effects),
+    ok.
 
-conf(ClusterName, UId, ServerId, _, Peers) ->
-    #{cluster_name => ClusterName,
-      id => ServerId,
-      uid => UId,
-      log_init_args => #{uid => UId},
-      initial_members => Peers,
-      machine => {module, rabbit_fifo, #{}}}.
+purge_test(_) ->
+    Cid = {<<"purge_test">>, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, {purge, 1}, _} = apply(meta(2), rabbit_fifo:make_purge(), State1),
+    {State3, _} = enq(3, 2, second, State2),
+    % get returns a reply value
+    {_State4, {dequeue, {0, {_, second}}, _}, [{monitor, _, _}]} =
+        apply(meta(4), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), State3),
+    ok.
 
-process_ra_event(State, Wait) ->
-    receive
-        {ra_event, From, Evt} ->
-            ct:pal("processed ra event ~p~n", [Evt]),
-            {internal, _, _, S} =
-            rabbit_fifo_client:handle_ra_event(From, Evt, State),
-            S
-    after Wait ->
-              exit(ra_event_timeout)
-    end.
+purge_with_checkout_test(_) ->
+    Cid = {<<"purge_test">>, self()},
+    {State0, _} = check_auto(Cid, 1, test_init(?FUNCTION_NAME)),
+    {State1, _} = enq(2, 1, <<"first">>, State0),
+    {State2, _} = enq(3, 2, <<"second">>, State1),
+    %% assert message bytes are non zero
+    ?assert(State2#rabbit_fifo.msg_bytes_checkout > 0),
+    ?assert(State2#rabbit_fifo.msg_bytes_enqueue > 0),
+    {State3, {purge, 1}, _} = apply(meta(2), rabbit_fifo:make_purge(), State2),
+    ?assert(State2#rabbit_fifo.msg_bytes_checkout > 0),
+    ?assertEqual(0, State3#rabbit_fifo.msg_bytes_enqueue),
+    ?assertEqual(1, rabbit_fifo_index:size(State3#rabbit_fifo.ra_indexes)),
+    #consumer{checked_out = Checked} = maps:get(Cid, State3#rabbit_fifo.consumers),
+    ?assertEqual(1, maps:size(Checked)),
+    ok.
 
-process_ra_events(State0, Wait) ->
-    process_ra_events(State0, [], Wait).
+down_returns_checked_out_in_order_test(_) ->
+    S0 = test_init(?FUNCTION_NAME),
+    %% enqueue 100
+    S1 = lists:foldl(fun (Num, FS0) ->
+                         {FS, _} = enq(Num, Num, Num, FS0),
+                         FS
+                     end, S0, lists:seq(1, 100)),
+    ?assertEqual(100, maps:size(S1#rabbit_fifo.messages)),
+    Cid = {<<"cid">>, self()},
+    {S2, _} = check(Cid, 101, 1000, S1),
+    #consumer{checked_out = Checked} = maps:get(Cid, S2#rabbit_fifo.consumers),
+    ?assertEqual(100, maps:size(Checked)),
+    %% simulate down
+    {S, _, _} = apply(meta(102), {down, self(), noproc}, S2),
+    Returns = lqueue:to_list(S#rabbit_fifo.returns),
+    ?assertEqual(100, length(Returns)),
+    %% validate returns are in order
+    ?assertEqual(lists:sort(Returns), Returns),
+    ok.
 
-process_ra_events(State, Acc, Wait) ->
-    DeliveryFun = fun ({delivery, Tag, Msgs}, S) ->
-                          MsgIds = [element(1, M) || M <- Msgs],
-                          {ok, S2} = rabbit_fifo_client:settle(Tag, MsgIds, S),
-                          S2
+single_active_consumer_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    ?assertEqual(single_active, State0#rabbit_fifo.cfg#cfg.consumer_strategy),
+    ?assertEqual(0, map_size(State0#rabbit_fifo.consumers)),
+
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+                      {NewState, _, _} = apply(
+                          meta(1),
+                          make_checkout({CTag, self()},
+                                        {once, 1, simple_prefetch},
+                                    #{}),
+                          State),
+                      NewState
                   end,
-    process_ra_events0(State, Acc, [], Wait, DeliveryFun).
+    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
 
-process_ra_events0(State0, Acc, Actions0, Wait, DeliveryFun) ->
-    receive
-        {ra_event, From, Evt} ->
-            case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
-                {internal, _, Actions,  State} ->
-                    process_ra_events0(State, Acc, Actions0 ++ Actions,
-                                       Wait, DeliveryFun);
-                {{delivery, _Tag, Msgs} = Del, State1} ->
-                    State = DeliveryFun(Del, State1),
-                    process_ra_events0(State, Acc ++ Msgs, Actions0, Wait, DeliveryFun);
-                eol ->
-                    eol
-            end
-    after Wait ->
-              {Acc, Actions0, State0}
-    end.
+    % the first registered consumer is the active one, the others are waiting
+    ?assertEqual(1, map_size(State1#rabbit_fifo.consumers)),
+    ?assert(maps:is_key({<<"ctag1">>, self()}, State1#rabbit_fifo.consumers)),
+    ?assertEqual(3, length(State1#rabbit_fifo.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag2">>, self()}, 1, State1#rabbit_fifo.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag3">>, self()}, 1, State1#rabbit_fifo.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State1#rabbit_fifo.waiting_consumers)),
 
-discard_next_delivery(State0, Wait) ->
-    receive
-        {ra_event, From, Evt} ->
-            case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
-                {internal, _, _Actions, State} ->
-                    discard_next_delivery(State, Wait);
-                {{delivery, Tag, Msgs}, State1} ->
-                    MsgIds = [element(1, M) || M <- Msgs],
-                    {ok, State} = rabbit_fifo_client:discard(Tag, MsgIds,
-                                                         State1),
-                    State
-            end
-    after Wait ->
-              State0
-    end.
+    % cancelling a waiting consumer
+    {State2, _, Effects1} = apply(meta(2),
+                                  make_checkout({<<"ctag3">>, self()},
+                                                cancel, #{}), State1),
+    % the active consumer should still be in place
+    ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
+    ?assert(maps:is_key({<<"ctag1">>, self()}, State2#rabbit_fifo.consumers)),
+    % the cancelled consumer has been removed from waiting consumers
+    ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag2">>, self()}, 1, State2#rabbit_fifo.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State2#rabbit_fifo.waiting_consumers)),
+    % there are some effects to unregister the consumer
+    ?assertEqual(1, length(Effects1)),
 
-return_next_delivery(State0, Wait) ->
-    receive
-        {ra_event, From, Evt} ->
-            case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
-                {internal, _, _, State} ->
-                    return_next_delivery(State, Wait);
-                {{delivery, Tag, Msgs}, State1} ->
-                    MsgIds = [element(1, M) || M <- Msgs],
-                    {ok, State} = rabbit_fifo_client:return(Tag, MsgIds,
-                                                        State1),
-                    State
-            end
-    after Wait ->
-              State0
-    end.
+    % cancelling the active consumer
+    {State3, _, Effects2} = apply(meta(3),
+                                  make_checkout({<<"ctag1">>, self()},
+                                                cancel, #{}),
+                                  State2),
+    % the second registered consumer is now the active one
+    ?assertEqual(1, map_size(State3#rabbit_fifo.consumers)),
+    ?assert(maps:is_key({<<"ctag2">>, self()}, State3#rabbit_fifo.consumers)),
+    % the new active consumer is no longer in the waiting list
+    ?assertEqual(1, length(State3#rabbit_fifo.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State3#rabbit_fifo.waiting_consumers)),
+    % there are some effects to unregister the consumer and to update the new active one (metrics)
+    ?assertEqual(2, length(Effects2)),
 
-validate_process_down(Name, 0) ->
-    exit({process_not_down, Name});
-validate_process_down(Name, Num) ->
-    case whereis(Name) of
-        undefined ->
-            ok;
-        _ ->
-            timer:sleep(100),
-            validate_process_down(Name, Num-1)
-    end.
+    % cancelling the active consumer
+    {State4, _, Effects3} = apply(meta(4),
+                                  make_checkout({<<"ctag2">>, self()},
+                                                cancel, #{}),
+                                  State3),
+    % the last waiting consumer became the active one
+    ?assertEqual(1, map_size(State4#rabbit_fifo.consumers)),
+    ?assert(maps:is_key({<<"ctag4">>, self()}, State4#rabbit_fifo.consumers)),
+    % the waiting consumer list is now empty
+    ?assertEqual(0, length(State4#rabbit_fifo.waiting_consumers)),
+    % there are some effects to unregister the consumer and to update the new active one (metrics)
+    ?assertEqual(2, length(Effects3)),
 
-start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    {ok, Started, _} = ra:start_cluster(ClusterName#resource.name,
-                                        {module, rabbit_fifo, RaFifoConfig},
-                                        ServerIds),
-    ?assertEqual(length(Started), length(ServerIds)),
+    % cancelling the last consumer
+    {State5, _, Effects4} = apply(meta(5),
+                                  make_checkout({<<"ctag4">>, self()},
+                                                cancel, #{}),
+                                  State4),
+    % no active consumer anymore
+    ?assertEqual(0, map_size(State5#rabbit_fifo.consumers)),
+    % still nothing in the waiting list
+    ?assertEqual(0, length(State5#rabbit_fifo.waiting_consumers)),
+    % there is an effect to unregister the consumer + queue inactive effect
+    ?assertEqual(1 + 1, length(Effects4)),
+
     ok.
 
-start_cluster(ClusterName, ServerIds) ->
-    start_cluster(ClusterName, ServerIds, #{name => some_name,
-                                            queue_resource => ClusterName}).
+single_active_consumer_cancel_consumer_when_channel_is_down_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        release_cursor_interval => 0,
+        single_active_consumer_on => true}),
 
-flush() ->
-    receive
-        Msg ->
-            ct:pal("flushed: ~w~n", [Msg]),
-            flush()
-    after 10 ->
-              ok
-    end.
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            #{index => 1},
+            make_checkout({CTag, ChannelId}, {once, 1, simple_prefetch}, #{}),
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    % the channel of the active consumer goes down
+    {State2, _, Effects} = apply(#{index => 2}, {down, Pid1, doesnotmatter}, State1),
+    % fell back to another consumer
+    ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
+    % there are still waiting consumers
+    ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
+    % effects to unregister the consumer and
+    % to update the new active one (metrics) are there
+    ?assertEqual(2, length(Effects)),
+
+    % the channel of the active consumer and a waiting consumer goes down
+    {State3, _, Effects2} = apply(#{index => 3}, {down, Pid2, doesnotmatter}, State2),
+    % fell back to another consumer
+    ?assertEqual(1, map_size(State3#rabbit_fifo.consumers)),
+    % no more waiting consumer
+    ?assertEqual(0, length(State3#rabbit_fifo.waiting_consumers)),
+    % effects to cancel both consumers of this channel + effect to update the new active one (metrics)
+    ?assertEqual(3, length(Effects2)),
+
+    % the last channel goes down
+    {State4, _, Effects3} = apply(#{index => 4}, {down, Pid3, doesnotmatter}, State3),
+    % no more consumers
+    ?assertEqual(0, map_size(State4#rabbit_fifo.consumers)),
+    ?assertEqual(0, length(State4#rabbit_fifo.waiting_consumers)),
+    % there is an effect to unregister the consumer + queue inactive effect
+    ?assertEqual(1 + 1, length(Effects3)),
+
+    ok.
+
+single_active_consumer_mark_waiting_consumers_as_suspected_when_down_noconnnection_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        release_cursor_interval => 0,
+        single_active_consumer_on => true}),
+
+    Meta = #{index => 1},
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+        {NewState, _, _} = apply(
+            Meta,
+            make_checkout({CTag, self()},
+                          {once, 1, simple_prefetch}, #{}),
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+                         [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+
+    % simulate node goes down
+    {State2, _, _} = apply(#{}, {down, self(), noconnection}, State1),
+
+    % all the waiting consumers should be suspected down
+    ?assertEqual(3, length(State2#rabbit_fifo.waiting_consumers)),
+    lists:foreach(fun({_, #consumer{status = Status}}) ->
+                      ?assert(Status == suspected_down)
+                  end, State2#rabbit_fifo.waiting_consumers),
+
+    % simulate node goes back up
+    {State3, _, _} = apply(#{index => 2}, {nodeup, node(self())}, State2),
+
+    % all the waiting consumers should be un-suspected
+    ?assertEqual(3, length(State3#rabbit_fifo.waiting_consumers)),
+    lists:foreach(fun({_, #consumer{status = Status}}) ->
+                      ?assert(Status /= suspected_down)
+                  end, State3#rabbit_fifo.waiting_consumers),
+
+    ok.
+
+single_active_consumer_state_enter_leader_include_waiting_consumers_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        release_cursor_interval => 0,
+        single_active_consumer_on => true}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    Meta = #{index => 1},
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            Meta,
+            make_checkout({CTag, ChannelId},
+                          {once, 1, simple_prefetch}, #{}),
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    Effects = rabbit_fifo:state_enter(leader, State1),
+    % 2 effects for each consumer process (channel process), 1 effect for the node
+    ?assertEqual(2 * 3 + 1, length(Effects)).
+
+single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        release_cursor_interval => 0,
+        single_active_consumer_on => true}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    Meta = #{index => 1},
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            Meta,
+            make_checkout({CTag, ChannelId},
+                          {once, 1, simple_prefetch}, #{}),
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    Effects = rabbit_fifo:state_enter(eol, State1),
+    % 1 effect for each consumer process (channel process)
+    ?assertEqual(3, length(Effects)).
+
+query_consumers_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+        {NewState, _, _} = apply(
+            #{index => 1},
+            make_checkout({CTag, self()},
+                          {once, 1, simple_prefetch}, #{}),
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+    Consumers0 = State1#rabbit_fifo.consumers,
+    Consumer = maps:get({<<"ctag2">>, self()}, Consumers0),
+    Consumers1 = maps:put({<<"ctag2">>, self()},
+                          Consumer#consumer{status = suspected_down}, Consumers0),
+    State2 = State1#rabbit_fifo{consumers = Consumers1},
+
+    ?assertEqual(4, rabbit_fifo:query_consumer_count(State2)),
+    Consumers2 = rabbit_fifo:query_consumers(State2),
+    ?assertEqual(4, maps:size(Consumers2)),
+    maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+        ?assertEqual(self(), Pid),
+        case Tag of
+            <<"ctag2">> ->
+                ?assertNot(Active),
+                ?assertEqual(suspected_down, ActivityStatus);
+            _ ->
+                ?assert(Active),
+                ?assertEqual(up, ActivityStatus)
+        end
+              end, [], Consumers2).
+
+query_consumers_when_single_active_consumer_is_on_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Meta = #{index => 1},
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+                    {NewState, _, _} = apply(
+                        Meta,
+                        make_checkout({CTag, self()},
+                                      {once, 1, simple_prefetch}, #{}),
+                        State),
+                    NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+
+    ?assertEqual(4, rabbit_fifo:query_consumer_count(State1)),
+    Consumers = rabbit_fifo:query_consumers(State1),
+    ?assertEqual(4, maps:size(Consumers)),
+    maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                  ?assertEqual(self(), Pid),
+                  case Tag of
+                     <<"ctag1">> ->
+                         ?assert(Active),
+                         ?assertEqual(single_active, ActivityStatus);
+                     _ ->
+                         ?assertNot(Active),
+                         ?assertEqual(waiting, ActivityStatus)
+                  end
+              end, [], Consumers).
+
+active_flag_updated_when_consumer_suspected_unsuspected_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        release_cursor_interval => 0,
+        single_active_consumer_on => false}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+                          {NewState, _, _} =
+                          apply(
+                            #{index => 1},
+                            rabbit_fifo:make_checkout({CTag, ChannelId},
+                                                      {once, 1, simple_prefetch},
+                                                      #{}),
+                            State),
+                          NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    {State2, _, Effects2} = apply(#{}, {down, Pid1, noconnection}, State1),
+    % 1 effect to update the metrics of each consumer (they belong to the same node), 1 more effect to monitor the node
+    ?assertEqual(4 + 1, length(Effects2)),
+
+    {_, _, Effects3} = apply(#{index => 1}, {nodeup, node(self())}, State2),
+    % for each consumer: 1 effect to update the metrics, 1 effect to monitor the consumer PID
+    ?assertEqual(4 + 4, length(Effects3)).
+
+active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_consumer_is_on_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        release_cursor_interval => 0,
+        single_active_consumer_on => true}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+                          {NewState, _, _} = apply(
+                                               #{index => 1},
+                                               make_checkout({CTag, ChannelId},
+                                                             {once, 1, simple_prefetch}, #{}),
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    {State2, _, Effects2} = apply(#{}, {down, Pid1, noconnection}, State1),
+    % only 1 effect to monitor the node
+    ?assertEqual(1, length(Effects2)),
+
+    {_, _, Effects3} = apply(#{index => 1}, {nodeup, node(self())}, State2),
+    % for each consumer: 1 effect to monitor the consumer PID
+    ?assertEqual(4, length(Effects3)).
+
+meta(Idx) ->
+    #{index => Idx, term => 1}.
+
+enq(Idx, MsgSeq, Msg, State) ->
+    strip_reply(
+        apply(meta(Idx), rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
+
+deq(Idx, Cid, Settlement, State0) ->
+    {State, {dequeue, {MsgId, Msg}, _}, _} =
+        apply(meta(Idx),
+              rabbit_fifo:make_checkout(Cid, {dequeue, Settlement}, #{}),
+              State0),
+    {State, {MsgId, Msg}}.
+
+check_n(Cid, Idx, N, State) ->
+    strip_reply(
+      apply(meta(Idx),
+            rabbit_fifo:make_checkout(Cid, {auto, N, simple_prefetch}, #{}),
+            State)).
+
+check(Cid, Idx, State) ->
+    strip_reply(
+      apply(meta(Idx),
+            rabbit_fifo:make_checkout(Cid, {once, 1, simple_prefetch}, #{}),
+            State)).
+
+check_auto(Cid, Idx, State) ->
+    strip_reply(
+      apply(meta(Idx),
+            rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+            State)).
+
+check(Cid, Idx, Num, State) ->
+    strip_reply(
+      apply(meta(Idx),
+            rabbit_fifo:make_checkout(Cid, {auto, Num, simple_prefetch}, #{}),
+            State)).
+
+settle(Cid, Idx, MsgId, State) ->
+    strip_reply(apply(meta(Idx), rabbit_fifo:make_settle(Cid, [MsgId]), State)).
+
+credit(Cid, Idx, Credit, DelCnt, Drain, State) ->
+    strip_reply(apply(meta(Idx), rabbit_fifo:make_credit(Cid, Credit, DelCnt, Drain),
+                      State)).
+
+strip_reply({State, _, Effects}) ->
+    {State, Effects}.
+
+run_log(InitState, Entries) ->
+    lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
+                        case apply(meta(Idx), E, Acc0) of
+                            {Acc, _, Efx} when is_list(Efx) ->
+                                {Acc, Efx0 ++ Efx};
+                            {Acc, _, Efx}  ->
+                                {Acc, Efx0 ++ [Efx]};
+                            {Acc, _}  ->
+                                {Acc, Efx0}
+                        end
+                end, {InitState, []}, Entries).
+
+
+%% AUX Tests
+
+aux_test(_) ->
+    _ = ra_machine_ets:start_link(),
+    Aux0 = init_aux(aux_test),
+    MacState = init(#{name => aux_test,
+                      queue_resource =>
+                      rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+    Log = undefined,
+    {no_reply, Aux, undefined} = handle_aux(leader, cast, active, Aux0,
+                                            Log, MacState),
+    {no_reply, _Aux, undefined} = handle_aux(leader, cast, emit, Aux,
+                                             Log, MacState),
+    [X] = ets:lookup(rabbit_fifo_usage, aux_test),
+    ?assert(X > 0.0),
+    ok.
+
+%% Utility
+
+init(Conf) -> rabbit_fifo:init(Conf).
+apply(Meta, Entry, State) -> rabbit_fifo:apply(Meta, Entry, State).
+init_aux(Conf) -> rabbit_fifo:init_aux(Conf).
+handle_aux(S, T, C, A, L, M) -> rabbit_fifo:handle_aux(S, T, C, A, L, M).
+make_checkout(C, S, M) -> rabbit_fifo:make_checkout(C, S, M).

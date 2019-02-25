@@ -163,13 +163,16 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
+    DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
       dead_letter_handler => dlx_mfa(Q),
       become_leader_handler => {?MODULE, become_leader, [QName]},
       max_length => MaxLength,
       max_bytes => MaxBytes,
-      single_active_consumer_on => single_active_consumer_on(Q)}.
+      single_active_consumer_on => single_active_consumer_on(Q),
+      delivery_limit => DeliveryLimit
+     }.
 
 single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),
@@ -680,14 +683,12 @@ add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
                     ok;
-                timeout ->
+                {timeout, _} ->
                     {error, timeout};
                 E ->
                     %% TODO should we stop the ra process here?
                     E
             end;
-        timeout ->
-            {error, timeout};
         E ->
             E
     end.
