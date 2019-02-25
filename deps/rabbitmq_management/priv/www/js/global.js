@@ -19,6 +19,7 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-expires':                 {'short': 'Exp', 'type': 'int'},
                   'x-max-length':              {'short': 'Lim', 'type': 'int'},
                   'x-max-length-bytes':        {'short': 'Lim B', 'type': 'int'},
+                  'x-delivery-limit':          {'short': 'DlL', 'type': 'int'},
                   'x-overflow':                {'short': 'Ovfl', 'type': 'string'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'},
@@ -137,6 +138,9 @@ var COLUMNS =
 
 // All help ? popups
 var HELP = {
+    'delivery-limit':
+      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsucessfully this many times it will be dropped or dead-lettered, depending on the queue configuration.',
+
     'exchange-auto-delete':
       'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
 
