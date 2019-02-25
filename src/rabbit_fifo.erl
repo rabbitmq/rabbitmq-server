@@ -824,7 +824,7 @@ drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects0) ->
             Indexes = rabbit_fifo_index:delete(RaftIdxToDrop, Indexes0),
             Bytes = message_size(Msg),
             State = add_bytes_drop(Bytes, State1#?MODULE{ra_indexes = Indexes}),
-            Effects = dead_letter_effects(maxlen, maps:put(none, FullMsg, #{}),
+            Effects = dead_letter_effects(maxlen, #{none => FullMsg},
                                           State, Effects0),
             {State, Effects};
         {{'$prefix_msg', #{size := Bytes}}, State1} ->
@@ -1074,7 +1074,8 @@ return_one(MsgNum, {RaftId, {Header0, RawMsg}},
     case maps:get(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
             DlMsg = {MsgNum, Msg},
-            Effects = dead_letter_effects(rejected, maps:put(none, DlMsg, #{}),
+            Effects = dead_letter_effects(delivery_limit,
+                                          #{none => DlMsg},
                                           State0, Effects0),
             Checked = Con#consumer.checked_out,
             {State1, Effects1} = complete(ConsumerId, [RaftId], 1, Con, Checked,
