@@ -159,8 +159,6 @@
          waiting_consumers = [] :: [{consumer_id(), consumer()}]
         }).
 
-
-
 -type config() :: #{name := atom(),
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => applied_mfa(),
