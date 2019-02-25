@@ -52,13 +52,25 @@ init([]) ->
 handle_event(#event{type = connection_created, props = Details}, State) ->
     ThisNode = node(),
     case pget(node, Details) of
-      ThisNode ->
-          rabbit_connection_tracking:register_connection(
-            rabbit_connection_tracking:tracked_connection_from_connection_created(Details)
-          );
-      _OtherNode ->
-        %% ignore
-        ok
+        ThisNode ->
+            TConn = rabbit_connection_tracking:tracked_connection_from_connection_created(Details),
+            ConnId = TConn#tracked_connection.id,
+            try
+                rabbit_connection_tracking:register_connection(TConn)
+            catch
+                error:{no_exists, _} ->
+                    Msg = "Could not register connection ~p for tracking, "
+                          "its table is not ready yet or the connection terminated prematurely",
+                    rabbit_log_connection:warning(Msg, [ConnId]),
+                    ok;
+                error:Err ->
+                    Msg = "Could not register connection ~p for tracking: ~p",
+                    rabbit_log_connection:warning(Msg, [ConnId, Err]),
+                    ok
+            end;
+        _OtherNode ->
+            %% ignore
+            ok
     end,
     {ok, State};
 handle_event(#event{type = connection_closed, props = Details}, State) ->
