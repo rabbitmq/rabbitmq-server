@@ -54,10 +54,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   end
 
   def run([node_to_remove], %{node: node_name, offline: false}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, [
-      to_atom(node_to_remove),
-      false
-    ])
+    atom_name = to_atom(node_to_remove)
+    args      = [atom_name, false]
+    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args) do
+      {:error, {:failed_to_remove_node, ^atom_name, {:active, _, _}}} ->
+        {:error, "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"};
+      {:error, _}  = error -> error;
+      {:badrpc, _} = error -> error;
+      other                -> other
+    end
   end
 
   use RabbitMQ.CLI.DefaultOutput
