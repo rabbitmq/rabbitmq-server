@@ -88,7 +88,7 @@ sed -e 's|@STDOUT_STDERR_REDIRECTION@||' \
 	< scripts/rabbitmq-script-wrapper \
 	> %{buildroot}%{_sbindir}/rabbitmqctl
 chmod 0755 %{buildroot}%{_sbindir}/rabbitmqctl
-for script in rabbitmq-server rabbitmq-plugins rabbitmq-diagnostics; do \
+for script in rabbitmq-server rabbitmq-plugins rabbitmq-diagnostics rabbitmq-queues; do \
 	cp -a %{buildroot}%{_sbindir}/rabbitmqctl \
 	 %{buildroot}%{_sbindir}/$script; \
 done

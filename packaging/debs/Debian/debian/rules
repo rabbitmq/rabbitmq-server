@@ -38,7 +38,7 @@ override_dh_auto_install:
 		< scripts/rabbitmq-script-wrapper \
 		> $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
 	chmod 0755 $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
-	for script in rabbitmq-server rabbitmq-plugins rabbitmq-diagnostics; do \
+	for script in rabbitmq-server rabbitmq-plugins rabbitmq-diagnostics rabbitmq-queues; do \
 		cp -a $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl \
 		 $(DEB_DESTDIR)$(PREFIX)/sbin/$$script; \
 	done
