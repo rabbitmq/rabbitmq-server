@@ -88,6 +88,8 @@
 
 -type consumer() :: #consumer{}.
 
+-type consumer_strategy() :: competing | single_active.
+
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
@@ -104,7 +106,8 @@
          max_length :: maybe(non_neg_integer()),
          max_bytes :: maybe(non_neg_integer()),
          %% whether single active consumer is on or not for this queue
-         consumer_strategy = default :: default | single_active,
+         consumer_strategy = competing :: consumer_strategy(),
+         %% the maximum number of unsuccessful delivery attempts permitted
          delivery_limit :: maybe(non_neg_integer())
         }).
 
@@ -114,7 +117,7 @@
          messages = #{} :: #{msg_in_id() => indexed_msg()},
          % defines the lowest message in id available in the messages map
          % that isn't a return
-         low_msg_num :: msg_in_id() | undefined,
+         low_msg_num :: maybe(msg_in_id()),
          % defines the next message in id to be added to the messages map
          next_msg_num = 1 :: msg_in_id(),
          % list of returned msg_in_ids - when checking out it picks from
