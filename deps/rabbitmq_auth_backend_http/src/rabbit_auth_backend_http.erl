@@ -58,21 +58,23 @@ user_login_authorization(Username, AuthProps) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username}, VHost, Sock) ->
+check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, Sock) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-                          {ip,       extract_address(Sock)}]).
+                          {ip,       extract_address(Sock)},
+                          {tags, join_tags(Tags)}]).
 
-check_resource_access(#auth_user{username = Username},
+check_resource_access(#auth_user{username = Username, tags = Tags},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
     bool_req(resource_path, [{username,   Username},
                              {vhost,      VHost},
                              {resource,   Type},
                              {name,       Name},
-                             {permission, Permission}]).
+                             {permission, Permission},
+                             {tags, join_tags(Tags)}]).
 
-check_topic_access(#auth_user{username = Username},
+check_topic_access(#auth_user{username = Username, tags = Tags},
                    #resource{virtual_host = VHost, kind = topic = Type, name = Name},
                    Permission,
                    Context) ->
@@ -81,7 +83,8 @@ check_topic_access(#auth_user{username = Username},
         {vhost,      VHost},
         {resource,   Type},
         {name,       Name},
-        {permission, Permission}] ++ OptionsParameters).
+        {permission, Permission},
+        {tags, join_tags(Tags)}] ++ OptionsParameters).
 
 %%--------------------------------------------------------------------
 
@@ -162,6 +165,9 @@ escape(K, V) ->
     rabbit_data_coercion:to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
 
 parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
+
+join_tags([]) -> "";
+join_tags(Tags) -> string:substr(lists:foldr(fun(Elem, Acc) ->  ", " ++ atom_to_list(Elem) ++ Acc end, "", Tags), 3).
 
 %%--------------------------------------------------------------------
 
