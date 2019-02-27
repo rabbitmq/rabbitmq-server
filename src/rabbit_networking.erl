@@ -389,13 +389,29 @@ force_connection_event_refresh(Ref) ->
     [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.
 
-handshake(Ref, ProxyProtocol) ->
-    case ProxyProtocol of
+failed_to_recv_proxy_header(Ref, Error) ->
+    Msg = case Error of
+        closed -> "error when receiving proxy header: TCP socket was ~p prematurely";
+        _Other -> "error when receiving proxy header: ~p"
+    end,
+    rabbit_log:error(Msg, [Error]),
+    % The following call will clean up resources then exit
+    _ = ranch:handshake(Ref),
+    exit({shutdown, failed_to_recv_proxy_header}).
+
+handshake(Ref, ProxyProtocolEnabled) ->
+    case ProxyProtocolEnabled of
         true ->
-            {ok, ProxyInfo} = ranch:recv_proxy_header(Ref, 1000),
-            {ok, Sock} = ranch:handshake(Ref),
-            setup_socket(Sock),
-            {ok, {rabbit_proxy_socket, Sock, ProxyInfo}};
+            case ranch:recv_proxy_header(Ref, 3000) of
+                {error, Error} ->
+                    failed_to_recv_proxy_header(Ref, Error);
+                {error, protocol_error, Error} ->
+                    failed_to_recv_proxy_header(Ref, Error);
+                {ok, ProxyInfo} ->
+                    {ok, Sock} = ranch:handshake(Ref),
+                    setup_socket(Sock),
+                    {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
+            end;
         false ->
             {ok, Sock} = ranch:handshake(Ref),
             setup_socket(Sock),
