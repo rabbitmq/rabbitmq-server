@@ -1029,8 +1029,61 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
 
     {_, _, Effects3} = apply(#{index => 1}, {nodeup, node(self())}, State2),
     % for each consumer: 1 effect to monitor the consumer PID
-    ct:pal("Effects3 ~w", [Effects3]),
     ?assertEqual(5, length(Effects3)).
+
+single_active_cancelled_with_unacked_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+
+    C1 = {<<"ctag1">>, self()},
+    C2 = {<<"ctag2">>, self()},
+    % adding some consumers
+    AddConsumer = fun(C, S0) ->
+                          {S, _, _} = apply(
+                                        meta(1),
+                                        make_checkout(C,
+                                                      {auto, 1, simple_prefetch},
+                                                      #{}),
+                                        S0),
+                          S
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [C1, C2]),
+
+    %% enqueue 2 messages
+    {State2, _Effects2} = enq(3, 1, msg1, State1),
+    {State3, _Effects3} = enq(4, 2, msg2, State2),
+    %% one should be checked ou to C1
+    %% cancel C1
+    {State4, _, _} = apply(meta(5),
+                           make_checkout(C1, cancel, #{}),
+                           State3),
+    %% C2 should be the active consumer
+    ?assertMatch(#{C2 := #consumer{status = up,
+                                   checked_out = #{0 := _}}},
+                 State4#rabbit_fifo.consumers),
+    %% C1 should be a cancelled consumer
+    ?assertMatch(#{C1 := #consumer{status = cancelled,
+                                   lifetime = once,
+                                   checked_out = #{0 := _}}},
+                 State4#rabbit_fifo.consumers),
+    ?assertMatch([], State4#rabbit_fifo.waiting_consumers),
+
+    %% Ack both messages
+    {State5, _Effects5} = settle(C1, 1, 0, State4),
+    %% C1 should now be cancelled
+    {State6, _Effects6} = settle(C2, 2, 0, State5),
+
+    %% C2 should remain
+    ?assertMatch(#{C2 := #consumer{status = up}},
+                 State6#rabbit_fifo.consumers),
+    %% C1 should be gone
+    ?assertNotMatch(#{C1 := _},
+                    State6#rabbit_fifo.consumers),
+    ?assertMatch([], State6#rabbit_fifo.waiting_consumers),
+    ok.
 
 meta(Idx) ->
     #{index => Idx, term => 1}.

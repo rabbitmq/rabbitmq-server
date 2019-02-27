@@ -784,6 +784,10 @@ cancel_consumer0(ConsumerId, #?MODULE{consumers = C0} = S0, Effects0, Reason) ->
         {Consumer, Cons1} ->
             {S, Effects2} = maybe_return_all(ConsumerId, Consumer, Cons1, S0,
                                              Effects0, Reason),
+            %% The effects are emitted before the consumer is actually removed
+            %% if the consumer has unacked messages. This is a bit weird but
+            %% in line with what classic queues do (from an external point of
+            %% view)
             Effects = cancel_consumer_effects(ConsumerId, S, Effects2),
             case maps:size(S#?MODULE.consumers) of
                 0 ->
@@ -796,30 +800,36 @@ cancel_consumer0(ConsumerId, #?MODULE{consumers = C0} = S0, Effects0, Reason) ->
             {S0, Effects0}
     end.
 
-activate_next_consumer(#?MODULE{consumers = Cons} = State0, Effects)
-  when map_size(Cons) == 1 ->
-    {State0, Effects};
-activate_next_consumer(#?MODULE{waiting_consumers = Waiting0} = State0,
+activate_next_consumer(#?MODULE{consumers = Cons,
+                                waiting_consumers = Waiting0} = State0,
                        Effects0) ->
-    case lists:filter(fun ({_, #consumer{status = Status}}) ->
-                              Status == up
-                      end, Waiting0) of
-        [{NextConsumerId, NextConsumer} | _] ->
-            Remaining = lists:keydelete(NextConsumerId, 1, Waiting0),
-            #?MODULE{service_queue = ServiceQueue} = State0,
-            ServiceQueue1 = maybe_queue_consumer(NextConsumerId,
-                                                 NextConsumer,
-                                                 ServiceQueue),
-            State = State0#?MODULE{consumers = #{NextConsumerId => NextConsumer},
-                                   service_queue = ServiceQueue1,
-                                   waiting_consumers = Remaining},
-            Effects = consumer_update_active_effects(State, NextConsumerId,
-                                                     NextConsumer, true,
-                                                     single_active, Effects0),
-            {State, Effects};
-        [] ->
-            {State0, Effects0}
+    case maps:filter(fun (_, #consumer{status = S}) -> S == up end, Cons) of
+        Up when map_size(Up) == 0 ->
+            %% there are no active consumer in the consumer map
+            case lists:filter(fun ({_, #consumer{status = Status}}) ->
+                                      Status == up
+                              end, Waiting0) of
+                [{NextConsumerId, NextConsumer} | _] ->
+                    %% there is a potential next active consumer
+                    Remaining = lists:keydelete(NextConsumerId, 1, Waiting0),
+                    #?MODULE{service_queue = ServiceQueue} = State0,
+                    ServiceQueue1 = maybe_queue_consumer(NextConsumerId,
+                                                         NextConsumer,
+                                                         ServiceQueue),
+                    State = State0#?MODULE{consumers = Cons#{NextConsumerId => NextConsumer},
+                                           service_queue = ServiceQueue1,
+                                           waiting_consumers = Remaining},
+                    Effects = consumer_update_active_effects(State, NextConsumerId,
+                                                             NextConsumer, true,
+                                                             single_active, Effects0),
+                    {State, Effects};
+                [] ->
+                    {State0, Effects0}
+            end;
+        _ ->
+                    {State0, Effects0}
     end.
+
 
 
 maybe_return_all(ConsumerId, #consumer{checked_out = Checked0} = Consumer,
