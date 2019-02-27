@@ -23,9 +23,15 @@
 %% Supported ciphers and hashes
 
 supported_ciphers() ->
-    NotSupportedByUs = [aes_ccm, aes_ctr, aes_ecb, aes_gcm,
+    NotSupportedByUs = [%% These ciphers should be supported in a future version.
+                        aes_128_ccm, aes_192_ccm, aes_256_ccm,
+                        aes_128_ctr, aes_192_ctr, aes_256_ctr,
+                        aes_128_gcm, aes_192_gcm, aes_256_gcm,
                         chacha20, chacha20_poly1305,
-                        blowfish_ecb, des_ecb, rc4],
+                        %% These are aliases that correspond to multiple ciphers.
+                        aes_ccm, aes_ctr, aes_gcm,
+                        %% These ciphers will never be supported.
+                        aes_ecb, blowfish_ecb, des_ecb, rc4],
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
     lists:filter(fun(Cipher) ->
         not lists:member(Cipher, NotSupportedByUs)
@@ -89,7 +95,9 @@ make_key(Cipher, Hash, Iterations, PassPhrase, Salt) ->
     Key = pbdkdf2(PassPhrase, Salt, Iterations, key_length(Cipher),
         fun crypto:hmac/4, Hash, hash_length(Hash)),
     if
-        Cipher =:= des3_cbc; Cipher =:= des3_cbf; Cipher =:= des3_cfb; Cipher =:= des_ede3 ->
+        Cipher =:= des3_cbc; Cipher =:= des3_cbf; Cipher =:= des3_cfb;
+                Cipher =:= des_ede3; Cipher =:= des_ede3_cbc;
+                Cipher =:= des_ede3_cbf; Cipher =:= des_ede3_cfb ->
             << A:8/binary, B:8/binary, C:8/binary >> = Key,
             [A, B, C];
         true ->
@@ -126,7 +134,9 @@ hash_length(sha3_256) -> 32;
 hash_length(sha384) -> 48;
 hash_length(sha3_384) -> 48;
 hash_length(sha512) -> 64;
-hash_length(sha3_512) -> 64.
+hash_length(sha3_512) -> 64;
+hash_length(blake2b) -> 64;
+hash_length(blake2s) -> 32.
 
 iv_length(des_cbc) -> 8;
 iv_length(des_cfb) -> 8;
@@ -134,6 +144,9 @@ iv_length(des3_cbc) -> 8;
 iv_length(des3_cbf) -> 8;
 iv_length(des3_cfb) -> 8;
 iv_length(des_ede3) -> 8;
+iv_length(des_ede3_cbf) -> 8;
+iv_length(des_ede3_cfb) -> 8;
+iv_length(des_ede3_cbc) -> 8;
 iv_length(blowfish_cbc) -> 8;
 iv_length(blowfish_cfb64) -> 8;
 iv_length(blowfish_ofb64) -> 8;
@@ -143,6 +156,9 @@ iv_length(aes_cbc128) -> 16;
 iv_length(aes_cfb8) -> 16;
 iv_length(aes_cfb128) -> 16;
 iv_length(aes_cbc256) -> 16;
+iv_length(aes_128_cbc) -> 16;
+iv_length(aes_192_cbc) -> 16;
+iv_length(aes_256_cbc) -> 16;
 iv_length(aes_ige256) -> 32.
 
 key_length(des_cbc) -> 8;
@@ -151,6 +167,9 @@ key_length(des3_cbc) -> 24;
 key_length(des3_cbf) -> 24;
 key_length(des3_cfb) -> 24;
 key_length(des_ede3) -> 24;
+key_length(des_ede3_cbf) -> 24;
+key_length(des_ede3_cfb) -> 24;
+key_length(des_ede3_cbc) -> 24;
 key_length(blowfish_cbc) -> 16;
 key_length(blowfish_cfb64) -> 16;
 key_length(blowfish_ofb64) -> 16;
@@ -160,12 +179,18 @@ key_length(aes_cbc128) -> 16;
 key_length(aes_cfb8) -> 16;
 key_length(aes_cfb128) -> 16;
 key_length(aes_cbc256) -> 32;
+key_length(aes_128_cbc) -> 16;
+key_length(aes_192_cbc) -> 24;
+key_length(aes_256_cbc) -> 32;
 key_length(aes_ige256) -> 16.
 
+block_size(aes_cbc) -> 32;
 block_size(aes_cbc256) -> 32;
 block_size(aes_cbc128) -> 32;
+block_size(aes_128_cbc) -> 32;
+block_size(aes_192_cbc) -> 32;
+block_size(aes_256_cbc) -> 32;
 block_size(aes_ige256) -> 32;
-block_size(aes_cbc) -> 32;
 block_size(_) -> 8.
 
 %% The following was taken from OTP's lib/public_key/src/pubkey_pbe.erl
