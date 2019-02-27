@@ -20,8 +20,13 @@ not designed to be anything other than an example.
 
 ### Running the Example
 
-Run `start.sh` to launch it after [installing Django](https://docs.djangoproject.com/en/1.10/topics/install/). You may need to
-hack `start.sh` if you are not running Debian or Ubuntu.
+Run
+
+``` shell
+start.sh
+```
+
+to launch it after [installing Django](https://docs.djangoproject.com/en/2.1/intro/install/). You may need to hack `start.sh` if you are not running Debian or Ubuntu.
 
 The app will use a local SQLite database. It uses the standard
 Django authentication database. All users get access to all vhosts and
@@ -44,7 +49,7 @@ not designed to be anything other than an example.
 Import the example as a Maven project in your favorite IDE or run it directly from the command line:
 
 ``` shell
-./mvnw spring-boot:run
+mvn spring-boot:run
 ```
 
 The application listens on the 8080 port.
@@ -56,6 +61,19 @@ with the `guest` password. This implementation also checks the
 routing key starts with an `a` when publishing to a topic exchange
 or consuming from a topic. (an example of [topic authorisation](http://next.rabbitmq.com/access-control.html#topic-authorisation)).
 
+### rabbitmq.config Example
+
+Below is a [RabbitMQ config file](http://www.rabbitmq.com/configure.html) example to go with this
+example:
+
+``` ini
+auth_backends.1 = http
+
+auth_http.http_method   = post
+auth_http.user_path     = http://localhost:8080/auth/user
+auth_http.vhost_path    = http://localhost:8080/auth/vhost
+auth_http.resource_path = http://localhost:8080/auth/resource
+```
 
 ## Spring Boot Kotlin Example
 
@@ -130,7 +148,7 @@ This example was developed using
  * ASP.NET Core 2.1
  * Visual Studio 2017 (Visual Studio Code)
  * Windows 10
-  
+
 It is possible to build and run service from Visual Studio using IIS or from Visual Studio or Visual Studio Code using cross-platform server Kestrel.
 
 
@@ -146,14 +164,14 @@ The example requires PHP >= 5.4 and [Composer](https://getcomposer.org/).
 The `rabbitmq-auth-backend-http-php` library depend on `symfony/security` and `symfony/http-foundation` components.
 Go to the `rabbitmq_auth_backend_php` folder and run `composer install`.
 
-```bash
+``` shell
 cd rabbitmq_auth_backend_php/
 composer install
 ```
 
 Now you can run the PHP 5.4 server (server at http://127.0.0.1:8080)
 
-```
+``` shell
 composer start
 ```
 
@@ -177,42 +195,17 @@ Users list:
 
 ### rabbitmq.config Example
 
-ℹ️ Dont forget to set the proper url in your rabbit config file
-
 Below is a [RabbitMQ config file](http://www.rabbitmq.com/configure.html) example to go with this
 example:
-
-the new style config format
 
 ``` ini
 auth_backends.1 = internal
 auth_backends.2 = http
+
 auth_http.user_path     = http://localhost:62190/auth/user.php
 auth_http.vhost_path    = http://localhost:62190/auth/vhost.php
 auth_http.resource_path = http://localhost:62190/auth/resource.php
 auth_http.topic_path    = http://localhost:62190/auth/topic.php
-```
-
-Or in the classic format:
-
-``` erlang
-[
-  {rabbit, [
-              {auth_backends, [rabbit_auth_backend_internal,rabbit_auth_backend_http]}
-            ]
-  },
-
-{
-  rabbitmq_auth_backend_http,
-    [
-       {http_method,   post},
-       {user_path,     "http://localhost:62190/auth/user"},
-       {vhost_path,    "http://localhost:62190/auth/vhost"},
-       {resource_path, "http://localhost:62190/auth/resource"},
-       {topic_path,    "http://localhost:62190/auth/topic"}
-    ]
-  }
-].
 ```
 
 See [RabbitMQ Access Control guide](http://www.rabbitmq.com/access-control.html) for more information.
