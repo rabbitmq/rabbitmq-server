@@ -17,18 +17,20 @@
 -module(unit_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
 all() ->
     [
-        {group, non_parallel_tests}
+        {group, parallel_tests}
     ].
 
 groups() ->
     [
-        {non_parallel_tests, [], [
-            query
+        {parallel_tests, [], [
+            query,
+            join_tags
         ]}
     ].
 
@@ -36,19 +38,26 @@ init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
 query(_Config) ->
-    "username=guest&vhost=%2F&resource=topic&name=amp.topic&permission=write" =
+    ?assertEqual("username=guest&vhost=%2F&resource=topic&name=amp.topic&permission=write",
             rabbit_auth_backend_http:q([
                 {username,   <<"guest">>},
                 {vhost,      <<"/">>},
                 {resource,   topic},
                 {name,       <<"amp.topic">>},
-                {permission, write}]),
+                {permission, write}])),
 
-    "username=guest&routing_key=a.b.c&variable_map.username=guest&variable_map.vhost=other-vhost" =
+    ?assertEqual("username=guest&routing_key=a.b.c&variable_map.username=guest&variable_map.vhost=other-vhost",
         rabbit_auth_backend_http:q([
             {username,   <<"guest">>},
             {routing_key,<<"a.b.c">>},
             {variable_map, #{<<"username">> => <<"guest">>,
                              <<"vhost">>    => <<"other-vhost">>}
-            }]),
-    ok.
+            }])).
+
+join_tags(_Config) ->
+  ?assertEqual("management administrator custom",
+              rabbit_auth_backend_http:join_tags([management, administrator, custom])),
+  ?assertEqual("management administrator custom2",
+              rabbit_auth_backend_http:join_tags(["management", "administrator", "custom2"])),
+  ?assertEqual("management administrator custom3 group:dev",
+              rabbit_auth_backend_http:join_tags([management, administrator, custom3, 'group:dev'])).

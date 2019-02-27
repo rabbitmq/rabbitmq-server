@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ HTTP authentication.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_http).
@@ -21,7 +21,7 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([description/0, p/1, q/1]).
+-export([description/0, p/1, q/1, join_tags/1]).
 -export([user_login_authentication/2, user_login_authorization/1,
          check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
@@ -42,7 +42,7 @@ user_login_authentication(Username, AuthProps) ->
     case http_req(p(user_path), q([{username, Username}|AuthProps])) of
         {error, _} = E  -> E;
         deny            -> {refused, "Denied by HTTP plugin", []};
-        "allow" ++ Rest -> Tags = [list_to_atom(T) ||
+        "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
                                       T <- string:tokens(Rest, " ")],
                            {ok, #auth_user{username = Username,
                                            tags     = Tags,
@@ -164,8 +164,10 @@ escape(K, V) ->
 
 parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 
-join_tags([]) -> "";
-join_tags(Tags) -> string:substr(lists:foldr(fun(Elem, Acc) ->  ", " ++ atom_to_list(Elem) ++ Acc end, "", Tags), 3).
+join_tags([])   -> "";
+join_tags(Tags) ->
+  Strings = [rabbit_data_coercion:to_list(T) || T <- Tags],
+  string:join(Strings, " ").
 
 %%--------------------------------------------------------------------
 
