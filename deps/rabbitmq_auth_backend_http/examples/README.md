@@ -7,9 +7,10 @@ different platforms and frameworks:
 
  * Python and Django
  * Java and Spring Boot
+ * Kotlin and Spring Boot
  * C# and ASP.NET Web API
  * C# and ASP.NET Core 2.1
-
+ * PHP
 
 ## Python Example
 
@@ -133,7 +134,7 @@ This example was developed using
 It is possible to build and run service from Visual Studio using IIS or from Visual Studio or Visual Studio Code using cross-platform server Kestrel.
 
 
-## PHP Boot Example
+## PHP Example
 
 `rabbitmq_auth_backend_php` is a minimalistic PHP application that this plugin can authenticate against.
 It's really not designed to be anything other than an example.
