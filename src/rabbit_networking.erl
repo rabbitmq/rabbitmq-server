@@ -392,10 +392,16 @@ force_connection_event_refresh(Ref) ->
 handshake(Ref, ProxyProtocol) ->
     case ProxyProtocol of
         true ->
-            {ok, ProxyInfo} = ranch:recv_proxy_header(Ref, 1000),
-            {ok, Sock} = ranch:handshake(Ref),
-            setup_socket(Sock),
-            {ok, {rabbit_proxy_socket, Sock, ProxyInfo}};
+            case ranch:recv_proxy_header(Ref, 1000) of
+                {error, Error} ->
+                    rabbit_log:error("error when receiving proxy header: ~p", [Error]),
+                    % The following call will clean up resources then exit
+                    should_never_match = ranch:handshake(Ref);
+                {ok, ProxyInfo} ->
+                    {ok, Sock} = ranch:handshake(Ref),
+                    setup_socket(Sock),
+                    {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
+            end;
         false ->
             {ok, Sock} = ranch:handshake(Ref),
             setup_socket(Sock),
