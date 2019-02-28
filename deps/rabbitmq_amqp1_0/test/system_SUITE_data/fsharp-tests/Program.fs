@@ -7,6 +7,30 @@ open Amqp.Sasl
 open Amqp.Framing
 open Amqp.Types
 
+let sleep (i: int) = System.Threading.Thread.Sleep i
+
+[<AutoOpen>]
+module RabbitClient =
+    open RabbitMQ.Client
+
+    let consume (m: IModel) queue autoAck f =
+            let consumer =
+                { new DefaultBasicConsumer(m) with
+                    member x.HandleBasicDeliver(consumerTag,
+                                                deliveryTag,
+                                                redelivered,
+                                                exchange,
+                                                routingKey,
+                                                props,
+                                                body) =
+                                                f deliveryTag props body }
+            m.ContinuationTimeout <- (TimeSpan.FromSeconds 115.)
+            (* m.BasicQos(0u, 100us, false) |> ignore *)
+            let consumerTag = m.BasicConsume(queue, autoAck, consumer)
+            { new System.IDisposable with
+                member __.Dispose () =
+                    m.BasicCancel(consumerTag) }
+
 [<AutoOpen>]
 module AmqpClient =
     type AmqpConnection =
@@ -107,11 +131,44 @@ module Test =
         use c = connect uri
         let sender, receiver = senderReceiver c "test" "roundtrip-q"
         for body in sampleTypes do
-            new Message(body, Header = Header(Ttl = 500u))
+            let corr = "correlation"
+            new Message(body,
+                        Header = Header(Ttl = 500u),
+                        Properties = new Properties(CorrelationId = corr))
             |> sender.Send
             let rtd = receive receiver
             assertEqual body rtd.Body
             assertTrue (rtd.Header.Ttl <= 500u)
+            assertEqual rtd.Properties.CorrelationId  corr
+            ()
+
+    open RabbitMQ.Client
+
+    let roundtrip_to_amqp_091 uri =
+        use c = connect uri
+        let q = "roundtrip-091-q"
+        let corr = "corrlation"
+        let sender = SenderLink(c.Session, q + "-sender" , q)
+        new Message("hi"B, Header = Header(),
+                    Properties = new Properties(CorrelationId = corr))
+        |> sender.Send
+        System.Threading.Thread.Sleep 500
+
+        let cf = ConnectionFactory()
+        cf.Uri <- Uri uri
+        use c = cf.CreateConnection()
+        use m = c.CreateModel()
+        use h = new AutoResetEvent(false)
+        let mutable id : string = null
+        let con = consume m q false (fun deliveryTag props body ->
+                                        printfn "got %A" props.CorrelationId
+                                        id <- props.CorrelationId
+                                        h.Set() |> ignore
+                                        m.BasicAck(deliveryTag, false) |> ignore)
+
+        h.WaitOne() |> ignore
+        assertEqual id corr
+        ()
 
     let defaultOutcome uri =
         for (defOut, cond, defObj) in
@@ -330,6 +387,9 @@ let main argv =
         0
     | [AsLower "roundtrip"; uri] ->
         roundtrip uri
+        0
+    | [AsLower "roundtrip_to_amqp_091"; uri] ->
+        roundtrip_to_amqp_091  uri
         0
     | [AsLower "data_types"; uri] ->
         datatypes uri
