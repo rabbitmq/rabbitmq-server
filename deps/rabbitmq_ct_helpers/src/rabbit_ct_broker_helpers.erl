@@ -563,7 +563,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
     end,
-    UseSecondaryUmbrella = (I + 1) rem 2 =:= 0,
+    UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
+                               false -> false;
+                               _     -> (I + 1) rem 2 =:= 0
+                           end,
     SrcDir = case WithPlugins of
         false when UseSecondaryUmbrella -> ?config(secondary_rabbit_srcdir,
                                                    Config);
