@@ -154,8 +154,8 @@ add(Binding, InnerFun, ActingUser) ->
       fun (Src, Dst, B) ->
               case rabbit_exchange:validate_binding(Src, B) of
                   ok ->
-                      lock_resource(Src),
-                      lock_resource(Dst),
+                      lock_resource(Src, read),
+                      lock_resource(Dst, read),
                       %% this argument is used to check queue exclusivity;
                       %% in general, we want to fail on that in preference to
                       %% anything else
@@ -174,8 +174,6 @@ add(Binding, InnerFun, ActingUser) ->
       end, fun not_found_or_absent_errs/1).
 
 add(Src, Dst, B, ActingUser) ->
-    lock_resource(Src),
-    lock_resource(Dst),
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
     ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
                     fun mnesia:write/3),
@@ -198,8 +196,8 @@ remove(Binding, InnerFun, ActingUser) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              lock_resource(Src),
-              lock_resource(Dst),
+              lock_resource(Src, read),
+              lock_resource(Dst, read),
               case mnesia:read(rabbit_route, B, write) of
                   [] -> case mnesia:read(rabbit_durable_route, B, write) of
                             [] -> rabbit_misc:const(ok);
@@ -216,8 +214,6 @@ remove(Binding, InnerFun, ActingUser) ->
       end, fun absent_errs_only/1).
 
 remove(Src, Dst, B, ActingUser) ->
-    lock_resource(Src),
-    lock_resource(Dst),
     ok = sync_route(#route{binding = B}, durable(Src), durable(Dst),
                     fun delete/3),
     Deletions = maybe_auto_delete(
@@ -536,9 +532,11 @@ remove_for_destination(DstName, OnlyDurable, Fun) ->
 
 %% Instead of locking entire table on remove operations we can lock the
 %% affected resource only.
-lock_resource(Name) ->
+lock_resource(Name) -> lock_resource(Name, write).
+
+lock_resource(Name, LockKind) ->
     mnesia:lock({global, Name, mnesia:table_info(rabbit_route, where_to_write)},
-                write).
+                LockKind).
 
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to
