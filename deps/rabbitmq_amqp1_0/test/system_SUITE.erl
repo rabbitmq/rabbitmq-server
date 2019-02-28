@@ -31,6 +31,7 @@ groups() ->
     [
       {dotnet, [], [
           roundtrip,
+          roundtrip_to_amqp_091,
           default_outcome,
           outcomes,
           fragmentation,
@@ -120,6 +121,11 @@ roundtrip(Config) ->
     run(Config, [
         {dotnet, "roundtrip"},
         {java, "RoundTripTest"}
+      ]).
+
+roundtrip_to_amqp_091(Config) ->
+    run(Config, [
+        {dotnet, "roundtrip_to_amqp_091"}
       ]).
 
 default_outcome(Config) ->
