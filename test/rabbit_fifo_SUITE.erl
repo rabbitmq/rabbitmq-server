@@ -1085,6 +1085,39 @@ single_active_cancelled_with_unacked_test(_) ->
     ?assertMatch([], State6#rabbit_fifo.waiting_consumers),
     ok.
 
+single_active_with_credited_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+
+    C1 = {<<"ctag1">>, self()},
+    C2 = {<<"ctag2">>, self()},
+    % adding some consumers
+    AddConsumer = fun(C, S0) ->
+                          {S, _, _} = apply(
+                                        meta(1),
+                                        make_checkout(C,
+                                                      {auto, 0, credited},
+                                                      #{}),
+                                        S0),
+                          S
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [C1, C2]),
+
+    %% add some credit
+    C1Cred = rabbit_fifo:make_credit(C1, 5, 0, false),
+    {State2, _, _Effects2} = apply(meta(3), C1Cred, State1),
+    C2Cred = rabbit_fifo:make_credit(C2, 4, 0, false),
+    {State3, _} = apply(meta(4), C2Cred, State2),
+    %% both consumers should have credit
+    ?assertMatch(#{C1 := #consumer{credit = 5}},
+                 State3#rabbit_fifo.consumers),
+    ?assertMatch([{C2, #consumer{credit = 4}}],
+                 State3#rabbit_fifo.waiting_consumers),
+    ok.
+
 meta(Idx) ->
     #{index => Idx, term => 1}.
 
