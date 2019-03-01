@@ -18,7 +18,9 @@
 
 -export([display_table/3,
          format_table/3,
-         ascii_color/1]).
+         isatty/0,
+         ascii_color/1,
+         ascii_color/2]).
 
 -type cell() :: {iolist(), color()} | empty.
 -type color() :: default | bright_white | red_bg | green | yellow.
@@ -182,9 +184,9 @@ format_rows([Row | Rest],
                                     Padding = string:chars($\s, PaddingLen),
                                     case is_atom(Color) of
                                         true ->
-                                            [ascii_color(Color),
+                                            [ascii_color(Color, UseColors),
                                              Value,
-                                             ascii_color(default),
+                                             ascii_color(default, UseColors),
                                              Padding];
                                         false ->
                                             ["",
@@ -205,11 +207,32 @@ format_rows([Row | Rest],
 format_rows([], _, _, _, _, AllLines) ->
     AllLines.
 
+-spec isatty() -> boolean().
+%% @doc
+%% Guess if stdout it a TTY which handles colors and line drawing.
+%%
+%% Really it only check is `$TERM' is defined, so it is incorrect
+%% at best. And even if it is set, we have no idea if it has the
+%% appropriate capabilities.
+%%
+%% Consider this function a plateholder for some real code.
+%%
+%% @return `true' if it is a TTY, `false' otherwise.
+
+isatty() ->
+    case os:getenv("TERM") of
+        %% We don't have access to isatty(3), so let's
+        %% assume that is $TERM is defined, we can use
+        %% colors and drawing characters.
+        false -> false;
+        _     -> true
+    end.
+
 -spec ascii_color(color()) -> string().
 %% @doc
 %% Returns the ANSI escape sequence for a given color name.
 %%
-%% @name Color Name of the color.
+%% @param Color Name of the color.
 %% @return String containing the escape sequence.
 
 ascii_color(default)      -> "\033[0m";
@@ -217,3 +240,15 @@ ascii_color(bright_white) -> "\033[1m";
 ascii_color(red_bg)       -> "\033[1;37;41m";
 ascii_color(green)        -> "\033[32m";
 ascii_color(yellow)       -> "\033[33m".
+
+-spec ascii_color(color(), UseColors :: boolean()) -> string().
+%% @doc
+%% Returns the ANSI escape sequence for a given color name, or the empty
+%% string if colors are disabled.
+%%
+%% @param Color Name of the color.
+%% @param UseColors Flag to indicate is colors can actually be used.
+%% @return String containing the escape sequence (or an empty string).
+
+ascii_color(Name, true) -> ascii_color(Name);
+ascii_color(_, false)   -> "".
