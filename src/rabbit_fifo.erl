@@ -839,7 +839,7 @@ activate_next_consumer(#?MODULE{consumers = Cons,
                                                              single_active, Effects0),
                     {State, Effects};
                 [] ->
-                    {State0, Effects0}
+                    {State0, [{aux, inactive} | Effects0]}
             end;
         _ ->
                     {State0, Effects0}

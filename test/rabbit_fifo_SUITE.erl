@@ -1025,7 +1025,7 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
 
     {State2, _, Effects2} = apply(#{}, {down, Pid1, noconnection}, State1),
     % one monitor and one consumer status update (deactivated)
-    ?assertEqual(2, length(Effects2)),
+    ?assertEqual(3, length(Effects2)),
 
     {_, _, Effects3} = apply(#{index => 1}, {nodeup, node(self())}, State2),
     % for each consumer: 1 effect to monitor the consumer PID
