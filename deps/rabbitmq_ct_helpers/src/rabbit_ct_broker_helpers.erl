@@ -612,6 +612,18 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             end,
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
+    ExtraArgs0 = [],
+    ExtraArgs1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
+                     undefined -> ExtraArgs0;
+                     Dir       -> [{"RABBITMQ_PLUGINS_DIR=~s", [Dir]}
+                                   | ExtraArgs0]
+                 end,
+    StartWithPluginsDisabled = rabbit_ct_helpers:get_config(
+                                 Config, start_rmq_with_plugins_disabled),
+    ExtraArgs2 = case StartWithPluginsDisabled of
+                     true -> ["LEAVE_PLUGINS_DISABLED=yes" | ExtraArgs1];
+                     _    -> ExtraArgs1
+                 end,
     ExtraArgs = case UseSecondaryUmbrella of
                     true ->
                         DepsDir = ?config(erlang_mk_depsdir, Config),
@@ -629,9 +641,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                          {"RABBITMQ_SCRIPTS_DIR=~s", [SecScriptsDir]},
                          {"RABBITMQ_SERVER=~s/rabbitmq-server", [SecScriptsDir]},
                          {"RABBITMQCTL=~s/rabbitmqctl", [SecScriptsDir]},
-                         {"RABBITMQ_PLUGINS=~s/rabbitmq-plugins", [SecScriptsDir]}];
+                         {"RABBITMQ_PLUGINS=~s/rabbitmq-plugins", [SecScriptsDir]}
+                         | ExtraArgs2];
                     false ->
-                        []
+                        ExtraArgs2
                 end,
     Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
