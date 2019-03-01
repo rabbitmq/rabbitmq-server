@@ -669,9 +669,8 @@ maps_merge(Fun, M1, M2) ->
 
 -spec merge_data(atom(), any(), any()) -> any().
 merge_data(_, A, B) when is_integer(A), is_integer(B) -> A + B;
-merge_data(_, [], [_|_] = B) -> B;
-merge_data(_, [_|_] = A, []) -> A;
-merge_data(_, [], []) -> [];
+merge_data(_, A, B) when is_list(A), is_list(B) ->
+    A ++ B;
 merge_data(_, {A1, B1}, {[_|_] = A2, [_|_] = B2}) ->
     {[A1 | A2], [B1 | B2]};
 merge_data(_, {A1, B1}, {A2, B2}) -> % first slide
