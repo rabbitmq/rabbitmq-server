@@ -120,6 +120,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
             RaMachine = ra_machine(NewQ),
             ServerIds = [{RaName, Node} || Node <- Nodes],
             ClusterName = RaName,
+            TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
             RaConfs = [begin
                            UId = ra:new_uid(ra_lib:to_binary(ClusterName)),
                            FName = rabbit_misc:rs(QName),
@@ -129,7 +130,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
                              friendly_name => FName,
                              initial_members => ServerIds,
                              log_init_args => #{uid => UId},
-                             tick_timeout => ?TICK_TIMEOUT,
+                             tick_timeout => TickTimeout,
                              machine => RaMachine}
                        end || ServerId <- ServerIds],
 

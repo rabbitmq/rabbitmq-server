@@ -45,12 +45,14 @@ groups() ->
         ]}
     ].
 
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
+    Config1 = rabbit_ct_helpers:set_config(Config0, [
         {rmq_nodename_suffix, ?MODULE}
     ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config1, {rabbit, [{quorum_tick_interval, 1000}]}),
+    rabbit_ct_helpers:run_setup_steps(Config,
         rabbit_ct_broker_helpers:setup_steps() ++
         rabbit_ct_client_helpers:setup_steps()).
 
