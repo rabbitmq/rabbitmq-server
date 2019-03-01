@@ -31,6 +31,7 @@
 
 -export([get/1,
          list/1,
+         states/0,
          is_supported/1,
          is_enabled/1,
          is_registry_initialized/0,
@@ -73,6 +74,23 @@ list(Which) ->
     %% See get/1 for an explanation of the case statement below.
     case is_registry_initialized() of
         false -> ?MODULE:list(Which);
+        true  -> #{}
+    end.
+
+-spec states() -> rabbit_feature_flags:feature_states().
+%% @doc
+%% Returns the states of supported feature flags.
+%%
+%% Only the informations stored in the local registry is used to answer
+%% this call.
+%%
+%% @returns A map of feature flag states.
+
+states() ->
+    rabbit_feature_flags:initialize_registry(),
+    %% See get/1 for an explanation of the case statement below.
+    case is_registry_initialized() of
+        false -> ?MODULE:states();
         true  -> #{}
     end.
 
