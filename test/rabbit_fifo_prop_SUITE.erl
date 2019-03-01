@@ -271,21 +271,6 @@ scenario16(_Config) ->
                         delivery_limit => 1}, Commands),
     ok.
 
-fake_pid(_Config) ->
-    Pid = fake_external_pid(<<"mynode@banana">>),
-    ?assertNotEqual(node(Pid), node()),
-    ?assert(is_pid(Pid)),
-    ok.
-
-fake_external_pid(Node) when is_binary(Node) ->
-    ThisNodeSize = size(term_to_binary(node())) + 1,
-    Pid = spawn(fun () -> ok end),
-    %% drop the local node data from a local pid
-    <<_:ThisNodeSize/binary, LocalPidData/binary>> = term_to_binary(Pid),
-    S = size(Node),
-    %% replace it with the incoming node binary
-    Final = <<131,103, 100, 0, S, Node/binary, LocalPidData/binary>>,
-    binary_to_term(Final).
 
 snapshots(_Config) ->
     run_proper(
@@ -352,7 +337,7 @@ log_gen(Size) ->
 
 pid_gen(Nodes) ->
     ?LET(Node, oneof(Nodes),
-         fake_external_pid(atom_to_binary(Node, utf8))).
+         test_util:fake_pid(atom_to_binary(Node, utf8))).
 
 down_gen(Pid) ->
     ?LET(E, {down, Pid, oneof([noconnection, noproc])}, E).
