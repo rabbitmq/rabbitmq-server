@@ -546,7 +546,7 @@ start_apps(Apps) ->
 
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
-    rabbit_feature_flags:initialize_registry(),
+    ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(Apps),
     start_loaded_apps(Apps, RestartTypes).
 
 start_loaded_apps(Apps) ->

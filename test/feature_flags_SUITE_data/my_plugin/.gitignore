@@ -1,0 +1,5 @@
+/.erlang.mk/
+/deps/
+/ebin/
+/plugins/
+/my_plugin.d

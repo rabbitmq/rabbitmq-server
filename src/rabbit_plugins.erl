@@ -454,7 +454,6 @@ clean_plugins(Plugins) ->
 clean_plugin(Plugin, ExpandDir) ->
     {ok, Mods} = application:get_key(Plugin, modules),
     application:unload(Plugin),
-    rabbit_feature_flags:initialize_registry(),
     [begin
          code:soft_purge(Mod),
          code:delete(Mod),
@@ -699,4 +698,6 @@ remove_plugins(Plugins) ->
 maybe_report_plugin_loading_problems([]) ->
     ok;
 maybe_report_plugin_loading_problems(Problems) ->
-    rabbit_log:warning("Problem reading some plugins: ~p~n", [Problems]).
+    io:format(standard_error,
+              "Problem reading some plugins: ~p~n",
+              [Problems]).

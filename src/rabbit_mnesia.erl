@@ -513,6 +513,7 @@ dir() -> mnesia:system_info(directory).
 %% nodes in the cluster already. It also updates the cluster status
 %% file.
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
+    NodeIsVirgin = is_virgin_node(),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -536,7 +537,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:create_local_copy(NodeType)
     end,
-    ensure_feature_flags_are_in_sync(Nodes),
+    ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
     ensure_schema_integrity(),
     rabbit_node_monitor:update_cluster_status(),
     ok.
@@ -602,12 +603,12 @@ ensure_mnesia_not_running() ->
             throw({error, mnesia_unexpectedly_running})
     end.
 
-ensure_feature_flags_are_in_sync(Nodes) ->
-    case rabbit_feature_flags:sync_feature_flags_with_cluster(Nodes) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            throw({error, {incompatible_feature_flags, Reason}})
+ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
+    Ret = rabbit_feature_flags:sync_feature_flags_with_cluster(
+            Nodes, NodeIsVirgin),
+    case Ret of
+        ok              -> ok;
+        {error, Reason} -> throw({error, {incompatible_feature_flags, Reason}})
     end.
 
 ensure_schema_integrity() ->
