@@ -182,6 +182,7 @@ SLOW_CT_SUITES := backing_queue \
 		  config_schema \
 		  dynamic_ha \
 		  eager_sync \
+		  feature_flags \
 		  health_check \
 		  lazy_queue \
 		  metrics \
