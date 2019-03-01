@@ -91,15 +91,17 @@ cli_info(FeatureFlags) ->
 %% @param Options Options to tune what is displayed and how.
 
 info(Options) ->
+    UseColors = use_colors(Options),
     %% Two tables: one for stable feature flags, one for experimental ones.
     StableFF = rabbit_feature_flags:list(all, stable),
     case maps:size(StableFF) of
         0 ->
             ok;
         _ ->
-            io:format("~n~s## Stable feature flags:~s~n",
-                      [rabbit_pretty_stdout:ascii_color(bright_white),
-                       rabbit_pretty_stdout:ascii_color(default)]),
+            io:format(
+              "~n~s## Stable feature flags:~s~n",
+              [rabbit_pretty_stdout:ascii_color(bright_white, UseColors),
+               rabbit_pretty_stdout:ascii_color(default, UseColors)]),
             info(StableFF, Options)
     end,
     ExpFF = rabbit_feature_flags:list(all, experimental),
@@ -107,14 +109,15 @@ info(Options) ->
         0 ->
             ok;
         _ ->
-            io:format("~n~s## Experimental feature flags:~s~n",
-                      [rabbit_pretty_stdout:ascii_color(bright_white),
-                       rabbit_pretty_stdout:ascii_color(default)]),
+            io:format(
+              "~n~s## Experimental feature flags:~s~n",
+              [rabbit_pretty_stdout:ascii_color(bright_white, UseColors),
+               rabbit_pretty_stdout:ascii_color(default, UseColors)]),
             info(ExpFF, Options)
     end,
     case maps:size(StableFF) + maps:size(ExpFF) of
         0 -> ok;
-        _ -> state_legend()
+        _ -> state_legend(Options)
     end.
 
 -spec info(rabbit_feature_flags:feature_flags(), info_options()) -> ok.
@@ -127,15 +130,8 @@ info(Options) ->
 
 info(FeatureFlags, Options) ->
     Verbose = maps:get(verbose, Options, 0),
-    IsaTty= case os:getenv("TERM") of
-                %% We don't have access to isatty(3), so let's
-                %% assume that is $TERM is defined, we can use
-                %% colors and drawing characters.
-                false -> false;
-                _     -> true
-            end,
-    UseColors = maps:get(color, Options, IsaTty),
-    UseLines = maps:get(lines, Options, IsaTty),
+    UseColors = use_colors(Options),
+    UseLines = use_lines(Options),
     %% Table columns:
     %%     | Name | State | Provided by | Description
     %%
@@ -182,10 +178,12 @@ info(FeatureFlags, Options) ->
                                                 "  ~s: ~s~s~s",
                                                 [Node,
                                                  rabbit_pretty_stdout:
-                                                 ascii_color(LabelColor),
+                                                 ascii_color(LabelColor,
+                                                             UseColors),
                                                  Label,
                                                  rabbit_pretty_stdout:
-                                                 ascii_color(default)]),
+                                                 ascii_color(default,
+                                                             UseColors)]),
                                     [empty,
                                      empty,
                                      empty,
@@ -209,7 +207,14 @@ info(FeatureFlags, Options) ->
                                        UseColors,
                                        UseLines).
 
-state_legend() ->
+use_colors(Options) ->
+    maps:get(color, Options, rabbit_pretty_stdout:isatty()).
+
+use_lines(Options) ->
+    maps:get(lines, Options, rabbit_pretty_stdout:isatty()).
+
+state_legend(Options) ->
+    UseColors = use_colors(Options),
     io:format(
       "~n"
       "Possible states:~n"
@@ -218,12 +223,12 @@ state_legend() ->
       "  ~sUnavailable~s: The feature flag cannot be enabled because one or "
       "more nodes do not support it~n"
       "~n",
-      [rabbit_pretty_stdout:ascii_color(green),
-       rabbit_pretty_stdout:ascii_color(default),
-       rabbit_pretty_stdout:ascii_color(yellow),
-       rabbit_pretty_stdout:ascii_color(default),
-       rabbit_pretty_stdout:ascii_color(red_bg),
-       rabbit_pretty_stdout:ascii_color(default)]).
+      [rabbit_pretty_stdout:ascii_color(green, UseColors),
+       rabbit_pretty_stdout:ascii_color(default, UseColors),
+       rabbit_pretty_stdout:ascii_color(yellow, UseColors),
+       rabbit_pretty_stdout:ascii_color(default, UseColors),
+       rabbit_pretty_stdout:ascii_color(red_bg, UseColors),
+       rabbit_pretty_stdout:ascii_color(default, UseColors)]).
 
 -spec format_error(any()) -> string().
 %% @doc
