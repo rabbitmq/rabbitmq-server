@@ -150,10 +150,15 @@ ifeq ($(wildcard ebin/test),)
 $(RABBITMQ_ENABLED_PLUGINS_FILE): dist
 endif
 
+ifdef LEAVE_PLUGINS_DISABLED
+$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
+	$(gen_verbose) : >$@
+else
 $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 	$(verbose) rm -f $@
 	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_PLUGINS) enable --all --offline
+endif
 
 # --------------------------------------------------------------------
 # Run a full RabbitMQ.
