@@ -400,6 +400,9 @@ queue(Q) when ?is_amqqueue(Q) ->
 
 queue_state({syncing, Msgs}) -> [{state,         syncing},
                                  {sync_messages, Msgs}];
+queue_state({terminated_by, Name}) ->
+                                [{state, terminated},
+                                 {terminated_by, Name}];
 queue_state(Status)          -> [{state,         Status}].
 
 %% We get bindings using rabbit_binding:list_*/1 rather than :info_all/1 since
