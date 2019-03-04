@@ -562,8 +562,8 @@ function fmt_object_state(obj) {
     else if (obj.state == 'terminated') {
         colour = 'yellow';
         var terminated_by = "";
-        if(typeof(obj.terminated_by) === "string"){
-            terminated_by = " by \"" + obj.terminated_by + "\""
+        if (obj.terminated_by) {
+            terminated_by = " by \"" + String(obj.terminated_by) + "\"";
         }
         explanation = 'The queue is being deleted' + terminated_by + ".";
     }
