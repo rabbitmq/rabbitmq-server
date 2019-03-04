@@ -37,8 +37,7 @@ all_tests() ->
      scenario13,
      scenario14,
      scenario15,
-     scenario16,
-     fake_pid
+     scenario16
     ].
 
 groups() ->
