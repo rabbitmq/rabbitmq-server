@@ -138,7 +138,7 @@ DECLARABLE = {
     'operator_policy': {'mandatory': ['name', 'pattern', 'definition'],
                         'json':      ['definition', 'priority'],
                         'optional':  {'priority': 0, 'apply-to': None}},
-    'vhost_limit': {'mandatory': ['name', 'value'],
+    'vhost_limit': {'mandatory': ['vhost', 'name', 'value'],
                     'json': ['value'],
                     'optional': {}},
     }
@@ -154,7 +154,7 @@ DELETABLE = {
     'parameter':  {'mandatory': ['component', 'name']},
     'policy':     {'mandatory': ['name']},
     'operator_policy': {'mandatory': ['name']},
-    'vhost_limit': {'mandatory': ['name']}
+    'vhost_limit': {'mandatory': ['vhost', 'name']}
     }
 
 CLOSABLE = {
