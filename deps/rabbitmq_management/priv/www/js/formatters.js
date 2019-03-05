@@ -541,6 +541,14 @@ function fmt_object_state(obj) {
         colour = 'yellow';
         explanation = 'Publishing rate recently throttled by server.';
     }
+    else if (obj.state == 'terminated') {
+        colour = 'yellow';
+        var terminated_by = "";
+        if (obj.terminated_by) {
+            terminated_by = " by \"" + String(obj.terminated_by) + "\"";
+        }
+        explanation = 'The queue is being deleted' + terminated_by + ".";
+    }
     else if (obj.state == 'down') {
         colour = 'red';
         explanation = 'The queue is located on a cluster node or nodes that ' +
@@ -930,7 +938,7 @@ function fmt_page_size_request(template, defaultPageSize){
     if  ((defaultPageSize == undefined) || (defaultPageSize < 0)) {
         defaultPageSize = 100;
     }
-        
+
     var result = stored_value_or_default(template + '_current_page_size', defaultPageSize);
     if (result > 500) {
         // hard limit
