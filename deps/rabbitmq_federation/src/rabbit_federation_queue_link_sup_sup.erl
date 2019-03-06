@@ -40,7 +40,12 @@ start_child(Q) ->
            {id(Q), {rabbit_federation_link_sup, start_link, [Q]},
             transient, ?SUPERVISOR_WAIT, supervisor,
             [rabbit_federation_link_sup]}) of
-        {ok, _Pid}             -> ok;
+        {ok, _Pid}               -> ok;
+        {error, already_started} ->
+          QueueName = Q#amqqueue.name,
+          rabbit_log_federation:warning("Federation link for queue ~p was already started",
+                                        [rabbit_misc:rs(QueueName)]),
+          ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
     end.
@@ -51,7 +56,15 @@ adjust(Reason) ->
     ok.
 
 stop_child(Q) ->
-    ok = supervisor2:terminate_child(?SUPERVISOR, id(Q)),
+    case supervisor2:terminate_child(?SUPERVISOR, id(Q)) of
+      ok -> ok;
+      {error, Err} ->
+        QueueName = Q#amqqueue.name,
+        rabbit_log_federation:warning(
+          "Attempt to stop a federation link for queue ~p failed: ~p",
+          [rabbit_misc:rs(QueueName), Err]),
+        ok
+    end,
     ok = supervisor2:delete_child(?SUPERVISOR, id(Q)).
 
 %%----------------------------------------------------------------------------
