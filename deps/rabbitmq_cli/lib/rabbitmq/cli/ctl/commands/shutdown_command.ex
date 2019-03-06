@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   def validate([], %{node: node_name, wait: true}) do
     local_hostname = NodeName.hostname_from_node(Node.self())
     remote_hostname = NodeName.hostname_from_node(node_name)
-    case local_hostname == remote_hostname do
+    case addressing_local_node?(local_hostname, remote_hostname) do
       true  -> :ok;
       false ->
         msg = "\nThis command can only --wait for shutdown of local nodes " <>
@@ -70,6 +70,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   #
   # Implementation
   #
+
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == :localhost , do: :true
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == 'localhost', do: :true
+  def addressing_local_node?(_, remote_hostname) when remote_hostname == "localhost", do: :true
+  def addressing_local_node?(local_hostname, remote_hostname) do
+    local_hostname == remote_hostname
+  end
 
   defp shut_down_node_without_waiting(node_name, timeout) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [], timeout)

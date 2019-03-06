@@ -39,7 +39,16 @@ defmodule ShutdownCommandTest do
     assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  test "validate: in no wait mode, does not check if target node is local", context do
+  test "validate: in wait mode, checks if local and target node hostnames match" do
+    assert match?({:validation_failure, {:unsupported_target, _}},
+                  @command.validate([], %{wait: true, node: :'rabbit@some.remote.hostname'}))
+  end
+
+  test "validate: in wait mode, always assumes @localhost nodes are local" do
+    assert @command.validate([], %{wait: true, node: :'rabbit@localhost'}) == :ok
+  end
+
+  test "validate: in no wait mode, passes unconditionally", context do
     assert @command.validate([], Map.merge(%{wait: false}, context[:opts])) == :ok
   end
 
