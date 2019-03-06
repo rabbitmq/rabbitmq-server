@@ -22,15 +22,12 @@
 
 build_dispatcher() ->
     {ok, _} = application:ensure_all_started(prometheus),
-    maybe_register_collectors(),
-    prometheus_http_impl:setup(),
+    prometheus_registry:register_collectors([prometheus_rabbitmq_core_metrics_collector]),
+    rabbit_prometheus_handler:setup(),
     cowboy_router:compile([{'_', dispatcher()}]).
 
 dispatcher() ->
     [{path() ++ "/[:registry]", rabbit_prometheus_handler, []}].
-
-maybe_register_collectors() ->
-    prometheus_registry:register_collectors([prometheus_rabbitmq_core_metrics_collector]).
 
 path() ->
     Config = application:get_env(rabbitmq_prometheus, path, []),

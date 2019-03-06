@@ -6,7 +6,7 @@ dep_prometheus_httpd = hex 2.1.8
 dep_accept = hex 0.3.3
 dep_prometheus_cowboy = hex 0.1.4
 
-DEPS = rabbit_common rabbit prometheus prometheus_httpd accept prometheus_cowboy rabbitmq_web_dispatch
+DEPS = rabbit_common rabbit prometheus accept rabbitmq_web_dispatch
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
