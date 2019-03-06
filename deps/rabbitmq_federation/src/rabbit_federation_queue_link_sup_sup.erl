@@ -42,7 +42,7 @@ start_child(Q) ->
             [rabbit_federation_link_sup]}) of
         {ok, _Pid}               -> ok;
         {error, already_started} ->
-          QueueName = amqqueue:get_name(Q),
+          QueueName = Q#amqqueue.name,
           rabbit_log_federation:warning("Federation link for queue ~p was already started",
                                         [rabbit_misc:rs(QueueName)]),
           ok;
@@ -59,7 +59,7 @@ stop_child(Q) ->
     case supervisor2:terminate_child(?SUPERVISOR, id(Q)) of
       ok -> ok;
       {error, Err} ->
-        QueueName = amqqueue:get_name(Q),
+        QueueName = Q#amqqueue.name,
         rabbit_log_federation:warning(
           "Attempt to stop a federation link for queue ~p failed: ~p",
           [rabbit_misc:rs(QueueName), Err]),
