@@ -34,6 +34,40 @@ defmodule RabbitMQ.CLI.Core.NodeName do
   def hostname, do: :inet_db.gethostname() |> List.to_string()
 
   @doc """
+  Get hostname part of current node name
+  """
+  def hostname_from_node do
+    [_, hostname] = split_node(Node.self())
+    hostname
+  end
+
+  @doc """
+  Get hostname part of given node name
+  """
+  def hostname_from_node(name) do
+    [_, hostname] = split_node(name)
+    hostname
+  end
+
+  def split_node(name) when is_atom(name) do
+    split_node(to_string(name))
+  end
+
+  def split_node(name) do
+    case String.split(name, "@", parts: 2) do
+      ["", host] ->
+        default_name = to_string(Config.get_option(:node))
+        [default_name, host]
+
+      [_head, _host] = rslt ->
+        rslt
+
+      [head] ->
+        [head, ""]
+    end
+  end
+
+  @doc """
   Get local domain. If unavailable, makes a good guess. We're using
   :inet_db here because that's what Erlang/OTP uses when it creates a node
   name:
@@ -42,6 +76,10 @@ defmodule RabbitMQ.CLI.Core.NodeName do
   def domain do
     domain(1)
   end
+
+  #
+  # Implementation
+  #
 
   defp domain(attempt) do
     case {attempt, :inet_db.res_option(:domain), :os.type()} do
@@ -160,24 +198,6 @@ defmodule RabbitMQ.CLI.Core.NodeName do
   defp valid_name_head(head) do
     rx = Regex.compile!("^[0-9A-Za-z_\\-]+$", [:unicode])
     Regex.match?(rx, head)
-  end
-
-  defp split_node(name) when is_atom(name) do
-    split_node(to_string(name))
-  end
-
-  defp split_node(name) do
-    case String.split(name, "@", parts: 2) do
-      ["", host] ->
-        default_name = to_string(Config.get_option(:node))
-        [default_name, host]
-
-      [_head, _host] = rslt ->
-        rslt
-
-      [head] ->
-        [head, ""]
-    end
   end
 
   defp do_load_resolv do
