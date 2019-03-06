@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  alias RabbitMQ.CLI.Core.OsPid
+  alias RabbitMQ.CLI.Core.{OsPid, NodeName}
 
   def switches() do
     [timeout: :integer,
@@ -32,18 +32,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
     :ok
   end
 
-  def validate([], %{node: node_name, wait: true, timeout: timeout}) do
-    hostname = :inet_db.gethostname()
-    case :rabbit_misc.rpc_call(node_name, :inet_db, :gethostname, [], timeout) do
-      {:badrpc, _} = err -> {:error, err}
-      remote_hostname    ->
-        case hostname == remote_hostname do
-          true  -> :ok;
-          false ->
-            msg = "\nThis command can only --wait for shutdown of local nodes but node #{node_name} is remote (local hostname: #{hostname}, remote: #{remote_hostname}).\n" <>
-                  "Pass --no-wait to shut node #{node_name} down without waiting.\n"
-            {:validation_failure, {:unsupported_target, msg}}
-        end
+  def validate([], %{node: node_name, wait: true}) do
+    local_hostname = NodeName.hostname_from_node(Node.self())
+    remote_hostname = NodeName.hostname_from_node(node_name)
+    case local_hostname == remote_hostname do
+      true  -> :ok;
+      false ->
+        msg = "\nThis command can only --wait for shutdown of local nodes " <>
+              "but node #{node_name} seems to be remote " <>
+              "(local hostname: #{local_hostname}, remote: #{remote_hostname}).\n" <>
+              "Pass --no-wait to shut node #{node_name} down without waiting.\n"
+        {:validation_failure, {:unsupported_target, msg}}
     end
   end
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
