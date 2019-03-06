@@ -42,7 +42,12 @@ start_child(X) ->
            {id(X), {rabbit_federation_link_sup, start_link, [X]},
             transient, ?SUPERVISOR_WAIT, supervisor,
             [rabbit_federation_link_sup]}) of
-        {ok, _Pid}             -> ok;
+        {ok, _Pid}               -> ok;
+        {error, already_started} ->
+          #exchange{name = ExchangeName} = X,
+          rabbit_log_federation:debug("Federation link for exchange ~p was already started",
+                                      [rabbit_misc:rs(ExchangeName)]),
+          ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
     end.
@@ -53,7 +58,15 @@ adjust(Reason) ->
     ok.
 
 stop_child(X) ->
-    ok = mirrored_supervisor:terminate_child(?SUPERVISOR, id(X)),
+    case mirrored_supervisor:terminate_child(?SUPERVISOR, id(X)) of
+      ok -> ok;
+      {error, Err} ->
+        #exchange{name = ExchangeName} = X,
+        rabbit_log_federation:warning(
+          "Attempt to stop a federation link for exchange ~p failed: ~p",
+          [rabbit_misc:rs(ExchangeName), Err]),
+        ok
+    end,
     ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(X)).
 
 %%----------------------------------------------------------------------------

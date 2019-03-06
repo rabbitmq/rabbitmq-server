@@ -129,7 +129,7 @@ ensure_connection_closed(Conn) ->
 connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning(XorQName, "did not connect to ~s~n~p~n",
+    log_warning(XorQName, "did not connect to ~s. Reason: ~p~n",
                 [rabbit_federation_upstream:params_to_string(UParams),
                  E]),
     {stop, {shutdown, restart}, State};
