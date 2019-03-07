@@ -30,5 +30,4 @@ dispatcher() ->
     [{path() ++ "/[:registry]", rabbit_prometheus_handler, []}].
 
 path() ->
-    Config = application:get_env(rabbitmq_prometheus, path, []),
-    proplists:get_value(path, Config, ?DEFAULT_PATH).
+    application:get_env(rabbitmq_prometheus, path, ?DEFAULT_PATH).

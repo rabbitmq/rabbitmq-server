@@ -17,7 +17,7 @@
 -module(rabbit_prometheus_app).
 
 -behaviour(application).
--export([start/2, stop/1, reset_dispatcher/1]).
+-export([start/2, stop/1]).
 
 -behaviour(supervisor).
 -export([init/1]).
@@ -29,23 +29,18 @@
 start(_Type, _StartArgs) ->
     %% TCP listener uses prometheus.tcp.*.
     %% TLS listener uses prometheus.ssl.*
-    start_configured_listener(true),
+    start_configured_listener(),
     supervisor:start_link({local,?MODULE},?MODULE,[]).
 
 stop(_State) ->
     unregister_all_contexts(),
     ok.
 
-
 init(_) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
-reset_dispatcher(_IgnoreApps) ->
-    unregister_all_contexts(),
-    start_configured_listener(false).
-
--spec start_configured_listener(boolean()) -> ok.
-start_configured_listener(NeedLogStartup) ->
+-spec start_configured_listener() -> ok.
+start_configured_listener() ->
     Listeners = case {has_configured_tcp_listener(),
                       has_configured_tls_listener()} of
                     {false, false} ->
@@ -59,8 +54,7 @@ start_configured_listener(NeedLogStartup) ->
                         [get_tcp_listener(),
                          get_tls_listener()]
                 end,
-    [ start_listener(Listener, NeedLogStartup)
-      || Listener <- Listeners ].
+    [ start_listener(Listener) || Listener <- Listeners ].
 
 has_configured_tcp_listener() ->
     has_configured_listener(tcp_config).
@@ -81,17 +75,13 @@ get_tls_listener() ->
 get_tcp_listener() ->
     application:get_env(rabbitmq_prometheus, tcp_config, []).
 
-start_listener(Listener, NeedLogStartup) ->
+start_listener(Listener) ->
     {Type, ContextName} = case is_tls(Listener) of
         true  -> {tls, ?TLS_CONTEXT};
         false -> {tcp, ?TCP_CONTEXT}
     end,
     {ok, _} = register_context(ContextName, Listener),
-    case NeedLogStartup of
-        true  -> log_startup(Type, Listener);
-        false -> ok
-    end,
-    ok.
+    log_startup(Type, Listener).
 
 register_context(ContextName, Listener0) ->
     M0 = maps:from_list(Listener0),
@@ -103,7 +93,7 @@ register_context(ContextName, Listener0) ->
       rabbit_prometheus_dispatcher:build_dispatcher(),
       "RabbitMQ Prometheus").
 
-unregister_all_contexts() ->
+unregister_all_contexts() ->    
     rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
     rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
 
