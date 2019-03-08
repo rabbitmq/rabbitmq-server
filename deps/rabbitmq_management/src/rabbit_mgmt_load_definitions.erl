@@ -34,15 +34,38 @@
                     {enables,     empty_db_check}]}).
 
 maybe_load_definitions() ->
-    {ok, File} = application:get_env(rabbitmq_management, load_definitions),
-    case File of
-        none -> ok;
-        _    -> case file:read_file(File) of
-                    {ok, Body} -> rabbit_log:info(
-                                    "Applying definitions from: ~s", [File]),
-                                  load_definitions(Body);
-                    {error, E} -> {error, {could_not_read_defs, {File, E}}}
-                end
+    case application:get_env(rabbitmq_management, load_definitions) of
+        {ok, none} ->
+            ok;
+        {ok, FileOrDir} ->
+            IsDir = filelib:is_dir(FileOrDir),
+            maybe_load_definitions_from(IsDir, FileOrDir)
+    end.
+
+maybe_load_definitions_from(true, Dir) ->
+    rabbit_log:info("Applying definitions from directory: ~s", [Dir]),
+    load_definitions_from_files(file:list_dir(Dir));
+maybe_load_definitions_from(false, File) ->
+    load_definitions_from_file(File).
+
+load_definitions_from_files({ok, Filenames}) ->
+    load_definitions_from_filenames(lists:sort(Filenames));
+load_definitions_from_files({error, E}) ->
+    {error, {could_not_read_defs, E}}.
+
+load_definitions_from_filenames([]) ->
+    ok;
+load_definitions_from_filenames([File|Rest]) ->
+    load_definitions_from_file(File),
+    load_definitions_from_filenames(Rest).
+
+load_definitions_from_file(File) ->
+    case file:read_file(File) of
+        {ok, Body} ->
+            rabbit_log:info("Applying definitions from: ~s", [File]),
+            load_definitions(Body);
+        {error, E} ->
+            {error, {could_not_read_defs, {File, E}}}
     end.
 
 load_definitions(Body) ->
