@@ -44,13 +44,15 @@ maybe_load_definitions() ->
 
 maybe_load_definitions_from(true, Dir) ->
     rabbit_log:info("Applying definitions from directory: ~s", [Dir]),
-    load_definitions_from_files(file:list_dir(Dir));
+    load_definitions_from_files(file:list_dir(Dir), Dir);
 maybe_load_definitions_from(false, File) ->
     load_definitions_from_file(File).
 
-load_definitions_from_files({ok, Filenames}) ->
-    load_definitions_from_filenames(lists:sort(Filenames));
-load_definitions_from_files({error, E}) ->
+load_definitions_from_files({ok, Filenames0}, Dir) ->
+    Filenames1 = lists:sort(Filenames0),
+    Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
+    load_definitions_from_filenames(Filenames2);
+load_definitions_from_files({error, E}, _Dir) ->
     {error, {could_not_read_defs, E}}.
 
 load_definitions_from_filenames([]) ->
