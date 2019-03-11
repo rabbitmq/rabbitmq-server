@@ -81,14 +81,14 @@ init() ->
     mnevis_node:start(),
 
     %% Create schema on all nodes
-    ok = create_schema(),
-
-
-
-    {ok, _, _} = ra:members(mnevis_node:node_id()),
-
+    case is_virgin_node() of
+        true ->
+            ok = create_schema();
+        false ->
+            ok
+    end,
+    
     io:format("~nDb nodes ~p~n", [mnevis:db_nodes()]),
-
     io:format("~nRunning Db nodes ~p~n", [mnevis:running_db_nodes()]),
 
     io:format("Get cluster status ~n"),
@@ -845,9 +845,13 @@ create_schema() ->
     % stop_mnesia(),
     % rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
     % start_mnesia(),
-
-    io:format("Create tables ~n"),
-    ok = rabbit_table:create(),
+    case ra:members(mnevis_node:node_id()) of
+        {ok, _, {_, Node}} when Node == node() ->
+            io:format("Create tables ~n"),
+            ok = rabbit_table:create();
+        _ ->
+            wait_for_tables()
+    end,
     io:format("Check integrity ~n"),
     ensure_schema_integrity(),
     io:format("Record version ~n"),
@@ -1023,21 +1027,8 @@ check_rabbit_consistency(RemoteNode, RemoteVersion) ->
 %% exception of the cluster status files, which will be there thanks to
 %% `rabbit_node_monitor:prepare_cluster_status_file/0'.
 is_virgin_node() ->
-    case rabbit_file:list_dir(dir()) of
-        {error, enoent} ->
-            true;
-        {ok, []} ->
-            true;
-        {ok, [File1, File2, File3]} ->
-            lists:usort([filename:join(dir(), File1),
-                         filename:join(dir(), File2),
-                         filename:join(dir(), File3)]) =:=
-                lists:usort([rabbit_node_monitor:cluster_status_filename(),
-                             rabbit_node_monitor:running_nodes_filename(),
-                             rabbit_node_monitor:quorum_filename()]);
-        {ok, _} ->
-            false
-    end.
+    {ok, Tables, _} = ra:consistent_query(mnevis_node:node_id(), fun(_) -> mnesia:system_info(tables) end),
+    not lists:member(rabbit_queue, Tables).
 
 find_reachable_peer_to_cluster_with([]) ->
     none;
