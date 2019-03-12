@@ -11,14 +11,14 @@
 %% The Original Code is RabbitMQ Management Plugin.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_load_definitions).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([maybe_load_definitions/0]).
+-export([maybe_load_definitions/0, maybe_load_definitions_from/2]).
 
 %% We want to A) make sure we apply definitions before being open for
 %% business (hence why we don't do this in the mgmt app startup) and

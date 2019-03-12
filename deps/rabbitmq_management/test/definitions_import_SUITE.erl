@@ -42,7 +42,8 @@ groups() ->
                                import_case5,
                                import_case6,
                                import_case7,
-                               import_case8
+                               import_case8,
+                               import_case9
                               ]}
     ].
 
@@ -80,16 +81,18 @@ end_per_testcase(Testcase, Config) ->
 %% Tests
 %%
 
-import_case1(Config) -> import_case(Config, "case1").
-import_case2(Config) -> import_case(Config, "case2").
-import_case3(Config) -> import_case(Config, "case3").
-import_case4(Config) -> import_case(Config, "case4").
-import_case6(Config) -> import_case(Config, "case6").
-import_case7(Config) -> import_case(Config, "case7").
-import_case8(Config) -> import_case(Config, "case8").
+import_case1(Config) -> import_file_case(Config, "case1").
+import_case2(Config) -> import_file_case(Config, "case2").
+import_case3(Config) -> import_file_case(Config, "case3").
+import_case4(Config) -> import_file_case(Config, "case4").
+import_case6(Config) -> import_file_case(Config, "case6").
+import_case7(Config) -> import_file_case(Config, "case7").
+import_case8(Config) -> import_file_case(Config, "case8").
+
+import_case9(Config) -> import_from_directory_case(Config, "case9").
 
 import_case5(Config) ->
-    import_case(Config, "case5"),
+    import_file_case(Config, "case5"),
     ?assertEqual(rabbit_ct_broker_helpers:rpc(Config, 0,
                                               rabbit_runtime_parameters, value_global,
                                               [mqtt_port_to_vhost_mapping]),
@@ -97,15 +100,25 @@ import_case5(Config) ->
                  [{<<"1883">>,<<"/">>},
                   {<<"1884">>,<<"vhost2">>}]).
 
-import_case(Config, CaseName) ->
+import_file_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_import_case, [CasePath]),
     ok.
 
+import_from_directory_case(Config, CaseName) ->
+    CasePath = filename:join(?config(data_dir, Config), CaseName),
+    ?assert(filelib:is_dir(CasePath)),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_directory_import_case, [CasePath]),
+    ok.
+
+run_directory_import_case(Path) ->
+    ct:pal("Will load definitions from files under ~p~n", [Path]),
+    rabbit_mgmt_load_definitions:maybe_load_definitions_from(true, Path).
+
 run_import_case(Path) ->
-    {ok, Body} = file:read_file(Path),
-    ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
-    rabbit_mgmt_wm_definitions:apply_defs(Body, ?INTERNAL_USER,
-                                          fun ()  -> ct:pal("Import case ~p succeeded~n",  [Path]) end,
-                                          fun (E) -> ct:pal("Import case ~p failed: ~p~n", [Path, E]),
-                                                     ct:fail({failure, Path, E}) end).
+   {ok, Body} = file:read_file(Path),
+   ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
+   rabbit_mgmt_wm_definitions:apply_defs(Body, ?INTERNAL_USER,
+                                         fun ()  -> ct:pal("Import case ~p succeeded~n",  [Path]) end,
+                                         fun (E) -> ct:pal("Import case ~p failed: ~p~n", [Path, E]),
+                                                    ct:fail({failure, Path, E}) end).
