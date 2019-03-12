@@ -4,11 +4,11 @@
 %% See http://www.rabbitmq.com/management.html for details
 %% ----------------------------------------------------------------------------
 
- % {rabbitmq_management,
-  % [%% Pre-Load schema definitions from the following JSON file. See
+%% Load definitions from a JSON file or directory of files. See
 %% http://www.rabbitmq.com/management.html#load-definitions
 %%
 %% {load_definitions, "/path/to/schema.json"},
+%% {load_definitions, "/path/to/schemas"},
 {mapping, "management.load_definitions", "rabbitmq_management.load_definitions",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
