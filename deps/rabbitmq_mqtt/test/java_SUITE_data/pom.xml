@@ -10,7 +10,7 @@
 
   <name>RabbitMQ MQTT plugin dependencies list</name>
   <description>Fetches test dependencies only.</description>
-  <url>http://www.rabbitmq.com</url>
+  <url>https://www.rabbitmq.com</url>
 
   <dependencies>
     <dependency>
