@@ -166,7 +166,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     end.
 
 apply_defs(Body, ActingUser, SuccessFun, ErrorFun) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~p", [ActingUser]),
+    rabbit_log:info("Asked to import definitions. Acting user: ~s", [rabbit_data_coercion:to_binary(ActingUser)]),
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
             ErrorFun(E);

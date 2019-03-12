@@ -43,7 +43,7 @@ maybe_load_definitions() ->
     end.
 
 maybe_load_definitions_from(true, Dir) ->
-    rabbit_log:info("Applying definitions from directory: ~s", [Dir]),
+    rabbit_log:info("Applying definitions from directory ~s", [Dir]),
     load_definitions_from_files(file:list_dir(Dir), Dir);
 maybe_load_definitions_from(false, File) ->
     load_definitions_from_file(File).
@@ -53,7 +53,7 @@ load_definitions_from_files({ok, Filenames0}, Dir) ->
     Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
     load_definitions_from_filenames(Filenames2);
 load_definitions_from_files({error, E}, Dir) ->
-    rabbit_log:error("Could not read definitions from directory: ~s, Error: ~p", [Dir, E]),
+    rabbit_log:error("Could not read definitions from directory ~s, Error: ~p", [Dir, E]),
     {error, {could_not_read_defs, E}}.
 
 load_definitions_from_filenames([]) ->
@@ -65,10 +65,10 @@ load_definitions_from_filenames([File|Rest]) ->
 load_definitions_from_file(File) ->
     case file:read_file(File) of
         {ok, Body} ->
-            rabbit_log:info("Applying definitions from: ~s", [File]),
+            rabbit_log:info("Applying definitions from ~s", [File]),
             load_definitions(Body);
         {error, E} ->
-            rabbit_log:error("Could not read definitions from: ~s, Error: ~p", [File, E]),
+            rabbit_log:error("Could not read definitions from ~s, Error: ~p", [File, E]),
             {error, {could_not_read_defs, {File, E}}}
     end.
 
