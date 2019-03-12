@@ -114,10 +114,22 @@ if test -d /var/log/rabbitmq; then
     stat --format '%a' /var/log/rabbitmq > /var/log/rabbitmq/permissions
 fi
 
-if [ $1 -gt 1 ]; then
-  # Upgrade - stop previous instance of rabbitmq-server init.d (this
-  # will also activate systemd if it was used) script.
+if [ "$1" = 2 ]; then
+  # Upgrade:
+  # Stop previous instance of rabbitmq-server. But before doing this, we
+  # also record if the service is running: it is used again in %post to
+  # restart the service.
+  if %{_sbindir}/rabbitmqctl status >/dev/null 2>&1; then
+    touch %{_localstatedir}/lib/rabbitmq/rabbitmq-running-before-upgrade
+  else
+    rm -f %{_localstatedir}/lib/rabbitmq/rabbitmq-running-before-upgrade
+  fi
+
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
+  systemctl stop rabbitmq-server
+%else
   /sbin/service rabbitmq-server stop
+%endif
 fi
 
 # create rabbitmq group
@@ -156,6 +168,22 @@ if test -f /var/log/rabbitmq/permissions; then
     rm -f /var/log/rabbitmq/permissions
 fi
 
+if [ "$1" = 2 ] ; then
+  # Upgrade:
+  # Restart the service if it was running before the upgrade.
+  if [ -f %{_localstatedir}/lib/rabbitmq/rabbitmq-running-before-upgrade ]; then
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
+    # %%systemd_postun_with_restart %%{name}.service
+    # manual expansion of systemd_postun_with_restart as this doesn't appear to
+    # expand correctly on debian machines
+    systemctl restart %{name}.service >/dev/null 2>&1 || :
+%else
+    /sbin/service %{name} restart
+%endif
+    rm -f %{_localstatedir}/lib/rabbitmq/rabbitmq-running-before-upgrade
+  fi
+fi
+
 if [ -n "$ZSH_VERSION" ]; then
     echo "Z Shell detected.
 to enable rabbitmqctl autocompletion add the following to your .zshrc file:
@@ -163,6 +191,7 @@ autoload _enable_rabbitmqctl_completion; _enable_rabbitmqctl_completion"
 fi
 
 %preun
+
 if [ $1 = 0 ]; then
   #Complete uninstall
 %if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
@@ -183,19 +212,6 @@ for ext in rel script boot ; do
 done
 
 %postun
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
-# %%systemd_postun_with_restart %%{name}.service
-# manual expansion of systemd_postun_with_restart as this doesn't appear to
-# expand correctly on debian machines
-if [ $1 -ge 1 ] ; then
-    # Package upgrade, not uninstall
-    systemctl try-restart %{name}.service >/dev/null 2>&1 || :
-fi
-%else
-if [ $1 -gt 1 ]; then
-   /sbin/service %{name} try-restart
-fi
-%endif
 
 %if 0%{?fedora} > 17 || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 # For prior versions older than this, do a conversion
