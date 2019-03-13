@@ -302,7 +302,7 @@ configure_lager() ->
         {ok, Val} when is_integer(Val) andalso Val < 1000 ->
             ok = application:set_env(lager, error_logger_hwm, 1000),
             ok = application:set_env(lager, error_logger_hwm_original, Val);
-        {ok, Val} ->
+        {ok, Val} when is_integer(Val) ->
             ok = application:set_env(lager, error_logger_hwm_original, Val),
             ok
     end,
