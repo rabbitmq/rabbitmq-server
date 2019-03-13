@@ -199,12 +199,6 @@
                    [{description, "message delivery logic ready"},
                     {requires,    [core_initialized, recovery]}]}).
 
--rabbit_boot_step({direct_client,
-                   [{description, "direct client"},
-                    {mfa,         {rabbit_direct, boot, []}},
-                    {requires,    routing_ready}
-                    ]}).
-
 -rabbit_boot_step({connection_tracking,
                    [{description, "connection tracking infrastructure"},
                     {mfa,         {rabbit_connection_tracking, boot, []}},
@@ -233,6 +227,12 @@
 -rabbit_boot_step({pre_flight,
                    [{description, "ready to communicate with peers and clients"},
                     {requires,    [core_initialized, recovery, routing_ready]}]}).
+
+-rabbit_boot_step({direct_client,
+                   [{description, "direct client"},
+                    {mfa,         {rabbit_direct, boot, []}},
+                    {requires,    pre_flight}
+                    ]}).
 
 -rabbit_boot_step({notify_cluster,
                    [{description, "notifies cluster peers of our presence"},
