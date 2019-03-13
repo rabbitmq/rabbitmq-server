@@ -63,26 +63,35 @@ set_log_level(Level) ->
 set_log_level(true, Level) ->
     SinksAndHandlers = [{Sink, gen_event:which_handlers(Sink)} ||
                         Sink <- lager:list_all_sinks()],
-    set_sink_log_level(SinksAndHandlers, Level);
+    DefaultHwm = application:get_env(lager, error_logger_hwm_original, 50),
+    Hwm = case Level of
+        debug -> DefaultHwm * 100;
+        _     -> DefaultHwm
+    end,
+    application:set_env(lager, error_logger_hwm, Hwm),
+    set_sink_log_level(SinksAndHandlers, Level, Hwm);
 set_log_level(_, Level) ->
     {error, {invalid_log_level, Level}}.
 
-set_sink_log_level([], _Level) ->
+set_sink_log_level([], _Level, _Hwm) ->
     ok;
-set_sink_log_level([{Sink, Handlers}|Rest], Level) ->
-    set_sink_handler_log_level(Sink, Handlers, Level),
-    set_sink_log_level(Rest, Level).
+set_sink_log_level([{Sink, Handlers}|Rest], Level, Hwm) ->
+    set_sink_handler_log_level(Sink, Handlers, Level, Hwm),
+    set_sink_log_level(Rest, Level, Hwm).
 
-set_sink_handler_log_level(_Sink, [], _Level) ->
+set_sink_handler_log_level(_Sink, [], _Level, _Hwm) ->
     ok;
-set_sink_handler_log_level(Sink, [Handler|Rest], Level) when is_atom(Handler) ->
+set_sink_handler_log_level(Sink, [Handler|Rest], Level, Hwm)
+  when is_atom(Handler) andalso is_integer(Hwm) ->
+    lager:set_loghwm(Sink, Handler, undefined, Hwm),
     ok = lager:set_loglevel(Sink, Handler, undefined, Level),
-    set_sink_handler_log_level(Sink, Rest, Level);
-set_sink_handler_log_level(Sink, [{Handler, Id}|Rest], Level) ->
+    set_sink_handler_log_level(Sink, Rest, Level, Hwm);
+set_sink_handler_log_level(Sink, [{Handler, Id}|Rest], Level, Hwm) ->
+    lager:set_loghwm(Sink, Handler, Id, Hwm),
     ok = lager:set_loglevel(Sink, Handler, Id, Level),
-    set_sink_handler_log_level(Sink, Rest, Level);
-set_sink_handler_log_level(Sink, [_|Rest], Level) ->
-    set_sink_handler_log_level(Sink, Rest, Level).
+    set_sink_handler_log_level(Sink, Rest, Level, Hwm);
+set_sink_handler_log_level(Sink, [_|Rest], Level, Hwm) ->
+    set_sink_handler_log_level(Sink, Rest, Level, Hwm).
 
 log_locations() ->
     ensure_lager_configured(),
