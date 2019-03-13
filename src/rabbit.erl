@@ -186,7 +186,7 @@
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
-                    {requires,    upgrade_queues},
+                    {requires,    [core_initialized]},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({empty_db_check,
