@@ -186,7 +186,7 @@
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
-                    {requires,    [core_initialized]},
+                    {requires,    upgrade_queues},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({empty_db_check,
@@ -197,43 +197,52 @@
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
-                    {requires,    core_initialized}]}).
+                    {requires,    [core_initialized, recovery]}]}).
 
 -rabbit_boot_step({direct_client,
                    [{description, "direct client"},
                     {mfa,         {rabbit_direct, boot, []}},
-                    {requires,    routing_ready}]}).
+                    {requires,    routing_ready}
+                    ]}).
 
 -rabbit_boot_step({connection_tracking,
-                   [{description, "sets up internal storage for node-local connections"},
+                   [{description, "connection tracking infrastructure"},
                     {mfa,         {rabbit_connection_tracking, boot, []}},
-                    {requires,    routing_ready}]}).
-
--rabbit_boot_step({networking,
-                   [{mfa,         {rabbit_networking, boot, []}},
-                    {requires,    routing_ready}]}).
-
--rabbit_boot_step({notify_cluster,
-                   [{description, "notify cluster nodes"},
-                    {mfa,         {rabbit_node_monitor, notify_node_up, []}},
-                    {requires,    networking}]}).
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({background_gc,
                    [{description, "background garbage collection"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [background_gc]}},
-                    {enables,     networking}]}).
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({rabbit_core_metrics_gc,
                    [{description, "background core metrics garbage collection"},
                     {mfa,         {rabbit_sup, start_restartable_child,
                                    [rabbit_core_metrics_gc]}},
-                    {enables,     networking}]}).
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
 
 -rabbit_boot_step({rabbit_looking_glass,
                    [{description, "Looking Glass tracer and profiler"},
                     {mfa,         {rabbit_looking_glass, boot, []}},
-                    {requires,    networking}]}).
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
+
+-rabbit_boot_step({pre_flight,
+                   [{description, "ready to communicate with peers and clients"},
+                    {requires,    [core_initialized, recovery, routing_ready]}]}).
+
+-rabbit_boot_step({notify_cluster,
+                   [{description, "notifies cluster peers of our presence"},
+                    {mfa,         {rabbit_node_monitor, notify_node_up, []}},
+                    {requires,    pre_flight}]}).
+
+-rabbit_boot_step({networking,
+                   [{description, "TCP and TLS listeners"},
+                    {mfa,         {rabbit_networking, boot, []}},
+                    {requires,    notify_cluster}]}).
 
 %%---------------------------------------------------------------------------
 
