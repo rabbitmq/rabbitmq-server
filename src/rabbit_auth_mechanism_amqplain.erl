@@ -48,6 +48,15 @@ handle_response(Response, _State) ->
         {{value, {_, longstr, User}},
          {value, {_, longstr, Pass}}} ->
             rabbit_access_control:check_user_pass_login(User, Pass);
+        {{value, {_, longstr, User}},
+         {value, {_, shortstr, Pass}}} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        {{value, {_, shortstr, User}},
+         {value, {_, longstr, Pass}}} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        {{value, {_, shortstr, User}},
+         {value, {_, shortstr, Pass}}} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
         _ ->
             {protocol_error,
              "AMQPLAIN auth info ~w is missing LOGIN or PASSWORD field",
