@@ -41,13 +41,15 @@ should_offer(_Sock) ->
 init(_Sock) ->
     [].
 
+-define(IS_STRING_TYPE(Type), Type =:= longstr orelse Type =:= shortstr).
+
 handle_response(Response, _State) ->
     LoginTable = rabbit_binary_parser:parse_table(Response),
     case {lists:keysearch(<<"LOGIN">>, 1, LoginTable),
           lists:keysearch(<<"PASSWORD">>, 1, LoginTable)} of
         {{value, {_, UserType, User}},
-         {value, {_, PassType, Pass}}} when UserType =:= longstr orelse UserType =:= shortstr;
-                                            PassType =:= longstr orelse PassType =:= shortstr ->
+         {value, {_, PassType, Pass}}} when ?IS_STRING_TYPE(UserType);
+                                            ?IS_STRING_TYPE(PassType) ->
             rabbit_access_control:check_user_pass_login(User, Pass);
         {{value, {_, _UserType, _User}},
          {value, {_, _PassType, _Pass}}} ->
