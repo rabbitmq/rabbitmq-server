@@ -1408,7 +1408,8 @@ maybe_queue_consumer(ConsumerId, #consumer{credit = Credit},
 dehydrate_state(#?MODULE{messages = Messages,
                          consumers = Consumers,
                          returns = Returns,
-                         prefix_msgs = {PrefRet0, PrefMsg0}} = State) ->
+                         prefix_msgs = {PrefRet0, PrefMsg0},
+                         waiting_consumers = Waiting0} = State) ->
     %% TODO: optimise this function as far as possible
     PrefRet = lists:foldl(fun ({'$prefix_msg', Header}, Acc) ->
                                   [Header | Acc];
@@ -1422,6 +1423,7 @@ dehydrate_state(#?MODULE{messages = Messages,
                            end,
                            lists:reverse(PrefMsg0),
                            lists:sort(maps:to_list(Messages))),
+    Waiting = [{Cid, dehydrate_consumer(C)} || {Cid, C} <- Waiting0],
     State#?MODULE{messages = #{},
                   ra_indexes = rabbit_fifo_index:empty(),
                   release_cursors = lqueue:new(),
@@ -1431,7 +1433,8 @@ dehydrate_state(#?MODULE{messages = Messages,
                                        end, Consumers),
                   returns = lqueue:new(),
                   prefix_msgs = {lists:reverse(PrefRet),
-                                 lists:reverse(PrefMsgs)}}.
+                                 lists:reverse(PrefMsgs)},
+                  waiting_consumers = Waiting}.
 
 dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
     Checked = maps:map(fun (_, {'$prefix_msg', _} = M) ->
