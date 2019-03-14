@@ -305,10 +305,11 @@ stop-rabbit-on-node:
 
 stop-node:
 	$(exec_verbose) ( \
-	pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)) && \
-	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
-	while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
-	) || :
+	  pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)) && \
+	  ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) stop && \
+	  while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
+	  ) || :
 
 # " <-- To please Vim syntax hilighting.
 
