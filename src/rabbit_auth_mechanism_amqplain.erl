@@ -45,18 +45,15 @@ handle_response(Response, _State) ->
     LoginTable = rabbit_binary_parser:parse_table(Response),
     case {lists:keysearch(<<"LOGIN">>, 1, LoginTable),
           lists:keysearch(<<"PASSWORD">>, 1, LoginTable)} of
-        {{value, {_, longstr, User}},
-         {value, {_, longstr, Pass}}} ->
+        {{value, {_, UserType, User}},
+         {value, {_, PassType, Pass}}} when UserType =:= longstr orelse UserType =:= shortstr;
+                                            PassType =:= longstr orelse PassType =:= shortstr ->
             rabbit_access_control:check_user_pass_login(User, Pass);
-        {{value, {_, longstr, User}},
-         {value, {_, shortstr, Pass}}} ->
-            rabbit_access_control:check_user_pass_login(User, Pass);
-        {{value, {_, shortstr, User}},
-         {value, {_, longstr, Pass}}} ->
-            rabbit_access_control:check_user_pass_login(User, Pass);
-        {{value, {_, shortstr, User}},
-         {value, {_, shortstr, Pass}}} ->
-            rabbit_access_control:check_user_pass_login(User, Pass);
+        {{value, {_, _UserType, _User}},
+         {value, {_, _PassType, _Pass}}} ->
+           {protocol_error,
+            "AMQPLAIN auth info ~w uses unsupported type for LOGIN or PASSWORD field",
+            [LoginTable]};
         _ ->
             {protocol_error,
              "AMQPLAIN auth info ~w is missing LOGIN or PASSWORD field",
