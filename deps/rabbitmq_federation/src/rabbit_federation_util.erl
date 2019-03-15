@@ -51,6 +51,8 @@ validate_arg(Name, Type, Args) ->
         _         -> fail("Argument ~s must be of type ~s", [Name, Type])
     end.
 
+-spec fail(io:format(), [term()]) -> no_return().
+
 fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
 
 name(                 #resource{name = XorQName})  -> XorQName;
