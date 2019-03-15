@@ -431,7 +431,7 @@ set_pid(Queue, Pid) ->
 
 % policy
 
--spec get_policy(amqqueue()) -> binary() | none | undefined.
+-spec get_policy(amqqueue()) -> proplists:proplist() | none | undefined.
 
 get_policy(#amqqueue{policy = Policy}) -> Policy;
 get_policy(Queue) -> amqqueue_v1:get_policy(Queue).
