@@ -37,7 +37,8 @@ all_tests() ->
      scenario13,
      scenario14,
      scenario15,
-     scenario16
+     scenario16,
+     scenario17
     ].
 
 groups() ->
@@ -270,6 +271,27 @@ scenario16(_Config) ->
                         delivery_limit => 1}, Commands),
     ok.
 
+scenario17(_Config) ->
+    C1Pid = test_util:fake_pid(rabbit@fake_node1),
+    C1 = {<<0>>, C1Pid},
+    % C2Pid = test_util:fake_pid(fake_node1),
+    C2 = {<<>>, C1Pid},
+    E = test_util:fake_pid(rabbit@fake_node2),
+    Commands = [
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E,1,<<"one">>),
+                make_checkout(C2, {auto,1,simple_prefetch}),
+                {down, C1Pid, noconnection},
+                make_checkout(C2, cancel),
+                make_enqueue(E,2,<<"two">>),
+                {nodeup,rabbit@fake_node1},
+                make_settle(C1, [0]),
+                make_settle(C1, [1])
+                ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        single_active_consumer_on => true
+                       }, Commands),
+    ok.
 
 snapshots(_Config) ->
     run_proper(
@@ -541,8 +563,9 @@ run_snapshot_test0(Conf, Commands) ->
              State -> ok;
              _ ->
                  ct:pal("Snapshot tests failed run log:~n"
-                        "~p~n from ~n~p~n Entries~n~p~n",
-                        [Filtered, SnapState, Entries]),
+                        "~p~n from ~n~p~n Entries~n~p~n"
+                        "Config: ~p~n",
+                        [Filtered, SnapState, Entries, Conf]),
                  ct:pal("Expected~n~p~nGot:~n~p", [State, S]),
                  ?assertEqual(State, S)
          end
