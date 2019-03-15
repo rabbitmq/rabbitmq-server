@@ -65,6 +65,9 @@
                 servers = [] :: [ra_server_id()],
                 leader :: maybe(ra_server_id()),
                 next_seq = 0 :: seq(),
+                %% Last applied is initialise to -1 to note that no command has yet been
+                %% applied, but allowing to resend messages if the first ones on the sequence
+                %% are lost (messages are sent from last_applied + 1)
                 last_applied = -1 :: maybe_seq(),
                 next_enqueue_seq = 1 :: seq(),
                 %% indicates that we've exceeded the soft limit
