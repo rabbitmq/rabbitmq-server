@@ -41,7 +41,7 @@ start_child(Q) ->
             transient, ?SUPERVISOR_WAIT, supervisor,
             [rabbit_federation_link_sup]}) of
         {ok, _Pid}               -> ok;
-        {error, already_started} ->
+        {error, {already_started, _Pid}} ->
           QueueName = Q#amqqueue.name,
           rabbit_log_federation:warning("Federation link for queue ~p was already started",
                                         [rabbit_misc:rs(QueueName)]),

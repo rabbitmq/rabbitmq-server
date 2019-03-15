@@ -43,7 +43,7 @@ start_child(X) ->
             transient, ?SUPERVISOR_WAIT, supervisor,
             [rabbit_federation_link_sup]}) of
         {ok, _Pid}               -> ok;
-        {error, already_started} ->
+        {error, {already_started, _Pid}} ->
           #exchange{name = ExchangeName} = X,
           rabbit_log_federation:debug("Federation link for exchange ~p was already started",
                                       [rabbit_misc:rs(ExchangeName)]),
