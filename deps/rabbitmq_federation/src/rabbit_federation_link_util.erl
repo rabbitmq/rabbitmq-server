@@ -24,7 +24,8 @@
 -export([start_conn_ch/5, disposable_channel_call/2, disposable_channel_call/3,
          disposable_connection_call/3, ensure_connection_closed/1,
          log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
-         handle_down/6, get_connection_name/2, log_warning/3]).
+         handle_down/6, get_connection_name/2,
+         log_debug/3, log_info/3, log_warning/3, log_error/3]).
 
 %% temp
 -export([connection_error/6]).
@@ -273,8 +274,10 @@ log_terminate(Reason, Upstream, UParams, XorQName) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(Reason)).
 
-log_info   (XorQName, Fmt, Args) -> log(info,    XorQName, Fmt, Args).
+log_debug(XorQName, Fmt, Args) -> log(debug, XorQName, Fmt, Args).
+log_info(XorQName, Fmt, Args) -> log(info, XorQName, Fmt, Args).
 log_warning(XorQName, Fmt, Args) -> log(warning, XorQName, Fmt, Args).
+log_error(XorQName, Fmt, Args) -> log(error, XorQName, Fmt, Args).
 
 log(Level, XorQName, Fmt0, Args0) ->
     Fmt = "Federation ~s " ++ Fmt0,
