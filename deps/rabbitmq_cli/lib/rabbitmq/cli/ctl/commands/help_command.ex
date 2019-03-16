@@ -200,7 +200,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   defp section_head(help_section) do
     case help_section do
       :help ->
-        "Print this help and commad specific help"
+        "Prints command list and provides commad-specific help"
       :user_management ->
         "Users"
       :cluster_management ->
@@ -242,11 +242,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     case value do
       ["amqp1.0"]    -> "AMQP 1.0"
       ["amqp1", "0"] -> "AMQP 1.0"
+      ["management"]  -> "Management"
+      ["management", "agent"]  -> "Management"
       ["mqtt"]       -> "MQTT"
       ["stomp"]      -> "STOMP"
       ["web", "mqtt"]  -> "Web MQTT"
       ["web", "stomp"] -> "Web STOMP"
       [other]        -> snake_case_to_capitalized_string(other)
+      fragments      -> snake_case_to_capitalized_string(Enum.join(fragments, "_"))
     end
   end
 
