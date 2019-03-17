@@ -130,7 +130,7 @@ short            | long          | description
 -s               | --silent      | suppress informational messages
                                  | and table header row
                  | --formatter   | alternative result formatter to use
-                                 | if supported: table, json, csv.",
+                                 | if supported: json, pretty_table, table, csv",
 
     "## Target Node Name
 
