@@ -39,7 +39,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.VersionCommand do
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def help_section(), do: :help
+  def help_section, do: :help
+
+  def description, do: "Displays CLI tools version"
 
   def usage, do: "version"
 

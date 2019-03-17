@@ -93,8 +93,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   def description(), do: "Tests queues to respond within timeout. Lists those which did not respond"
 
   def usage_additional() do
-    "<unresponsive_queueinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
+    "<unresponsive_queueinfoitem> must be one of " <>
+      Enum.join(@info_keys, ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."

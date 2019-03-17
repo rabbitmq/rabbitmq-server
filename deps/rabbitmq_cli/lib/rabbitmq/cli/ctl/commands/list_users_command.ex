@@ -35,6 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_users [--no-table-headers]"
+
   def help_section(), do: :user_management
 
   def description(), do: "List user names and tags"

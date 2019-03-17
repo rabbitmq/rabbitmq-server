@@ -32,17 +32,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             head_message_timestamp disk_reads disk_writes consumers
             consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
-  def description(), do: "Lists queues"
-  def usage(), do: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem> ...]"
+  def description(), do: "Lists queues and their properties"
+  def usage(), do: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem>, ...]"
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [ offline: :boolean,
-                     online: :boolean,
-                     local: :boolean,
-                     timeout: :integer ]
+  def switches(), do: [offline: :boolean,
+                       online: :boolean,
+                       local: :boolean,
+                       timeout: :integer ]
   def aliases(), do: [t: :timeout]
-  def help_section(), do: :observability_and_health_checks
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  def usage_additional(), do: ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
 
   def info_keys(), do: @info_keys
 
@@ -125,6 +122,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
+  def help_section(), do: :observability_and_health_checks
+
+  def usage_additional do
+    [
+      "--online: lists only queues on online (reachable) nodes",
+      "--offline: lists only queues on offline (unreachable) nodes",
+      "--local: only return queues hosted on the target node",
+      "<queueinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
+    ]
+  end
 
   def banner(_, %{vhost: vhost, timeout: timeout}) do
     ["Timeout: #{timeout / 1000} seconds ...", "Listing queues for vhost #{vhost} ..."]

@@ -104,7 +104,7 @@ defmodule RabbitMQCtl do
 
         case options[:help] do
           true ->
-            {:ok, ExitCodes.exit_ok(), HelpCommand.all_usage(command, options)};
+            {:ok, ExitCodes.exit_ok(), HelpCommand.command_usage(command, options)};
           _ ->
             {arguments, options} = command.merge_defaults(arguments, options)
 

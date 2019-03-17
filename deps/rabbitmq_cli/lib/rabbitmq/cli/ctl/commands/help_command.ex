@@ -26,7 +26,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def distribution(_), do: :none
   use RabbitMQ.CLI.Core.MergesNoDefaults
-  def banner(_, _), do: nil
 
   def validate(_, _), do: :ok
 
@@ -38,7 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         all_usage(opts)
 
       command ->
-        all_usage(command, opts)
+        command_usage(command, opts)
     end
   end
 
@@ -55,9 +54,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     {:error, ExitCodes.exit_ok(), result}
   end
 
+  def banner(_, _), do: nil
+
   def help_section(), do: :help
 
-  def description(), do: "Displays help for a command"
+  def description(), do: "Displays usage information for a command"
 
   def usage(), do: "help (<command> | [--list-commands])"
 
@@ -69,21 +70,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     tool_name = program_name(opts)
     Enum.join(
       tool_usage(tool_name) ++
-        [Enum.join(["Commands:"] ++ commands_description(), "\n")] ++
+        [Enum.join(["Available commands:"] ++ commands_description(), "\n")] ++
         help_additional(tool_name),
       "\n\n"
     ) <> "\n"
   end
 
-  def all_usage(command, opts) do
+  def command_usage(command, opts) do
     Enum.join([base_usage(command, opts)] ++
-              options_usage() ++
-              additional_usage(command),
+              command_description(command) ++
+              additional_usage(command) ++
+              timeout_usage(command) ++
+              general_options_usage(),
               "\n\n") <> "\n"
   end
   defp tool_usage(tool_name) do
     [
-      "\nUsage:\n" <>
+      "\nUsage\n\n" <>
         "#{tool_name} [-n <node>] [-t <timeout>] [-l|--longnames] [-q|--quiet] <command> [<command options>]"
     ]
   end
@@ -98,7 +101,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       end
 
     Enum.join([
-      "\nUsage:\n",
+      "\n## Usage\n\n",
       "#{tool_name} [-n <node>] [-l] [-q] " <>
         flatten_string(command.usage(), maybe_timeout)
     ])
@@ -114,36 +117,84 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     str <> additional
   end
 
-  defp options_usage() do
+  defp general_options_usage() do
     [
-      "General options:
-    short            | long          | description
-    -----------------|---------------|--------------------------------
-    -?               | --help        | displays command usage information
-    -n <node>        | --node <node> | connect to node <node>
-    -l               | --longnames   | use long host names
-    -q               | --quiet       | suppress informational messages
-    -s               | --silent      | suppress informational messages
-                                     | and table header row
-    Default node is \"rabbit@server\", where `server` is the local hostname. On a host
-    named \"server.example.com\", the node name of the RabbitMQ Erlang node will
-    usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some
-    non-default value at broker startup time). The output of hostname -s is usually
-    the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for
-    details of configuring the RabbitMQ broker.
+    "## General Options
 
-    Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
-    Long options for boolean values may be negated with the \"--no-\" prefix,
-    i.e. \"--no-quiet\" or \"--no-table-headers\"
+short            | long          | description
+-----------------|---------------|--------------------------------
+-?               | --help        | displays command usage information
+-n <node>        | --node <node> | connect to node <node>
+-l               | --longnames   | use long host names
+-q               | --quiet       | suppress informational messages
+-s               | --silent      | suppress informational messages
+                                 | and table header row
+                 | --formatter   | alternative result formatter to use
+                                 | if supported: table, json, csv.",
 
-    Quiet output mode is selected with the \"-q\" flag. Informational messages are
-    suppressed when quiet mode is in effect.
+    "## Target Node Name
 
-    If target RabbitMQ node is configured to use long node names, the \"--longnames\"
-    option must be specified.
+Default node is \"rabbit@hostname\", where `hostname` is the target node's hostname.
+On a host named \"eng.example.com\", the node name of the RabbitMQ node will
+usually be rabbit@eng. Node name can be overridden using the RABBITMQ_NODENAME environment
+variable at node startup time. The output of hostname -s is usually
+the correct suffix to use after the \"@\" sign. See rabbitmq-server(8)
+and RabbitMQ configuration and networking guides to learn more.
 
-    Some commands accept an optional virtual host parameter for which
-    to display results. The default value is \"/\"."]
+If target RabbitMQ node is configured to use long node names, the \"--longnames\"
+option must be specified.",
+
+    "## Disabling Options
+
+Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
+Long options for boolean values may be negated with the \"--no-\" prefix,
+i.e. \"--no-quiet\" or \"--no-table-headers\"",
+
+    "## Suppressing Information Messages
+
+Quiet output mode is selected with the \"-q\" flag. Informational messages are
+suppressed when quiet mode is in effect.",
+
+    "## Virtual Hosts
+
+Some commands are specific to a virtual host. The name of the virtual host is
+provided using the --vhost or -p option. Default value is \"/\"."]
+  end
+
+  defp command_description(command) do
+    [CommandBehaviour.description(command) <> ".\n"]
+  end
+
+  defp additional_usage(command) do
+    command_usage =
+      case CommandBehaviour.usage_additional(command) do
+        list when is_list(list) -> list |> Enum.map(fn(ln) -> "    " <> ln <> "\n" end)
+        bin when is_binary(bin) -> ["    " <> bin <> "\n"]
+      end
+    case command_usage do
+      []    -> []
+      usage ->
+        [flatten_string(["## Arguments and options\n" | usage], "")]
+    end
+  end
+
+  defp timeout_usage(command) do
+    case command_supports_timeout(command) do
+      true ->
+        [flatten_string(["## Timeout\n",
+                         "   -t <timeout>: operation timeout in seconds. Default is \"infinity\".\n"], "")]
+
+      false ->
+        []
+    end
+  end
+
+  defp help_additional(tool_name) do
+    ["Use '#{tool_name} help <command>' to learn more about a specific command"]
+  end
+
+  defp command_supports_timeout(command) do
+    nil != CommandBehaviour.switches(command)[:timeout]
   end
 
   defp commands_description() do
@@ -192,7 +243,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
           Enum.sort(section_helps)
           |> Enum.map(
             fn({name, {description, _}}) ->
-              "    #{String.pad_trailing(name, pad_commands_to)}  #{description}"
+              "   #{String.pad_trailing(name, pad_commands_to)}  #{description}"
             end)
         ]
 
@@ -203,7 +254,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   defp section_head(help_section) do
     case help_section do
       :help ->
-        "Prints command list and provides commad-specific help"
+        "Help"
       :user_management ->
         "Users"
       :cluster_management ->
@@ -269,35 +320,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     |> String.split("_")
     |> Enum.map(&String.capitalize/1)
     |> Enum.join(" ")
-  end
-
-  defp additional_usage(command) do
-    timeout_usage =
-      case command_supports_timeout(command) do
-        true ->
-          ["    <timeout> - operation timeout in seconds. Default is \"infinity\".\n"]
-
-        false ->
-          []
-      end
-    command_usage =
-      case CommandBehaviour.usage_additional(command) do
-        list when is_list(list) -> list |> Enum.map(fn(ln) -> "    " <> ln <> "\n" end)
-        bin when is_binary(bin) -> ["    " <> bin <> "\n"]
-      end
-    case timeout_usage ++ command_usage do
-      []    -> []
-      usage ->
-        [flatten_string(["Command options: " | usage], "")]
-    end
-  end
-
-  defp help_additional(tool_name) do
-    ["Use '#{tool_name} help <command>' to get more info about a specific command"]
-  end
-
-  defp command_supports_timeout(command) do
-    nil != CommandBehaviour.switches(command)[:timeout]
   end
 
   defp program_name(opts) do

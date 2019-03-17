@@ -15,11 +15,12 @@
 
 defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   import RabbitCommon.Records
+  alias Rabbitmq.Atom.Coerce
 
   def validate_info_keys(args, valid_keys) do
     info_keys = prepare_info_keys(args)
 
-    case invalid_info_keys(info_keys, valid_keys) do
+    case invalid_info_keys(info_keys, Enum.map(valid_keys, &Coerce.to_atom/1)) do
       [_ | _] = bad_info_keys ->
         {:validation_failure, {:bad_info_key, bad_info_keys}}
 
@@ -31,6 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   def prepare_info_keys(args) do
     args
     |> Enum.flat_map(fn arg -> String.split(arg, ",", trim: true) end)
+    |> Enum.map(fn s -> String.replace(s, ",", "") end)
     |> Enum.map(&String.trim/1)
     |> Enum.map(&String.to_atom/1)
     |> Enum.uniq()

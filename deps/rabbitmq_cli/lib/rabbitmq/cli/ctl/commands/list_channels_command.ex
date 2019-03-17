@@ -25,7 +25,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   @info_keys ~w(pid connection name number user vhost transactional
                 confirm consumer_count messages_unacknowledged
                 messages_uncommitted acks_uncommitted messages_unconfirmed
-                prefetch_count global_prefetch_count)a
+                prefetch_count global_prefetch_count)
 
   def info_keys(), do: @info_keys
 
@@ -79,8 +79,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   def description(), do: "Lists all channels in the node"
 
   def usage_additional() do
-    "<channelinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
+    "<channelinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
   end
 
   def banner(_, _), do: "Listing channels ..."
