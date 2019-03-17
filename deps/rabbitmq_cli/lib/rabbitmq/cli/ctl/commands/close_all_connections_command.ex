@@ -77,9 +77,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
     "Closing #{limit} connections in vhost #{vhost}, reason: #{explanation}..."
   end
 
-  def usage,
-    do:
-      "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
+  def usage do
+    "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
+  end
+
+  def usage_additional do
+    [
+      "--global: consider connections across all virtual hosts",
+      "--limit <number>: close up to this many connections",
+      "--per-connection-delay <milliseconds>: inject a delay between closures"
+    ]
+  end
 
   def help_section(), do: :operations
 
