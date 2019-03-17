@@ -15,12 +15,9 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-  def merge_defaults(args, opts), do: {args, opts}
 
-  def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
-  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
-  def validate([_, _], _), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
@@ -31,7 +28,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
     ])
   end
 
-  def usage, do: "close_connection <connectionpid> <explanation>"
+  use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "close_connection <connection pid> <explanation>"
 
   def help_section(), do: :operations
 
