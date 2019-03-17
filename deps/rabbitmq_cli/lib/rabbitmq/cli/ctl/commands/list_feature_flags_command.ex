@@ -46,13 +46,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
     |> filter_by_arg(args)
   end
 
-  def usage, do: "list_feature_flags [<feature-flag-info-item> ...]"
+  def banner(_, _), do: "Listing feature flags ..."
 
   def help_section(), do: :feature_flags
+
+  def description(), do: "Lists feature flags"
+
+  def usage, do: "list_feature_flags [<feature-flag-info-item> ...]"
 
   def usage_additional() do
     "<feature-flag-info-item> must be a member of the list [name, state, stability, provided_by, desc]."
   end
+
+  #
+  # Implementation
+  #
 
   defp filter_by_arg(ff_info, _) when is_tuple(ff_info) do
     # tuple means unexpected data
@@ -69,6 +77,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
       end
     )
   end
-
-  def banner(_,_), do: "Listing feature flags ..."
 end

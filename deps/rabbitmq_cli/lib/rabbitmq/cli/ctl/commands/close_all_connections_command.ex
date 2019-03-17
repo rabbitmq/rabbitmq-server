@@ -15,6 +15,9 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+
+  def switches(), do: [global: :boolean, per_connection_delay: :integer, limit: :integer]
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{global: false, vhost: "/", per_connection_delay: 0, limit: 0}, opts)}
   end
@@ -57,27 +60,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
     end
   end
 
-  defp apply_limit(conns, 0) do
-    conns
-  end
-
-  defp apply_limit(conns, number) do
-    :lists.sublist(conns, number)
-  end
-
   def output({:stream, stream}, _opts) do
     {:stream, Stream.filter(stream, fn x -> x != :ok end)}
   end
-
   use RabbitMQ.CLI.DefaultOutput
-
-  def switches(), do: [global: :boolean, per_connection_delay: :integer, limit: :integer]
-
-  def usage,
-    do:
-      "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
-
-  def description(), do: "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
 
   def banner([explanation], %{node: node_name, global: true}) do
     "Closing all connections to node #{node_name} (across all vhosts), reason: #{explanation}..."
@@ -89,5 +75,25 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
 
   def banner([explanation], %{vhost: vhost, limit: limit}) do
     "Closing #{limit} connections in vhost #{vhost}, reason: #{explanation}..."
+  end
+
+  def usage,
+    do:
+      "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
+
+  def help_section(), do: :operations
+
+  def description(), do: "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
+
+  #
+  # Implementation
+  #
+
+  defp apply_limit(conns, 0) do
+    conns
+  end
+
+  defp apply_limit(conns, number) do
+    :lists.sublist(conns, number)
   end
 end

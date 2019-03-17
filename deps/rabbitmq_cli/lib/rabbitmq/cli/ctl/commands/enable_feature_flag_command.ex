@@ -35,5 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
 
   def help_section(), do: :feature_flags
 
+  def description(), do: "Enables a feature flag on target node"
+
   def banner([feature_flag], _), do: "Enabling feature flag \"#{feature_flag}\" ..."
 end

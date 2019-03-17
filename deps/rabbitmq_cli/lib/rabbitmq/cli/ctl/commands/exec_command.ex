@@ -62,9 +62,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
 
+  def banner(_, _), do: nil
+
   def usage, do: "exec <expr> [--offline]"
 
-  def description(), do: "Executes Elixir code on the CLI node"
+  def help_section(), do: :operations
 
-  def banner(_, _), do: nil
+  def description(), do: "Executes Elixir code on the CLI node"
 end

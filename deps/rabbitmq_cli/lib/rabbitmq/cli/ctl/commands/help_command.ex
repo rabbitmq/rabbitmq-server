@@ -21,19 +21,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def usage(), do: "help (<command> | [--list-commands])"
-
-  def help_section(), do: :help
-
   def scopes(), do: [:ctl, :diagnostics, :plugins]
-
   def switches(), do: [list_commands: :boolean]
 
   def distribution(_), do: :none
-
-  def banner(_, _), do: nil
-
   use RabbitMQ.CLI.Core.MergesNoDefaults
+  def banner(_, _), do: nil
 
   def validate(_, _), do: :ok
 
@@ -61,6 +54,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def output(result, _) do
     {:error, ExitCodes.exit_ok(), result}
   end
+
+  def help_section(), do: :help
+
+  def description(), do: "Displays help for a command"
+
+  def usage(), do: "help (<command> | [--list-commands])"
+
+  #
+  # Implementation
+  #
 
   def all_usage(opts) do
     tool_name = program_name(opts)
