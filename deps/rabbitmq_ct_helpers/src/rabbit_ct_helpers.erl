@@ -699,7 +699,7 @@ exec(Cmd) ->
     exec(Cmd, []).
 
 exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
-    Cmd1 = case (lists:member($/, Cmd) orelse lists:member($\\, Cmd)) of
+    Cmd0 = case (lists:member($/, Cmd) orelse lists:member($\\, Cmd)) of
         true ->
             Cmd;
         false ->
@@ -708,6 +708,7 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
                 Path  -> Path
             end
     end,
+    Cmd1 = string:trim(rabbit_data_coercion:to_list(Cmd0)),
     Args1 = [format_arg(Arg) || Arg <- Args],
     {LocalOptions, PortOptions} = lists:partition(
       fun
