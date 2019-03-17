@@ -25,7 +25,8 @@
          banner/2,
          run/2,
          output/2,
-         switches/0
+         switches/0,
+         description/0
         ]).
 
 
@@ -44,12 +45,6 @@ merge_defaults(A, Opts) ->
 switches() ->
     [{all, boolean}].
 
-banner(_, #{all := true}) ->
-    <<"Resetting statistics database in all nodes">>;
-banner(_, #{node := Node}) ->
-    erlang:iolist_to_binary([<<"Resetting statistics database in node ">>,
-                             atom_to_binary(Node, utf8)]).
-
 run(_Args, #{node := Node, all := true}) ->
     rabbit_misc:rpc_call(Node, rabbit_mgmt_storage, reset_all, []);
 run(_Args, #{node := Node, all := false}) ->
@@ -57,3 +52,12 @@ run(_Args, #{node := Node, all := false}) ->
 
 output(Output, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output).
+
+banner(_, #{all := true}) ->
+    <<"Resetting statistics database in all nodes">>;
+banner(_, #{node := Node}) ->
+    erlang:iolist_to_binary([<<"Resetting statistics database on node ">>,
+                             atom_to_binary(Node, utf8)]).
+
+description() ->
+    <<"Resets statistics database. This will remove all metrics data!">>.
