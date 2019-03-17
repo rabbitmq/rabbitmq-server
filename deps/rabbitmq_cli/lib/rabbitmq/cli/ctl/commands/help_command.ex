@@ -168,8 +168,8 @@ provided using the --vhost or -p option. Default value is \"/\"."]
   defp additional_usage(command) do
     command_usage =
       case CommandBehaviour.usage_additional(command) do
-        list when is_list(list) -> list |> Enum.map(fn(ln) -> "    " <> ln <> "\n" end)
-        bin when is_binary(bin) -> ["    " <> bin <> "\n"]
+        list when is_list(list) -> list |> Enum.map(fn(ln) -> "#{ln}\n" end)
+        bin when is_binary(bin) -> ["#{bin}\n"]
       end
     case command_usage do
       []    -> []
@@ -182,7 +182,7 @@ provided using the --vhost or -p option. Default value is \"/\"."]
     case command_supports_timeout(command) do
       true ->
         [flatten_string(["## Timeout\n",
-                         "   -t <timeout>: operation timeout in seconds. Default is \"infinity\".\n"], "")]
+                         "--timeout <seconds>: operation timeout in seconds. Default is \"infinity\".\n"], "")]
 
       false ->
         []
