@@ -108,6 +108,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   defp info_keys(command) do
     command.info_keys()
-    |> Enum.map(&Atom.to_string/1)
+    |> Enum.map(&to_string/1)
   end
 end

@@ -23,7 +23,6 @@ defmodule ReportTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
@@ -36,7 +35,7 @@ defmodule ReportTest do
     {:validation_failure, :too_many_args}
   end
 
-  test "run: report request on a named, active RMQ node is successful", context do
+  test "run: report request to a reachable node succeeds", context do
     output = @command.run([], context[:opts]) |> Enum.to_list
 
     assert_stream_without_errors(output)
