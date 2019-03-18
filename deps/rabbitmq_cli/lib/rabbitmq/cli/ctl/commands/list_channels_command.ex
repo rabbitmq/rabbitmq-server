@@ -75,7 +75,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   end
 
   def usage_additional() do
-    "<channelinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
+    [
+      "<channelinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
+      "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
+    ]
   end
 
   def banner(_, _), do: "Listing channels ..."

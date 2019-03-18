@@ -65,7 +65,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   end
 
   def usage_additional() do
-    "<exchangeinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
+    "<exchangeinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing exchanges for vhost #{vhost} ..."
