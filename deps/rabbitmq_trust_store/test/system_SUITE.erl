@@ -6,6 +6,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
+-define(SERVER_REJECT_CLIENT_NEW, {tls_alert, {unknown_ca, _}}).
+
 all() ->
     [
       {group, http_provider_tests},
@@ -237,6 +239,7 @@ validation_failure_for_AMQP_client1(Config) ->
     case Error of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% With Erlang 18.3, there is a regression which causes the SSL
         %% connection to crash with the following exception:
@@ -355,6 +358,7 @@ validate_longer_chain1(Config) ->
     case Error1 of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -373,6 +377,7 @@ validate_longer_chain1(Config) ->
     case Error2 of
         %% Expected error from amqp_client.
         {error, {tls_alert, "bad certificate"}} -> ok;
+        {error, {tls_alert, {bad_certificate, _}}} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -415,6 +420,7 @@ validate_chain_without_whitelisted1(Config) ->
     case Error of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -493,6 +499,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
     case Error of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -590,6 +597,7 @@ whitelist_directory_DELTA1(Config) ->
     case Error of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -647,6 +655,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     case Error1 of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -673,6 +682,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     case Error2 of
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
