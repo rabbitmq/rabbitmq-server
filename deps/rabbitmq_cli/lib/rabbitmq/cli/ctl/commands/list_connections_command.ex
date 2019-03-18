@@ -79,7 +79,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
 
   def usage_additional() do
     [
-      "<connectioninfoitem> must be one of " <> Enum.join(@info_keys, ", "),
+      "<connectioninfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
       "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
     ]
   end

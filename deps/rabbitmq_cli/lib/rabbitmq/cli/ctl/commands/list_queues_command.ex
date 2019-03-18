@@ -129,11 +129,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def usage_additional do
     [
+      "<queueinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
       "--online: lists only queues on online (reachable) nodes",
       "--offline: lists only queues on offline (unreachable) nodes",
       "--local: only return queues hosted on the target node",
       "--formatter <json | csv>: alternative formatter to use, JSON or CSV",
-      "<queueinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
     ]
   end
 
