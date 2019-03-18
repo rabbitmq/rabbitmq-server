@@ -43,7 +43,11 @@ start_logger() ->
 
 broker_is_started() ->
     {ok, HwmCurrent} = application:get_env(lager, error_logger_hwm),
-    {ok, HwmOrig} = application:get_env(lager, error_logger_hwm_original),
+    {ok, HwmOrig0} = application:get_env(lager, error_logger_hwm_original),
+    HwmOrig = case get_most_verbose_log_level() of
+                  debug -> HwmOrig0 * 100;
+                  _     -> HwmOrig0
+              end,
     case HwmOrig =:= HwmCurrent of
         false ->
             ok = application:set_env(lager, error_logger_hwm, HwmOrig),
@@ -603,3 +607,24 @@ maybe_remove_logger_handler() ->
             error_logger:error_msg("calling ~p:~p failed: ~p:~p~n",
                                    [M, F, Err, Reason])
     end.
+
+get_most_verbose_log_level() ->
+    {ok, HandlersA} = application:get_env(lager, handlers),
+    {ok, ExtraSinks} = application:get_env(lager, extra_sinks),
+    HandlersB = lists:append(
+                  [H || {_, Keys} <- ExtraSinks,
+                        {handlers, H} <- Keys]),
+    get_most_verbose_log_level(HandlersA ++ HandlersB,
+                               lager_util:level_to_num(none)).
+
+get_most_verbose_log_level([{_, Props} | Rest], MostVerbose) ->
+    LogLevel = proplists:get_value(level, Props, info),
+    LogLevelNum = lager_util:level_to_num(LogLevel),
+    case LogLevelNum > MostVerbose of
+        true ->
+            get_most_verbose_log_level(Rest, LogLevelNum);
+        false ->
+            get_most_verbose_log_level(Rest, MostVerbose)
+    end;
+get_most_verbose_log_level([], MostVerbose) ->
+    lager_util:num_to_level(MostVerbose).
