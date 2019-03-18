@@ -285,7 +285,9 @@ scenario17(_Config) ->
                 make_checkout(C2, cancel),
                 make_enqueue(E,2,<<"two">>),
                 {nodeup,rabbit@fake_node1},
+                %% this has no effect as was returned
                 make_settle(C1, [0]),
+                %% this should settle "one"
                 make_settle(C1, [1])
                 ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
