@@ -53,9 +53,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage,
-    do:
-      "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
+  def usage() do
+    "set_policy [--vhost <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
+  end
+
+  def usage_additional() do
+    [
+      "<name>: policy name (identifier)",
+      "<pattern>: a regular expression pattern that will be used to match queue, exchanges, etc",
+      "<definition>: policy definition (arguments). Must be a valid JSON document",
+      "--priority <priority>: policy priority",
+      "--apply-to <queues | exchanges | all>: policy should only apply to queues, exchanges, or all entities (both of the above)"
+    ]
+  end
 
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
     "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{

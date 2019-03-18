@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListOperatorPoliciesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def usage, do: "list_operator_policies [-p <vhost>] [--no-table-headers]"
+  def usage, do: "list_operator_policies [--vhost <vhost>] [--no-table-headers]"
 
   def banner(_, %{vhost: vhost}),
     do: "Listing operator policy overrides for vhost \"#{vhost}\" ..."

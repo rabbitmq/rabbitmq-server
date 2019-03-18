@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "sync_queue [-p <vhost>] queue"
+  def usage, do: "sync_queue [--vhost <vhost>] queue"
 
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Synchronising queue '#{queue}' in vhost '#{vhost}' ..."

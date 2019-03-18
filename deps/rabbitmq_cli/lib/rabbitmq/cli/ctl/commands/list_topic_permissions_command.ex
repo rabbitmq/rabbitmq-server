@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def usage, do: "list_topic_permissions [-p <vhost>] [--no-table-headers]"
+  def usage, do: "list_topic_permissions [--vhost <vhost>] [--no-table-headers]"
 
   def banner(_, %{vhost: vhost}), do: "Listing topic permissions for vhost \"#{vhost}\" ..."
 end

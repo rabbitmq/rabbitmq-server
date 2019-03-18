@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
     )
   end
 
-  def usage, do: "cancel_sync_queue [-p <vhost>] queue"
+  def usage, do: "cancel_sync_queue [--vhost <vhost>] queue"
 
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Stopping synchronising queue '#{queue}' in vhost '#{vhost}' ..."

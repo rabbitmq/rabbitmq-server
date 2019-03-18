@@ -34,7 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearOperatorPolicyCommand do
     ])
   end
 
-  def usage, do: "clear_operator_policy [-p <vhost>] <key>"
+  def usage, do: "clear_operator_policy [--vhost <vhost>] <key>"
 
   def banner([key], %{vhost: vhost}) do
     "Clearing operator policy \"#{key}\" on vhost \"#{vhost}\" ..."

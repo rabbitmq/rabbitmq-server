@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage,
-    do: "set_topic_permissions [-p <vhost>] <username> <exchange> <write_pattern> <read_pattern>"
+    do: "set_topic_permissions [--vhost <vhost>] <username> <exchange> <write_pattern> <read_pattern>"
 
   def banner([user, exchange, _, _], %{vhost: vhost}),
     do:

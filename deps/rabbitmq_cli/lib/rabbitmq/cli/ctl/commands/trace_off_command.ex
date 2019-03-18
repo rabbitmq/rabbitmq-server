@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "trace_off [-p <vhost>]"
+  def usage, do: "trace_off [--vhost <vhost>]"
 
   def banner(_, %{vhost: vhost}), do: "Stopping tracing for vhost \"#{vhost}\" ..."
 end

@@ -69,7 +69,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def usage, do: "list_vhost_limits [-p <vhost>] [--global] [--no-table-headers]"
+  def usage, do: "list_vhost_limits [--vhost <vhost>] [--global] [--no-table-headers]"
 
   def banner([], %{global: true}) do
     "Listing limits for all vhosts ..."

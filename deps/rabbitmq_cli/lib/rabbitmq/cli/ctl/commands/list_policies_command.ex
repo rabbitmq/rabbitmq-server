@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def usage, do: "list_policies [-p <vhost>] [--no-table-headers]"
+  def usage, do: "list_policies [--vhost <vhost>] [--no-table-headers]"
 
   def banner(_, %{vhost: vhost}), do: "Listing policies for vhost \"#{vhost}\" ..."
 end

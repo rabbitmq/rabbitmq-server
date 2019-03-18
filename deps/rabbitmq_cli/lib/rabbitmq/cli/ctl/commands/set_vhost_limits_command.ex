@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "set_vhost_limits [-p <vhost>] <definition>"
+  def usage, do: "set_vhost_limits [--vhost <vhost>] <definition>"
 
   def banner([definition], %{vhost: vhost}) do
     "Setting vhost limits to \"#{definition}\" for vhost \"#{vhost}\" ..."

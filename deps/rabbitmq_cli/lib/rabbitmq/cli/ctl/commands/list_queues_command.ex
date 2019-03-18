@@ -128,9 +128,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def usage() do
-    "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column> ...]"
-  end
+  def usage(), do: "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
 
   def usage_additional do
     [
