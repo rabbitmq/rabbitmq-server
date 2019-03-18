@@ -85,10 +85,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     Enum.join([base_usage(command, opts)] ++
               command_description(command) ++
               additional_usage(command) ++
-              timeout_usage(command) ++
               general_options_usage(),
               "\n\n") <> "\n"
   end
+
   defp tool_usage(tool_name) do
     [
       "\nUsage\n\n" <>
@@ -101,7 +101,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
     maybe_timeout =
       case command_supports_timeout(command) do
-        true -> " [-t <timeout>]"
+        true -> " [--timeout <timeout>]"
         false -> ""
       end
 
@@ -126,14 +126,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     [
     "## General Options
 
+The following options are accepted by most or all commands.
+
 short            | long          | description
 -----------------|---------------|--------------------------------
--?               | --help        | displays command usage information
+-?               | --help        | displays command help
 -n <node>        | --node <node> | connect to node <node>
 -l               | --longnames   | use long host names
+-t               | --timeout <n> | for commands that support it, operation timeout in seconds
 -q               | --quiet       | suppress informational messages
 -s               | --silent      | suppress informational messages
                                  | and table header row
+-p               | --vhost       | for commands that are scoped to a virtual host,
+                 |               | virtual host to use
                  | --formatter   | alternative result formatter to use
                                  | if supported: json, pretty_table, table, csv",
 
@@ -153,17 +158,7 @@ option must be specified.",
 
 Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
 Long options for boolean values may be negated with the \"--no-\" prefix,
-i.e. \"--no-quiet\" or \"--no-table-headers\"",
-
-    "## Suppressing Information Messages
-
-Quiet output mode is selected with the \"-q\" flag. Informational messages are
-suppressed when quiet mode is in effect.",
-
-    "## Virtual Hosts
-
-Some commands are specific to a virtual host. The name of the virtual host is
-provided using the --vhost or -p option. Default value is \"/\"."]
+i.e. \"--no-quiet\" or \"--no-table-headers\""]
   end
 
   defp command_description(command) do
@@ -180,17 +175,6 @@ provided using the --vhost or -p option. Default value is \"/\"."]
       []    -> []
       usage ->
         [flatten_string(["## Arguments and options\n" | usage], "")]
-    end
-  end
-
-  defp timeout_usage(command) do
-    case command_supports_timeout(command) do
-      true ->
-        [flatten_string(["## Timeout\n",
-                         "--timeout <seconds>: operation timeout in seconds. Default is \"infinity\".\n"], "")]
-
-      false ->
-        []
     end
   end
 
