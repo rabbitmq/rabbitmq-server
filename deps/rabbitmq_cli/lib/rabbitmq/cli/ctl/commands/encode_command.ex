@@ -78,16 +78,29 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def usage,
-    do: "encode value passphrase [--cipher cipher] [--hash hash] [--iterations iterations]"
-
-  def help_section(), do: :configuration
-
-  def description(), do: "Encrypts a value"
-
   def banner([_, _], _) do
     "Encrypting value ..."
   end
+
+  def usage, do: "encode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+
+  def usage_additional() do
+    [
+      "<value>: config value to encode",
+      "<passphrase>: passphrase to use with the config value encryption key",
+      "--cipher <cipher>: cipher suite to use",
+      "--hash <hash>: hashing function to use",
+      "--iterations <iterations>: number of iteration to apply"
+    ]
+  end
+
+  def help_section(), do: :configuration
+
+  def description(), do: "Encrypts a sensitive configuration value"
+
+  #
+  # Implementation
+  #
 
   defp supports_cipher(cipher), do: Enum.member?(:rabbit_pbe.supported_ciphers(), cipher)
 

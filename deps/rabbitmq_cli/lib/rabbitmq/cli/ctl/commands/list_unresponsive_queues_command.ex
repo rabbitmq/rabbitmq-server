@@ -84,18 +84,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
+
   def usage() do
-    "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"
+    "list_unresponsive_queues [--local] [--queue-timeout <milliseconds>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"
+  end
+
+  def usage_additional() do
+    [
+      "<unresponsive_queueinfoitem> must be one of " <> Enum.join(@info_keys, ", "),
+      "--local: only return queues hosted on the target node",
+      "--queue-timeout <milliseconds>: per-queue timeout to use when checking for responsiveness"
+    ]
   end
 
   def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Tests queues to respond within timeout. Lists those which did not respond"
-
-  def usage_additional() do
-    "<unresponsive_queueinfoitem> must be one of " <>
-      Enum.join(@info_keys, ", ")
-  end
-
-  def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
 end

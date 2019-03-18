@@ -61,6 +61,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def usage, do: "cipher_suites [--openssl-format] [--erlang-format]"
 
+  def usage_additional() do
+    [
+      "--openssl-format: use OpenSSL cipher suite format",
+      "--erlang-format: use Erlang cipher suite format"
+    ]
+  end
+
   def banner([], %{openssl_format: true}),
     do: "Listing available cipher suites in the OpenSSL format"
 

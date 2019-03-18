@@ -58,16 +58,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     )
   end
 
-  def usage, do: "enable <plugin>|--all [--offline] [--online]"
-
-  def banner([], %{all: true, node: node_name}) do
-    "Enabling ALL plugins on node #{node_name}"
-  end
-
-  def banner(plugins, %{node: node_name}) do
-    ["Enabling plugins on node #{node_name}:" | plugins]
-  end
-
   def run(plugin_names, %{all: all_flag} = opts) do
     plugins =
       case all_flag do
@@ -80,6 +70,35 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
       other -> other
     end
   end
+
+  use RabbitMQ.CLI.Plugins.ErrorOutput
+
+  def banner([], %{all: true, node: node_name}) do
+    "Enabling ALL plugins on node #{node_name}"
+  end
+
+  def banner(plugins, %{node: node_name}) do
+    ["Enabling plugins on node #{node_name}:" | plugins]
+  end
+
+  def usage, do: "enable <plugin1> [ <plugin2>] | --all [--offline] [--online]"
+
+  def usage_additional() do
+    [
+      "<plugin1> [ <plugin2>]: names of plugins to enable separated by a space",
+      "--online: contact target node to enable the plugins. Changes are applied immediately.",
+      "--offline: update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted.",
+      "--all: enable all available plugins. Not recommended as some plugins may conflict or otherwise be incompatible!"
+    ]
+  end
+
+  def help_section(), do: :plugin_management
+
+  def description(), do: "Enables one or more plugins"
+
+  #
+  # Implementation
+  #
 
   def do_run(plugins, %{node: node_name} = opts) do
     enabled = PluginHelpers.read_enabled(opts)
@@ -136,6 +155,4 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
         filter_strictly_plugins(Map.put(map, head, value), all, tail)
     end
   end
-
-  use RabbitMQ.CLI.Plugins.ErrorOutput
 end

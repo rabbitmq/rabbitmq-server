@@ -50,12 +50,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     )
   end
 
-  def usage, do: "set [<plugin>] [--offline] [--online]"
-
-  def banner(plugins, %{node: node_name}) do
-    ["Enabling plugins on node #{node_name}:" | plugins]
-  end
-
   def run(plugin_names, opts) do
     plugins = for s <- plugin_names, do: String.to_atom(s)
 
@@ -64,6 +58,35 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
       other -> other
     end
   end
+
+  def output({:error, {:plugins_not_found, missing}}, _opts) do
+    {:error, ExitCodes.exit_dataerr(),
+     "The following plugins were not found: #{Enum.join(Enum.to_list(missing), ", ")}"}
+  end
+
+  use RabbitMQ.CLI.Plugins.ErrorOutput
+
+  def banner(plugins, %{node: node_name}) do
+    ["Enabling plugins on node #{node_name}:" | plugins]
+  end
+
+  def usage, do: "set <plugin1> [ <plugin2>] [--offline] [--online]"
+
+  def usage_additional() do
+    [
+      "<plugin1> [ <plugin2>]: names of plugins to enable separated by a space. All other plugins will be disabled.",
+      "--online: contact target node to enable the plugins. Changes are applied immediately.",
+      "--offline: update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted."
+    ]
+  end
+
+  def help_section(), do: :plugin_management
+
+  def description(), do: "Enables one or more plugins, disables the rest"
+
+  #
+  # Implementation
+  #
 
   def do_run(plugins, %{node: node_name} = opts) do
     all = PluginHelpers.list(opts)
@@ -109,11 +132,4 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
         filter_strictly_plugins(Map.put(map, head, value), all, tail)
     end
   end
-
-  def output({:error, {:plugins_not_found, missing}}, _opts) do
-    {:error, ExitCodes.exit_dataerr(),
-     "The following plugins were not found: #{Enum.join(Enum.to_list(missing), ", ")}"}
-  end
-
-  use RabbitMQ.CLI.Plugins.ErrorOutput
 end
