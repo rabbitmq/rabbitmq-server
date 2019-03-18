@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_consumers [-p vhost] [--no-table-headers] [<consumerinfoitem> ...]"
+    "list_consumers [-p vhost] [--no-table-headers] [<column> ...]"
   end
 
   def help_section(), do: :observability_and_health_checks
@@ -76,7 +76,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def description(), do: "Lists all consumers for a vhost"
 
   def usage_additional() do
-    "<consumerinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
+    "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."
@@ -102,6 +102,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def fill_consumer_active_fields(v) do
     v
   end
-
-
 end

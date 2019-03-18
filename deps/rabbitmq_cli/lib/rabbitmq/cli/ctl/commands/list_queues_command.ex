@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             consumer_utilisation memory slave_pids synchronised_slave_pids state type)a
 
   def description(), do: "Lists queues and their properties"
-  def usage(), do: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem>, ...]"
+  def usage(), do: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
   def scopes(), do: [:ctl, :diagnostics]
   def switches(), do: [offline: :boolean,
                        online: :boolean,
@@ -129,7 +129,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def usage_additional do
     [
-      "<queueinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
+      "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
       "--online: lists only queues on online (reachable) nodes",
       "--offline: lists only queues on offline (unreachable) nodes",
       "--local: only return queues hosted on the target node",

@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
+    "list_bindings [-p <vhost>] [--no-table-headers] [<column> ...]"
   end
 
   def help_section(), do: :observability_and_health_checks
@@ -74,7 +74,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def description(), do: "Lists all bindings on a vhost"
 
   def usage_additional() do
-    "<bindinginfoitem> must be one of " <>
+    "<column> must be one of " <>
       Enum.join(Enum.sort(@info_keys), ", ")
   end
 
