@@ -78,8 +78,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   def description(), do: "Lists AMQP 0.9.1 connections for the node"
 
   def usage_additional() do
-    "<connectioninfoitem> must be one of " <>
-      Enum.join(@info_keys, ", ")
+    [
+      "<connectioninfoitem> must be one of " <> Enum.join(@info_keys, ", "),
+      "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
+    ]
   end
 
   def banner(_, _), do: "Listing connections ..."

@@ -69,9 +69,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Provides a memory usage breakdown on the target node"
+  def description(), do: "Provides a memory usage breakdown on the target node."
 
   def usage, do: "memory_breakdown [--unit <unit>]"
+
+  def usage_additional() do
+    [
+      "--unit <bytes | mb | gb>: byte multiple (bytes, megabytes, gigabytes) to use",
+      "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
+    ]
+  end
 
   def banner([], %{node: node_name}) do
     "Reporting memory breakdown on node #{node_name}..."

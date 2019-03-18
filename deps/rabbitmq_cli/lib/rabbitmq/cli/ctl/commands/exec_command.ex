@@ -66,6 +66,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def usage, do: "exec <expr> [--offline]"
 
+  def usage_additional() do
+    "--offline: do not initialize Erlang distribution"
+  end
+
+
   def help_section(), do: :operations
 
   def description(), do: "Executes Elixir code on the CLI node"

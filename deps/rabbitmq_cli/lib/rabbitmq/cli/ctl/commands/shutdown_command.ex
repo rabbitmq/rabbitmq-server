@@ -64,9 +64,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
 
   def usage, do: "shutdown [--wait]"
 
+  def usage_additional() do
+    [
+      "--wait: if set, will wait for target node to terminate (by inferring and monitoring its PID file). Only works for local nodes.",
+      "--no-wait: if set, will not wait for target node to terminate"
+    ]
+  end
+
   def help_section(), do: :node_management
 
-  def description(), do: "Stops the Erlang node on which RabbitMQ is running and waits for the OS process to exit"
+  def description(), do: "Stops RabbitMQ and its runtime (Erlang VM). Monitors progress for local nodes. Does not require a PID file path."
 
   def banner(_, _), do: nil
 

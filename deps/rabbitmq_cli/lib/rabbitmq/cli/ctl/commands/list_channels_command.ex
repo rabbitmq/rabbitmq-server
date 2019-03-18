@@ -77,7 +77,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   end
 
   def usage_additional() do
-    "<channelinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
+    [
+      "<channelinfoitem> must be one of " <> Enum.join(@info_keys, ", "),
+      "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
+    ]
   end
 
   def help_section(), do: :observability_and_health_checks

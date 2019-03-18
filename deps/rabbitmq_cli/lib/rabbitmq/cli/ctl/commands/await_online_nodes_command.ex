@@ -38,13 +38,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :await_running_count, [n, timeout])
   end
 
-  def usage() do
-    "await_online_nodes <count>"
+  def output({:error, :timeout}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
+     "Error: timed out while waiting. Not enough nodes joined #{node_name}'s cluster."}
   end
 
-  def help_section(), do: :cluster_management
-
-  def description(), do: "Waits for <count> nodes to join the cluster"
+  use RabbitMQ.CLI.DefaultOutput
 
   def banner([count], %{node: node_name, timeout: timeout}) when is_number(timeout) do
     "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{
@@ -56,10 +55,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
     "Will wait for at least #{count} nodes to join the cluster of #{node_name}."
   end
 
-  def output({:error, :timeout}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     "Error: timed out while waiting. Not enough nodes joined #{node_name}'s cluster."}
+  def usage() do
+    "await_online_nodes <count>"
   end
 
-  use RabbitMQ.CLI.DefaultOutput
+  def usage_additional() do
+    "<count>: how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."
+  end
+
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Waits for <count> nodes to join the cluster"
 end

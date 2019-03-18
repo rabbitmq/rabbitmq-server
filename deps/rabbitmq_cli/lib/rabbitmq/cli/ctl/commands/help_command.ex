@@ -62,6 +62,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def usage(), do: "help (<command> | [--list-commands])"
 
+  def usage_additional() do
+    "--list-commands: only output a list of discovered commands"
+  end
+
+
   #
   # Implementation
   #
