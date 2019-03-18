@@ -70,12 +70,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_connections [--no-table-headers] [<connectioninfoitem> ...]"
+    "list_connections [--no-table-headers] [<column> ...]"
   end
 
   def usage_additional() do
     [
-      "<connectioninfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
+      "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
       "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
     ]
   end

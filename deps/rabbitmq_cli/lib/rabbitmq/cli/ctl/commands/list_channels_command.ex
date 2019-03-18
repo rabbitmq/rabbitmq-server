@@ -71,12 +71,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_channels [--no-table-headers] [<channelinfoitem> ...]"
+    "list_channels [--no-table-headers] [<column> ...]"
   end
 
   def usage_additional() do
     [
-      "<channelinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
+      "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
       "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
     ]
   end

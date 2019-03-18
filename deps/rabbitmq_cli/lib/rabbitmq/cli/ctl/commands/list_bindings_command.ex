@@ -66,11 +66,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
+    "list_bindings [-p <vhost>] [--no-table-headers] [<column> ...]"
   end
 
   def usage_additional() do
-    "<bindinginfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
+    "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."

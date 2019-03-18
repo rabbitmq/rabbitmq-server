@@ -61,11 +61,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_exchanges [-p <vhost>] [--no-table-headers] [<exchangeinfoitem> ...]"
+    "list_exchanges [-p <vhost>] [--no-table-headers] [<column> ...]"
   end
 
   def usage_additional() do
-    "<exchangeinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
+    "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing exchanges for vhost #{vhost} ..."

@@ -85,12 +85,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"
+    "list_unresponsive_queues [--local] [--queue-timeout <milliseconds>] [<column> ...] [--no-table-headers]"
   end
 
   def usage_additional() do
     [
-      "<unresponsive_queueinfoitem> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
+      "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
       "--local: only return queues hosted on the target node",
       "--queue-timeout <milliseconds>: per-queue timeout to use when checking for responsiveness"
     ]

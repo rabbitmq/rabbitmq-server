@@ -50,10 +50,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
     |> filter_by_arg(args)
   end
 
-  def usage, do: "list_vhosts [--no-table-headers] [<vhostinfoitem> ...]"
+  def usage, do: "list_vhosts [--no-table-headers] [<column> ...]"
 
   def usage_additional() do
-    "<vhostinfoitem> must be one of name, tracing, cluster_state"
+    "<column> must be one of name, tracing, cluster_state"
   end
 
   #
