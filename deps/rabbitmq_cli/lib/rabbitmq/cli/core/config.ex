@@ -15,7 +15,10 @@
 
 defmodule RabbitMQ.CLI.Core.Config do
 
-  alias RabbitMQ.CLI.FormatterBehaviour
+  alias RabbitMQ.CLI.{
+    FormatterBehaviour,
+    PrinterBehaviour
+  }
 
   #
   # Environment
@@ -100,7 +103,7 @@ defmodule RabbitMQ.CLI.Core.Config do
   end
 
   def get_printer(%{printer: printer}) do
-    module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
+    module_name = PrinterBehaviour.module_name(printer)
 
     case Code.ensure_loaded(module_name) do
       {:module, _} -> module_name
