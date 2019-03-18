@@ -70,17 +70,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def banner(_, _), do: "Listing channels ..."
+
   def usage() do
     "list_channels [--no-table-headers] [<channelinfoitem> ...]"
   end
-
-  def help_section(), do: :observability_and_health_checks
-
-  def description(), do: "Lists all channels in the node"
 
   def usage_additional() do
     "<channelinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
   end
 
-  def banner(_, _), do: "Listing channels ..."
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists all channels in the node"
 end
