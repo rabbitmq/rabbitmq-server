@@ -65,8 +65,11 @@ defmodule ArgsProcessingTest do
     commands = list_commands()
     Enum.each(commands, fn(command) ->
       items_usage = case command.usage_additional() do
-        list when is_list(list) -> Enum.join(list, "\n")
-        string -> string
+        # find the line with info items, ignore the rest
+        list when is_list(list) ->
+          Enum.filter(list, fn line -> Regex.match?(~r/must be one of/, line) end) |> List.first
+        string ->
+          string
       end
       # info_item, info_item2, …
       case Regex.run(~r/.*one of (.*)$/, items_usage, [capture: :all_but_first]) do
