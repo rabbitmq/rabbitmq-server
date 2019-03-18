@@ -13,9 +13,10 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.CommandBehaviour
-
 defmodule RabbitMQ.CLI.Core.Config do
+
+  alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
+
   #
   # Environment
   #
@@ -87,7 +88,7 @@ defmodule RabbitMQ.CLI.Core.Config do
   #
 
   def get_formatter(command, %{formatter: formatter}) do
-    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
+    module_name = FormatterBehaviour.module_name(formatter)
 
     case Code.ensure_loaded(module_name) do
       {:module, _} -> module_name

@@ -62,4 +62,6 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   def format_element(val, separator, options) do
     separator <> format_output(val, options)
   end
+
+  def machine_readable?, do: true
 end
