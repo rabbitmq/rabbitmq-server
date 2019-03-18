@@ -23,7 +23,7 @@ defmodule RabbitMQCtl do
     Output,
     Parser
   }
-
+  alias RabbitMQ.CLI.{FormatterBehaviour}
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
   # Enable unit tests for private functions
@@ -267,27 +267,24 @@ defmodule RabbitMQCtl do
     nil
   end
 
-  # Suppress banner if a machine-readable formatter is used
-  defp maybe_print_banner(_, _, %{formatter: "csv"}) do
-    nil
-  end
-
-  defp maybe_print_banner(_, _, %{formatter: "json"}) do
-    nil
-  end
-
   defp maybe_print_banner(command, args, opts) do
-    case command.banner(args, opts) do
-      nil ->
-        nil
+    # Suppress banner if a machine-readable formatter is used
+    formatter = Map.get(opts, :formatter)
+    case FormatterBehaviour.machine_readable?(formatter) do
+      true  -> nil
+      false ->
+        case command.banner(args, opts) do
+          nil ->
+            nil
 
-      banner ->
-        case banner do
-          list when is_list(list) ->
-            for line <- list, do: IO.puts(line)
+          banner ->
+            case banner do
+              list when is_list(list) ->
+                for line <- list, do: IO.puts(line)
 
-          binary when is_binary(binary) ->
-            IO.puts(binary)
+              binary when is_binary(binary) ->
+                IO.puts(binary)
+            end
         end
     end
   end

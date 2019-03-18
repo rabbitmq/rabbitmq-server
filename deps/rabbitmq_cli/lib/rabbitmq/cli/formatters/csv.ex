@@ -62,6 +62,12 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
     |> Enum.join()
   end
 
+  def machine_readable?, do: true
+
+  #
+  # Implementation
+  #
+
   defp keys(map) when is_map(map) do
     Map.keys(map)
   end
