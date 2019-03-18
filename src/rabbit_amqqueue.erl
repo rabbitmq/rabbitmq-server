@@ -969,6 +969,7 @@ i_down(auto_delete,        Q, _) -> amqqueue:is_auto_delete(Q);
 i_down(arguments,          Q, _) -> amqqueue:get_arguments(Q);
 i_down(pid,                Q, _) -> amqqueue:get_pid(Q);
 i_down(recoverable_slaves, Q, _) -> amqqueue:get_recoverable_slaves(Q);
+i_down(type,               Q, _) -> amqqueue:get_type(Q);
 i_down(state, _Q, DownReason)    -> DownReason;
 i_down(K, _Q, _DownReason) ->
     case lists:member(K, rabbit_amqqueue_process:info_keys()) of

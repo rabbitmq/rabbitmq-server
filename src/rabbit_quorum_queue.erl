@@ -967,6 +967,7 @@ i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
         _ ->
             ''
     end;
+i(type, _) -> quorum;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->

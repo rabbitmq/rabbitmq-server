@@ -1128,6 +1128,7 @@ i(reductions, _State) ->
 i(user_who_performed_action, #q{q = Q}) ->
     Opts = amqqueue:get_options(Q),
     maps:get(user, Opts, ?UNKNOWN_USER);
+i(type, _) -> classic;
 i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:info(Item, BQS).
 
