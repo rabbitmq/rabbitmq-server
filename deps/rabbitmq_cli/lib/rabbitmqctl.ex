@@ -157,7 +157,6 @@ defmodule RabbitMQCtl do
       command.run(arguments, options) |> command.output(options)
     catch
       _error_type, error ->
-        IO.inspect(:erlang.get_stacktrace())
         format_error(error, options, command)
     end
   end
