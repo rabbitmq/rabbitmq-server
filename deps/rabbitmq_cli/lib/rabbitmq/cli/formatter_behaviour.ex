@@ -26,6 +26,14 @@ defmodule RabbitMQ.CLI.FormatterBehaviour do
   @callback switches() :: Keyword.t()
   @callback aliases() :: Keyword.t()
 
+  def switches(formatter) do
+    Helpers.apply_if_exported(formatter, :switches, [], [])
+  end
+
+  def aliases(formatter) do
+    Helpers.apply_if_exported(formatter, :aliases, [], [])
+  end
+
   def module_name(nil) do
     nil
   end

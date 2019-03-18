@@ -49,6 +49,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def usage, do: "eval <expr>"
 
+  def help_section(), do: :operations
+
+  def description(), do: "Executes Erlang code on the RabbitMQ node"
+
   def banner(_, _), do: nil
 
   #

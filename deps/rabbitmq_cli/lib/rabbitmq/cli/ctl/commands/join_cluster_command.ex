@@ -59,14 +59,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     )
   end
 
-  def usage() do
-    "join_cluster [--disc|--ram] <existing_cluster_member_node>"
-  end
-
-  def banner([target_node], %{node: node_name}) do
-    "Clustering node #{node_name} with #{target_node}"
-  end
-
   def output({:ok, :already_member}, _) do
     {:ok, "The node is already a member of this cluster"}
   end
@@ -82,4 +74,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  def banner([target_node], %{node: node_name}) do
+    "Clustering node #{node_name} with #{target_node}"
+  end
+
+  def usage() do
+    "join_cluster [--disc|--ram] <existing_cluster_member_node>"
+  end
+
+  def usage_additional() do
+    [
+      "--disc: new node should be a disk one (stores its schema on disk). Highly recommended, used by default.",
+      "--ram: new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first.",
+    ]
+  end
+
+
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Instructs the node to become a member of the cluster that the specified node is in"
 end

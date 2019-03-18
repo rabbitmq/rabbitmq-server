@@ -41,6 +41,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_parameters [--vhost <vhost>] [--no-table-headers]"
+  def help_section(), do: :parameters
+
+  def description(), do: "Lists all parameters for a virtual host"
 
   def banner(_, %{vhost: vhost}), do: "Listing runtime parameters for vhost \"#{vhost}\" ..."
 end

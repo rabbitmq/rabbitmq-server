@@ -73,11 +73,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     )
   end
 
-  def usage, do: "wait [<pid_file>] [--pid|-P <pid>]"
-
-  ## Banners are included in wait steps
-  def banner(_, _), do: nil
-
   def output({:error, err}, _opts) do
     case format_error(err) do
       :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err})
@@ -101,6 +96,26 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  # Banner is printed in wait steps
+  def banner(_, _), do: nil
+
+  def usage, do: "wait [<pidfile>] [--pid|-P <pid>]"
+
+  def usage_additional() do
+    [
+      "<pidfile>: PID file path",
+      "--pid <pid>: operating system PID to monitor"
+    ]
+  end
+
+  def help_section(), do: :node_management
+
+  def description(), do: "Waits for RabbitMQ node startup by monitoring a local PID file. See also 'rabbitmqctl await_online_nodes'"
+
+  #
+  # Implementation
+  #
 
   def wait_for(timeout, fun) do
     sleep = round(timeout / 10)
@@ -144,10 +159,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
         other
     end
   end
-
-  #
-  # Implementation
-  #
 
   defp wait_for_pid_funs(node_name, app_names, timeout, quiet) do
     app_names_formatted = :io_lib.format('~p', [app_names])

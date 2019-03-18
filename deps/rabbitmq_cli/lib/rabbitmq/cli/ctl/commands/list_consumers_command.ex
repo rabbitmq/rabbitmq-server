@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   alias RabbitMQ.CLI.Core.Helpers
@@ -29,7 +29,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
+    {Enum.map(@info_keys -- [:activity_status], &Atom.to_string/1),
+     Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def merge_defaults(args, opts) do
@@ -49,14 +50,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     info_keys = InfoKeys.prepare_info_keys(args)
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
-      RpcStream.receive_list_items(
+      RpcStream.receive_list_items_with_fun(
         node_name,
-        :rabbit_amqqueue,
+        [{:rabbit_amqqueue,
         :emit_consumers_all,
-        [nodes, vhost],
+        [nodes, vhost]}],
         timeout,
         info_keys,
-        Kernel.length(nodes)
+        Kernel.length(nodes),
+        fn item -> fill_consumer_active_fields(item) end
       )
     end)
   end
@@ -69,9 +71,35 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     "list_consumers [-p vhost] [--no-table-headers] [<column> ...]"
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists all consumers for a vhost"
+
   def usage_additional() do
     "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."
+
+  # add missing fields if response comes from node < 3.8
+  def fill_consumer_active_fields({[], {chunk, :continue}}) do
+    {[], {chunk, :continue}}
+  end
+
+  def fill_consumer_active_fields({items, {chunk, :continue}}) do
+    {Enum.map(items, fn item ->
+                          case Keyword.has_key?(item, :active) do
+                            true ->
+                              item
+                            false ->
+                              Keyword.drop(item, [:arguments])
+                                ++ [active: true, activity_status: :up]
+                                ++ [arguments: Keyword.get(item, :arguments, [])]
+                          end
+                        end), {chunk, :continue}}
+  end
+
+  def fill_consumer_active_fields(v) do
+    v
+  end
 end

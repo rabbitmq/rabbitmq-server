@@ -30,21 +30,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             messages_persistent message_bytes message_bytes_ready
             message_bytes_unacknowledged message_bytes_ram message_bytes_persistent
             head_message_timestamp disk_reads disk_writes consumers
-            consumer_utilisation memory slave_pids synchronised_slave_pids state)a
+            consumer_utilisation memory slave_pids synchronised_slave_pids state type)a
+
+  def description(), do: "Lists queues and their properties"
+  def usage(), do: "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
+  def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: [offline: :boolean,
+                       online: :boolean,
+                       local: :boolean,
+                       timeout: :integer ]
+  def aliases(), do: [t: :timeout]
 
   def info_keys(), do: @info_keys
-
-  def scopes(), do: [:ctl, :diagnostics]
-
-  def switches(),
-    do: [
-      offline: :boolean,
-      online: :boolean,
-      local: :boolean,
-      timeout: :integer
-    ]
-
-  def aliases(), do: [t: :timeout]
 
   defp default_opts() do
     %{vhost: "/", offline: false, online: false, local: false, table_headers: true}
@@ -128,7 +125,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def usage(), do: "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
+  def help_section(), do: :observability_and_health_checks
 
   def usage_additional do
     [

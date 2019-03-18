@@ -67,6 +67,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
     ]
   end
 
+  def help_section(), do: :policies
+
+  def description(), do: "Sets or updates a policy"
+
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
     "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{
       priority

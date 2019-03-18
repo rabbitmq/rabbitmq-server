@@ -63,16 +63,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
     Validators.node_is_running(args, opts)
   end
 
-  def usage, do: "directories [--offline] [--online]"
-
-  def banner([], %{offline: true}) do
-    "Listing plugin directories inferred from local environment..."
-  end
-
-  def banner([], %{online: true, node: node}) do
-    "Listing plugin directories used by node #{node}"
-  end
-
   def run([], %{online: true, node: node_name}) do
     do_run(fn key ->
       :rabbit_misc.rpc_call(node_name, :rabbit_plugins, key, [])
@@ -104,6 +94,31 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  def banner([], %{offline: true}) do
+    "Listing plugin directories inferred from local environment..."
+  end
+
+  def banner([], %{online: true, node: node}) do
+    "Listing plugin directories used by node #{node}"
+  end
+
+  def usage, do: "directories [--offline] [--online]"
+
+  def usage_additional() do
+    [
+      "--offline: do not contact target node. Try to infer directories from the environment.",
+      "--online: infer directories from target node."
+    ]
+  end
+
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Displays plugin directory and enabled plugin file paths"
+
+  #
+  # Implementation
+  #
 
   defp do_run(fun) do
     # return an error or an {:ok, map} tuple

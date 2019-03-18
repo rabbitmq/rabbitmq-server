@@ -89,6 +89,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def usage, do: "report"
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Generate a server status report containing a concatenation of all server status information for support purposes"
+
   def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 
   #
@@ -104,6 +108,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   defp info_keys(command) do
     command.info_keys()
-    |> Enum.map(&Atom.to_string/1)
+    |> Enum.map(&to_string/1)
   end
 end

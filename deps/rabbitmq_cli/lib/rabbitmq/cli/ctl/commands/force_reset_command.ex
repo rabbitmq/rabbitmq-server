@@ -35,5 +35,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
 
   def usage, do: "force_reset"
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Forcefully returns a RabbitMQ node to its virgin state"
+
   def banner(_, %{node: node_name}), do: "Forcefully resetting node #{node_name} ..."
 end

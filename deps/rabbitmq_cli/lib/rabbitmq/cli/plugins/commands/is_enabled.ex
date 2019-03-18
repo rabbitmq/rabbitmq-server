@@ -63,16 +63,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
     Validators.node_is_running(args, opts)
   end
 
-  def usage, do: "is_enabled <plugin1> [, <plugin2>, ...] [--offline] [--online]"
-
-  def banner(args, %{offline: true}) do
-    "Inferring if #{plugin_or_plugins(args)} from local environment..."
-  end
-
-  def banner(args, %{online: true, node: node}) do
-    "Asking node #{node} if #{plugin_or_plugins(args)} enabled..."
-  end
-
   def run(args, %{online: true, node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :active, []) do
       {:error, _} = e ->
@@ -111,6 +101,32 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "is_enabled <plugin1> [ <plugin2>] [--offline] [--online]"
+
+  def usage_additional() do
+    [
+      "<plugin1> [ <plugin2>]: names of plugins to check separated by a space",
+      "--online: contact target node to perform the check. Requires the node to be running and reachable.",
+      "--offline: check enabled plugins file directly without contacting target node."
+    ]
+  end
+
+  def banner(args, %{offline: true}) do
+    "Inferring if #{plugin_or_plugins(args)} from local environment..."
+  end
+
+  def banner(args, %{online: true, node: node}) do
+    "Asking node #{node} if #{plugin_or_plugins(args)} enabled..."
+  end
+
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Health check that exits with a non-zero code if provided plugins are not enabled on target node"
+
+  #
+  # Implementation
+  #
 
   def plugin_or_plugins(args) when length(args) == 1 do
     "plugin #{PluginHelpers.comma_separated_names(args)} is"

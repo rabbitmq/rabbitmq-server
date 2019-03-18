@@ -55,10 +55,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     )
   end
 
-  def usage, do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled]"
-
-  def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
-
   def run([pattern], %{node: node_name} = opts) do
     %{verbose: verbose, minimal: minimal, enabled: only_enabled, implicitly_enabled: all_enabled} =
       opts
@@ -117,6 +113,29 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       plugins: format_plugins(plugins, format, enabled, enabled_implicitly, running)
     }
   end
+
+  def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
+
+  def usage, do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled]"
+
+  def usage_additional() do
+    [
+      "<pattern>: only list plugins that match a regular expression pattern",
+      "--verbose: output more information",
+      "--minimal: only print plugin names. Most useful in compbination with --silent and --enabled.",
+      "--enabled: only list enabled plugins",
+      "--implicitly-enabled: include plugins enabled as dependencies of other plugins"
+    ]
+  end
+
+
+  def help_section(), do: :plugin_management
+
+  def description(), do: "Lists plugins and their state"
+
+  #
+  # Implementation
+  #
 
   defp remote_running_plugins(node) do
     case :rabbit_misc.rpc_call(node, :rabbit_plugins, :running_plugins, []) do

@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.CommandBehaviour do
+  alias RabbitMQ.CLI.Core.Helpers
+
   @callback usage() :: String.t() | [String.t()]
   # validates CLI arguments
   @callback validate(list(), map()) :: :ok | {:validation_failure, atom() | {atom(), String.t()}}
@@ -31,6 +33,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @optional_callbacks formatter: 0,
                       scopes: 0,
                       usage_additional: 0,
+                      description: 0,
+                      help_section: 0,
                       switches: 0,
                       aliases: 0,
                       # validates execution environment, e.g. file presence,
@@ -45,10 +49,62 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
 
   @callback formatter() :: atom()
   @callback scopes() :: [atom()]
+  @callback description() :: String.t()
+  @callback help_section() :: String.t()
   @callback usage_additional() :: String.t() | [String.t()]
   ## Erlang distribution control
   ## :cli - default rabbitmqctl generated node name
   ## :none - disable erlang distribution
   ## {:fun, fun} - use a custom function to start distribution
   @callback distribution(map()) :: :cli | :none | {:fun, (map() -> :ok | {:error, any()})}
+
+  def usage(cmd) do
+    cmd.usage()
+  end
+
+  def scopes(cmd) do
+    Helpers.apply_if_exported(cmd, :scopes, [], nil)
+  end
+
+  def description(cmd) do
+    Helpers.apply_if_exported(cmd, :description, [], "")
+  end
+
+  def help_section(cmd) do
+    case Helpers.apply_if_exported(cmd, :help_section, [], :other) do
+      :other ->
+        case Application.get_application(cmd) do
+          :rabbitmqctl -> :other
+          plugin -> {:plugin, plugin}
+        end
+      section ->
+        section
+    end
+  end
+
+  def usage_additional(cmd) do
+    Helpers.apply_if_exported(cmd, :usage_additional, [], [])
+  end
+
+  def formatter(cmd) do
+    Helpers.apply_if_exported(cmd, :formatter, [], RabbitMQ.CLI.Formatters.String)
+  end
+
+  def switches(cmd) do
+    Helpers.apply_if_exported(cmd, :switches, [], [])
+  end
+
+  def aliases(cmd) do
+    Helpers.apply_if_exported(cmd, :aliases, [], [])
+  end
+
+  def validate_execution_environment(cmd, args, options) do
+    Helpers.apply_if_exported(cmd,
+                              :validate_execution_environment, [args, options],
+                              :ok)
+  end
+
+  def distribution(cmd, options) do
+    Helpers.apply_if_exported(cmd, :distribution, [options], :cli)
+  end
 end

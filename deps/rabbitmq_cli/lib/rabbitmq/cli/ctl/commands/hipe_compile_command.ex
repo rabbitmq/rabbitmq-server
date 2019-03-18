@@ -67,6 +67,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
 
   def usage, do: "hipe_compile <directory>"
 
+  def help_section(), do: :operations
+
+  def description() do
+    "Performs HiPE-compilation of [some] server modules to the given directory "
+    <> "to be used with RABBITMQ_SERVER_CODE_PATH"
+  end
+
   def banner([target_dir], _) do
     "Will pre-compile RabbitMQ server modules with HiPE to #{target_dir} ..."
   end

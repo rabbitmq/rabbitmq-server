@@ -84,6 +84,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
+
   def usage() do
     "list_unresponsive_queues [--local] [--queue-timeout <milliseconds>] [<column> ...] [--no-table-headers]"
   end
@@ -96,5 +98,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
     ]
   end
 
-  def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Tests queues to respond within timeout. Lists those which did not respond"
 end

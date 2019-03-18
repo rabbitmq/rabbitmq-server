@@ -35,7 +35,7 @@ defmodule RabbitMQCtlTest do
     command = ["status", "--help"]
     assert capture_io(fn ->
       error_check(command, exit_ok())
-    end) =~ ~r/Usage:/
+    end) =~ ~r/Usage/
   end
 
 ## ------------------------ Error Messages ------------------------------------
@@ -68,28 +68,28 @@ defmodule RabbitMQCtlTest do
     command = []
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/\nUsage:\n/
+    end) =~ ~r/usage/i
   end
 
   test "when invoked with only a --help, shows a generic usage message and exits with a success" do
     command = ["--help"]
     assert capture_io(:stdio, fn ->
       error_check(command, exit_ok())
-    end) =~ ~r/\nUsage:\n/
+    end) =~ ~r/usage/i
   end
 
   test "when invoked with --help [command], shows a generic usage message and exits with a success" do
     command = ["--help", "status"]
     assert capture_io(:stdio, fn ->
       error_check(command, exit_ok())
-    end) =~ ~r/\nUsage:\n/
+    end) =~ ~r/usage/i
   end
 
   test "Empty command with options shows usage, and exit with usage exit code" do
     command = ["-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/\nUsage:\n/
+    end) =~ ~r/usage/i
   end
 
   test "Short names without host connect properly" do
@@ -101,21 +101,27 @@ defmodule RabbitMQCtlTest do
     command = ["not_real"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/\nUsage\:/
+    end) =~ ~r/Usage/
   end
 
   test "Extraneous arguments return a usage error" do
     command = ["status", "extra"]
-    assert capture_io(:stderr, fn ->
+    output = capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/given:\n\t.*\n\nUsage:\n.* status/
+    end)
+    assert output =~ ~r/too many arguments/
+    assert output =~ ~r/Usage/
+    assert output =~ ~r/status/
   end
 
   test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
-    assert capture_io(:stderr, fn ->
+    output = capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/given:\n\t.*\n\nUsage:\n.* list_user_permissions/
+    end)
+    assert output =~ ~r/not enough arguments/
+    assert output =~ ~r/Usage/
+    assert output =~ ~r/list_user_permissions/
   end
 
   test "A bad argument returns a data error" do

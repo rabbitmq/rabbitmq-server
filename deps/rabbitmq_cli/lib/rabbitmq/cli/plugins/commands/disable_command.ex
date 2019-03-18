@@ -58,16 +58,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     )
   end
 
-  def usage, do: "disable <plugin>|--all [--offline] [--online]"
-
-  def banner([], %{all: true, node: node_name}) do
-    "Disabling ALL plugins on node #{node_name}"
-  end
-
-  def banner(plugins, %{node: node_name}) do
-    ["Disabling plugins on node #{node_name}:" | plugins]
-  end
-
   def run(plugin_names, %{all: all_flag, node: node_name} = opts) do
     plugins =
       case all_flag do
@@ -112,6 +102,35 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     end
   end
 
+  use RabbitMQ.CLI.Plugins.ErrorOutput
+
+  def banner([], %{all: true, node: node_name}) do
+    "Disabling ALL plugins on node #{node_name}"
+  end
+
+  def banner(plugins, %{node: node_name}) do
+    ["Disabling plugins on node #{node_name}:" | plugins]
+  end
+
+  def usage, do: "disable <plugin1> [ <plugin2>] | --all [--offline] [--online]"
+
+  def usage_additional() do
+    [
+      "<plugin1> [ <plugin2>]: names of plugins to disable separated by a space",
+      "--online: contact target node to disable the plugins. Changes are applied immediately.",
+      "--offline: update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted.",
+      "--all: disable all currently enabled plugins"
+    ]
+  end
+
+  def help_section(), do: :plugin_management
+
+  def description(), do: "Disables one or more plugins"
+
+  #
+  # Implementation
+  #
+
   defp filter_strictly_plugins(map, _all, []) do
     map
   end
@@ -126,6 +145,4 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
         filter_strictly_plugins(Map.put(map, head, value), all, tail)
     end
   end
-
-  use RabbitMQ.CLI.Plugins.ErrorOutput
 end

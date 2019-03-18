@@ -59,6 +59,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     "rename_cluster_node <oldnode1> <newnode1> [oldnode2] [newnode2] ..."
   end
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Renames cluster nodes in the local database"
+
   def banner(args, _) do
     [
       "Renaming cluster nodes: \n ",
