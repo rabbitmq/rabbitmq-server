@@ -308,7 +308,7 @@ apply(#{index := RaftIdx}, #purge{},
     %% reverse the effects ourselves
     {State, {purge, Total},
      lists:reverse([garbage_collection | Effects])};
-apply(_, {down, Pid, noconnection},
+apply(Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
                waiting_consumers = Waiting0,
@@ -346,8 +346,8 @@ apply(_, {down, Pid, noconnection},
                        (_, E) -> E
                     end, Enqs0),
     Effects = [{monitor, node, Node} | Effects1],
-    {State#?MODULE{enqueuers = Enqs}, ok, Effects};
-apply(_, {down, Pid, noconnection},
+    checkout(Meta, State#?MODULE{enqueuers = Enqs}, Effects);
+apply(Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                enqueuers = Enqs0} = State0) ->
     %% A node has been disconnected. This doesn't necessarily mean that
@@ -383,14 +383,14 @@ apply(_, {down, Pid, noconnection},
     % Monitor the node so that we can "unsuspect" these processes when the node
     % comes back, then re-issue all monitors and discover the final fate of
     % these processes
-    Effects2 = case maps:size(State#?MODULE.consumers) of
-                   0 ->
-                       [{aux, inactive}, {monitor, node, Node}];
-                   _ ->
-                       [{monitor, node, Node}]
-               end ++ Effects1,
+    Effects = case maps:size(State#?MODULE.consumers) of
+                  0 ->
+                      [{aux, inactive}, {monitor, node, Node}];
+                  _ ->
+                      [{monitor, node, Node}]
+              end ++ Effects1,
     %% TODO: should we run a checkout here?
-    {State#?MODULE{enqueuers = Enqs}, ok, Effects2};
+    checkout(Meta, State#?MODULE{enqueuers = Enqs}, Effects);
 apply(Meta, {down, Pid, _Info}, #?MODULE{consumers = Cons0,
                                          enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the same pid and enqueue any pending messages
