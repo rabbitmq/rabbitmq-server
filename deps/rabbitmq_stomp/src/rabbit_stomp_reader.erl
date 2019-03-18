@@ -288,24 +288,23 @@ log_reason({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
     rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: connection closed~n",
         [ConnStr]);
 
-log_reason({network_error,
-           {ssl_upgrade_error,
-            {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
-    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: handshake failure~n",
-        [ConnStr]);
 
 log_reason({network_error,
-           {ssl_upgrade_error,
-            {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
-    rabbit_log_connection:error("STOMP detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
-        [ConnStr]);
-
+            {ssl_upgrade_error,
+             {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
+    log_tls_alert(handshake_failure, ConnStr);
 log_reason({network_error,
-           {ssl_upgrade_error,
-            {tls_alert, Alert}}, ConnStr}, _State) ->
-    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: alert ~s~n",
-        [ConnStr, Alert]);
-
+            {ssl_upgrade_error,
+             {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
+    log_tls_alert(unknown_ca, ConnStr);
+log_reason({network_error,
+            {ssl_upgrade_error,
+             {tls_alert, {Err, _}}}, ConnStr}, _State) ->
+    log_tls_alert(Err, ConnStr);
+log_reason({network_error,
+            {ssl_upgrade_error,
+             {tls_alert, Alert}}, ConnStr}, _State) ->
+    log_tls_alert(Alert, ConnStr);
 log_reason({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
     rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: ~p~n",
         [ConnStr, Reason]);
@@ -333,6 +332,17 @@ log_reason(Reason, #reader_state{ processor_state = ProcState }) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
     rabbit_log:warning("STOMP connection ~s terminated"
                        " with reason ~p, closing it~n", [AdapterName, Reason]).
+
+log_tls_alert(handshake_failure, ConnStr) ->
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: handshake failure~n",
+        [ConnStr]);
+log_tls_alert(unknown_ca, ConnStr) ->
+    rabbit_log_connection:error("STOMP detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
+        [ConnStr]);
+log_tls_alert(Alert, ConnStr) ->
+    rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: alert ~s~n",
+        [ConnStr, Alert]).
+
 
 %%----------------------------------------------------------------------------
 
