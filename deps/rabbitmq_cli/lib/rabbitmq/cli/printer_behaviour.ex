@@ -19,4 +19,12 @@ defmodule RabbitMQ.CLI.PrinterBehaviour do
 
   @callback print_output(output :: String.t() | [String.t()], printer_state :: any) :: :ok
   @callback print_ok(printer_state :: any) :: :ok
+
+  def module_name(nil) do
+    nil
+  end
+  def module_name(printer) do
+    mod = printer |> String.downcase |> Macro.camelize
+    String.to_atom("RabbitMQ.CLI.Printers." <> mod)
+  end
 end
