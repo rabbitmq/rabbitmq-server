@@ -133,10 +133,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   end
 
   def usage_additional() do
-    ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
+    "<queueinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
   end
 
   def banner(_, %{vhost: vhost, timeout: timeout}) do
-    ["Timeout: #{timeout / 1000} seconds ...", "Listing queues for vhost #{vhost} ..."]
+    [
+      "Timeout: #{timeout / 1000} seconds ...",
+      "Listing queues for vhost #{vhost} ..."
+    ]
   end
 end

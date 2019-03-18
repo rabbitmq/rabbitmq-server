@@ -70,7 +70,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   end
 
   def usage_additional() do
-    "<consumerinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."
+    "<consumerinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."

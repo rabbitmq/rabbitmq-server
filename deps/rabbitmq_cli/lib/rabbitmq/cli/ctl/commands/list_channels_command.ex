@@ -75,8 +75,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   end
 
   def usage_additional() do
-    "<channelinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
+    "<channelinfoitem> must be one of " <> Enum.join(@info_keys, ", ")
   end
 
   def banner(_, _), do: "Listing channels ..."

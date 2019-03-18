@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   def usage, do: "list_vhosts [--no-table-headers] [<vhostinfoitem> ...]"
 
   def usage_additional() do
-    "<vhostinfoitem> must be a member of the list [name, tracing, cluster_state]."
+    "<vhostinfoitem> must be one of name, tracing, cluster_state"
   end
 
   #

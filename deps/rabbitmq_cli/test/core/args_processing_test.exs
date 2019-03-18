@@ -58,18 +58,29 @@ defmodule ArgsProcessingTest do
       end)
   end
 
+  # this test parses info keys mentioned in the usage_additional section
+  # and makes sure they pass validation, including when separated by a comma
+  # or a mix of commas and spaces
   test "comma-separated info items are supported", context do
     commands = list_commands()
     Enum.each(commands, fn(command) ->
       items_usage = case command.usage_additional() do
-        list when is_list(list) -> Enum.join(list, "\n")
-        string -> string
+        # find the line with info items, ignore the rest
+        list when is_list(list) ->
+          Enum.filter(list, fn line -> Regex.match?(~r/must be one of/, line) end) |> List.first
+        string ->
+          string
       end
-      [info_items] = Regex.run(~r/\[(.*)\]/, items_usage, [capture: :all_but_first])
-      :ok = command.validate([info_items], context[:opts])
-      :ok = command.validate(String.split(info_items, " "), context[:opts])
-      run_command_ok(command, [info_items], context[:opts])
-      run_command_ok(command, String.split(info_items, " "), context[:opts])
+      # info_item, info_item2, …
+      case Regex.run(~r/.*one of (.*)$/, items_usage, [capture: :all_but_first]) do
+        nil          ->
+          throw "Command #{command} does not list info items in usage_additional or the format has changed. Output: #{items_usage}"
+        [info_items] ->
+          :ok = command.validate([info_items], context[:opts])
+          :ok = command.validate(String.split(info_items, " "), context[:opts])
+          run_command_ok(command, [info_items], context[:opts])
+          run_command_ok(command, String.split(info_items, " "), context[:opts])
+      end
     end)
   end
 
