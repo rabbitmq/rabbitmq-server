@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "restart_vhost [-p <vhost>]"
+  def usage, do: "restart_vhost [--vhost <vhost>]"
 
   def help_section(), do: :virtual_hosts
 

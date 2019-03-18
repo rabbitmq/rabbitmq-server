@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
-    "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
+    "set_policy [--vhost <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
   end
 
   def usage_additional() do

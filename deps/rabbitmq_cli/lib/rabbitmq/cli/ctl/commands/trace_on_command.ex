@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
 
 use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "trace_on [-p <vhost>]"
+  def usage, do: "trace_on [--vhost <vhost>]"
 
   def help_section(), do: :virtual_hosts
 

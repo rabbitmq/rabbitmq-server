@@ -57,7 +57,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
-    "set_operator_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
+    "set_operator_policy [--vhost <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
   end
 
   def usage_additional() do

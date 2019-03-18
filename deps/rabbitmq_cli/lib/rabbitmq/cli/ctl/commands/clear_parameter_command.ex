@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
     )
   end
 
-  def usage, do: "clear_parameter [-p <vhost>] <component_name> <key>"
+  def usage, do: "clear_parameter [--vhost <vhost>] <component_name> <key>"
 
   def help_section(), do: :parameters
 

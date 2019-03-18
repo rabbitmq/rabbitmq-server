@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_bindings [-p <vhost>] [--no-table-headers] [<column> ...]"
+    "list_bindings [--vhost <vhost>] [--no-table-headers] [<column> ...]"
   end
 
   def help_section(), do: :observability_and_health_checks

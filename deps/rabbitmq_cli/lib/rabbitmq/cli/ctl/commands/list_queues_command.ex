@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             consumer_utilisation memory slave_pids synchronised_slave_pids state type)a
 
   def description(), do: "Lists queues and their properties"
-  def usage(), do: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
+  def usage(), do: "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
   def scopes(), do: [:ctl, :diagnostics]
   def switches(), do: [offline: :boolean,
                        online: :boolean,

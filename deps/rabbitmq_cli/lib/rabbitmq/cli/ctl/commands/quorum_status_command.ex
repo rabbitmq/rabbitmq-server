@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "quorum_status [-p <vhost>] <queuename>"
+    "quorum_status [--vhost <vhost>] <queuename>"
   end
 
   def help_section(), do: :queues

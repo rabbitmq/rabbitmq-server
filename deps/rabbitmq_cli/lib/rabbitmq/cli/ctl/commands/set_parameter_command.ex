@@ -49,7 +49,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
+  def usage, do: "set_parameter [--vhost <vhost>] <component_name> <name> <value>"
 
   def help_section(), do: :parameters
 

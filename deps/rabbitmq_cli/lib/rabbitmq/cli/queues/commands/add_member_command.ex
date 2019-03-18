@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "add_member [-p <vhost>] <queuename> <node>"
+  def usage, do: "add_member [--vhost <vhost>] <queuename> <node>"
 
   def help_section, do: :replication
 

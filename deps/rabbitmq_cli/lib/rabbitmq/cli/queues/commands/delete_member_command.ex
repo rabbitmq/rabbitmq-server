@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "delete_member [-p <vhost>] <queuename> <node>"
+  def usage, do: "delete_member [--vhost <vhost>] <queuename> <node>"
 
   def help_section, do: :replication
 

@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
     )
   end
 
-  def usage, do: "cancel_sync_queue [-p <vhost>] queue"
+  def usage, do: "cancel_sync_queue [--vhost <vhost>] queue"
 
   def help_section(), do: :replication
 
