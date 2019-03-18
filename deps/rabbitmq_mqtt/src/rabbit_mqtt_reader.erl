@@ -194,23 +194,21 @@ do_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
        [ConnStr]);
 
 do_terminate({network_error,
-           {ssl_upgrade_error,
-            {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: handshake failure~n",
-       [ConnStr]);
-
+              {ssl_upgrade_error,
+               {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
+    log_tls_alert(handshake_failure, ConnStr);
 do_terminate({network_error,
-           {ssl_upgrade_error,
-            {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
-       [ConnStr]);
-
+              {ssl_upgrade_error,
+               {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
+    log_tls_alert(unknown_ca, ConnStr);
 do_terminate({network_error,
-           {ssl_upgrade_error,
-            {tls_alert, Alert}}, ConnStr}, _State) ->
-    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: alert ~s~n",
-       [ConnStr, Alert]);
-
+              {ssl_upgrade_error,
+               {tls_alert, {Err, _}}}, ConnStr}, _State) ->
+    log_tls_alert(Err, ConnStr);
+do_terminate({network_error,
+              {ssl_upgrade_error,
+               {tls_alert, Alert}}, ConnStr}, _State) ->
+    log_tls_alert(Alert, ConnStr);
 do_terminate({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
     rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: ~p~n",
         [ConnStr, Reason]);
@@ -247,6 +245,16 @@ ssl_login_name(Sock) ->
   end.
 
 %%----------------------------------------------------------------------------
+
+log_tls_alert(handshake_failure, ConnStr) ->
+    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: handshake failure~n",
+       [ConnStr]);
+log_tls_alert(unknown_ca, ConnStr) ->
+    rabbit_log_connection:error("MQTT detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
+       [ConnStr]);
+log_tls_alert(Alert, ConnStr) ->
+    rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: alert ~s~n",
+       [ConnStr, Alert]).
 
 log_new_connection(#state{conn_name = ConnStr}) ->
     rabbit_log_connection:info("accepting MQTT connection ~p (~s)~n", [self(), ConnStr]).
