@@ -42,7 +42,7 @@ usage() ->
     <<"shovel_status">>.
 
 description() ->
-    <<"Lists dynamic Shovels">>.
+    <<"Displays status of Shovel on a node">>.
 
 help_section() ->
     {plugin, shovel}.
