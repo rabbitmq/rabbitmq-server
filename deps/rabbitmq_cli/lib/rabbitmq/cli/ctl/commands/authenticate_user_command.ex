@@ -34,9 +34,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   end
 
   def usage, do: "authenticate_user <username> <password>"
+
+  def usage_additional() do
+    [
+      ["<username>", "Username to use"],
+      ["<password>", "Password to use"]
+    ]
+  end
+
+
   def help_section(), do: :user_management
 
-  def description(), do: "Checks username and password"
+  def description(), do: "Attempts to authenticate a user. Exits with a non-zero code if authentication fails."
 
   def banner([username, _password], _), do: "Authenticating user \"#{username}\" ..."
 

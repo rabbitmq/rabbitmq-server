@@ -114,8 +114,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
 
   def usage_additional() do
     [
-      "--if_empty: delete the queue if it is empty (has no messages ready for delivery)",
-      "--if_unused: delete the queue only if it has no consumers"
+      ["--if_empty", "delete the queue if it is empty (has no messages ready for delivery)"],
+      ["--if_unused", "delete the queue only if it has no consumers"]
     ]
   end
 

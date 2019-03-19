@@ -78,8 +78,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
 
   def usage_additional() do
     [
-      "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
-      "--formatter <json | csv>: alternative formatter to use, JSON or CSV"
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")],
+      ["--formatter <json | csv>", "alternative formatter to use, JSON or CSV"]
     ]
   end
 

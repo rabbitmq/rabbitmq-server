@@ -85,10 +85,10 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   def usage_additional() do
     [
-      "<plugin1> [ <plugin2>]: names of plugins to enable separated by a space",
-      "--online: contact target node to enable the plugins. Changes are applied immediately.",
-      "--offline: update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted.",
-      "--all: enable all available plugins. Not recommended as some plugins may conflict or otherwise be incompatible!"
+      ["<plugin1> [ <plugin2>]", "names of plugins to enable separated by a space"],
+      ["--online", "contact target node to enable the plugins. Changes are applied immediately."],
+      ["--offline", "update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted."],
+      ["--all", "enable all available plugins. Not recommended as some plugins may conflict or otherwise be incompatible!"]
     ]
   end
 

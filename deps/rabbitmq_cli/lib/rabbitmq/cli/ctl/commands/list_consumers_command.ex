@@ -72,7 +72,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   end
 
   def usage_additional() do
-    "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
   end
 
   def help_section(), do: :observability_and_health_checks

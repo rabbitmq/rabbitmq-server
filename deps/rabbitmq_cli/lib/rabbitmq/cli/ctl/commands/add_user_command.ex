@@ -46,6 +46,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   end
 
   def usage, do: "add_user <username> <password>"
+
+  def usage_additional() do
+    [
+      ["<username>", "Self-explanatory"],
+      ["<password>", "Password this user will authenticate with. Use a blank string to disable password-based authentication."]
+    ]
+  end
+
   def help_section(), do: :user_management
 
   def description(), do: "Creates a new user in the internal database"

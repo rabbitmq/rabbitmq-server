@@ -106,9 +106,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
 
   def usage_additional() do
     [
-      "<plugin1> [ <plugin2>]: names of plugins to check separated by a space",
-      "--online: contact target node to perform the check. Requires the node to be running and reachable.",
-      "--offline: check enabled plugins file directly without contacting target node."
+      ["<plugin1> [ <plugin2>]", "names of plugins to check separated by a space"],
+      ["--online", "contact target node to perform the check. Requires the node to be running and reachable."],
+      ["--offline", "check enabled plugins file directly without contacting target node."]
     ]
   end
 

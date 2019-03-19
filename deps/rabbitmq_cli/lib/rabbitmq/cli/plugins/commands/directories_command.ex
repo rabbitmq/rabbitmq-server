@@ -107,8 +107,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
 
   def usage_additional() do
     [
-      "--offline: do not contact target node. Try to infer directories from the environment.",
-      "--online: infer directories from target node."
+      ["--offline", "do not contact target node. Try to infer directories from the environment."],
+      ["--online", "infer directories from target node."]
     ]
   end
 

@@ -50,6 +50,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "set_permissions [--vhost <vhost>] <username> <conf> <write> <read>"
+
+  def usage_additional() do
+    [
+      ["<username>", "Self-explanatory"],
+      ["<conf>", "Configuration permission pattern"],
+      ["<write>", "Write permission pattern"],
+      ["<read>", "Read permission pattern"]
+    ]
+  end
+
+
   def help_section(), do: :access_control
   def description(), do: "Sets user permissions for a vhost"
 

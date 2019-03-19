@@ -74,8 +74,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def description(), do: "Lists all bindings on a vhost"
 
   def usage_additional() do
-    "<column> must be one of " <>
-      Enum.join(Enum.sort(@info_keys), ", ")
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."

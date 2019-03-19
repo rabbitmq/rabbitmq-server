@@ -56,7 +56,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   def description(), do: "Lists virtual hosts"
 
   def usage_additional() do
-    "<column> must be one of name, tracing, cluster_state"
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
   end
 
   #

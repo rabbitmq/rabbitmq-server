@@ -120,11 +120,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   def usage_additional() do
     [
-      "<pattern>: only list plugins that match a regular expression pattern",
-      "--verbose: output more information",
-      "--minimal: only print plugin names. Most useful in compbination with --silent and --enabled.",
-      "--enabled: only list enabled plugins",
-      "--implicitly-enabled: include plugins enabled as dependencies of other plugins"
+      ["<pattern>", "only list plugins that match a regular expression pattern"],
+      ["--verbose", "output more information"],
+      ["--minimal", "only print plugin names. Most useful in compbination with --silent and --enabled."],
+      ["--enabled", "only list enabled plugins"],
+      ["--implicitly-enabled", "include plugins enabled as dependencies of other plugins"]
     ]
   end
 

@@ -92,9 +92,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def usage_additional() do
     [
-      "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", "),
-      "--local: only return queues hosted on the target node",
-      "--queue-timeout <milliseconds>: per-queue timeout to use when checking for responsiveness"
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")],
+      ["--local", "only return queues hosted on the target node"],
+      ["--queue-timeout <milliseconds>", "per-queue timeout to use when checking for responsiveness"]
     ]
   end
 

@@ -104,8 +104,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def usage_additional() do
     [
-      "<pidfile>: PID file path",
-      "--pid <pid>: operating system PID to monitor"
+      ["<pidfile>", "PID file path"],
+      ["--pid <pid>", "operating system PID to monitor"]
     ]
   end
 

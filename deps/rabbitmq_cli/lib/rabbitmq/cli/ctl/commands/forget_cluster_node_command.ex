@@ -71,7 +71,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   end
 
   def usage_additional() do
-    "--offline: try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."
+    [
+      ["--offline", "try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."]
+    ]
   end
 
   def help_section(), do: :cluster_management

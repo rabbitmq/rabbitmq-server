@@ -36,8 +36,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "clear_permissions [-p vhost] <username>"
+
+  def usage_additional() do
+    [
+      ["<username>", "Name of the user whose permissions should be revoked"]
+    ]
+  end
+
+
   def help_section(), do: :access_control
-  def description(), do: "Removes all user permissions for a vhost"
+  def description(), do: "Revokes user permissions for a vhost"
 
   def banner([username], %{vhost: vhost}) do
     "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."

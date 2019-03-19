@@ -86,11 +86,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def usage_additional() do
     [
-      "<value>: config value to encode",
-      "<passphrase>: passphrase to use with the config value encryption key",
-      "--cipher <cipher>: cipher suite to use",
-      "--hash <hash>: hashing function to use",
-      "--iterations <iterations>: number of iteration to apply"
+      ["<value>", "config value to encode"],
+      ["<passphrase>", "passphrase to use with the config value encryption key"],
+      ["--cipher <cipher>", "cipher suite to use"],
+      ["--hash <hash>", "hashing function to use"],
+      ["--iterations <iterations>", "number of iteration to apply"]
     ]
   end
 

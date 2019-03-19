@@ -40,6 +40,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
 
   def usage, do: "set_user_tags <username> <tag> [...]"
 
+  def usage_additional() do
+    [
+      ["<username>", "Self-explanatory"],
+      ["<tags>", "Space separated list of tags"]
+    ]
+  end
+
+
   def help_section(), do: :user_management
 
   def description(), do: "Sets user tags"

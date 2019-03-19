@@ -67,7 +67,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
   def usage, do: "exec <expr> [--offline]"
 
   def usage_additional() do
-    "--offline: do not initialize Erlang distribution"
+    [
+      ["--offline", "do not initialize Erlang distribution"]
+    ]
   end
 
 

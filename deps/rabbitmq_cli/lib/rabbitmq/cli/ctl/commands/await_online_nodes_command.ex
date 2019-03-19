@@ -60,7 +60,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   end
 
   def usage_additional() do
-    "<count>: how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."
+    [
+      ["<count>", "how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."]
+    ]
   end
 
   def help_section(), do: :cluster_management
