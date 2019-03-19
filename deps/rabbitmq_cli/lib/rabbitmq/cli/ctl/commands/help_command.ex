@@ -92,7 +92,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   defp tool_usage(tool_name) do
     [
       "\nUsage\n\n" <>
-        "#{tool_name} [-n <node>] [-t <timeout>] [-l|--longnames] [-q|--quiet] <command> [<command options>]"
+        "#{tool_name} [--node <node>] [--timeout <timeout>] [--longnames] [--quiet] <command> [<command options>]"
     ]
   end
 
@@ -107,7 +107,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
     Enum.join([
       "\n## Usage\n\n",
-      "#{tool_name} [-n <node>] [-l] [-q] " <>
+      "#{tool_name} [--node <node>] [--longnames] [--quiet] " <>
         flatten_string(command.usage(), maybe_timeout)
     ])
   end
@@ -140,25 +140,7 @@ short            | long          | description
 -p               | --vhost       | for commands that are scoped to a virtual host,
                  |               | virtual host to use
                  | --formatter   | alternative result formatter to use
-                                 | if supported: json, pretty_table, table, csv",
-
-    "## Target Node Name
-
-Default node is \"rabbit@hostname\", where `hostname` is the target node's hostname.
-On a host named \"eng.example.com\", the node name of the RabbitMQ node will
-usually be rabbit@eng. Node name can be overridden using the RABBITMQ_NODENAME environment
-variable at node startup time. The output of hostname -s is usually
-the correct suffix to use after the \"@\" sign. See rabbitmq-server(8)
-and RabbitMQ configuration and networking guides to learn more.
-
-If target RabbitMQ node is configured to use long node names, the \"--longnames\"
-option must be specified.",
-
-    "## Disabling Options
-
-Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
-Long options for boolean values may be negated with the \"--no-\" prefix,
-i.e. \"--no-quiet\" or \"--no-table-headers\""]
+                                 | if supported: json, pretty_table, table, csv"]
   end
 
   defp command_description(command) do
