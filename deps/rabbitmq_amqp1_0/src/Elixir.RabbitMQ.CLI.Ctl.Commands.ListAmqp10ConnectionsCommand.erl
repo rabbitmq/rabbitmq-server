@@ -20,7 +20,8 @@
 
 -export([formatter/0, scopes/0, switches/0, aliases/0,
          usage/0, usage_additional/0, banner/2,
-         validate/2, merge_defaults/2, run/2, output/2]).
+         validate/2, merge_defaults/2, run/2, output/2,
+         help_section/0, description/0]).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
 
@@ -48,6 +49,12 @@ usage_additional() ->
       <<"<amqp10_connectioninfoitem> must be a member of the list [",
         ('Elixir.Enum':join(?INFO_ITEMS, <<", ">>))/binary,
         "].">>.
+
+description() ->
+    <<"Lists AMQP 1.0 connections">>.
+
+help_section() ->
+    {plugin, 'amqp1.0'}.
 
 run(Args, #{node := NodeName,
                     timeout := Timeout,
