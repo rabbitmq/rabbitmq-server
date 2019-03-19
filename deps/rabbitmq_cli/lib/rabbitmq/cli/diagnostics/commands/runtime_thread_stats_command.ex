@@ -58,7 +58,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
   def usage, do: "runtime_thread_stats [--sample-interval <interval>]"
 
   def usage_additional() do
-    "--sample-interval <seconds>: sampling interval to use in seconds"
+    [
+      ["--sample-interval <seconds>", "sampling interval to use in seconds"]
+    ]
   end
 
   def banner([], %{node: node_name, sample_interval: interval}) do

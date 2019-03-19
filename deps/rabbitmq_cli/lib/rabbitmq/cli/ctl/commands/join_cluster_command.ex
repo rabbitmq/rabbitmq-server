@@ -85,8 +85,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   def usage_additional() do
     [
-      "--disc: new node should be a disk one (stores its schema on disk). Highly recommended, used by default.",
-      "--ram: new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first.",
+      ["--disc", "new node should be a disk one (stores its schema on disk). Highly recommended, used by default."],
+      ["--ram", "new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first."]
     ]
   end
 

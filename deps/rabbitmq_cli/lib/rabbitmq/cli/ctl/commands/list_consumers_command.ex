@@ -76,7 +76,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def description(), do: "Lists all consumers for a vhost"
 
   def usage_additional() do
-    "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers in vhost #{vhost} ..."

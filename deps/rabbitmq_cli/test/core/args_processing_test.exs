@@ -34,6 +34,13 @@ defmodule ArgsProcessingTest do
     |> Map.values
   end
 
+  defp line_filter([option, description]) do
+    Regex.match?(~r/must be one of/, description)
+  end
+  defp line_filter(line) do
+    Regex.match?(~r/must be one of/, line)
+  end
+
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     :ok
@@ -67,7 +74,8 @@ defmodule ArgsProcessingTest do
       items_usage = case command.usage_additional() do
         # find the line with info items, ignore the rest
         list when is_list(list) ->
-          Enum.filter(list, fn line -> Regex.match?(~r/must be one of/, line) end) |> List.first
+          # list items can be strings or pairs
+          Enum.filter(list, &line_filter/1) |> List.first |> Enum.join(" ")
         string ->
           string
       end

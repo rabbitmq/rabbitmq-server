@@ -48,7 +48,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   def usage, do: "erlang_version"
 
   def usage_additional() do
-    "--details: when set, display additional Erlang/OTP system information"
+    [
+      ["--details", "when set, display additional Erlang/OTP system information"]
+    ]
   end
 
 

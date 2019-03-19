@@ -83,9 +83,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
 
   def usage_additional do
     [
-      "--global: consider connections across all virtual hosts",
-      "--limit <number>: close up to this many connections",
-      "--per-connection-delay <milliseconds>: inject a delay between closures"
+      ["--global", "consider connections across all virtual hosts"],
+      ["--limit <number>", "close up to this many connections"],
+      ["--per-connection-delay <milliseconds>", "inject a delay between closures"]
     ]
   end
 

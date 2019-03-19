@@ -66,8 +66,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
 
   def usage_additional() do
     [
-      "--wait: if set, will wait for target node to terminate (by inferring and monitoring its PID file). Only works for local nodes.",
-      "--no-wait: if set, will not wait for target node to terminate"
+      ["--wait", "if set, will wait for target node to terminate (by inferring and monitoring its PID file). Only works for local nodes."],
+      ["--no-wait", "if set, will not wait for target node to terminate"]
     ]
   end
 

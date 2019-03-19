@@ -62,11 +62,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
 
   def usage_additional() do
     [
-      "<name>: policy name (identifier)",
-      "<pattern>: a regular expression pattern that will be used to match queue, exchanges, etc",
-      "<definition>: policy definition (arguments). Must be a valid JSON document",
-      "--priority <priority>: policy priority",
-      "--apply-to <queues | exchanges | all>: policy should only apply to queues, exchanges, or all entities (both of the above)"
+      ["<name>", "policy name (identifier)"],
+      ["<pattern>", "a regular expression pattern that will be used to match queue, exchanges, etc"],
+      ["<definition>", "policy definition (arguments). Must be a valid JSON document"],
+      ["--priority <priority>", "policy priority"],
+      ["--apply-to <queues | exchanges | all>", "policy should only apply to queues, exchanges, or all entities (both of the above)"]
     ]
   end
 

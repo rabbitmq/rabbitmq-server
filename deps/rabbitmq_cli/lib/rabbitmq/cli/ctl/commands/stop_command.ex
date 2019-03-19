@@ -63,8 +63,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def usage_additional() do
     [
-      "<pidfile>: node PID file path to monitor. To avoid using a PID file, use 'rabbitmqctl shutdown'",
-      "--idempotent: return success if target node is not running (cannot be contacted)"
+      ["<pidfile>", "node PID file path to monitor. To avoid using a PID file, use 'rabbitmqctl shutdown'"],
+      ["--idempotent", "return success if target node is not running (cannot be contacted)"]
     ]
   end
 

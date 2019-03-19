@@ -52,10 +52,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
 
   def description(), do: "Lists feature flags"
 
-  def usage, do: "list_feature_flags [<feature-flag-info-item> ...]"
+  def usage, do: "list_feature_flags [<column> ...]"
 
   def usage_additional() do
-    "<feature-flag-info-item> must be one of name, state, stability, provided_by, desc"
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
   end
 
   #

@@ -63,7 +63,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def usage(), do: "help (<command> | [--list-commands])"
 
   def usage_additional() do
-    "--list-commands: only output a list of discovered commands"
+    [
+      ["--list-commands", "only output a list of discovered commands"]
+    ]
   end
 
 
@@ -89,9 +91,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
               "\n\n") <> "\n"
   end
 
+  defp bright(string) do
+    "#{IO.ANSI.bright()}#{string}#{IO.ANSI.reset()}"
+  end
+
   defp tool_usage(tool_name) do
     [
-      "\nUsage\n\n" <>
+      "\n#{bright("Usage")}\n\n" <>
         "#{tool_name} [--node <node>] [--timeout <timeout>] [--longnames] [--quiet] <command> [<command options>]"
     ]
   end
@@ -106,7 +112,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       end
 
     Enum.join([
-      "\n## Usage\n\n",
+      "\n#{bright("Usage")}\n\n",
       "#{tool_name} [--node <node>] [--longnames] [--quiet] " <>
         flatten_string(command.usage(), maybe_timeout)
     ])
@@ -124,7 +130,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   defp general_options_usage() do
     [
-    "## General Options
+    "#{bright("General Options")}
 
 The following options are accepted by most or all commands.
 
@@ -147,16 +153,26 @@ short            | long          | description
     [CommandBehaviour.description(command) <> ".\n"]
   end
 
+  defp list_item_formatter([option, description]) do
+    "#{option}\n\t#{description}\n"
+  end
+  defp list_item_formatter({option, description}) do
+    "#{option}\n\t#{description}\n"
+  end
+  defp list_item_formatter(line) do
+    "#{line}\n"
+  end
+
   defp additional_usage(command) do
     command_usage =
       case CommandBehaviour.usage_additional(command) do
-        list when is_list(list) -> list |> Enum.map(fn(ln) -> "#{ln}\n" end)
+        list when is_list(list) -> list |> Enum.map(&list_item_formatter/1)
         bin when is_binary(bin) -> ["#{bin}\n"]
       end
     case command_usage do
       []    -> []
       usage ->
-        [flatten_string(["## Arguments and options\n" | usage], "")]
+        [flatten_string(["#{bright("Arguments and Options")}\n" | usage], "")]
     end
   end
 
@@ -190,7 +206,6 @@ short            | long          | description
     |> Enum.group_by(fn({_, {_, help_section}}) -> help_section end)
     |> Enum.sort_by(
       fn({help_section, _}) ->
-        ## TODO: sort help sections
         case help_section do
           :other -> 100
           {:plugin, _} -> 99
@@ -210,7 +225,7 @@ short            | long          | description
     |> Enum.map(
       fn({help_section, section_helps}) ->
         [
-          "\n## " <> section_head(help_section) <> ":\n" |
+          "\n" <> bright(section_head(help_section)) <> ":\n" |
           Enum.sort(section_helps)
           |> Enum.map(
             fn({name, {description, _}}) ->

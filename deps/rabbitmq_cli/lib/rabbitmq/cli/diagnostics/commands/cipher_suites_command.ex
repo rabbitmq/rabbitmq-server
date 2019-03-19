@@ -67,8 +67,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def usage_additional() do
     [
-      "--openssl-format: use OpenSSL cipher suite format",
-      "--erlang-format: use Erlang cipher suite format"
+      ["--openssl-format", "use OpenSSL cipher suite format"],
+      ["--erlang-format", "use Erlang cipher suite format"]
     ]
   end
 

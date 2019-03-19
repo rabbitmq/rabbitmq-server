@@ -59,7 +59,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def usage, do: "shrink <node> [--errors-only]"
 
   def usage_additional() do
-    "--errors-only: only list queues which reported an error"
+    [
+      ["--errors-only", "only list queues which reported an error"]
+    ]
   end
 
   def help_section, do: :cluster_management
