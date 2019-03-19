@@ -30,6 +30,7 @@
          output/2,
          scopes/0,
          formatter/0,
+         help_section/0,
          description/0
         ]).
 
@@ -42,6 +43,9 @@ usage() ->
 
 description() ->
     <<"Lists dynamic Shovels">>.
+
+help_section() ->
+    {plugin, shovel}.
 
 flags() ->
     [].
