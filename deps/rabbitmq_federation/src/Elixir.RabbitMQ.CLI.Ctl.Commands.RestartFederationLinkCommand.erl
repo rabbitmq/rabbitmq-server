@@ -20,13 +20,16 @@
 
 -export([
          usage/0,
+         usage_additional/0,
          flags/0,
          validate/2,
          merge_defaults/2,
          banner/2,
          run/2,
          aliases/0,
-         output/2
+         output/2,
+         help_section/0,
+         description/0
         ]).
 
 
@@ -35,6 +38,15 @@
 %%----------------------------------------------------------------------------
 usage() ->
      <<"restart_federation_link <link_id>">>.
+
+usage_additional() ->
+   <<"<link_id>: ID of the link to restart">>.
+
+help_section() ->
+   {plugin, federation}.
+
+description() ->
+   <<"Restarts a running federation link">>.
 
 flags() ->
     [].
