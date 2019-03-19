@@ -20,13 +20,16 @@
 
 -export([
          usage/0,
+         usage_additional/0,
          validate/2,
          merge_defaults/2,
          banner/2,
          run/2,
          switches/0,
          aliases/0,
-         output/2
+         output/2,
+         help_section/0,
+         description/0
         ]).
 
 
@@ -34,7 +37,16 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"delete_shovel [-p <vhost>] <name>">>.
+    <<"delete_shovel [--vhost <vhost>] <name>">>.
+
+usage_additional() ->
+    <<"<name>: Shovel to delete">>.
+
+description() ->
+    <<"Deletes a Shovel">>.
+
+help_section() ->
+    {plugin, shovel}.
 
 validate([], _Opts) ->
     {validation_failure, not_enough_args};
