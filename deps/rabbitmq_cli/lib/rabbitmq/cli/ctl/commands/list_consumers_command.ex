@@ -63,7 +63,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."
+  def banner(_, %{vhost: vhost}), do: "Listing consumers in vhost #{vhost} ..."
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
@@ -77,5 +77,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists all consumers for a vhost"
+  def description(), do: "Lists all consumers in a vhost"
 end

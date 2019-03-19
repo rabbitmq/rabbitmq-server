@@ -86,6 +86,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Health check that exits with a non-zero code if the target node reports any alarms, local or cluster-wide."
+
   def usage, do: "check_alarms"
 
   def banner([], %{node: node_name}) do

@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback aliases() :: Keyword.t()
 
   @callback formatter() :: atom()
-  @callback scopes() :: [atom()]
+  @callback scopes() :: [atom()] | nil
   @callback description() :: String.t()
   @callback help_section() :: String.t()
   @callback usage_additional() :: String.t() | [String.t()]

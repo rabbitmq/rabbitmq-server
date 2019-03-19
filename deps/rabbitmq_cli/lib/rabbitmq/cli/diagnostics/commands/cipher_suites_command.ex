@@ -28,8 +28,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def validate(_, _), do: :ok
 
-  def usage, do: "cipher_suites [--openssl-format]"
-
   def run([], %{node: node_name, timeout: timeout, openssl_format: openssl_format}) do
     args = case openssl_format do
       true  -> [:openssl]
@@ -38,8 +36,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, args, timeout)
   end
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+
   def banner([], %{openssl_format: true}),  do: "Listing available cipher suites in the OpenSSL format"
   def banner([], %{openssl_format: false}), do: "Listing available cipher suites in the Erlang term format"
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists cipher suites available (but not necessarily allowed) on the target node"
+
+  def usage, do: "cipher_suites [--openssl-format] [--erlang-format]"
+
+  def usage_additional() do
+    [
+     "--openssl-format: use OpenSSL cipher suite format",
+     "--erlang-format: use Erlang cipher suite format"
+    ]
+  end
 end
