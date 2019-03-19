@@ -20,6 +20,7 @@
 
 -export([
          usage/0,
+         usage_additional/0,
          flags/0,
          validate/2,
          merge_defaults/2,
@@ -30,6 +31,7 @@
          output/2,
          scopes/0,
          formatter/0,
+         help_section/0,
          description/0
         ]).
 
@@ -38,7 +40,16 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"federation_status [--only-down]">>.
+    <<"federation_status [--only-down]">>.
+
+usage_additional() ->
+    <<"--only-down: only display links that failed or are not currently connected">>.
+
+help_section() ->
+    {plugin, federation}.
+
+description() ->
+    <<"Displays federation link status">>.
 
 flags() ->
     [].
@@ -72,8 +83,6 @@ switches() ->
 
 aliases() ->
     [].
-
-description() -> <<"Lists federation links on the node">>.
 
 output({stream, FederationStatus}, _) ->
     Formatted = [begin
