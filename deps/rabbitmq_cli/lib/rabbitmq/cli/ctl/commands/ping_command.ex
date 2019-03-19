@@ -66,6 +66,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     "ping"
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Checks that the node OS process is up, registered with EPMD and CLI tools can authenticate with it"
+
   def banner([], %{node: node_name, timeout: timeout}) when is_number(timeout) do
     "Will ping #{node_name}. This only checks if the OS process is running and registered with epmd. Timeout: #{
       timeout

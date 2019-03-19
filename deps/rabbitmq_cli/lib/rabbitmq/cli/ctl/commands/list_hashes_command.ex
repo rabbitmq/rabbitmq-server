@@ -32,5 +32,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
 
   def usage, do: "list_hashes"
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists hash functions supported by encoding commands"
+
   def banner(_, _), do: "Listing supported hash algorithms ..."
 end

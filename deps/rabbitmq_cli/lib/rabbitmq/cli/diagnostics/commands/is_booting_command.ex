@@ -35,6 +35,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsBootingCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Checks if RabbitMQ is still booting on the target node"
+
   def usage, do: "is_booting"
 
   def banner([], %{node: node_name}) do

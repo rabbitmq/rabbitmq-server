@@ -37,6 +37,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
     "update_cluster_nodes <existing_cluster_member_node_to_seed_from>"
   end
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Instructs an already clustered node to contact <clusternode> to cluster when waking up"
+
   def banner([seed_node], %{node: node_name}) do
     "Will seed #{node_name} from #{seed_node} on next start"
   end

@@ -47,7 +47,7 @@ defmodule RabbitMQ.CLI.Formatters.Report do
   end
 
   def format_result(command, output, options) do
-    formatter = Config.default_formatter(command)
+    formatter = Config.get_formatter(command, options)
 
     case Output.format_output(output, formatter, options) do
       :ok -> []

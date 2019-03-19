@@ -35,6 +35,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
 
   def usage, do: "clear_global_parameter <key>"
 
+  def help_section(), do: :parameters
+
+  def description(), do: "Clears a global runtime parameter."
+
   def banner([key], _) do
     "Clearing global runtime parameter \"#{key}\" ..."
   end

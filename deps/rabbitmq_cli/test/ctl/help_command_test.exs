@@ -28,7 +28,9 @@ defmodule HelpCommandTest do
   end
 
   test "run: prints basic usage info" do
-    assert @command.run([], %{}) =~ ~r/Default node is \"rabbit@server\"/
+    output = @command.run([], %{})
+    assert output =~ ~r/[-n <node>] [-t <timeout>]/
+    assert output =~ ~r/commands/i
   end
 
   test "run: ctl command usage info is printed if command is specified" do
@@ -47,7 +49,7 @@ defmodule HelpCommandTest do
   end
 
   test "run prints command info" do
-    assert @command.run([], %{}) =~ ~r/Commands:\n/
+    assert @command.run([], %{}) =~ ~r/commands/i
 
     # Checks to verify that each module's command appears in the list.
     ctl_commands = CommandModules.module_map
@@ -59,24 +61,8 @@ defmodule HelpCommandTest do
     Enum.each(
       ctl_commands,
       fn(command) ->
-        assert @command.run([], %{}) =~ ~r/\n    #{command}.*\n/
+        assert @command.run([], %{}) =~ ~r/\n\s+#{command}.*\n/
       end)
-  end
-
-  test "run: sorts commands alphabetically" do
-    [cmd1, cmd2, cmd3] = CommandModules.module_map
-    |> Map.keys
-    |> Enum.sort
-    |> Enum.take(3)
-
-    output = @command.run([], %{})
-
-    {start1, _} = :binary.match(output, cmd1)
-    {start2, _} = :binary.match(output, cmd2)
-    {start3, _} = :binary.match(output, cmd3)
-
-    assert start1 < start2
-    assert start2 < start3
   end
 
   test "run: exits with code of OK" do
@@ -85,10 +71,10 @@ defmodule HelpCommandTest do
   end
 
   test "run: no arguments print general help" do
-    assert @command.run([], %{}) =~ ~r/Usage:/
+    assert @command.run([], %{}) =~ ~r/usage/i
   end
 
   test "run: unrecognised arguments print general help" do
-    assert @command.run(["extra1", "extra2"], %{}) =~ ~r/Usage:/
+    assert @command.run(["extra1", "extra2"], %{}) =~ ~r/usage/i
   end
 end

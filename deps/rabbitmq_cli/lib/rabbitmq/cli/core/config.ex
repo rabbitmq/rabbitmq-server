@@ -16,6 +16,7 @@
 defmodule RabbitMQ.CLI.Core.Config do
 
   alias RabbitMQ.CLI.{
+    CommandBehaviour,
     FormatterBehaviour,
     PrinterBehaviour
   }
@@ -94,12 +95,12 @@ defmodule RabbitMQ.CLI.Core.Config do
 
     case Code.ensure_loaded(module_name) do
       {:module, _} -> module_name
-      {:error, :nofile} -> default_formatter(command)
+      {:error, :nofile} -> CommandBehaviour.formatter(command)
     end
   end
 
   def get_formatter(command, _) do
-    default_formatter(command)
+    CommandBehaviour.formatter(command)
   end
 
   def get_printer(%{printer: printer}) do
@@ -117,12 +118,5 @@ defmodule RabbitMQ.CLI.Core.Config do
 
   def default_printer() do
     RabbitMQ.CLI.Printers.StdIO
-  end
-
-  def default_formatter(command) do
-    case function_exported?(command, :formatter, 0) do
-      true -> command.formatter
-      false -> RabbitMQ.CLI.Formatters.String
-    end
   end
 end

@@ -19,25 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
   def switches(), do: [if_empty: :boolean, if_unused: :boolean, timeout: :integer]
   def aliases(), do: [e: :if_empty, u: :is_unused, t: :timeout]
 
-  def usage(), do: "delete_queue queue_name [--if_empty|-e] [--if_unused|-u]"
-
-  def banner([qname], %{vhost: vhost, if_empty: if_empty, if_unused: if_unused}) do
-    if_empty_str =
-      case if_empty do
-        true -> ["if queue is empty "]
-        false -> []
-      end
-
-    if_unused_str =
-      case if_unused do
-        true -> ["if queue is unused "]
-        false -> []
-      end
-
-    "Deleting queue '#{qname}' on vhost '#{vhost}' " <>
-      Enum.join(Enum.concat([if_empty_str, if_unused_str]), "and ") <> "..."
-  end
-
   def merge_defaults(args, options) do
     {
       args,
@@ -111,4 +92,35 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
 
   ## Use default output for all non-special case outputs
   use RabbitMQ.CLI.DefaultOutput
+
+  def banner([qname], %{vhost: vhost, if_empty: if_empty, if_unused: if_unused}) do
+    if_empty_str =
+      case if_empty do
+        true -> ["if queue is empty "]
+        false -> []
+      end
+
+    if_unused_str =
+      case if_unused do
+        true -> ["if queue is unused "]
+        false -> []
+      end
+
+    "Deleting queue '#{qname}' on vhost '#{vhost}' " <>
+      Enum.join(Enum.concat([if_empty_str, if_unused_str]), "and ") <> "..."
+  end
+
+  def usage(), do: "delete_queue queue_name [--if_empty|-e] [--if_unused|-u]"
+
+  def usage_additional() do
+    [
+      "--if_empty: delete the queue if it is empty (has no messages ready for delivery)",
+      "--if_unused: delete the queue only if it has no consumers"
+    ]
+  end
+
+
+  def help_section(), do: :queues
+
+  def description(), do: "Deletes a queue"
 end

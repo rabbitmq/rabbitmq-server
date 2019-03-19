@@ -62,7 +62,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
 
+  def banner(_, _), do: nil
+
   def usage, do: "exec <expr> [--offline]"
 
-  def banner(_, _), do: nil
+  def usage_additional() do
+    "--offline: do not initialize Erlang distribution"
+  end
+
+
+  def help_section(), do: :operations
+
+  def description(), do: "Executes Elixir code on the CLI node"
 end

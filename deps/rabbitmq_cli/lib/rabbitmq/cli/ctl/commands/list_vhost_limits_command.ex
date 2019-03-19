@@ -71,6 +71,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
   def usage, do: "list_vhost_limits [--vhost <vhost>] [--global] [--no-table-headers]"
 
+  def usage_additional() do
+    "--global: list global limits (those not associated with a virtual host)"
+  end
+
+
+  def help_section(), do: :virtual_hosts
+
+  def description(), do: "Displays configured virtual host limits"
+
   def banner([], %{global: true}) do
     "Listing limits for all vhosts ..."
   end

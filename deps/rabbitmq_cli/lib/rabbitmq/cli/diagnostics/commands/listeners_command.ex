@@ -70,8 +70,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
     {:ok, "Node #{node_name} reported no enabled listeners."}
   end
 
-  def output(listeners, %{formatter: "json"}) do
-    {:ok, %{"result" => "ok", "listeners" => listener_maps(listeners)}}
+  def output(listeners, %{node: node_name, formatter: "json"}) do
+    {:ok, %{"result" => "ok", "node" => node_name, "listeners" => listener_maps(listeners)}}
   end
 
   def output(listeners, %{formatter: "csv"}) do
@@ -83,6 +83,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
 
     {:ok, Enum.join(lines, Helpers.line_separator())}
   end
+
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists active connection listeners (bound interface, port, protocol) on the target node"
 
   def usage, do: "listeners"
 

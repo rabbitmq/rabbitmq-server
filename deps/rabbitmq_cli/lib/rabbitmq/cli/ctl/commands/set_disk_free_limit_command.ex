@@ -87,6 +87,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
 
   def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
 
+  def help_section(), do: :configuration
+
+  def description(), do: "Sets the disk_free_limit setting"
+
   #
   # Implementation
   #

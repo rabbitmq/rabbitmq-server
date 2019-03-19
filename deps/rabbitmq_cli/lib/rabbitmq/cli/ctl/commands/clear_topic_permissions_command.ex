@@ -54,6 +54,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand do
   end
 
   def usage, do: "clear_topic_permissions [-p vhost] <username> [<exchange>]"
+  def help_section(), do: :access_control
+  def description(), do: "Clears user topic permissions for a vhost or exchange"
 
   def banner([username], %{vhost: vhost}) do
     "Clearing topic permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."

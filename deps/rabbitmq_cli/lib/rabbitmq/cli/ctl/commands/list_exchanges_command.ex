@@ -58,13 +58,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists exchanges"
+
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage(), do: "list_exchanges [--vhost <vhost>] [--no-table-headers] [<column> ...]"
 
-  def usage_additional() do
-    "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
-  end
+  def usage_additional(), do: "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
 
   def banner(_, %{vhost: vhost}), do: "Listing exchanges for vhost #{vhost} ..."
 end

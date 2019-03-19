@@ -70,6 +70,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def banner(_, _), do: "Listing channels ..."
+
   def usage() do
     "list_channels [--no-table-headers] [<column> ...]"
   end
@@ -81,5 +83,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
     ]
   end
 
-  def banner(_, _), do: "Listing channels ..."
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists all channels in the node"
 end

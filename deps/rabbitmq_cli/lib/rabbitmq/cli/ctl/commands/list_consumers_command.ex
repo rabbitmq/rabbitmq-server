@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   alias RabbitMQ.CLI.Core.Helpers
@@ -63,6 +63,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def banner(_, %{vhost: vhost}), do: "Listing consumers in vhost #{vhost} ..."
+
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
@@ -73,5 +75,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
-  def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists all consumers in a vhost"
 end

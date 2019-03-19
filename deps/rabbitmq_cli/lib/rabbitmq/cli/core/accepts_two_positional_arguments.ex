@@ -13,26 +13,22 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+# Should be used by commands that require rabbit app to be stopped
+# but need no other execution environment validators.
+defmodule RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments do
+  defmacro __using__(_) do
+    quote do
+      def validate(args, _) when length(args) < 2 do
+        {:validation_failure, :not_enough_args}
+      end
 
-  @behaviour RabbitMQ.CLI.CommandBehaviour
+      def validate(args, _) when length(args) > 2 do
+        {:validation_failure, :too_many_args}
+      end
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
-  def run([vhost], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
+      # Note: this will accept everything, so it must be the
+      # last validation clause defined!
+      def validate([_, _], _), do: :ok
+    end
   end
-
-  use RabbitMQ.CLI.DefaultOutput
-
-  def usage, do: "add_vhost <vhost>"
-
-  def help_section(), do: :virtual_hosts
-
-  def description(), do: "Creates a virtual host"
-
-  def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
 end

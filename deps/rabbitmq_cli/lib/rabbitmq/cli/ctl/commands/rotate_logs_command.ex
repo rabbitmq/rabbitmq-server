@@ -27,5 +27,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
 
   def usage, do: "rotate_logs"
 
+  def help_section(), do: :node_management
+
+  def description(), do: "Instructs the RabbitMQ node to perform internal log rotation"
+
   def banner(_, %{node: node_name}), do: "Rotating logs for node #{node_name} ..."
 end

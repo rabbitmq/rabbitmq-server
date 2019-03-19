@@ -87,6 +87,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckProtocolListenerCommand do
        "Found listeners for the following protocols: #{protocols}"}
   end
 
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Health check that exits with a non-zero code if target node does not have an active listener for given protocol"
+
   def usage, do: "check_protocol_listener <protocol>"
 
   def banner([proto], %{node: node_name}) do
