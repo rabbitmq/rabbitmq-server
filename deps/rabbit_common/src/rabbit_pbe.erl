@@ -20,31 +20,45 @@
 -export([encrypt_term/5, decrypt_term/5]).
 -export([encrypt/5, decrypt/5]).
 
+%% A lot of ugly code in this module can be removed once we support OTP-22+.
+-ifdef(OTP_RELEASE).
+-if(?OTP_RELEASE >= 22).
+-define(HAS_CRYPTO_INFO_FUNCTIONS, 1).
+-endif.
+-endif.
+
 %% Supported ciphers and hashes
 
+-ifdef(HAS_CRYPTO_INFO_FUNCTIONS).
+
+%% We only support block ciphers that use an initialization vector.
+
 supported_ciphers() ->
-    NotSupportedByUs = [%% These ciphers should be supported in a future version.
-                        aes_128_ccm, aes_192_ccm, aes_256_ccm,
-                        aes_128_ctr, aes_192_ctr, aes_256_ctr,
-                        aes_128_gcm, aes_192_gcm, aes_256_gcm,
+    SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
+    lists:filter(fun(Cipher) ->
+        Mode = maps:get(mode, crypto:cipher_info(Cipher)),
+        not lists:member(Mode, [ccm_mode, ecb_mode, gcm_mode, stream_cipher])
+    end,
+    SupportedByCrypto).
+
+-else.
+
+supported_ciphers() ->
+    NotSupportedByUs = [aes_ccm, aes_128_ccm, aes_192_ccm, aes_256_ccm,
+                        aes_gcm, aes_128_gcm, aes_192_gcm, aes_256_gcm,
+                        aes_ecb, aes_128_ecb, aes_192_ecb, aes_256_ecb,
                         chacha20, chacha20_poly1305,
-                        %% These are aliases that correspond to multiple ciphers.
-                        aes_ccm, aes_ctr, aes_gcm,
-                        %% These ciphers will never be supported.
-                        aes_ecb, blowfish_ecb, des_ecb, rc4],
+                        blowfish_ecb, des_ecb, rc4],
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
     lists:filter(fun(Cipher) ->
         not lists:member(Cipher, NotSupportedByUs)
     end,
     SupportedByCrypto).
 
+-endif.
+
 supported_hashes() ->
-    NotSupportedByUs = [md4, ripemd160],
-    SupportedByCrypto = proplists:get_value(hashs, crypto:supports()),
-    lists:filter(fun(Hash) ->
-        not lists:member(Hash, NotSupportedByUs)
-    end,
-    SupportedByCrypto).
+    proplists:get_value(hashs, crypto:supports()).
 
 %% Default encryption parameters (keep those in sync with rabbit.app.src)
 default_cipher() ->
@@ -116,16 +130,25 @@ unpad(Data) ->
     N = binary:last(Data),
     binary:part(Data, 0, byte_size(Data) - N).
 
-%% These functions are necessary because the current Erlang crypto interface
-%% is lacking interfaces to the following OpenSSL functions:
-%%
-%% * int EVP_MD_size(const EVP_MD *md);
-%% * int EVP_CIPHER_iv_length(const EVP_CIPHER *e);
-%% * int EVP_CIPHER_key_length(const EVP_CIPHER *e);
-%% * int EVP_CIPHER_block_size(const EVP_CIPHER *e);
+-ifdef(HAS_CRYPTO_INFO_FUNCTIONS).
+
+hash_length(Type) ->
+    maps:get(size, crypto:hash_info(Type)).
+
+iv_length(Type) ->
+    maps:get(iv_length, crypto:cipher_info(Type)).
+
+key_length(Type) ->
+    maps:get(key_length, crypto:cipher_info(Type)).
+
+block_size(Type) ->
+    maps:get(block_size, crypto:cipher_info(Type)).
+
+-else.
 
 hash_length(md4) -> 16;
 hash_length(md5) -> 16;
+hash_length(ripemd160) -> 20;
 hash_length(sha) -> 20;
 hash_length(sha224) -> 28;
 hash_length(sha3_224) -> 28;
@@ -159,6 +182,16 @@ iv_length(aes_cbc256) -> 16;
 iv_length(aes_128_cbc) -> 16;
 iv_length(aes_192_cbc) -> 16;
 iv_length(aes_256_cbc) -> 16;
+iv_length(aes_128_cfb8) -> 16;
+iv_length(aes_192_cfb8) -> 16;
+iv_length(aes_256_cfb8) -> 16;
+iv_length(aes_128_cfb128) -> 16;
+iv_length(aes_192_cfb128) -> 16;
+iv_length(aes_256_cfb128) -> 16;
+iv_length(aes_ctr) -> 16;
+iv_length(aes_128_ctr) -> 16;
+iv_length(aes_192_ctr) -> 16;
+iv_length(aes_256_ctr) -> 16;
 iv_length(aes_ige256) -> 32.
 
 key_length(des_cbc) -> 8;
@@ -182,16 +215,28 @@ key_length(aes_cbc256) -> 32;
 key_length(aes_128_cbc) -> 16;
 key_length(aes_192_cbc) -> 24;
 key_length(aes_256_cbc) -> 32;
+key_length(aes_128_cfb8) -> 16;
+key_length(aes_192_cfb8) -> 24;
+key_length(aes_256_cfb8) -> 32;
+key_length(aes_128_cfb128) -> 16;
+key_length(aes_192_cfb128) -> 24;
+key_length(aes_256_cfb128) -> 32;
+key_length(aes_ctr) -> 32;
+key_length(aes_128_ctr) -> 16;
+key_length(aes_192_ctr) -> 24;
+key_length(aes_256_ctr) -> 32;
 key_length(aes_ige256) -> 16.
 
-block_size(aes_cbc) -> 32;
-block_size(aes_cbc256) -> 32;
-block_size(aes_cbc128) -> 32;
-block_size(aes_128_cbc) -> 32;
-block_size(aes_192_cbc) -> 32;
-block_size(aes_256_cbc) -> 32;
-block_size(aes_ige256) -> 32;
+block_size(aes_cbc) -> 16;
+block_size(aes_cbc256) -> 16;
+block_size(aes_cbc128) -> 16;
+block_size(aes_128_cbc) -> 16;
+block_size(aes_192_cbc) -> 16;
+block_size(aes_256_cbc) -> 16;
+block_size(aes_ige256) -> 16;
 block_size(_) -> 8.
+
+-endif.
 
 %% The following was taken from OTP's lib/public_key/src/pubkey_pbe.erl
 %%
