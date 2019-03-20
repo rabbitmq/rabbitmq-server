@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -189,7 +189,7 @@ connection_succeeded_diagnostics() ->
               "  * suggestion: check if the Erlang cookie identical for all server nodes and CLI tools~n"
               "  * suggestion: check if all server nodes and CLI tools use consistent hostnames when addressing each other~n"
               "  * suggestion: check if inter-node connections may be configured to use TLS. If so, all nodes and CLI tools must do that~n"
-             "   * suggestion: see the CLI, clustering and networking guides on http://rabbitmq.com/documentation.html to learn more~n", []}];
+             "   * suggestion: see the CLI, clustering and networking guides on https://rabbitmq.com/documentation.html to learn more~n", []}];
         Report ->
             [{"  * TCP connection succeeded but Erlang distribution "
               "failed ~n", []}]

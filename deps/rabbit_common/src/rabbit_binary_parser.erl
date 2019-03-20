@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -70,7 +70,7 @@ parse_table(<<>>) ->
 
 %% yes, both 'l' and 'L' fields are decoded to 64-bit signed values;
 %% see https://github.com/rabbitmq/rabbitmq-server/issues/1093#issuecomment-276351183,
-%% http://www.rabbitmq.com/amqp-0-9-1-errata.html, and section
+%% https://www.rabbitmq.com/amqp-0-9-1-errata.html, and section
 %% 4.2.1 of the spec for details.
 ?SIMPLE_PARSE_TABLE($l, Value:64/signed, long);
 ?SIMPLE_PARSE_TABLE($L, Value:64/signed, long);
