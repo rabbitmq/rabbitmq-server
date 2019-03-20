@@ -6,11 +6,11 @@ ability for multiple applications to co-exist on Cowboy
 listeners. Applications can register static docroots or dynamic
 handlers to be executed, dispatched by URL path prefix.
 
-See http://www.rabbitmq.com/web-dispatch.html for information on
-configuring web plugins.
+Related doc guides:
 
-The most general registration procedure is
-`rabbit_web_dispatch:register_context_handler/5`.
+ * [Management plugin guide](https://www.rabbitmq.com/management.html)
+ * [Web STOMP guide](https://www.rabbitmq.com/web-stomp.html)
+ * [Web MQTT guide](https://www.rabbitmq.com/web-mqtt.html)
 
 This takes a dispatch list of the kind usually given to Cowboy, in compiled
 form.
