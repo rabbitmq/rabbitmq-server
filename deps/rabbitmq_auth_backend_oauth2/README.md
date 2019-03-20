@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-auth-backend-oauth2.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-auth-backend-oauth2)
 
-This **experimental** [RabbitMQ authentication/authorisation backend](http://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
+This **experimental** [RabbitMQ authentication/authorisation backend](https://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
 and users authenticate and authorize using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
 It is not specific to but developed against [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa).
@@ -33,7 +33,7 @@ of this plugin.
 To use this plugin
 
 1. A symmetrically encrypted JWT token containing a set of RabbitMQ permission scopes.
-2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](http://www.rabbitmq.com/access-control.html)
+2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](https://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
 
 ### Authorization Flow
@@ -74,7 +74,7 @@ VwIDAQAB
       HCkEBMPxKwXuEhdnK98EMAnxdalbuHgFTVX8X8v7hLxt0O8dNOT903CvkHGICcWr95YnLUouXcli4BkAL5JJ1oraUSvClS8qRI-Vino-ghfJ6t9LrZ9eRUINCZB6Ks8Igqqnnp_BiD7XiO1c
 ```
 
-it will translate into the following configuration (in the [advanced RabbitMQ config format](http://www.rabbitmq.com/configure.html)):
+it will translate into the following configuration (in the [advanced RabbitMQ config format](https://www.rabbitmq.com/configure.html)):
 
 ```erlang
 [
