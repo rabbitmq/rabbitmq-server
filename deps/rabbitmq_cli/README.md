@@ -14,7 +14,7 @@ Team RabbitMQ wanted a set of tools that
  * Supported pluggable output formats (in particular machine-friendly ones)
  * Had good test coverage
  * Wasn't as coupled to the server repository
- * Could be used as a low risk vehicle for [Elixir](http://elixir-lang.org) evaluation
+ * Could be used as a low risk vehicle for [Elixir](https://elixir-lang.org) evaluation
 
 ## Supported RabbitMQ Versions
 
@@ -32,7 +32,7 @@ Please use the version of CLI tools that come with the RabbitMQ distribution ver
 Building this project requires
 
  * Erlang/OTP 20.3 (or later)
- * [Elixir](http://elixir-lang.org/) 1.7.0 (or later).
+ * [Elixir](https://elixir-lang.org/) 1.7.0 (or later).
 
 Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common).
 Dependencies are being resolved by `erlang.mk`
