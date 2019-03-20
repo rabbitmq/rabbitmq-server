@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -128,8 +128,8 @@
 %%     client properties to be sent to the server, defaults to []</li>
 %% <li>socket_options :: [any()] - Extra socket options.  These are
 %%     appended to the default options.  See
-%%     <a href="http://www.erlang.org/doc/man/inet.html#setopts-2">inet:setopts/2</a>
-%%     and <a href="http://www.erlang.org/doc/man/gen_tcp.html#connect-4">
+%%     <a href="https://www.erlang.org/doc/man/inet.html#setopts-2">inet:setopts/2</a>
+%%     and <a href="https://www.erlang.org/doc/man/gen_tcp.html#connect-4">
 %%     gen_tcp:connect/4</a> for descriptions of the available options.</li>
 %% </ul>
 

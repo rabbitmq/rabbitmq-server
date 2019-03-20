@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -222,7 +222,7 @@ amqp_uri_parsing(_Config) ->
     ?assertEqual(lists:usort(Exp10), lists:usort(TLSOpts10)),
 
     %% Various failure cases
-    ?assertMatch({error, _}, amqp_uri:parse("http://www.rabbitmq.com")),
+    ?assertMatch({error, _}, amqp_uri:parse("https://www.rabbitmq.com")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo:bar:baz")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo[::1]")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo:[::1]")),
