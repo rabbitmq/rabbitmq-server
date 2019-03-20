@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -39,7 +39,7 @@
 % by `httpc`
 -define(INSTANCE_ID_TIMEOUT, 2250).
 -define(INSTANCE_ID_URL,
-        "http://169.254.169.254/latest/meta-data/instance-id").
+        "https://169.254.169.254/latest/meta-data/instance-id").
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
