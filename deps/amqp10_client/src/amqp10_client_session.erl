@@ -616,6 +616,7 @@ send_flow(Send, OutHandle,
                              next_outgoing_id = uint(NOI),
                              outgoing_window = uint(OutWin),
                              incoming_window = uint(InWin),
+                             %% delivery_count = uint(DeliveryCount),
                              delivery_count = uint(DeliveryCount),
                              available = uint(Available)},
     ok = Send(Flow, State),
@@ -670,7 +671,9 @@ translate_filters(Filters) when is_map(Filters) -> {
         (<<"apache.org:no-local-filter:list">> = K, V, Acc) when is_list(V) ->
             [{{symbol, K}, lists:map(fun(Id) -> {utf8, Id} end, V)} | Acc];
         (<<"apache.org:selector-filter:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {utf8, V}} | Acc]
+                [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
+           (<<"apache.org:selector-filter:string:*">> = K, V, Acc) when is_binary(V) ->
+                [{{symbol, K}, {utf8, V}} | Acc]
         end,
         [],
         Filters)
