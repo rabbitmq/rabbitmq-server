@@ -26,7 +26,7 @@ our consumer get messages from one of those queues. Therefore if there is
 a partition with 3 queues, it is assumed that there are at least 3
 consumers to get all the messages from those queues.
 
-Queues in RabbitMQ are [units of concurrency](http://www.rabbitmq.com/queues.html#runtime-characteristics)
+Queues in RabbitMQ are [units of concurrency](https://www.rabbitmq.com/queues.html#runtime-characteristics)
 (and, if there are enough cores available, parallelism). This plugin makes
 it possible to have a single logical queue that is partitioned into
 multiple regular queues ("shards"). This trades off total ordering
@@ -115,7 +115,7 @@ queues in an uneven way.
 
 ## Load Distribution and Consumer Balancing
 
-This plugin can be affected by [queue master locator policy used](http://www.rabbitmq.com/ha.html) in
+This plugin can be affected by [queue master locator policy used](https://www.rabbitmq.com/ha.html) in
 the cluster as well as client connection load balancing strategy.
 
 "Minimum masters" is a queue master locator that is most in line with the goals of
@@ -140,7 +140,7 @@ the same routing key, they would all end up on the same shard.
 
 As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
 
-Like any other [RabbitMQ plugin](http://www.rabbitmq.com/plugins.html) it has to be enabled before it can be used:
+Like any other [RabbitMQ plugin](https://www.rabbitmq.com/plugins.html) it has to be enabled before it can be used:
 
 ```bash
 rabbitmq-plugins enable rabbitmq_sharding
@@ -152,7 +152,7 @@ plugin, too.
 ### With Earlier Versions
 
 Install the corresponding .ez files from our
-[Community Plugins archive](http://www.rabbitmq.com/community-plugins/).
+[Community Plugins archive](https://www.rabbitmq.com/community-plugins/).
 
 Then run the following command:
 
@@ -197,7 +197,7 @@ The `routing-key` policy definition is optional.
 ## Building from Source
 
 Get the RabbitMQ Public Umbrella ready as explained in the
-[RabbitMQ Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html).
+[RabbitMQ Plugin Development Guide](https://www.rabbitmq.com/plugin-development.html).
 
 Move to the umbrella folder an then run the following commands, to
 fetch dependencies:
