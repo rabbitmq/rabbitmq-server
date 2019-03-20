@@ -39,7 +39,7 @@
 % by `httpc`
 -define(INSTANCE_ID_TIMEOUT, 2250).
 -define(INSTANCE_ID_URL,
-        "https://169.254.169.254/latest/meta-data/instance-id").
+        "http://169.254.169.254/latest/meta-data/instance-id").
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
