@@ -1,11 +1,11 @@
 %% ----------------------------------------------------------------------------
 %% RabbitMQ Management Plugin
 %%
-%% See http://www.rabbitmq.com/management.html for details
+%% See https://www.rabbitmq.com/management.html for details
 %% ----------------------------------------------------------------------------
 
 %% Load definitions from a JSON file or directory of files. See
-%% http://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/management.html#load-definitions
 %%
 %% {load_definitions, "/path/to/schema.json"},
 %% {load_definitions, "/path/to/schemas"},
@@ -358,14 +358,14 @@ end}.
 
 
 %% One of 'basic', 'detailed' or 'none'. See
-%% http://www.rabbitmq.com/management.html#fine-stats for more details.
+%% https://www.rabbitmq.com/management.html#fine-stats for more details.
 %% {rates_mode, basic},
 {mapping, "management.rates_mode", "rabbitmq_management.rates_mode",
     [{datatype, {enum, [basic, detailed, none]}}]}.
 
 %% Configure how long aggregated data (such as message rates and queue
 %% lengths) is retained. Please read the plugin's documentation in
-%% http://www.rabbitmq.com/management.html#configuration for more
+%% https://www.rabbitmq.com/management.html#configuration for more
 %% details.
 %%
 %% {sample_retention_policies,

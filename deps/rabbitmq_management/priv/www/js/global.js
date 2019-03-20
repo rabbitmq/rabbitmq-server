@@ -142,31 +142,31 @@ var HELP = {
       'If yes, clients cannot publish to this exchange directly. It can only be used with exchange to exchange bindings.',
 
     'exchange-alternate':
-      'If messages to this exchange cannot otherwise be routed, send them to the alternate exchange named here.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/ae.html">alternate-exchange</a>" argument.)',
+      'If messages to this exchange cannot otherwise be routed, send them to the alternate exchange named here.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ae.html">alternate-exchange</a>" argument.)',
 
     'queue-message-ttl':
-    'How long a message published to a queue can live before it is discarded (milliseconds).<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/ttl.html#per-queue-message-ttl">x-message-ttl</a>" argument.)',
+    'How long a message published to a queue can live before it is discarded (milliseconds).<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ttl.html#per-queue-message-ttl">x-message-ttl</a>" argument.)',
 
     'queue-expires':
-      'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/ttl.html#queue-ttl">x-expires</a>" argument.)',
+      'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ttl.html#queue-ttl">x-expires</a>" argument.)',
 
     'queue-max-length':
-      'How many (ready) messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/maxlength.html">x-max-length</a>" argument.)',
+      'How many (ready) messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length</a>" argument.)',
 
     'queue-max-length-bytes':
-      'Total body size for ready messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/maxlength.html">x-max-length-bytes</a>" argument.)',
+      'Total body size for ready messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length-bytes</a>" argument.)',
 
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
     'queue-dead-letter-exchange':
-      'Optional name of an exchange to which messages will be republished if they are rejected or expire.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-exchange</a>" argument.)',
+      'Optional name of an exchange to which messages will be republished if they are rejected or expire.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/dlx.html">x-dead-letter-exchange</a>" argument.)',
 
     'queue-dead-letter-routing-key':
-      'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
+      'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
 
     'queue-max-priority':
-      'Maximum number of priority levels for the queue to support; if not set, the queue will not support message priorities.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/priority.html">x-max-priority</a>" argument.)',
+      'Maximum number of priority levels for the queue to support; if not set, the queue will not support message priorities.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/priority.html">x-max-priority</a>" argument.)',
 
     'queue-lazy':
       'Set the queue into lazy mode, keeping as many messages as possible on disk to reduce RAM usage; if not set, the queue will keep an in-memory cache to deliver messages as fast as possible.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/lazy-queues.html">x-queue-mode</a>" argument.)',
@@ -218,9 +218,9 @@ var HELP = {
     'channel-mode':
       'Channel guarantee mode. Can be one of the following, or neither:<br/> \
       <dl> \
-        <dt><abbr title="Confirm">C</abbr> &ndash; <a target="_blank" href="http://www.rabbitmq.com/confirms.html">confirm</a></dt> \
+        <dt><abbr title="Confirm">C</abbr> &ndash; <a target="_blank" href="https://www.rabbitmq.com/confirms.html">confirm</a></dt> \
         <dd>Channel will send streaming publish confirmations.</dd> \
-        <dt><abbr title="Transactional">T</abbr> &ndash; <a target="_blank" href="http://www.rabbitmq.com/amqp-0-9-1-reference.html#class.tx">transactional</a></dt> \
+        <dt><abbr title="Transactional">T</abbr> &ndash; <a target="_blank" href="https://www.rabbitmq.com/amqp-0-9-1-reference.html#class.tx">transactional</a></dt> \
         <dd>Channel is transactional.</dd> \
       </dl>',
 
@@ -246,7 +246,7 @@ var HELP = {
       the limit on Windows, set the ERL_MAX_PORTS environment variable</p> \
       <p>To report used file handles on Windows, handle.exe from \
       sysinternals must be installed in your path. You can download it \
-      <a target="_blank" href="http://technet.microsoft.com/en-us/sysinternals/bb896655">here</a>.</p>',
+      <a target="_blank" href="https://technet.microsoft.com/en-us/sysinternals/bb896655">here</a>.</p>',
 
     'socket-descriptors':
       'The network sockets count and limit managed by RabbitMQ.<br/> \
@@ -254,7 +254,7 @@ var HELP = {
       network connections.',
 
     'memory-alarm':
-      '<p>The <a target="_blank" href="http://www.rabbitmq.com/memory.html#memsup">memory \
+      '<p>The <a target="_blank" href="https://www.rabbitmq.com/memory.html#memsup">memory \
       alarm</a> for this node has gone off. It will block \
       incoming network traffic until the memory usage drops below \
       the watermark.</p>\
@@ -262,7 +262,7 @@ var HELP = {
       in relation to how much memory is used in total. </p>',
 
     'disk-free-alarm':
-      'The <a target="_blank" href="http://www.rabbitmq.com/memory.html#diskfreesup">disk \
+      'The <a target="_blank" href="https://www.rabbitmq.com/memory.html#diskfreesup">disk \
       free space alarm</a> for this node has gone off. It will block \
       incoming network traffic until the amount of free space exceeds \
       the limit.',
@@ -311,7 +311,7 @@ var HELP = {
 
     'user-tags':
       'Comma-separated list of tags to apply to the user. Currently \
-       <a target="_blank" href="http://www.rabbitmq.com/management.html#permissions">supported \
+       <a target="_blank" href="https://www.rabbitmq.com/management.html#permissions">supported \
        by the management plugin</a>: \
       <dl> \
         <dt>management</dt> \
@@ -382,15 +382,15 @@ var HELP = {
         statistics.\
       </p>',
 
-    'disk-monitoring-no-watermark' : 'There is no <a target="_blank" href="http://www.rabbitmq.com/memory.html#diskfreesup">disk space low watermark</a> set. RabbitMQ will not take any action to avoid running out of disk space.',
+    'disk-monitoring-no-watermark' : 'There is no <a target="_blank" href="https://www.rabbitmq.com/memory.html#diskfreesup">disk space low watermark</a> set. RabbitMQ will not take any action to avoid running out of disk space.',
 
     'resource-counts' : 'Shows total number of objects for all virtual hosts the current user has access to.',
 
-    'memory-use' : '<p>Note that the memory details shown here are only updated on request - they could be too expensive to calculate every few seconds on a busy server.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
+    'memory-use' : '<p>Note that the memory details shown here are only updated on request - they could be too expensive to calculate every few seconds on a busy server.</p><p><a target="_blank" href="https://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
-    'memory-calculation-strategy-breakdown' : '<p>The setting <code>vm_memory_calculation_strategy</code> defines which of the below memory values is used to check if the memory usage reaches the watermark or paging to disk is required.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
+    'memory-calculation-strategy-breakdown' : '<p>The setting <code>vm_memory_calculation_strategy</code> defines which of the below memory values is used to check if the memory usage reaches the watermark or paging to disk is required.</p><p><a target="_blank" href="https://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
-    'memory-calculation-strategy' : '<p>This value can be calculated using different strategies the <code>vm_memory_calculation_strategy</code> config setting.</p><p><a target="_blank" href="http://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
+    'memory-calculation-strategy' : '<p>This value can be calculated using different strategies the <code>vm_memory_calculation_strategy</code> config setting.</p><p><a target="_blank" href="https://www.rabbitmq.com/memory-use.html">Read more</a> on memory use.</p>',
 
     'binary-use' : '<p>Binary accounting is not exact; binaries are shared between processes (and thus the same binary might be counted in more than one section), and the VM does not allow us to track binaries that are not associated with processes (so some binary use might not appear at all).</p>',
 
@@ -400,11 +400,11 @@ var HELP = {
     if <code>ha-mode</code> is <code>exactly</code>, or a list\
     of strings if <code>ha-mode</code> is <code>nodes</code>.',
 
-    'policy-ha-sync-mode' : 'One of <code>manual</code> or <code>automatic</code>. <a target="_blank" href="http://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
+    'policy-ha-sync-mode' : 'One of <code>manual</code> or <code>automatic</code>. <a target="_blank" href="https://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
 
-    'policy-ha-promote-on-shutdown' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="http://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
+    'policy-ha-promote-on-shutdown' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="https://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
 
-    'policy-ha-promote-on-failure' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="http://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
+    'policy-ha-promote-on-failure' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="https://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
 
     'policy-federation-upstream-set' :
     'A string; only if the federation plugin is enabled. Chooses the name of a set of upstreams to use with federation, or "all" to use all upstreams. Incompatible with <code>federation-upstream</code>.',
@@ -412,7 +412,7 @@ var HELP = {
     'policy-federation-upstream' :
     'A string; only if the federation plugin is enabled. Chooses a specific upstream set to use for federation. Incompatible with <code>federation-upstream-set</code>.',
 
-    'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="http://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
+    'handle-exe' : 'In order to monitor the number of file descriptors in use on Windows, RabbitMQ needs the <a href="https://technet.microsoft.com/en-us/sysinternals/bb896655" target="_blank">handle.exe command line tool from Microsoft</a>. Download it and place it in the path (e.g. in C:\Windows).',
 
     'filter-regex' :
     'Whether to enable regular expression matching. Both string literals \
@@ -458,7 +458,7 @@ var HELP = {
 
     'persister-operations-msg':
     'Rate at which per-message persister operations take place on this node. See \
-     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     <a href="https://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
      for more information on the persister. \
       <dl>\
         <dt>QI Journal</dt>\
@@ -472,7 +472,7 @@ var HELP = {
 
     'persister-operations-bulk':
     'Rate at which whole-file persister operations take place on this node. See \
-     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     <a href="https://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
      for more information on the persister. \
       <dl>\
         <dt>QI Read</dt>\
