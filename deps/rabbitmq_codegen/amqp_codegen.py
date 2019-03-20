@@ -1,7 +1,7 @@
 ##  The contents of this file are subject to the Mozilla Public License
 ##  Version 1.1 (the "License"); you may not use this file except in
 ##  compliance with the License. You may obtain a copy of the License
-##  at http://www.mozilla.org/MPL/
+##  at https://www.mozilla.org/MPL/
 ##
 ##  Software distributed under the License is distributed on an "AS IS"
 ##  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -37,7 +37,7 @@ except ImportError:
     print("   - by running 'yum install python-simplejson' on Fedora/Red Hat system,", file = sys.stderr)
     print("   - by running 'port install py25-simplejson' on Macports on OS X", file = sys.stderr)
     print("     (you may need to say 'make PYTHON=python2.5', as well),", file = sys.stderr)
-    print("   - from sources from 'http://pypi.python.org/pypi/simplejson'", file = sys.stderr)
+    print("   - from sources from 'https://pypi.python.org/pypi/simplejson'", file = sys.stderr)
     print("   - simplejson is a standard json library in the Python core since 2.6", file = sys.stderr)
     sys.exit(1)
 

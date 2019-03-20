@@ -17,7 +17,7 @@ specification document is therefore non-commutative.
 ## The main document
 
 Written in the style of a
-[json-shapes](http://github.com/tonyg/json-shapes) schema:
+[json-shapes](https://github.com/tonyg/json-shapes) schema:
 
     DomainDefinition = _and(array_of(string()), array_length_equals(2));
 
@@ -89,7 +89,7 @@ straightforward numeric constant.
 ## Extensions
 
 Written in the style of a
-[json-shapes](http://github.com/tonyg/json-shapes) schema, and
+[json-shapes](https://github.com/tonyg/json-shapes) schema, and
 referencing some of the type definitions given above:
 
     ExtensionDocument = {
