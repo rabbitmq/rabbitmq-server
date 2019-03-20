@@ -366,22 +366,22 @@ apply(Meta, {down, Pid, noconnection},
     %% all pids for the disconnected node will be marked as suspected not just
     %% the one we got the `down' command for
     Node = node(Pid),
-    ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
 
     {State, Effects1} =
-    maps:fold(fun({_, P} = Cid, #consumer{checked_out = Checked0,
-                                          status = up} = C0,
-                      {St0, Eff}) when node(P) =:= Node ->
-                          Credit = increase_credit(C0, map_size(Checked0)),
-                          C = C0#consumer{status = suspected_down,
-                                          credit = Credit},
-                          {St, Eff0} = return_all(St0, Eff, Cid, C),
-                          Eff1 = ConsumerUpdateActiveFun(St, Cid, C, false,
-                                                         suspected_down, Eff0),
-                          {St, Eff1};
-                     (_, _, {St, Eff}) ->
-                          {St, Eff}
-                  end, {State0, []}, Cons0),
+        maps:fold(
+          fun({_, P} = Cid, #consumer{checked_out = Checked0,
+                                      status = up} = C0,
+              {St0, Eff}) when node(P) =:= Node ->
+                  Credit = increase_credit(C0, map_size(Checked0)),
+                  C = C0#consumer{status = suspected_down,
+                                  credit = Credit},
+                  {St, Eff0} = return_all(St0, Eff, Cid, C),
+                  Eff1 = consumer_update_active_effects(St, Cid, C, false,
+                                                        suspected_down, Eff0),
+                  {St, Eff1};
+             (_, _, {St, Eff}) ->
+                  {St, Eff}
+          end, {State0, []}, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{status = suspected_down};
                        (_, E) -> E
