@@ -4,17 +4,17 @@
  %% ----------------------------------------------------------------------------
  %% Advanced Erlang Networking/Clustering Options.
  %%
- %% See http://www.rabbitmq.com/clustering.html for details
+ %% See https://www.rabbitmq.com/clustering.html for details
  %% ----------------------------------------------------------------------------
  %% Sets the net_kernel tick time.
  %% Please see http://erlang.org/doc/man/kernel_app.html and
- %% http://www.rabbitmq.com/nettick.html for further details.
+ %% https://www.rabbitmq.com/nettick.html for further details.
  %%
  %% {kernel, [{net_ticktime, 60}]},
  %% ----------------------------------------------------------------------------
  %% RabbitMQ Shovel Plugin
  %%
- %% See http://www.rabbitmq.com/shovel.html for details
+ %% See https://www.rabbitmq.com/shovel.html for details
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_shovel,
@@ -87,7 +87,7 @@
 
     %% The LDAP plugin can perform a variety of queries against your
     %% LDAP server to determine questions of authorisation. See
-    %% http://www.rabbitmq.com/ldap.html#authorisation for more
+    %% https://www.rabbitmq.com/ldap.html#authorisation for more
     %% information.
 
     %% Set the query to use when determining vhost access

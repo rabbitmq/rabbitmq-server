@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -22,7 +22,7 @@
 -rabbit_feature_flag(
    {quorum_queue,
     #{desc          => "Support queues of type `quorum`",
-      doc_url       => "http://www.rabbitmq.com/quorum-queues.html",
+      doc_url       => "https://www.rabbitmq.com/quorum-queues.html",
       stability     => stable,
       migration_fun => {?MODULE, quorum_queue_migration}
      }}).
