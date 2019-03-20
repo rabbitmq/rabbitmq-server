@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -2789,10 +2789,10 @@ cors_test(Config) ->
     %% The Vary header should include "Origin" regardless of CORS configuration.
     {_, "accept, accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
     %% Enable CORS.
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, ["http://rabbitmq.com"]]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, ["https://rabbitmq.com"]]),
     %% We should only receive allow-origin and allow-credentials from GET.
     {ok, {_, HdGetCORS, _}} = req(Config, get, "/overview",
-                                  [{"origin", "http://rabbitmq.com"}, auth_header("guest", "guest")]),
+                                  [{"origin", "https://rabbitmq.com"}, auth_header("guest", "guest")]),
     true = lists:keymember("access-control-allow-origin", 1, HdGetCORS),
     true = lists:keymember("access-control-allow-credentials", 1, HdGetCORS),
     false = lists:keymember("access-control-expose-headers", 1, HdGetCORS),
@@ -2801,7 +2801,7 @@ cors_test(Config) ->
     false = lists:keymember("access-control-allow-headers", 1, HdGetCORS),
     %% We should receive allow-origin, allow-credentials and allow-methods from OPTIONS.
     {ok, {{_, 200, _}, HdOptionsCORS, _}} = req(Config, options, "/overview",
-                                                [{"origin", "http://rabbitmq.com"}]),
+                                                [{"origin", "https://rabbitmq.com"}]),
     true = lists:keymember("access-control-allow-origin", 1, HdOptionsCORS),
     true = lists:keymember("access-control-allow-credentials", 1, HdOptionsCORS),
     false = lists:keymember("access-control-expose-headers", 1, HdOptionsCORS),
@@ -2810,7 +2810,7 @@ cors_test(Config) ->
     false = lists:keymember("access-control-allow-headers", 1, HdOptionsCORS),
     %% We should receive allow-headers when request-headers is sent.
     {ok, {_, HdAllowHeadersCORS, _}} = req(Config, options, "/overview",
-                                           [{"origin", "http://rabbitmq.com"},
+                                           [{"origin", "https://rabbitmq.com"},
                                             auth_header("guest", "guest"),
                                             {"access-control-request-headers", "x-piggy-bank"}]),
     {_, "x-piggy-bank"} = lists:keyfind("access-control-allow-headers", 1, HdAllowHeadersCORS),
@@ -2818,7 +2818,7 @@ cors_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_max_age, undefined]),
     %% We shouldn't receive max-age anymore.
     {ok, {_, HdNoMaxAgeCORS, _}} = req(Config, options, "/overview",
-                                       [{"origin", "http://rabbitmq.com"}, auth_header("guest", "guest")]),
+                                       [{"origin", "https://rabbitmq.com"}, auth_header("guest", "guest")]),
     false = lists:keymember("access-control-max-age", 1, HdNoMaxAgeCORS),
     %% Disable CORS again.
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
