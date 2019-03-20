@@ -2,7 +2,7 @@
 
 Adds UNIX top-like information on the Erlang VM to the management plugin.
 
-Screenshots: http://imgur.com/a/BjVOP
+Screenshots: https://imgur.com/a/BjVOP
 
 ## Installation
 
@@ -26,7 +26,7 @@ object's management view.
 Click on the process ID (e.g. "&lt;0.3423.0&gt;") to see some more
 Erlang process details.
 
-See [Memory Use Analysis guide](http://www.rabbitmq.com/memory-use.html) on RabbitMQ website
+See [Memory Use Analysis guide](https://www.rabbitmq.com/memory-use.html) on RabbitMQ website
 for more information.
 
 ## HTTP API
@@ -46,7 +46,7 @@ Individual process details.
 ## Building from Source
 
 You can build and install it like any other plugin (see
-[the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
+[the plugin development guide](https://www.rabbitmq.com/plugin-development.html)).
 
 ## License and Copyright
 
