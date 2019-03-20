@@ -8,6 +8,6 @@ HTML files on port 15670 (e.g. [http://127.0.0.1:15670](http://127.0.0.1:15670/)
 
 ## Installation
 
-This plugin ships with RabbitMQ. Enabled it using [CLI tools](http://www.rabbitmq.com/cli.html):
+This plugin ships with RabbitMQ. Enabled it using [CLI tools](https://www.rabbitmq.com/cli.html):
 
     rabbitmq-plugins enable rabbitmq_web_stomp_examples
