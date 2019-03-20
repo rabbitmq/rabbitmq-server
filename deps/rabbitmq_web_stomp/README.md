@@ -1,6 +1,6 @@
 # RabbitMQ Web STOMP plugin
 
-This project is a minimalistic bridge between the [RabbitMQ STOMP plugin](http://rabbitmq.com/stomp.html) and
+This project is a minimalistic bridge between the [RabbitMQ STOMP plugin](https://rabbitmq.com/stomp.html) and
 WebSockets.
 
 ## RabbitMQ Version Requirements
@@ -12,16 +12,16 @@ SockJS URL path was removed.
 
 ## Installation and Binary Builds
 
-This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).
-Please consult the docs on [how to install RabbitMQ plugins](http://www.rabbitmq.com/plugins.html#installing-plugins).
+This plugin is now available from the [RabbitMQ community plugins page](https://www.rabbitmq.com/community-plugins.html).
+Please consult the docs on [how to install RabbitMQ plugins](https://www.rabbitmq.com/plugins.html#installing-plugins).
 
 ## Documentation
 
-Please refer to the [RabbitMQ Web STOMP guide](http://www.rabbitmq.com/web-stomp.html).
+Please refer to the [RabbitMQ Web STOMP guide](https://www.rabbitmq.com/web-stomp.html).
 
 ## Building from Source
 
-See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
+See [Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
 
 TL;DR: running
 
