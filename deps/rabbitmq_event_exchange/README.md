@@ -37,7 +37,7 @@ rabbitmq-plugins enable rabbitmq_event_exchange
 ### With RabbitMQ 3.5.x
 
 You can download a pre-built binary of this plugin from
-the [RabbitMQ Community Plugins](http://www.rabbitmq.com/community-plugins.html) page.
+the [RabbitMQ Community Plugins](https://www.rabbitmq.com/community-plugins.html) page.
 
 Then run the following command:
 
@@ -149,7 +149,7 @@ e.g. with :
 
 ## Building from Source
 
-Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
+Building is no different from [building other RabbitMQ plugins](https://www.rabbitmq.com/plugin-development.html).
 
 TL;DR:
 
