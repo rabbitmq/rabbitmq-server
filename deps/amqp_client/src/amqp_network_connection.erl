@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -311,7 +311,7 @@ client_properties(UserProperties) ->
                 <<"Copyright (c) 2007-2017 Pivotal Software, Inc.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
-                  "See http://www.rabbitmq.com/">>},
+                  "See https://www.rabbitmq.com/">>},
                {<<"capabilities">>, table, ?CLIENT_CAPABILITIES}],
     lists:foldl(fun({K, _, _} = Tuple, Acc) ->
                     lists:keystore(K, 1, Acc, Tuple)
