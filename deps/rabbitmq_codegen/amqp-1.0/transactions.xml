@@ -32,7 +32,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 
-<amqp name="transactions" xmlns="http://www.amqp.org/schema/amqp.xsd">
+<amqp name="transactions" xmlns="https://www.amqp.org/schema/amqp.xsd">
   <section name="coordination">
     <type name="coordinator" class="composite" source="list" provides="target">
       <descriptor name="amqp:coordinator:list" code="0x00000000:0x00000030"/>

@@ -32,7 +32,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 
-<amqp name="security" xmlns="http://www.amqp.org/schema/amqp.xsd">
+<amqp name="security" xmlns="https://www.amqp.org/schema/amqp.xsd">
   <section name="tls">
     <definition name="TLS-MAJOR" value="1"/>
     <definition name="TLS-MINOR" value="0"/>
