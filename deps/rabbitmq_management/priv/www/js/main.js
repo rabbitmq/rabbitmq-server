@@ -1197,7 +1197,7 @@ function sync_req(type, params0, path_template, options) {
     catch (e) {
         if (e.number == 0x80004004) {
             // 0x80004004 means "Operation aborted."
-            // http://support.microsoft.com/kb/186063
+            // https://support.microsoft.com/kb/186063
             // MSIE6 appears to do this in response to HTTP 204.
         }
     }
@@ -1214,7 +1214,7 @@ function sync_req(type, params0, path_template, options) {
 }
 
 function check_bad_response(req, full_page_404) {
-    // 1223 == 204 - see http://www.enhanceie.com/ie/bugs.asp
+    // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
         return true;

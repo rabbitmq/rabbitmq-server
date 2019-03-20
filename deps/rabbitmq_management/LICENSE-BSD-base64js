@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2010 Nick Galbreath
- * http://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
+ * https://code.google.com/p/stringencoders/source/browse/#svn/trunk/javascript
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
