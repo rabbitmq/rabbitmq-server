@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -82,7 +82,7 @@ query_static_resource_test1(Host, Port) ->
                                                 ?MODULE, "test/priv/www", "Test"),
     inets:start(),
     {ok, {_Status, _Headers, Body}} =
-        httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
+        httpc:request(format("https://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
     ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0),
 
     passed.
