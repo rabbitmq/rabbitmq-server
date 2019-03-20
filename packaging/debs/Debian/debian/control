@@ -89,4 +89,4 @@ Depends: init-system-helpers (>= 1.13~),
  socat
 Description: Multi-protocol messaging broker
  RabbitMQ is an open source multi-protocol messaging broker.
-Homepage: http://www.rabbitmq.com/
+Homepage: https://www.rabbitmq.com/

@@ -23,17 +23,17 @@ Creating a repository
 =====================
 
 Much of this was cribbed from:
-http://www.debian-administration.org/articles/286
+https://www.debian-administration.org/articles/286
 
 The repository is fundamentally just some files in a folder, served over 
 HTTP (or FTP etc). So let's make it "debian" in the root of 
 www.rabbitmq.com. 
 
-This means the repository will be at http://www.rabbitmq.com/debian/ and 
+This means the repository will be at https://www.rabbitmq.com/debian/ and 
 can be added to a sources.list as:
 
-deb http://www.rabbitmq.com/debian/ testing main
-deb-src http://www.rabbitmq.com/debian/ testing main
+deb https://www.rabbitmq.com/debian/ testing main
+deb-src https://www.rabbitmq.com/debian/ testing main
 
 Inside this folder we need a "conf" folder, and in 
 that we need a "distributions" configuration file - see the file in this 
