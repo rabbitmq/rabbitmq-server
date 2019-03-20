@@ -1,7 +1,7 @@
 # RabbitMQ (Message) Tracing Plugin
 
 This is an opinionated tracing plugin that extends RabbitMQ management UI.
-It logs messages passing through vhosts [with enabled tracing](http://www.rabbitmq.com/firehose.html) to a log
+It logs messages passing through vhosts [with enabled tracing](https://www.rabbitmq.com/firehose.html) to a log
 file.
 
 ## Usage
@@ -49,7 +49,7 @@ GET     DELETE /api/trace-files/<name>    (GET returns the file as text/plain)
 GET     DELETE /api/trace-files/node/<node>/<name>    (GET returns the file as text/plain)
 ```
 
-Example for how to create a trace using [RabbitMQ HTTP API](http://www.rabbitmq.com/management.html):
+Example for how to create a trace using [RabbitMQ HTTP API](https://www.rabbitmq.com/management.html):
 
 ```
 curl -i -u guest:guest -H "content-type:application/json" -XPUT \
