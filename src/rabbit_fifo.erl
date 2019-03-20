@@ -327,9 +327,16 @@ apply(Meta, {down, Pid, noconnection},
                 Credit = increase_credit(C0, maps:size(Checked)),
                 {St, Effs1} = return_all(State0, Effs,
                                          Cid, C0#consumer{credit = Credit}),
-                #{Cid := C} = St#?MODULE.consumers,
+                %% if the consumer was cancelled there is a chance it got
+                %% removed when returning hence we need to be defensive here
+                Waiting = case St#?MODULE.consumers of
+                              #{Cid := C} ->
+                                  Waiting0 ++ [{Cid, C}];
+                              _ ->
+                                  Waiting0
+                          end,
                 {St#?MODULE{consumers = #{},
-                            waiting_consumers = Waiting0 ++ [{Cid, C}]},
+                            waiting_consumers = Waiting},
                  Effs1};
             _ -> {State0, []}
         end,
