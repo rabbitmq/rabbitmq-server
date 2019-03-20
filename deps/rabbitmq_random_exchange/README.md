@@ -12,7 +12,7 @@ interested.
 ## Installation
 
 Install the corresponding .ez files from our
-[GitHub releases](https://github.com/rabbitmq/rabbitmq-random-exchange/releases) or [Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
+[GitHub releases](https://github.com/rabbitmq/rabbitmq-random-exchange/releases) or [Community Plugins page](https://www.rabbitmq.com/community-plugins.html).
 
 Then run the following command:
 
@@ -22,7 +22,7 @@ rabbitmq-plugins enable rabbitmq_random_exchange
 
 ## Building from Source
 
-Please see [RabbitMQ Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
+Please see [RabbitMQ Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
 
 To build the plugin:
 
@@ -30,7 +30,7 @@ To build the plugin:
     cd rabbitmq-random-exchange
     make
 
-Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html)
+Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](https://www.rabbitmq.com/relocate.html)
 and enable the plugin:
 
     [sudo] rabbitmq-plugins enable rabbitmq_random_exchange
