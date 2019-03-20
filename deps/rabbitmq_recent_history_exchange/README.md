@@ -19,7 +19,7 @@ rabbitmq-plugins enable rabbitmq_recent_history_exchange
 ### With Earlier Versions
 
 Install the corresponding .ez files from our
-[Community Plugins archive](http://www.rabbitmq.com/community-plugins/)..
+[Community Plugins archive](https://www.rabbitmq.com/community-plugins/)..
 
 Then run the following command:
 
@@ -29,7 +29,7 @@ rabbitmq-plugins enable rabbitmq_recent_history_exchange
 
 ## Building from Source
 
-Please see [RabbitMQ Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
+Please see [RabbitMQ Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
 
 To build the plugin:
 
@@ -37,7 +37,7 @@ To build the plugin:
     cd rabbitmq-recent-history-exchange
     make
 
-Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html)
+Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](https://www.rabbitmq.com/relocate.html)
 and enable the plugin:
 
     [sudo] rabbitmq-plugins enable rabbitmq_recent_history_exchange
