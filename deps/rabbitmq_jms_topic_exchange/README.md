@@ -7,7 +7,7 @@ This plugin provides support for JMS topic routing and selection based on JMS SQ
 rules.
 
 This implementation is based upon the [Java Messaging Service
-Specification Version 1.1](http://www.oracle.com/technetwork/java/docs-136352.html).
+Specification Version 1.1](https://www.oracle.com/technetwork/java/docs-136352.html).
 
 ## Project Maturity
 
@@ -48,7 +48,7 @@ and filtering implied by the topic name.
 
 ## Building From Source
 
-Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
+Building is no different from [building other RabbitMQ plugins](https://www.rabbitmq.com/plugin-development.html).
 
 TL;DR:
 
