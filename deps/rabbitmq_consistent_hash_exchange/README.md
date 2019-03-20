@@ -32,7 +32,7 @@ their bindings.
 new topology still distributes messages between the different queues
 evenly.
 
-[Consistent Hashing](http://en.wikipedia.org/wiki/Consistent_hashing)
+[Consistent Hashing](https://en.wikipedia.org/wiki/Consistent_hashing)
 is a hashing technique whereby each bucket appears at multiple points
 throughout the hash space, and the bucket selected is the nearest
 higher (or lower, it doesn't matter, provided it's consistent) bucket
@@ -50,7 +50,7 @@ This plugin supports the same [Erlang versions](https://rabbitmq.com/which-erlan
 
 ## Installation
 
-This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](http://www.rabbitmq.com/plugins.html), it has to be enabled before it can be used:
+This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](https://www.rabbitmq.com/plugins.html), it has to be enabled before it can be used:
 
 ``` sh
 rabbitmq-plugins enable rabbitmq_consistent_hash_exchange
