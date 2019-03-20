@@ -22,7 +22,7 @@
 
 -export([federate/1, for/1, for/2, params_to_string/1, to_params/2]).
 %% For testing
--export([from_set/2, remove_credentials/1]).
+-export([from_set/2, from_re/2, remove_credentials/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [name/1, vhost/1, r/1]).
@@ -31,7 +31,8 @@
 
 federate(XorQ) ->
     rabbit_policy:get(<<"federation-upstream">>, XorQ) =/= undefined orelse
-        rabbit_policy:get(<<"federation-upstream-set">>, XorQ) =/= undefined.
+        rabbit_policy:get(<<"federation-upstream-set">>, XorQ) =/= undefined orelse
+            rabbit_policy:get(<<"federation-upstream-regex">>, XorQ) =/= undefined.
 
 for(XorQ) ->
     case federate(XorQ) of
@@ -49,11 +50,13 @@ for(XorQ, UpstreamName) ->
 upstreams(XorQ) ->
     UName = rabbit_policy:get(<<"federation-upstream">>, XorQ),
     USetName = rabbit_policy:get(<<"federation-upstream-set">>, XorQ),
-    %% Cannot define both, see rabbit_federation_parameters:validate_policy/1
-    case {UName, USetName} of
-        {undefined, undefined} -> [];
-        {undefined, _}         -> set_contents(USetName, vhost(XorQ));
-        {_,         undefined} -> [[{<<"upstream">>, UName}]]
+    UReValue = rabbit_policy:get(<<"federation-upstream-regex">>, XorQ),
+    %% Cannot define 2 at a time, see rabbit_federation_parameters:validate_policy/1
+    case {UName, USetName, UReValue} of
+        {undefined, undefined, undefined} -> [];
+        {undefined, undefined, _}         -> find_contents(UReValue, vhost(XorQ));
+        {undefined, _, undefined}         -> set_contents(USetName, vhost(XorQ));
+        {_,         undefined, undefined} -> [[{<<"upstream">>, UName}]]
     end.
 
 params_table(SafeURI, XorQ) ->
@@ -87,6 +90,9 @@ print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 from_set(SetName, XorQ) ->
     from_set_contents(set_contents(SetName, vhost(XorQ)), XorQ).
 
+from_re(SetName, XorQ) ->
+    from_set_contents(find_contents(SetName, vhost(XorQ)), XorQ).
+
 set_contents(<<"all">>, VHost) ->
     Upstreams0 = rabbit_runtime_parameters:list(
                     VHost, <<"federation-upstream">>),
@@ -99,6 +105,13 @@ set_contents(SetName, VHost) ->
         not_found -> [];
         Set       -> Set
     end.
+
+find_contents(RegExp, VHost) ->
+    Upstreams0 = rabbit_runtime_parameters:list(
+                    VHost, <<"federation-upstream">>),
+    Upstreams  = [rabbit_data_coercion:to_list(U) || U <- Upstreams0,
+                    re:run(pget(name, U), RegExp) =/= nomatch],
+    [[{<<"upstream">>, pget(name, U)}] || U <- Upstreams].
 
 from_set_contents(Set, XorQ) ->
     Results = [from_set_element(P, XorQ) || P <- Set],
