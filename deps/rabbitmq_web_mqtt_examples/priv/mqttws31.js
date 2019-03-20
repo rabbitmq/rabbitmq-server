@@ -6,9 +6,9 @@
  * and Eclipse Distribution License v1.0 which accompany this distribution. 
  *
  * The Eclipse Public License is available at 
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    https://www.eclipse.org/legal/epl-v10.html
  * and the Eclipse Distribution License is available at 
- *   http://www.eclipse.org/org/documents/edl-v10.php.
+ *   https://www.eclipse.org/org/documents/edl-v10.php.
  *
  * Contributors:
  *    Andrew Banks - initial API and implementation and initial documentation
