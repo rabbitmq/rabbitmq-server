@@ -246,6 +246,7 @@ rpc_delete_metrics(QName) ->
 handle_tick(QName, {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack}) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
+    Self = self(),
     _ = spawn(fun() ->
                       R = reductions(Name),
                       rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
@@ -264,12 +265,12 @@ handle_tick(QName, {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack}) ->
                                                     {messages, M},
                                                     {messages_ready, MR},
                                                     {messages_unacknowledged, MU},
-                                                    {reductions, R}])
+                                                    {reductions, R}]),
+                      ok = repair_leader_record(QName, Self)
               end),
-    ok = repair_leader_record(QName),
     ok.
 
-repair_leader_record(QName) ->
+repair_leader_record(QName, Self) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     Node = node(),
     case amqqueue:get_pid(Q) of
@@ -279,7 +280,7 @@ repair_leader_record(QName) ->
         _ ->
             rabbit_log:debug("~s: repairing leader record",
                              [rabbit_misc:rs(QName)]),
-            {_, Name} = erlang:process_info(self(), registered_name),
+            {_, Name} = erlang:process_info(Self, registered_name),
             become_leader(QName, Name)
     end,
     ok.
