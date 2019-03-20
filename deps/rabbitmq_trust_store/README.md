@@ -35,8 +35,8 @@ This plugin requires Erlang version 17.3 or later.
 
 ## Installation and Binary Builds
 
-This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).
-Please consult the docs on [how to install RabbitMQ plugins](http://www.rabbitmq.com/plugins.html#installing-plugins).
+This plugin is now available from the [RabbitMQ community plugins page](https://www.rabbitmq.com/community-plugins.html).
+Please consult the docs on [how to install RabbitMQ plugins](https://www.rabbitmq.com/plugins.html#installing-plugins).
 
 ## Usage
 
@@ -98,7 +98,7 @@ Configuration of the HTTP provider:
 
 ```
 trust_store.providers.1      = http
-trust_store.url              = http://example.cert.url/path
+trust_store.url              = https://example.cert.url/path
 trust_store.refresh_interval = 30
 ```
 
@@ -113,7 +113,7 @@ In the erlang terms format:
 ```
 {rabbitmq_trust_store,
  [{providers, [rabbit_trust_store_http_provider]},
-  {url, "http://example.cert.url/path"},
+  {url, "https://example.cert.url/path"},
   {refresh_interval, {seconds, 30}}
  ]}.
 ```
@@ -151,7 +151,7 @@ You can additionally specify headers (e.g. authorization) using Erlang term form
 ```
 {rabbitmq_trust_store,
  [{providers, [rabbit_trust_store_http_provider]},
-  {url, "http://example.cert.url/path"},
+  {url, "https://example.cert.url/path"},
   {headers, [{"Authorization", "Bearer token"}]},
   {refresh_interval, {seconds, 30}}
  ]}.
@@ -199,7 +199,7 @@ interval or a manual refresh (by invoking a `rabbitmqctl eval
 
 ## Building from Source
 
-See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
+See [Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
 
 TL;DR: running
 
