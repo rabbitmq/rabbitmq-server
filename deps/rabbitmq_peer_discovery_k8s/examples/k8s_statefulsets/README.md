@@ -6,10 +6,10 @@ via `rabbitmq-peer-discovery-k8s` plugin.
 ## Production (Non-)Suitability
 
 Some values in this example **may or may not be optimal for your deployment**. We encourage users
-to get familiar with the [RabbitMQ Peer Discovery guide](http://www.rabbitmq.com/cluster-formation.html), [RabbitMQ Production Checklist](http://www.rabbitmq.com/production-checklist.html)
+to get familiar with the [RabbitMQ Peer Discovery guide](https://www.rabbitmq.com/cluster-formation.html), [RabbitMQ Production Checklist](https://www.rabbitmq.com/production-checklist.html)
 and the rest of [RabbitMQ documentation](https://www.rabbitmq.com/documentation.html) before going into production.
 
-Having [metrics](http://www.rabbitmq.com/monitoring.html), both of RabbitMQ and applications that use it,
+Having [metrics](https://www.rabbitmq.com/monitoring.html), both of RabbitMQ and applications that use it,
 is critically important when making informed decisions about production systems.
 
 
