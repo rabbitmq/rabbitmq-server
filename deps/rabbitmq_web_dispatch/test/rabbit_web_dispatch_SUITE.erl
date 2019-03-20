@@ -82,7 +82,7 @@ query_static_resource_test1(Host, Port) ->
                                                 ?MODULE, "test/priv/www", "Test"),
     inets:start(),
     {ok, {_Status, _Headers, Body}} =
-        httpc:request(format("https://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
+        httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
     ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0),
 
     passed.
