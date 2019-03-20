@@ -1,10 +1,10 @@
 # RabbitMQ LDAP Authentication Backend
 
-This plugin provides [authentication and authorisation backends](http://rabbitmq.com/access-control.html)
+This plugin provides [authentication and authorisation backends](https://rabbitmq.com/access-control.html)
 for RabbitMQ that use LDAP.
 
 Under a heavy load this plugin can put a higher than expected amount of load on it's backing LDAP service.
-We recommend using it together with [rabbitmq_auth_backend_cache](http://github.com/rabbitmq/rabbitmq-auth-backend-cache)
+We recommend using it together with [rabbitmq_auth_backend_cache](https://github.com/rabbitmq/rabbitmq-auth-backend-cache)
 with a reasonable caching interval (e.g. 2-3 minutes).
 
 ## Installation
@@ -16,12 +16,12 @@ This plugin ships with reasonably recent RabbitMQ versions
 
 ## Documentation
 
-[See LDAP guide](http://www.rabbitmq.com/ldap.html) on rabbitmq.com.
+[See LDAP guide](https://www.rabbitmq.com/ldap.html) on rabbitmq.com.
 
 
 ## Building from Source
 
-See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
+See [Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
 
 TL;DR: running
 
