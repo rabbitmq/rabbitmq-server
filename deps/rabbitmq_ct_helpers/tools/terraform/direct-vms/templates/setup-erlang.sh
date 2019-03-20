@@ -39,21 +39,9 @@ case "$erlang_version" in
       erlang_git_ref='master'
     fi
     ;;
-  21.2)
+  21.*|20.*|19.3)
     readonly erlang_package_version="1:$erlang_version-1"
     ;;  
-  21.1)
-    readonly erlang_package_version="1:$erlang_version-1"
-    ;;  
-  21.0)
-    readonly erlang_package_version="1:$erlang_version-1"
-    ;;
-  20.[1-3])
-    readonly erlang_package_version="1:$erlang_version-1"
-    ;;
-  19.3)
-    readonly erlang_package_version='1:19.3-1'
-    ;;
   R16B03)
     readonly erlang_package_version='1:16.b.3-3'
     ;;
