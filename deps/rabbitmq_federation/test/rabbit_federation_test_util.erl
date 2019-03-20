@@ -201,6 +201,11 @@ set_policy(Config, Node, Name, Pattern, UpstreamSet) ->
       Name, Pattern, <<"all">>,
       [{<<"federation-upstream-set">>, UpstreamSet}]).
 
+set_policy_regex(Config, Node, Name, Pattern, Regex) ->
+    rabbit_ct_broker_helpers:set_policy(Config, Node,
+      Name, Pattern, <<"all">>,
+      [{<<"federation-upstream-regex">>, Regex}]).
+
 clear_policy(Config, Node, Name) ->
     rabbit_ct_broker_helpers:clear_policy(Config, Node, Name).
 
@@ -262,14 +267,36 @@ assert_link_status({DXorQNameBin, UpstreamName, UXorQNameBin}, Status,
 
 links(#'exchange.declare'{exchange = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, xr(Name)) of
-        undefined -> [];
+        undefined ->
+            case rabbit_policy:get(<<"federation-upstream-regex">>, xr(Name)) of
+                undefined -> [];
+                Regex       ->
+                    X = #exchange{name = xr(Name)},
+                    [{Name, U#upstream.name, U#upstream.exchange_name} ||
+                         U <- rabbit_federation_upstream:from_re(Regex, X)]
+            end;
         Set       -> X = #exchange{name = xr(Name)},
                      [{Name, U#upstream.name, U#upstream.exchange_name} ||
                          U <- rabbit_federation_upstream:from_set(Set, X)]
     end;
 links(#'queue.declare'{queue = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
-        undefined -> [];
+        undefined ->
+            case rabbit_policy:get(<<"federation-upstream-regex">>, qr(Name)) of
+                undefined -> [];
+                Regex       ->
+                    Q = amqqueue:new(qr(Name),
+                                      self(),
+                                      false,
+                                      false,
+                                      none,
+                                      [],
+                                      undefined,
+                                      #{},
+                                      classic),
+                    [{Name, U#upstream.name, U#upstream.queue_name} ||
+                        U <- rabbit_federation_upstream:from_re(Regex, Q)]
+            end;
         Set       -> Q = amqqueue:new(qr(Name),
                                       self(),
                                       false,
