@@ -2,7 +2,7 @@
 %% ----------------------------------------------------------------------------
 %% RabbitMQ Stomp Adapter
 %%
-%% See http://www.rabbitmq.com/stomp.html for details
+%% See https://www.rabbitmq.com/stomp.html for details
 %% ----------------------------------------------------------------------------
 
 %  {rabbitmq_stomp,
