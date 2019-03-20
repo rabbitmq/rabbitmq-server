@@ -13,7 +13,7 @@ install it separately.
 
 ## Documentation        
 
-See [RabbitMQ shovel plugin](http://www.rabbitmq.com/shovel.html) on rabbitmq.com.
+See [RabbitMQ shovel plugin](https://www.rabbitmq.com/shovel.html) on rabbitmq.com.
 
 
 ## License and Copyright
