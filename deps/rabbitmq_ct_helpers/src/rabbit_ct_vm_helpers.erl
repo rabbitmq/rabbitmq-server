@@ -979,7 +979,7 @@ archive_names_to_urls(Config, HttpInfo) ->
 archive_name_to_url(HttpInfo, Archive) ->
     Hostname = proplists:get_value(server_name, HttpInfo),
     Port = proplists:get_value(port, HttpInfo),
-    rabbit_misc:format("https://~s:~b/~s", [Hostname, Port, Archive]).
+    rabbit_misc:format("http://~s:~b/~s", [Hostname, Port, Archive]).
 
 stop_ct_peers(Config) ->
     CTPeers = get_ct_peers(Config),
