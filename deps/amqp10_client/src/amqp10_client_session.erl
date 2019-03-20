@@ -662,13 +662,13 @@ translate_filters(Filters) when is_map(Filters) -> {
     map,
     maps:fold(
         fun(<<"apache.org:legacy-amqp-direct-binding:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {utf8, V}} | Acc];
+            [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
         (<<"apache.org:legacy-amqp-topic-binding:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {utf8, V}} | Acc];
+            [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
         (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
-            [{{symbol, K}, translate_legacy_amqp_headers_binding(V)} | Acc];
+            [{{symbol, K}, {described, {symbol, K}, translate_legacy_amqp_headers_binding(V)}} | Acc];
         (<<"apache.org:no-local-filter:list">> = K, V, Acc) when is_list(V) ->
-            [{{symbol, K}, lists:map(fun(Id) -> {utf8, Id} end, V)} | Acc];
+            [{{symbol, K}, {described, {symbol, K}, lists:map(fun(Id) -> {utf8, Id} end, V)}} | Acc];
         (<<"apache.org:selector-filter:string">> = K, V, Acc) when is_binary(V) ->
                 [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc]
         end,
@@ -1070,7 +1070,7 @@ translate_filters_legacy_amqp_direct_binding_filter_test() ->
     {map,
         [{
             {symbol,<<"apache.org:legacy-amqp-direct-binding:string">>},
-            {utf8,<<"my topic">>}
+            {described, {symbol, <<"apache.org:legacy-amqp-direct-binding:string">>}, {utf8,<<"my topic">>}}
         }]
     } = translate_filters(#{<<"apache.org:legacy-amqp-direct-binding:string">> => <<"my topic">>}).
 
@@ -1078,20 +1078,21 @@ translate_filters_legacy_amqp_topic_binding_filter_test() ->
     {map,
         [{
             {symbol, <<"apache.org:legacy-amqp-topic-binding:string">>},
-            {utf8, <<"*.stock.#">>}
+            {described, {symbol, <<"apache.org:legacy-amqp-topic-binding:string">>}, {utf8, <<"*.stock.#">>}}
         }]
     } = translate_filters(#{<<"apache.org:legacy-amqp-topic-binding:string">> => <<"*.stock.#">>}).
 
 translate_filters_legacy_amqp_headers_binding_filter_test() ->
     {map,
         [{
-            {symbol,<<"apache.org:legacy-amqp-headers-binding:map">>},
-            {map, [
+            {symbol, <<"apache.org:legacy-amqp-headers-binding:map">>},
+            {described, {symbol, <<"apache.org:legacy-amqp-headers-binding:map">>},
+             {map, [
                     {{utf8, <<"x-match">>}, {utf8, <<"all">>}},
                     {{utf8, <<"foo">>}, {utf8, <<"bar">>}},
                     {{utf8, <<"bar">>}, {utf8, <<"baz">>}}
                 ]
-            }
+            }}
         }]
     } = translate_filters(#{<<"apache.org:legacy-amqp-headers-binding:map">> => #{
             <<"x-match">> => <<"all">>,
@@ -1104,7 +1105,7 @@ translate_filters_legacy_amqp_no_local_filter_test() ->
     {map,
         [{
             {symbol, <<"apache.org:no-local-filter:list">>},
-            [{utf8, <<"foo">>}, {utf8, <<"bar">>}]
+            {described, {symbol, <<"apache.org:no-local-filter:list">>}, [{utf8, <<"foo">>}, {utf8, <<"bar">>}]}
         }]
     } = translate_filters(#{<<"apache.org:no-local-filter:list">> => [<<"foo">>, <<"bar">>]}).
 
@@ -1112,15 +1113,19 @@ translate_filters_selector_filter_test() ->
     {map,
         [{
             {symbol, <<"apache.org:selector-filter:string">>},
-            {utf8, <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}
+            {described, {symbol, <<"apache.org:selector-filter:string">>},
+             {utf8, <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}}
         }]
     } = translate_filters(#{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}).
 
 translate_filters_multiple_filters_test() ->
     {map,
         [
-            {{symbol, <<"apache.org:selector-filter:string">>}, {utf8, <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}},
-            {{symbol, <<"apache.org:legacy-amqp-direct-binding:string">>}, {utf8,<<"my topic">>}}
+            {{symbol, <<"apache.org:selector-filter:string">>},
+             {described, {symbol, <<"apache.org:selector-filter:string">>},
+              {utf8, <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}}},
+            {{symbol, <<"apache.org:legacy-amqp-direct-binding:string">>},
+             {described, {symbol, <<"apache.org:legacy-amqp-direct-binding:string">>}, {utf8,<<"my topic">>}}}
         ]
     } = translate_filters(#{
             <<"apache.org:legacy-amqp-direct-binding:string">> => <<"my topic">>,
