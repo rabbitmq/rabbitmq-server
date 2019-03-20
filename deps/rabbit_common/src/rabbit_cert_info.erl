@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -197,13 +197,13 @@ format_asn1_value(V) ->
 %% "intended to represent the limited character sets available to
 %% mainframe input terminals"
 %% A-Z a-z 0-9 ' ( ) + , - . / : = ? [space]
-%% http://msdn.microsoft.com/en-us/library/bb540814(v=vs.85).aspx
+%% https://msdn.microsoft.com/en-us/library/bb540814(v=vs.85).aspx
 %%
 %% teletexString:
 %% "a sizable volume of software in the world treats TeletexString
 %% (T61String) as a simple 8-bit string with mostly Windows Latin 1
 %% (superset of iso-8859-1) encoding"
-%% http://www.mail-archive.com/asn1@asn1.org/msg00460.html
+%% https://www.mail-archive.com/asn1@asn1.org/msg00460.html
 %%
 %% (However according to that link X.680 actually defines
 %% TeletexString in some much more involved and crazy way. I suggest
