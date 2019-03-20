@@ -45,7 +45,7 @@ before_script:
   - |
     echo YES | kiex implode
     elixir --version
-    elixir --version | grep -q 'Elixir 1.7.4'
+    elixir --version | grep -q 'Elixir 1.8.1'
 
 script:
   - make xref
