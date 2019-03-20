@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -106,7 +106,7 @@ scanner(<<Size:?INTEGER_SIZE_BITS, MsgIdAndMsg:Size/binary,
     case WriteMarker of
         ?WRITE_OK_MARKER ->
             %% Here we take option 5 from
-            %% http://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in
+            %% https://www.erlang.org/cgi-bin/ezmlm-cgi?2:mss:1569 in
             %% which we read the MsgId as a number, and then convert it
             %% back to a binary in order to work around bugs in
             %% Erlang's GC.

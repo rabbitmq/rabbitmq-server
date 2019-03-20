@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -586,7 +586,7 @@ handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     Msg = io_lib:format("broker forced connection closure with reason '~w'", [Reason]),
     terminate(Msg, State),
     %% this is what we are expected to do according to
-    %% http://www.erlang.org/doc/man/sys.html
+    %% https://www.erlang.org/doc/man/sys.html
     %%
     %% If we wanted to be *really* nice we should wait for a while for
     %% clients to close the socket at their end, just as we do in the

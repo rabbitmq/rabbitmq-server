@@ -2,13 +2,13 @@
 # RabbitMQ broker section
 # ======================================
 
-## Related doc guide: http://rabbitmq.com/configure.html. See
-## http://rabbitmq.com/documentation.html for documentation ToC.
+## Related doc guide: https://rabbitmq.com/configure.html. See
+## https://rabbitmq.com/documentation.html for documentation ToC.
 
 ## Networking
 ## ====================
 ##
-## Related doc guide: http://rabbitmq.com/networking.html.
+## Related doc guide: https://rabbitmq.com/networking.html.
 ##
 ## By default, RabbitMQ will listen on all interfaces, using
 ## the standard (reserved) AMQP 0-9-1 and 1.0 port.
@@ -57,7 +57,7 @@
 ## ==============
 ##
 
-## Related doc guide: http://rabbitmq.com/access-control.html.
+## Related doc guide: https://rabbitmq.com/access-control.html.
 
 ## The default "guest" user is only permitted to access the server
 ## via a loopback interface (e.g. localhost).
@@ -71,7 +71,7 @@
 
 ## TLS configuration.
 ##
-## Related doc guide: http://rabbitmq.com/ssl.html.
+## Related doc guide: https://rabbitmq.com/ssl.html.
 ##
 # ssl_options.verify               = verify_peer
 # ssl_options.fail_if_no_peer_cert = false
@@ -127,8 +127,8 @@
 ##
 ## Related doc guides:
 ##
-##  * http://rabbitmq.com/plugins.html
-##  * http://rabbitmq.com/access-control.html
+##  * https://rabbitmq.com/plugins.html
+##  * https://rabbitmq.com/access-control.html
 ##
 
 # auth_backends.1   = rabbit_auth_backend_internal
@@ -144,8 +144,8 @@
 ##
 ## Relevant doc guides:
 ##
-## * http://rabbitmq.com/ldap.html
-## * http://rabbitmq.com/access-control.html
+## * https://rabbitmq.com/ldap.html
+## * https://rabbitmq.com/access-control.html
 ##
 ## uses LDAP for both authentication and authorisation
 # auth_backends.1 = rabbit_auth_backend_ldap
@@ -163,14 +163,14 @@
 ## 'AMQPLAIN', and 'EXTERNAL' Additional mechanisms can be added via
 ## plugins.
 ##
-## Related doc guide: http://rabbitmq.com/authentication.html.
+## Related doc guide: https://rabbitmq.com/authentication.html.
 ##
 # auth_mechanisms.1 = PLAIN
 # auth_mechanisms.2 = AMQPLAIN
 
 ## The rabbitmq-auth-mechanism-ssl plugin makes it possible to
 ## authenticate a user based on the client's x509 (TLS) certificate.
-## Related doc guide: http://rabbitmq.com/authentication.html.
+## Related doc guide: https://rabbitmq.com/authentication.html.
 ##
 ## To use auth-mechanism-ssl, the EXTERNAL mechanism should
 ## be enabled:
@@ -221,7 +221,7 @@
 
 ## On first start RabbitMQ will create a vhost and a user. These
 ## config items control what gets created.
-## Relevant doc guide: http://rabbitmq.com/access-control.html
+## Relevant doc guide: https://rabbitmq.com/access-control.html
 ##
 # default_vhost = /
 # default_user = guest
@@ -234,7 +234,7 @@
 ## Tags for default user
 ##
 ## For more details about tags, see the documentation for the
-## Management Plugin at http://rabbitmq.com/management.html.
+## Management Plugin at https://rabbitmq.com/management.html.
 ##
 # default_user_tags.administrator = true
 
@@ -250,8 +250,8 @@
 ## Set the default AMQP 0-9-1 heartbeat interval (in seconds).
 ## Related doc guides:
 ##
-## * http://rabbitmq.com/heartbeats.html
-## * http://rabbitmq.com/networking.html
+## * https://rabbitmq.com/heartbeats.html
+## * https://rabbitmq.com/networking.html
 ##
 # heartbeat = 60
 
@@ -273,8 +273,8 @@
 ##
 ## Related doc guides:
 ##
-## * http://rabbitmq.com/networking.html
-## * http://www.erlang.org/doc/man/inet.html#setopts-2
+## * https://rabbitmq.com/networking.html
+## * https://www.erlang.org/doc/man/inet.html#setopts-2
 ##
 
 # tcp_listen_options.backlog = 128
@@ -292,7 +292,7 @@
 ## Resource Limits & Flow Control
 ## ==============================
 ##
-## Related doc guide: http://rabbitmq.com/memory.html.
+## Related doc guide: https://rabbitmq.com/memory.html.
 
 ## Memory-based Flow Control threshold.
 ##
@@ -328,7 +328,7 @@
 ##
 ## Another alternative is to configure queues to page all messages (both
 ## persistent and transient) to disk as quickly
-## as possible, see http://rabbitmq.com/lazy-queues.html.
+## as possible, see https://rabbitmq.com/lazy-queues.html.
 ##
 # vm_memory_high_watermark_paging_ratio = 0.5
 
@@ -389,7 +389,7 @@
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
 ##
-## Relevant doc guide: http://rabbitmq.com//cluster-formation.html
+## Relevant doc guide: https://rabbitmq.com//cluster-formation.html
 ##
 
 # cluster_formation.peer_discovery_backend     = rabbit_peer_discovery_classic_config
@@ -456,7 +456,7 @@
 # mnesia_table_loading_retry_limit = 10
 
 ## Size in bytes below which to embed messages in the queue index.
-## Related doc guide: http://rabbitmq.com/persistence-conf.html
+## Related doc guide: https://rabbitmq.com/persistence-conf.html
 ##
 # queue_index_embed_msgs_below = 4096
 
@@ -472,7 +472,7 @@
 ## (see https://www.erlang-solutions.com/blog/erlang-garbage-collector.html).
 ##
 ## Before trying this option, please take a look at the memory
-## breakdown (http://www.rabbitmq.com/memory-use.html).
+## breakdown (https://www.rabbitmq.com/memory-use.html).
 ##
 # background_gc_enabled = false
 
@@ -496,7 +496,7 @@
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##
-## Related doc guide: http://rabbitmq.com/clustering.html
+## Related doc guide: https://rabbitmq.com/clustering.html
 ## ----------------------------------------------------------------------------
 
 # ======================================
@@ -517,7 +517,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
 ##
-## Related doc guide: http://rabbitmq.com/management.html.
+## Related doc guide: https://rabbitmq.com/management.html.
 ## ----------------------------------------------------------------------------
 
 # =======================================
@@ -525,7 +525,7 @@
 # =======================================
 
 ## Preload schema definitions from the following JSON file.
-## Related doc guide: http://rabbitmq.com/management.html#load-definitions.
+## Related doc guide: https://rabbitmq.com/management.html#load-definitions.
 ##
 # management.load_definitions = /path/to/exported/definitions.json
 
@@ -578,12 +578,12 @@
 
 
 ## One of 'basic', 'detailed' or 'none'. See
-## http://rabbitmq.com/management.html#fine-stats for more details.
+## https://rabbitmq.com/management.html#fine-stats for more details.
 # management.rates_mode = basic
 
 ## Configure how long aggregated data (such as message rates and queue
 ## lengths) is retained. Please read the plugin's documentation in
-## http://rabbitmq.com/management.html#configuration for more
+## https://rabbitmq.com/management.html#configuration for more
 ## details.
 ## Your can use 'minute', 'hour' and 'day' keys or integer key (in seconds)
 # management.sample_retention_policies.global.minute    = 5
@@ -598,7 +598,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Shovel Plugin
 ##
-## Related doc guide: http://rabbitmq.com/shovel.html
+## Related doc guide: https://rabbitmq.com/shovel.html
 ## ----------------------------------------------------------------------------
 
 ## See advanced.config.example for a Shovel plugin example
@@ -607,7 +607,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ STOMP Plugin
 ##
-## Related doc guide: http://rabbitmq.com/stomp.html
+## Related doc guide: https://rabbitmq.com/stomp.html
 ## ----------------------------------------------------------------------------
 
 # =======================================
@@ -801,7 +801,7 @@
 
 ## Logging settings.
 ##
-## See http://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
+## See https://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
 ##
 
 ## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
@@ -845,7 +845,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ LDAP Plugin
 ##
-## Related doc guide: http://rabbitmq.com/ldap.html.
+## Related doc guide: https://rabbitmq.com/ldap.html.
 ##
 ## ----------------------------------------------------------------------------
 
@@ -946,7 +946,7 @@
 ## The LDAP plugin can perform a variety of queries against your
 ## LDAP server to determine questions of authorisation.
 ##
-## Related doc guide: http://rabbitmq.com/ldap.html#authorisation.
+## Related doc guide: https://rabbitmq.com/ldap.html#authorisation.
 
 ## Following configuration should be defined in additional.config file
 ## DO NOT UNCOMMENT THIS LINES!
