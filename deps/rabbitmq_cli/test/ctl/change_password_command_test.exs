@@ -1,4 +1,4 @@
-## at http://www.mozilla.org/MPL/
+## at https://www.mozilla.org/MPL/
 ##
 ## Software distributed under the License is distributed on an "AS IS"
 ## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See

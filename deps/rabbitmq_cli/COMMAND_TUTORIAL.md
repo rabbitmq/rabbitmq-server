@@ -7,7 +7,7 @@ tools](https://github.com/rabbitmq/rabbitmq-cli) (e.g. `rabbitmqctl`)
 allow plugin developers to extend them their own commands.
 
 The CLI is written in the [Elixir programming
-language](http://elixir-lang.org/) and commands can be implemented in
+language](https://elixir-lang.org/) and commands can be implemented in
 Elixir, Erlang or any other Erlang-based language.  This tutorial will
 use Elixir but also provides an Erlang example.  The fundamentals are
 the same.
@@ -22,7 +22,7 @@ To develop a new plugin you should check existing tutorials:
 ## Anatomy of a RabbitMQ CLI Command
 
 A RabbitMQ CLI command is an Elixir/Erlang module that implements a
-particular [behavior](http://elixir-lang.org/getting-started/typespecs-and-behaviours.html).
+particular [behavior](https://elixir-lang.org/getting-started/typespecs-and-behaviours.html).
 It should fulfill certain requirements in order to be discovered and load by CLI tools:
 
  * Follow a naming convention (module name should match `RabbitMQ.CLI.(.*).Commands.(.*)Command`)

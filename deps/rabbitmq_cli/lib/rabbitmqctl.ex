@@ -1,7 +1,7 @@
 ## The contents of this file are subject to the Mozilla Public License
 ## Version 1.1 (the "License"); you may not use this file except in
 ## compliance with the License. You may obtain a copy of the License
-## at http://www.mozilla.org/MPL/
+## at https://www.mozilla.org/MPL/
 ##
 ## Software distributed under the License is distributed on an "AS IS"
 ## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -500,7 +500,7 @@ defmodule RabbitMQCtl do
 
     In addition to the diagnostics info below:
 
-     * See the CLI, clustering and networking guides on http://rabbitmq.com/documentation.html to learn more
+     * See the CLI, clustering and networking guides on https://rabbitmq.com/documentation.html to learn more
      * Consult server logs on node #{node}
      * If target node is configured to use long node names, don't forget to use --longnames with CLI tools
     """
