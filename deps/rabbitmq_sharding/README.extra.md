@@ -26,7 +26,7 @@ taking them out of the list of bound queues. Message loss can happen
 in the case where a race occurs from a node going away and your
 message arriving to the shard exchange. If you can't afford to lose a
 message then you can use
-[publisher confirms](http://www.rabbitmq.com/confirms.html) to prevent
+[publisher confirms](https://www.rabbitmq.com/confirms.html) to prevent
 message loss.
 
 ## Message Ordering ##
@@ -36,7 +36,7 @@ means that once a message entered a queue, then for that queue and the
 set of consumers attached to the queue, ordering will be preserved.
 
 If you need global ordering then stick with
-[mirrored queues](http://www.rabbitmq.com/ha.html).
+[mirrored queues](https://www.rabbitmq.com/ha.html).
 
 ## What strategy is used for picking the queue name ##
 
