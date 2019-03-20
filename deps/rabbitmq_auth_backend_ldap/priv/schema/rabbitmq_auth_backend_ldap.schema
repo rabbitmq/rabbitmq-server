@@ -1,7 +1,7 @@
 %% ----------------------------------------------------------------------------
 %% RabbitMQ LDAP Plugin
 %%
-%% See http://www.rabbitmq.com/ldap.html for details.
+%% See https://www.rabbitmq.com/ldap.html for details.
 %%
 %% ----------------------------------------------------------------------------
 
@@ -193,7 +193,7 @@ end}.
 
 %% The LDAP plugin can perform a variety of queries against your
 %% LDAP server to determine questions of authorisation. See
-%% http://www.rabbitmq.com/ldap.html#authorisation for more
+%% https://www.rabbitmq.com/ldap.html#authorisation for more
 %% information.
 
 %% Set the query to use when determining vhost access
