@@ -10,7 +10,7 @@ management plugin.
 
 ## Installing
 
-This plugin ships with RabbitMQ. Like all [plugins](http://www.rabbitmq.com/plugins.html), it must be enabled
+This plugin ships with RabbitMQ. Like all [plugins](https://www.rabbitmq.com/plugins.html), it must be enabled
 before it can be used:
 
 ```
