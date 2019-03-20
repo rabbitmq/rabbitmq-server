@@ -10,6 +10,6 @@ at the same time unless they are configured to use different ports.
 
 ## Installation
 
-This plugin ships with RabbitMQ. Enabled it using [CLI tools](http://www.rabbitmq.com/cli.html):
+This plugin ships with RabbitMQ. Enabled it using [CLI tools](https://www.rabbitmq.com/cli.html):
 
     rabbitmq-plugins enable rabbitmq_web_mqtt_examples
