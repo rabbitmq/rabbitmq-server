@@ -27,7 +27,7 @@ The HTTP API endpoints allow for retrieval of federation links:
 
 ## Building From Source
 
-To [build the plugin](http://www.rabbitmq.com/plugin-development.html), use
+To [build the plugin](https://www.rabbitmq.com/plugin-development.html), use
 
     make dist
 
