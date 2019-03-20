@@ -18,8 +18,8 @@
 <beans
   xmlns="http://www.springframework.org/schema/beans"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
-  http://activemq.apache.org/schema/core http://activemq.apache.org/schema/core/activemq-core.xsd">
+  xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd
+  http://activemq.apache.org/schema/core https://activemq.apache.org/schema/core/activemq-core.xsd">
 
     <!-- Allows us to use system properties as variables in this configuration file -->
     <bean class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
@@ -48,7 +48,7 @@
                          by limiting the number of messages that are retained
                          For more information, see:
 
-                         http://activemq.apache.org/slow-consumer-handling.html
+                         https://activemq.apache.org/slow-consumer-handling.html
 
                     -->
                   <pendingMessageLimitStrategy>
@@ -65,7 +65,7 @@
             JMX. By default, ActiveMQ uses the MBean server that is started by
             the JVM. For more information, see:
 
-            http://activemq.apache.org/jmx.html
+            https://activemq.apache.org/jmx.html
         -->
         <managementContext>
             <managementContext createConnector="false"/>
@@ -76,7 +76,7 @@
             mechanism is the KahaDB store (identified by the kahaDB tag).
             For more information, see:
 
-            http://activemq.apache.org/persistence.html
+            https://activemq.apache.org/persistence.html
         -->
         <persistenceAdapter>
             <kahaDB directory="${activemq.data}/kahadb"/>
@@ -86,7 +86,7 @@
           <!--
             The systemUsage controls the maximum amount of space the broker will
             use before disabling caching and/or slowing down producers. For more information, see:
-            http://activemq.apache.org/producer-flow-control.html
+            https://activemq.apache.org/producer-flow-control.html
           -->
           <systemUsage>
             <systemUsage>
@@ -106,7 +106,7 @@
             The transport connectors expose ActiveMQ over a given protocol to
             clients and other brokers. For more information, see:
 
-            http://activemq.apache.org/configuring-transports.html
+            https://activemq.apache.org/configuring-transports.html
         -->
         <transportConnectors>
             <!-- DOS protection, limit concurrent connections to 1000 and frame size to 100MB -->
