@@ -1,6 +1,6 @@
 # RabbitMQ Access Control Cache Plugin
 
-This plugin provides a caching layer for [access control operations](http://rabbitmq.com/access-control.html)
+This plugin provides a caching layer for [access control operations](https://rabbitmq.com/access-control.html)
 performed by RabbitMQ nodes.
 
 ## Project Maturity
@@ -9,14 +9,14 @@ As of 3.7.0, this plugin is distributed with RabbitMQ.
 
 ## Overview
 
-This plugin provides a way to cache [authentication and authorization backend](http://rabbitmq.com/access-control.html)
+This plugin provides a way to cache [authentication and authorization backend](https://rabbitmq.com/access-control.html)
 results for a configurable amount of time.
 It's not an independent auth backend but a caching layer for existing backends
 such as the built-in, [LDAP](github.com/rabbitmq/rabbitmq-auth-backend-ldap), or [HTTP](github.com/rabbitmq/rabbitmq-auth-backend-http)
 ones.
 
 Cache expiration is currently time-based. It is not very useful with the built-in
-(internal) [authn/authz backends](http://rabbitmq.com/access-control.html) but can be very useful for LDAP, HTTP or other backends that
+(internal) [authn/authz backends](https://rabbitmq.com/access-control.html) but can be very useful for LDAP, HTTP or other backends that
 use network requests.
 
 ## RabbitMQ Version Requirements
@@ -38,7 +38,7 @@ Binary builds can be obtained [from project releases](https://github.com/rabbitm
 ## Building
 
 You can build and install it like any other plugin (see
-[the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
+[the plugin development guide](https://www.rabbitmq.com/plugin-development.html)).
 
 ## Authentication and Authorization Backend Configuration
 
@@ -51,7 +51,7 @@ So a configuration fragment that enables this plugin *only* (this example is **i
 
     auth_backends.1 = cache
 
-In the [classic config format](http://www.rabbitmq.com/configure.html#config-file-formats):
+In the [classic config format](https://www.rabbitmq.com/configure.html#config-file-formats):
 
 ``` erlang
 [
@@ -170,7 +170,7 @@ define `start_link` function to start cache process.
 This repository provides several implementations:
 
  * `rabbit_auth_cache_dict` stores cache entries in the internal process dictionary. **This module is for demonstration only and should not be used in production**.
- * `rabbit_auth_cache_ets` stores cache entries in an [ETS](http://learnyousomeerlang.com/ets) table and uses timers for cache invalidation. **This is the default implementation**.
+ * `rabbit_auth_cache_ets` stores cache entries in an [ETS](https://learnyousomeerlang.com/ets) table and uses timers for cache invalidation. **This is the default implementation**.
  * `rabbit_auth_cache_ets_segmented` stores cache entries in multiple ETS tables and does not delete individual cache items but rather
    uses a separate process for garbage collection.
  * `rabbit_auth_cache_ets_segmented_stateless` same as previous, but with minimal use of `gen_server` state, using ets tables to store information about segments.
@@ -183,7 +183,7 @@ Cache module can be set via sysctl config format:
 
     auth_cache.cache_module = rabbit_auth_backend_ets_segmented
 
-Additional cache module arguments can only be defined via the [advanced config](http://www.rabbitmq.com/configure.html#advanced-config-file) or classic config format:
+Additional cache module arguments can only be defined via the [advanced config](https://www.rabbitmq.com/configure.html#advanced-config-file) or classic config format:
 
 ``` erlang
 [
