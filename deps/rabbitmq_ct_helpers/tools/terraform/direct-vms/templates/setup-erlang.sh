@@ -66,7 +66,7 @@ esac
 setup_backports() {
   # Enable backports.
   cat >/etc/apt/sources.list.d/backports.list << EOF
-deb http://httpredir.debian.org/debian $debian_codename-backports main
+deb http://cdn-fastly.deb.debian.org/debian $debian_codename-backports main
 EOF
   apt-get -qq update
 }

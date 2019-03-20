@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -979,7 +979,7 @@ archive_names_to_urls(Config, HttpInfo) ->
 archive_name_to_url(HttpInfo, Archive) ->
     Hostname = proplists:get_value(server_name, HttpInfo),
     Port = proplists:get_value(port, HttpInfo),
-    rabbit_misc:format("http://~s:~b/~s", [Hostname, Port, Archive]).
+    rabbit_misc:format("https://~s:~b/~s", [Hostname, Port, Archive]).
 
 stop_ct_peers(Config) ->
     CTPeers = get_ct_peers(Config),
