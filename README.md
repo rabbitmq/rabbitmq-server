@@ -26,7 +26,7 @@
 ## Getting Help
 
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
- * [Commercial support](https://rabbitmq.com/services.html) from [Pivotal](http://pivotal.io) for open source RabbitMQ
+ * [Commercial support](https://rabbitmq.com/services.html) from [Pivotal](https://pivotal.io) for open source RabbitMQ
  * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
  * `#rabbitmq` on Freenode
 

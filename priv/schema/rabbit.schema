@@ -130,7 +130,7 @@ fun(Conf) ->
 end}.
 
 %% TLS options.
-%% See http://www.rabbitmq.com/ssl.html for full documentation.
+%% See https://www.rabbitmq.com/ssl.html for full documentation.
 %%
 %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
 %%                {certfile,             "/path/to/server/cert.pem"},
@@ -268,7 +268,7 @@ end}.
 %% 'AMQPLAIN'. Additional mechanisms can be added via
 %% plugins.
 %%
-%% See http://www.rabbitmq.com/authentication.html for more details.
+%% See https://www.rabbitmq.com/authentication.html for more details.
 %%
 %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
 
@@ -431,7 +431,7 @@ end}.
 
 %% On first start RabbitMQ will create a vhost and a user. These
 %% config items control what gets created. See
-%% http://www.rabbitmq.com/access-control.html for further
+%% https://www.rabbitmq.com/access-control.html for further
 %% information about vhosts and access control.
 %%
 %% {default_vhost,       <<"/">>},
@@ -490,7 +490,7 @@ end}.
 %% Tags for default user
 %%
 %% For more details about tags, see the documentation for the
-%% Management Plugin at http://www.rabbitmq.com/management.html.
+%% Management Plugin at https://www.rabbitmq.com/management.html.
 %%
 %% {default_user_tags, [administrator]},
 
@@ -556,7 +556,7 @@ end}.
 
 %% Customising Socket Options.
 %%
-%% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
+%% See (https://www.erlang.org/doc/man/inet.html#setopts-2) for
 %% further documentation.
 %%
 %% {tcp_listen_options, [{backlog,       128},
@@ -655,7 +655,7 @@ end}.
 %% Resource Limits & Flow Control
 %% ==============================
 %%
-%% See http://www.rabbitmq.com/memory.html for full details.
+%% See https://www.rabbitmq.com/memory.html for full details.
 
 %% Memory-based Flow Control threshold.
 %%
@@ -768,7 +768,7 @@ end}.
 %%
 
 %% How to respond to cluster partitions.
-%% See http://www.rabbitmq.com/partitions.html for further details.
+%% See https://www.rabbitmq.com/partitions.html for further details.
 %%
 %% {cluster_partition_handling, ignore},
 
@@ -904,7 +904,7 @@ end}.
 %%
 %% Make clustering happen *automatically* at startup - only applied
 %% to nodes that have just been reset or started for the first time.
-%% See http://www.rabbitmq.com/clustering.html#auto-config for
+%% See https://www.rabbitmq.com/clustering.html#auto-config for
 %% further details.
 %%
 %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
@@ -1015,7 +1015,7 @@ end}.
     [{datatype, integer}]}.
 
 %% Size in bytes below which to embed messages in the queue index. See
-%% http://www.rabbitmq.com/persistence-conf.html
+%% https://www.rabbitmq.com/persistence-conf.html
 %%
 %% {queue_index_embed_msgs_below, 4096}
 
