@@ -5,7 +5,7 @@
 This is an MQTT plugin for RabbitMQ.
 
 The plugin is included in the RabbitMQ distribution.  To enable
-it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
+it, use [rabbitmq-plugins](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
 
     rabbitmq-plugins enable rabbitmq_mqtt
 
@@ -13,7 +13,7 @@ Default port used by the plugin is `1883`.
 
 ## Documentation
 
-[MQTT plugin documentation](http://www.rabbitmq.com/mqtt.html) is available
+[MQTT plugin documentation](https://www.rabbitmq.com/mqtt.html) is available
 from rabbitmq.com.
 
 ## Contributing
@@ -34,5 +34,5 @@ against it. Note that there must be no other MQTT server running on ports `1883`
 
 (c) 2007 — 2016 Pivotal Software, Inc.
 
-Released under the [Mozilla Public License](http://www.rabbitmq.com/mpl.html),
+Released under the [Mozilla Public License](https://www.rabbitmq.com/mpl.html),
 the same as RabbitMQ.
