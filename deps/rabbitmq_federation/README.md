@@ -13,7 +13,7 @@ install it separately.
 
 ## Documentation        
 
-See [RabbitMQ federation plugin](http://www.rabbitmq.com/federation.html) on rabbitmq.com.
+See [RabbitMQ federation plugin](https://www.rabbitmq.com/federation.html) on rabbitmq.com.
 
 
 ## License and Copyright
