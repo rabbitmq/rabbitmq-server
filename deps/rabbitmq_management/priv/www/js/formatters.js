@@ -617,7 +617,14 @@ function fmt_shortened_uri(uri) {
 }
 
 function fmt_uri_with_credentials(uri) {
-    if (typeof uri == 'string') {
+    if (typeof uri == 'object') {
+        var res = [];
+        for (i in uri) {
+            res.push(fmt_uri_with_credentials(uri[i]));
+        }
+        return res;
+    }
+    else if (typeof uri == 'string') {
         // mask password
         var mask = /^([a-zA-Z0-9+-.]+):\/\/(.*):(.*)@/;
         return uri.replace(mask, "$1://$2:[redacted]@");
