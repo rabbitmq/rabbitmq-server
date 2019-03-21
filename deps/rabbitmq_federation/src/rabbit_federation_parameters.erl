@@ -28,7 +28,7 @@
          {runtime_parameter, <<"federation-upstream">>},
          {runtime_parameter, <<"federation-upstream-set">>},
          {policy_validator,  <<"federation-upstream">>},
-         {policy_validator,  <<"federation-upstream-regex">>},
+         {policy_validator,  <<"federation-upstream-pattern">>},
          {policy_validator,  <<"federation-upstream-set">>}]).
 
 -rabbit_boot_step({?MODULE,
@@ -124,15 +124,15 @@ validate_policy([{<<"federation-upstream-set">>, Value}])
 validate_policy([{<<"federation-upstream-set">>, Value}]) ->
     {error, "~p is not a valid federation upstream set name", [Value]};
 
-validate_policy([{<<"federation-upstream-regex">>, Value}])
+validate_policy([{<<"federation-upstream-pattern">>, Value}])
   when is_binary(Value) ->
     case re:compile(Value) of
         {ok, _}         -> ok;
         {error, Reason} -> {error, "~s should be regular expression "
-                                 "but is invalid: ~p", [Value, Reason]}
+                                   "but is invalid: ~p", [Value, Reason]}
     end;
-validate_policy([{<<"federation-upstream-regex">>, Value}]) ->
-    {error, "~p is not a valid federation upstream re name", [Value]};
+validate_policy([{<<"federation-upstream-pattern">>, Value}]) ->
+    {error, "~p is not a valid federation upstream pattern name", [Value]};
 
 validate_policy([{<<"federation-upstream">>, Value}])
   when is_binary(Value) ->
@@ -141,5 +141,5 @@ validate_policy([{<<"federation-upstream">>, Value}]) ->
     {error, "~p is not a valid federation upstream name", [Value]};
 
 validate_policy(L) when length(L) >= 2 ->
-    {error, "cannot specify federation-upstream and federation-upstream-set "
-     "or federation-upstream-regex together", []}.
+    {error, "cannot specify federation-upstream, federation-upstream-set "
+            "or federation-upstream-pattern together", []}.

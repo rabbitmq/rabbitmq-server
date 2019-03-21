@@ -27,7 +27,7 @@
 -import(rabbit_federation_test_util,
         [expect/3, expect_empty/2,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_upstream_set/4,
-         set_policy/5, set_policy_regex/5, clear_policy/3,
+         set_policy/5, set_policy_pattern/5, clear_policy/3,
          set_policy_upstream/5, set_policy_upstreams/4]).
 
 all() ->
@@ -42,7 +42,7 @@ groups() ->
           {cluster_size_1, [], [
               simple,
               multiple_upstreams,
-              multiple_upstreams_regex,
+              multiple_upstreams_pattern,
               multiple_uris,
               multiple_downstreams,
               e2e,
@@ -177,7 +177,7 @@ multiple_upstreams(Config) ->
             x(<<"upstream2">>),
             x(<<"fed12.downstream">>)]).
 
-multiple_upstreams_regex(Config) ->
+multiple_upstreams_pattern(Config) ->
     set_upstream(Config, 0, <<"local453x">>,
         rabbit_ct_broker_helpers:node_uri(Config, 0), [
         {<<"exchange">>, <<"upstream">>},
@@ -188,22 +188,22 @@ multiple_upstreams_regex(Config) ->
         {<<"exchange">>, <<"upstream2">>},
         {<<"queue">>, <<"upstream2">>}]),
 
-    set_policy_regex(Config, 0, <<"regex">>, <<"^regex\.">>, <<"local\\d+x">>),
+    set_policy_pattern(Config, 0, <<"pattern">>, <<"^pattern\.">>, <<"local\\d+x">>),
 
     with_ch(Config,
       fun (Ch) ->
-              Q = bind_queue(Ch, <<"regex.downstream">>, <<"key">>),
+              Q = bind_queue(Ch, <<"pattern.downstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream2">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>),
               publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>)
       end, [x(<<"upstream">>),
             x(<<"upstream2">>),
-            x(<<"regex.downstream">>)]),
+            x(<<"pattern.downstream">>)]),
 
     clear_upstream(Config, 0, <<"local453x">>),
     clear_upstream(Config, 0, <<"local3214x">>),
-    clear_policy(Config, 0, <<"regex">>).
+    clear_policy(Config, 0, <<"pattern">>).
 
 multiple_uris(Config) ->
     %% We can't use a direct connection for Kill() to work.
