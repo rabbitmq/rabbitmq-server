@@ -55,6 +55,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)
   end
 
+  def banner([], %{openssl_format: true}), do: "Listing available cipher suites in the OpenSSL format"
+
+  def banner([], %{erlang_format: true}), do: "Listing available cipher suites in the Erlang term format"
+
   def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Lists cipher suites available (but not necessarily allowed) on the target node"
@@ -67,12 +71,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
       "--erlang-format: use Erlang cipher suite format"
     ]
   end
-
-  def banner([], %{openssl_format: true}),
-    do: "Listing available cipher suites in the OpenSSL format"
-
-  def banner([], %{erlang_format: true}),
-    do: "Listing available cipher suites in the Erlang term format"
 
   defmodule Formatter do
     alias RabbitMQ.CLI.Formatters.FormatterHelpers

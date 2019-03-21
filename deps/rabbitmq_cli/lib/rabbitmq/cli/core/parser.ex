@@ -12,10 +12,9 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
-alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
-
 
 defmodule RabbitMQ.CLI.Core.Parser do
+  alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
   alias RabbitMQ.CLI.Core.{CommandModules, Config}
 
   # Use the same jaro distance limit as in Elixir `did_you_mean`

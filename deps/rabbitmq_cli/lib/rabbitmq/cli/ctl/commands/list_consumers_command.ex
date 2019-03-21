@@ -79,7 +79,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     "<column> must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")
   end
 
-  def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."
+  def banner(_, %{vhost: vhost}), do: "Listing consumers in vhost #{vhost} ..."
 
   # add missing fields if response comes from node < 3.8
   def fill_consumer_active_fields({[], {chunk, :continue}}) do
