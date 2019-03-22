@@ -42,8 +42,8 @@ user_login_authorization(Username, AuthProps) ->
            (_)                -> unknown
         end).
 
-check_vhost_access(#auth_user{} = AuthUser, VHostPath, Sock) ->
-    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, Sock]},
+check_vhost_access(#auth_user{} = AuthUser, VHostPath, AuthzData) ->
+    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, AuthzData]},
         fun(true)  -> success;
            (false) -> refusal;
            ({error, _} = Err) -> Err;
