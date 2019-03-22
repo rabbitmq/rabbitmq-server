@@ -128,8 +128,8 @@ validate_policy([{<<"federation-upstream-pattern">>, Value}])
   when is_binary(Value) ->
     case re:compile(Value) of
         {ok, _}         -> ok;
-        {error, Reason} -> {error, "~s should be regular expression "
-                                   "but is invalid: ~p", [Value, Reason]}
+        {error, Reason} -> {error, "could not compile pattern ~s to a regular expression. "
+                                   "Error: ~p", [Value, Reason]}
     end;
 validate_policy([{<<"federation-upstream-pattern">>, Value}]) ->
     {error, "~p is not a valid federation upstream pattern name", [Value]};
