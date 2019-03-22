@@ -97,7 +97,7 @@ user_login_authorization(Username, AuthProps) ->
 
 check_vhost_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
-                   VHost, _Sock) ->
+                   VHost, _AuthzData) ->
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username, Username},
             {user_dn,  UserDN},
