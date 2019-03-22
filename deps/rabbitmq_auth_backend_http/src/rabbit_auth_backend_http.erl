@@ -170,15 +170,3 @@ join_tags([])   -> "";
 join_tags(Tags) ->
   Strings = [rabbit_data_coercion:to_list(T) || T <- Tags],
   string:join(Strings, " ").
-
-%%--------------------------------------------------------------------
-
-extract_address(undefined) -> undefined;
-% for native direct connections the address is set to unknown
-extract_address(#authz_socket_info{peername = {unknown, _Port}}) -> undefined;
-extract_address(#authz_socket_info{peername = {Address, _Port}}) -> inet_parse:ntoa(Address);
-extract_address(Sock) ->
-    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
-    inet_parse:ntoa(Address).
-
-%%--------------------------------------------------------------------
