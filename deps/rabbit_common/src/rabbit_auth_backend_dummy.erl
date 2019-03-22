@@ -40,6 +40,6 @@ user_login_authentication(_, _) ->
 user_login_authorization(_, _) ->
     {refused, "cannot log in conventionally as dummy user", []}.
 
-check_vhost_access(#auth_user{}, _VHostPath, _Sock) -> true.
+check_vhost_access(#auth_user{}, _VHostPath, _AuthData) -> true.
 check_resource_access(#auth_user{}, #resource{}, _Permission) -> true.
 check_topic_access(#auth_user{}, #resource{}, _Permission, _Context) -> true.

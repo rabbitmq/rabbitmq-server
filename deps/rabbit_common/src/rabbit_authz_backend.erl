@@ -39,14 +39,15 @@
     {'refused', string(), [any()]} |
     {'error', any()}.
 
-%% Given #auth_user and vhost, can a user log in to a vhost?
+%% Given #auth_user, vhost and data (client IP for now), can a user log in to a vhost?
 %% Possible responses:
 %% true
 %% false
 %% {error, Error}
 %%     Something went wrong. Log and die.
--callback check_vhost_access(rabbit_types:auth_user(),
-                             rabbit_types:vhost(), rabbit_net:socket()) ->
+-callback check_vhost_access(AuthUser :: rabbit_types:auth_user(),
+                             VHost :: rabbit_types:vhost(),
+                             AuthData :: #{peeraddr := inet:ip_address()}) ->
     boolean() | {'error', any()}.
 
 %% Given #auth_user, resource and permission, can a user access a resource?
