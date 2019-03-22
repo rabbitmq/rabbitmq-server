@@ -161,15 +161,23 @@ expect(Ch, Q, Fun) when is_function(Fun) ->
 expect(Ch, Q, Payloads) ->
     expect(Ch, Q, fun() -> expect(Payloads) end).
 
+expect(Ch, Q, Payloads, Timeout) ->
+    expect(Ch, Q, fun() -> expect(Payloads, Timeout) end).
+
 expect([]) ->
     ok;
 expect(Payloads) ->
+    expect(Payloads, 60000).
+
+expect(Payloads, Timeout) ->
     receive
         {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
                 true  -> expect(Payloads -- [Payload]);
                 false -> throw({expected, Payloads, actual, Payload})
             end
+    after Timeout ->
+      throw({timeout, {waiting_for, Payloads}})
     end.
 
 expect_empty(Ch, Q) ->
