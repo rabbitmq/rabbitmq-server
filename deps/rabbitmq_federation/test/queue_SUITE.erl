@@ -22,9 +22,9 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [expect/3,
-         set_upstream/4, clear_upstream/3, set_policy/5, clear_policy/3,
-         set_policy_upstream/5, set_policy_upstreams/4, q/1, with_ch/3,
+        [expect/3, expect/4,
+         set_upstream/4, set_upstream/5, clear_upstream/3, set_policy/5, clear_policy/3,
+         set_policy_pattern/5, set_policy_upstream/5, set_policy_upstreams/4, q/1, with_ch/3,
          declare_queue/2, delete_queue/2]).
 
 all() ->
@@ -39,6 +39,7 @@ groups() ->
           {cluster_size_1, [], [
               simple,
               multiple_upstreams,
+              multiple_upstreams_pattern,
               multiple_downstreams,
               bidirectional,
               dynamic_reconfiguration,
@@ -130,6 +131,37 @@ multiple_upstreams(Config) ->
       end, [q(<<"upstream">>),
             q(<<"upstream2">>),
             q(<<"fed12.downstream">>)]).
+
+multiple_upstreams_pattern(Config) ->
+    set_upstream(Config, 0, <<"local453x">>,
+        rabbit_ct_broker_helpers:node_uri(Config, 0), [
+        {<<"exchange">>, <<"upstream">>},
+        {<<"queue">>, <<"upstream">>}]),
+
+    set_upstream(Config, 0, <<"zzzzzZZzz">>,
+        rabbit_ct_broker_helpers:node_uri(Config, 0), [
+        {<<"exchange">>, <<"upstream-zzz">>},
+        {<<"queue">>, <<"upstream-zzz">>}]),
+
+    set_upstream(Config, 0, <<"local3214x">>,
+        rabbit_ct_broker_helpers:node_uri(Config, 0), [
+        {<<"exchange">>, <<"upstream2">>},
+        {<<"queue">>, <<"upstream2">>}]),
+
+    set_policy_pattern(Config, 0, <<"pattern">>, <<"^pattern\.">>, <<"local\\d+x">>),
+
+    Timeout = 60000,
+    with_ch(Config,
+      fun (Ch) ->
+              expect_federation(Ch, <<"upstream">>, <<"pattern.downstream">>, Timeout),
+              expect_federation(Ch, <<"upstream2">>, <<"pattern.downstream">>, Timeout)
+      end, [q(<<"upstream">>),
+            q(<<"upstream2">>),
+            q(<<"pattern.downstream">>)]),
+
+    clear_upstream(Config, 0, <<"local453x">>),
+    clear_upstream(Config, 0, <<"local3214x">>),
+    clear_policy(Config, 0, <<"pattern">>).
 
 multiple_downstreams(Config) ->
     with_ch(Config,
@@ -272,6 +304,10 @@ publish_expect(Ch, X, Key, Q, Payload) ->
     publish(Ch, X, Key, Payload),
     expect(Ch, Q, [Payload]).
 
+publish_expect(Ch, X, Key, Q, Payload, Timeout) ->
+    publish(Ch, X, Key, Payload),
+    expect(Ch, Q, [Payload], Timeout).
+
 %% Doubled due to our strange basic.get behaviour.
 expect_empty(Ch, Q) ->
     rabbit_federation_test_util:expect_empty(Ch, Q),
@@ -279,6 +315,9 @@ expect_empty(Ch, Q) ->
 
 expect_federation(Ch, UpstreamQ, DownstreamQ) ->
     publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, <<"HELLO">>).
+
+expect_federation(Ch, UpstreamQ, DownstreamQ, Timeout) ->
+    publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, <<"HELLO">>, Timeout).
 
 expect_no_federation(Ch, UpstreamQ, DownstreamQ) ->
     publish(Ch, <<>>, UpstreamQ, <<"HELLO">>),

@@ -161,15 +161,23 @@ expect(Ch, Q, Fun) when is_function(Fun) ->
 expect(Ch, Q, Payloads) ->
     expect(Ch, Q, fun() -> expect(Payloads) end).
 
+expect(Ch, Q, Payloads, Timeout) ->
+    expect(Ch, Q, fun() -> expect(Payloads, Timeout) end).
+
 expect([]) ->
     ok;
 expect(Payloads) ->
+    expect(Payloads, 60000).
+
+expect(Payloads, Timeout) ->
     receive
         {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
                 true  -> expect(Payloads -- [Payload]);
                 false -> throw({expected, Payloads, actual, Payload})
             end
+    after Timeout ->
+      throw({timeout, {waiting_for, Payloads}})
     end.
 
 expect_empty(Ch, Q) ->
@@ -200,6 +208,11 @@ set_policy(Config, Node, Name, Pattern, UpstreamSet) ->
     rabbit_ct_broker_helpers:set_policy(Config, Node,
       Name, Pattern, <<"all">>,
       [{<<"federation-upstream-set">>, UpstreamSet}]).
+
+set_policy_pattern(Config, Node, Name, Pattern, Regex) ->
+    rabbit_ct_broker_helpers:set_policy(Config, Node,
+      Name, Pattern, <<"all">>,
+      [{<<"federation-upstream-pattern">>, Regex}]).
 
 clear_policy(Config, Node, Name) ->
     rabbit_ct_broker_helpers:clear_policy(Config, Node, Name).
@@ -262,14 +275,28 @@ assert_link_status({DXorQNameBin, UpstreamName, UXorQNameBin}, Status,
 
 links(#'exchange.declare'{exchange = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, xr(Name)) of
-        undefined -> [];
+        undefined ->
+            case rabbit_policy:get(<<"federation-upstream-pattern">>, xr(Name)) of
+                undefined -> [];
+                Regex       ->
+                    X = #exchange{name = xr(Name)},
+                    [{Name, U#upstream.name, U#upstream.exchange_name} ||
+                         U <- rabbit_federation_upstream:from_pattern(Regex, X)]
+            end;
         Set       -> X = #exchange{name = xr(Name)},
                      [{Name, U#upstream.name, U#upstream.exchange_name} ||
                          U <- rabbit_federation_upstream:from_set(Set, X)]
     end;
 links(#'queue.declare'{queue = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
-        undefined -> [];
+        undefined ->
+          case rabbit_policy:get(<<"federation-upstream-pattern">>, qr(Name)) of
+              undefined -> [];
+              Regex       ->
+                  Q = #amqqueue{name = qr(Name)},
+                  [{Name, U#upstream.name, U#upstream.queue_name} ||
+                      U <- rabbit_federation_upstream:from_pattern(Regex, Q)]
+          end;
         Set       -> Q = #amqqueue{name = qr(Name)},
                      [{Name, U#upstream.name, U#upstream.queue_name} ||
                          U <- rabbit_federation_upstream:from_set(Set, Q)]
