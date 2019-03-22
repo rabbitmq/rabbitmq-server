@@ -126,15 +126,10 @@ check_user_loopback(Username, SockOrAddr) ->
     end.
 
 get_authz_data_from({ip, Address}) ->
-    case inet:ntoa(Address) of
-        {error, einval} ->
-            undefined;
-        AddressStr ->
-            #{peeraddr => AddressStr}
-    end;
+    #{peeraddr => Address};
 get_authz_data_from({socket, Sock}) ->
     {ok, {Address, _Port}} = rabbit_net:peername(Sock),
-    get_authz_data_from({ip, Address});
+    #{peeraddr => Address};
 get_authz_data_from(undefined) ->
     undefined.
 
