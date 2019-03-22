@@ -125,20 +125,33 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
+get_authz_data_from({ip, Address}) ->
+    case inet:ntoa(Address) of
+        {error, einval} ->
+            undefined;
+        AddressStr ->
+            #{peeraddr => AddressStr}
+    end;
+get_authz_data_from({socket, Sock}) ->
+    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
+    get_authz_data_from({ip, Address});
+get_authz_data_from(undefined) ->
+    undefined.
+
 -spec check_vhost_access(User :: rabbit_types:user(),
                          VHostPath :: rabbit_types:vhost(),
-                         Sock :: rabbit_net:socket() | #authz_socket_info{} | undefined) ->
+                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address()} | undefined) ->
     'ok' | rabbit_types:channel_exit().
 check_vhost_access(User = #user{username       = Username,
-                                authz_backends = Modules}, VHostPath, Sock) ->
-    AuthData = 
+                                authz_backends = Modules}, VHostPath, AuthzRawData) ->
+    AuthzData = get_authz_data_from(AuthzRawData),
     lists:foldl(
       fun({Mod, Impl}, ok) ->
               check_access(
                 fun() ->
                         rabbit_vhost:exists(VHostPath) andalso
                             Mod:check_vhost_access(
-                              auth_user(User, Impl), VHostPath, AuthData)
+                              auth_user(User, Impl), VHostPath, AuthzData)
                 end,
                 Mod, "access to vhost '~s' refused for user '~s'",
                 [VHostPath, Username], not_allowed);
