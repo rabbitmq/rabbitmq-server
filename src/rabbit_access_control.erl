@@ -125,20 +125,20 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
--spec check_vhost_access
-        (rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_net:socket() | #authz_socket_info{}) ->
-            'ok' | rabbit_types:channel_exit().
-
+-spec check_vhost_access(User :: rabbit_types:user(),
+                         VHostPath :: rabbit_types:vhost(),
+                         Sock :: rabbit_net:socket() | #authz_socket_info{} | undefined) ->
+    'ok' | rabbit_types:channel_exit().
 check_vhost_access(User = #user{username       = Username,
                                 authz_backends = Modules}, VHostPath, Sock) ->
+    AuthData = 
     lists:foldl(
       fun({Mod, Impl}, ok) ->
               check_access(
                 fun() ->
                         rabbit_vhost:exists(VHostPath) andalso
                             Mod:check_vhost_access(
-                              auth_user(User, Impl), VHostPath, Sock)
+                              auth_user(User, Impl), VHostPath, AuthData)
                 end,
                 Mod, "access to vhost '~s' refused for user '~s'",
                 [VHostPath, Username], not_allowed);
