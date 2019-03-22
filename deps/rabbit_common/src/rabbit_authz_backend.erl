@@ -47,7 +47,7 @@
 %%     Something went wrong. Log and die.
 -callback check_vhost_access(AuthUser :: rabbit_types:auth_user(),
                              VHost :: rabbit_types:vhost(),
-                             AuthData :: #{peeraddr := inet:ip_address()}) ->
+                             AuthzData :: rabbit_types:authz_data()) ->
     boolean() | {'error', any()}.
 
 %% Given #auth_user, resource and permission, can a user access a resource?

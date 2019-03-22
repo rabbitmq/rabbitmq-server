@@ -30,7 +30,8 @@
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
               proc_type_and_name/0, timestamp/0,
-              tracked_connection/0, node_type/0, topic_access_context/0]).
+              tracked_connection/0, node_type/0, topic_access_context/0,
+              authz_data/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
@@ -147,6 +148,9 @@
         #auth_user{username :: username(),
                    tags     :: [atom()],
                    impl     :: any()}).
+
+-type(authz_data() ::
+        #{peeraddr := inet:ip_address()} | undefined).
 
 -type(user() ::
         #user{username       :: username(),
