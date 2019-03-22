@@ -39,7 +39,7 @@
 -export([get_disk_free_limit/0, set_disk_free_limit/1,
          get_min_check_interval/0, set_min_check_interval/1,
          get_max_check_interval/0, set_max_check_interval/1,
-         get_disk_free/0]).
+         get_disk_free/0, set_enabled/1]).
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MIN_DISK_CHECK_INTERVAL, 100).
@@ -112,9 +112,13 @@ set_max_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_max_check_interval, Interval}, infinity).
 
 -spec get_disk_free() -> (integer() | 'unknown').
+-spec set_enabled(string()) -> 'ok'.
 
 get_disk_free() ->
     gen_server:call(?MODULE, get_disk_free, infinity).
+
+set_enabled(Enabled) ->
+    gen_server:call(?MODULE, {set_enabled, Enabled}, infinity).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -164,6 +168,15 @@ handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
 
 handle_call(get_disk_free, _From, State = #state { actual = Actual }) ->
     {reply, Actual, State};
+
+handle_call({set_enabled, Enabled}, _From, State) ->
+    case Enabled of
+        Enabled when Enabled == false ->
+             erlang:cancel_timer(State#state.timer);
+        Enabled when Enabled == true ->
+             start_timer(set_disk_limits(State, State#state.limit))
+    end,
+    {reply, ok, State#state{enabled = Enabled}};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
