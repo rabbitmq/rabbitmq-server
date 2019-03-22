@@ -169,14 +169,14 @@ handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
 handle_call(get_disk_free, _From, State = #state { actual = Actual }) ->
     {reply, Actual, State};
 
-handle_call({set_enabled, Enabled}, _From, State) ->
-    case Enabled of
-        Enabled when Enabled == false ->
-             erlang:cancel_timer(State#state.timer);
-        Enabled when Enabled == true ->
-             start_timer(set_disk_limits(State, State#state.limit))
-    end,
-    {reply, ok, State#state{enabled = Enabled}};
+handle_call({set_enabled, _Enabled = true}, _From, State) ->
+    start_timer(set_disk_limits(State, State#state.limit)),
+    rabbit_log:info("Free disk space monitor was enabled"),
+    {reply, ok, State#state{enabled = true}};
+handle_call({set_enabled, _Enabled = false}, _From, State) ->
+    erlang:cancel_timer(State#state.timer),
+    rabbit_log:info("Free disk space monitor was manually disabled"),
+    {reply, ok, State#state{enabled = false}};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
