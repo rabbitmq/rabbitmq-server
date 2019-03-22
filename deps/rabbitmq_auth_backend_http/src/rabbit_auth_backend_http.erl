@@ -61,7 +61,7 @@ user_login_authorization(Username, AuthProps) ->
 check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, #{peeraddr := PeerAddr}) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-                          {ip,       PeerAddr},
+                          {ip,       inet:ntoa(PeerAddr)},
                           {tags, join_tags(Tags)}]).
 
 check_resource_access(#auth_user{username = Username, tags = Tags},
