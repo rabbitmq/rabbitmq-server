@@ -61,8 +61,8 @@ user_login_authorization(Username, AuthProps) ->
 check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, #{peeraddr := PeerAddr}) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-                          {ip,       inet:ntoa(PeerAddr)},
-                          {tags, join_tags(Tags)}]).
+                          {ip,       parse_peeraddr(PeerAddr)},
+                          {tags,     join_tags(Tags)}]).
 
 check_resource_access(#auth_user{username = Username, tags = Tags},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
@@ -170,3 +170,11 @@ join_tags([])   -> "";
 join_tags(Tags) ->
   Strings = [rabbit_data_coercion:to_list(T) || T <- Tags],
   string:join(Strings, " ").
+
+parse_peeraddr(PeerAddr) ->
+    handle_inet_ntoa_peeraddr(inet:ntoa(PeerAddr), PeerAddr).
+
+handle_inet_ntoa_peeraddr({error, einval}, PeerAddr) ->
+    rabbit_data_coercion:to_list(PeerAddr);
+handle_inet_ntoa_peeraddr(PeerAddrStr, _PeerAddr0) ->
+    PeerAddrStr.
