@@ -150,7 +150,7 @@
                    impl     :: any()}).
 
 -type(authz_data() ::
-        #{peeraddr := inet:ip_address()} | undefined).
+        #{peeraddr := inet:ip_address() | binary()} | undefined).
 
 -type(user() ::
         #user{username       :: username(),
