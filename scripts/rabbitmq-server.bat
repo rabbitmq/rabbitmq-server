@@ -48,6 +48,8 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+rem convert unix style path seperators into windows style path seperators, needed for comparing with _NOEX variables
+CALL :get_localized !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE
 CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
@@ -59,6 +61,8 @@ if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
     )
 )
 
+rem convert unix style path seperators into windows style path seperators, needed for comparing with _NOEX variables
+CALL :get_localized !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE
 CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
@@ -278,6 +282,11 @@ EXIT /B 0
 :get_noex
 set "%~2=%~dpn1"
 EXIT /B 0
+
+:get_localized
+set "%~2=%~dpf1"
+EXIT /B 0
+
 
 endlocal
 endlocal
