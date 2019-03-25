@@ -133,9 +133,11 @@ get_authz_data_from({socket, Sock}) ->
 get_authz_data_from(undefined) ->
     undefined.
 
+% Note: ip can be either a tuple or, a binary if reverse_dns_lookups
+% is enabled and it's a direct connection.
 -spec check_vhost_access(User :: rabbit_types:user(),
                          VHostPath :: rabbit_types:vhost(),
-                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address()} | undefined) ->
+                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address() | binary()} | undefined) ->
     'ok' | rabbit_types:channel_exit().
 check_vhost_access(User = #user{username       = Username,
                                 authz_backends = Modules}, VHostPath, AuthzRawData) ->
