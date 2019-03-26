@@ -47,3 +47,5 @@
          ssl_key_exchange,
          ssl_cipher,
          ssl_hash]).
+
+-define(STOMP_GUIDE_URL, <<"https://rabbitmq.com/stomp.html">>).
