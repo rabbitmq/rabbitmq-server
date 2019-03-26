@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.Ctl.Commands.{
     ClusterStatusCommand,
     EnvironmentCommand,
@@ -88,6 +89,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Report
 
   def usage, do: "report"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.monitoring()
+    ]
+  end
 
   def help_section(), do: :observability_and_health_checks
 

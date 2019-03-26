@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(args, opts) do
@@ -42,9 +43,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
 
   def usage, do: "list_global_parameters [--no-table-headers]"
 
+  def usage_doc_guides() do
+    [
+      DocGuide.parameters()
+    ]
+  end
+
   def help_section(), do: :parameters
 
-  def description(), do: "Lists all global runtime parameters"
+  def description(), do: "Lists global runtime parameters"
 
   def banner(_, _), do: "Listing global runtime parameters ..."
 end

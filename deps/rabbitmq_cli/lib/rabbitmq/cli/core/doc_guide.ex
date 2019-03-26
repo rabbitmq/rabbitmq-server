@@ -18,16 +18,17 @@ defmodule RabbitMQ.CLI.Core.DocGuide.Macros do
   Helper module that works around a compiler limitation: macros cannot
   be used in a module that defines them.
   """
-  @root "https://rabbitmq.com"
+  @default_domain "rabbitmq.com"
 
-  defmacro defguide(name) do
+  defmacro defguide(name, opts \\ []) do
+    domain = Keyword.get(opts, :domain, @default_domain)
+    fn_name = String.to_atom(name)
+    path_segment = Keyword.get(opts, :path_segment, String.replace(name, "_", "-"))
+
     quote do
-      def unquote(String.to_atom(name))(), do: unquote("#{@root}/#{name}.html")
-    end
-  end
-  defmacro defguide(name, path_segment) do
-    quote do
-      def unquote(String.to_atom(name))(), do: unquote("#{@root}/#{path_segment}.html")
+      def unquote(fn_name)() do
+        unquote("https://#{domain}/#{path_segment}.html")
+      end
     end
   end
 end
@@ -40,8 +41,16 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   # API
   #
 
-  Macros.defguide("alternate_exchange", "ae")
+  Macros.defguide("alternate_exchange", path_segment: "ae")
+  Macros.defguide("clustering")
+  Macros.defguide("cluster_formation")
+  Macros.defguide("configuration", path_segment: "configure")
   Macros.defguide("consumers")
+  Macros.defguide("logging")
+  Macros.defguide("management")
+  Macros.defguide("monitoring")
   Macros.defguide("parameters")
+  Macros.defguide("plugins")
   Macros.defguide("queues")
+  Macros.defguide("quorum_queues", domain: "next.rabbitmq.com")
 end

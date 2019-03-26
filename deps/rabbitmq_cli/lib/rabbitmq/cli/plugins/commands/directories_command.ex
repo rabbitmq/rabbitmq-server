@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{Helpers, Validators, Config}
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Validators, Config}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -109,6 +109,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
     [
       ["--offline", "do not contact target node. Try to infer directories from the environment."],
       ["--online", "infer directories from target node."]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.plugins()
     ]
   end
 

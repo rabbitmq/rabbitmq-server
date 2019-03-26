@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -41,9 +43,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_parameters [--vhost <vhost>] [--no-table-headers]"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.parameters()
+    ]
+  end
+
   def help_section(), do: :parameters
 
-  def description(), do: "Lists all parameters for a virtual host"
+  def description(), do: "Lists runtime parameters for a virtual host"
 
   def banner(_, %{vhost: vhost}), do: "Listing runtime parameters for vhost \"#{vhost}\" ..."
 end

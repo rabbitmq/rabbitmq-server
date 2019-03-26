@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def scopes(), do: [:ctl, :diagnostics, :plugins]
+  def scopes(), do: [:ctl, :diagnostics, :plugins, :queues]
   def switches(), do: [list_commands: :boolean]
 
   def distribution(_), do: :none

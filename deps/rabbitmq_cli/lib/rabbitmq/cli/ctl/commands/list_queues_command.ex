@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   require RabbitMQ.CLI.Ctl.RpcStream
 
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -134,6 +134,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       ["--offline", "lists only queues on offline (unreachable) nodes"],
       ["--local", "only return queues hosted on the target node"],
       ["--formatter <json | csv>", "alternative formatter to use, JSON or CSV"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.queues()
     ]
   end
 

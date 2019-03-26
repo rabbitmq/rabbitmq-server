@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -44,7 +44,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
     )
   end
 
-  def usage, do: "clear_parameter [--vhost <vhost>] <component_name> <key>"
+  def usage, do: "clear_parameter [--vhost <vhost>] <component_name> <name>"
+
+  def usage_additional() do
+    [
+      ["<component_name>", "component name"],
+      ["<name>", "parameter name (identifier)"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.parameters()
+    ]
+  end
 
   def help_section(), do: :parameters
 

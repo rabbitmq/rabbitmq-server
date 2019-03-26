@@ -16,7 +16,7 @@
 defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   import RabbitCommon.Records
 
-  alias RabbitMQ.CLI.Core.{Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Validators}
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -128,6 +128,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.plugins()
+    ]
+  end
 
   def help_section(), do: :plugin_management
 

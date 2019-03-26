@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
-  alias RabbitMQ.CLI.Core.{Config, Helpers}
+  alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -90,6 +90,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering(),
+      DocGuide.cluster_formation()
+    ]
+  end
 
   def help_section(), do: :cluster_management
 
