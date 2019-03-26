@@ -730,6 +730,7 @@ decompose_pid(Pid) when is_pid(Pid) ->
             <<131, 103, _NodePrefix:NodeByteSize/binary, Id:32, Ser:32, Cre:8>> = BinPid,
             {Node, Cre, Id, Ser}
     end.
+-dialyzer({no_match, decompose_pid/1}).
 
 compose_pid(Node, Cre, Id, Ser) ->
     <<131,NodeEnc/binary>> = term_to_binary(Node),
