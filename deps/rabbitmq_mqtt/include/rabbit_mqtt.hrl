@@ -95,3 +95,4 @@
      user,
      vhost]).
 
+-define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
