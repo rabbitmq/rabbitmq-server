@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @known_levels [
     "debug",
@@ -54,6 +55,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
   end
 
   def usage, do: "set_log_level <log_level>"
+
+  def usage_additional() do
+    [
+      ["<log_level>", "new log level"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.logging()
+    ]
+  end
 
   def help_section(), do: :configuration
 

@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -67,6 +67,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
       ["<definition>", "policy definition (arguments). Must be a valid JSON document"],
       ["--priority <priority>", "policy priority"],
       ["--apply-to <queues | exchanges | all>", "policy should only apply to queues, exchanges, or all entities (both of the above)"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.parameters()
     ]
   end
 

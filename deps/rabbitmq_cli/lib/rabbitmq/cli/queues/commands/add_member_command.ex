@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -42,6 +43,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "add_member [--vhost <vhost>] <queuename> <node>"
+
+  def usage_additional do
+    [
+      ["<queuename>", "quorum queue name"],
+      ["<node>", "node to add to the Raft cluster of the queue"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.quorum_queues()
+    ]
+  end
 
   def help_section, do: :replication
 

@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -30,6 +31,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "status"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.monitoring()
+    ]
+  end
 
   def help_section(), do: :observability_and_health_checks
 

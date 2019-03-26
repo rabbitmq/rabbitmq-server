@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Validators}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -109,6 +109,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
       ["<plugin1> [ <plugin2>]", "names of plugins to check separated by a space"],
       ["--online", "contact target node to perform the check. Requires the node to be running and reachable."],
       ["--offline", "check enabled plugins file directly without contacting target node."]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.plugins()
     ]
   end
 

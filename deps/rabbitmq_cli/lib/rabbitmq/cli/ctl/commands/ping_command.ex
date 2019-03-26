@@ -14,6 +14,7 @@
 ## Copyright (c) 2016-2018 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   @default_timeout 60_000
@@ -64,6 +65,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
 
   def usage() do
     "ping"
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.monitoring()
+    ]
   end
 
   def help_section(), do: :observability_and_health_checks

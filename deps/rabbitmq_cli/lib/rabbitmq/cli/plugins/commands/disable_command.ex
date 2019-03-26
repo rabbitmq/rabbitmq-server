@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Validators}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -120,6 +120,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
       ["--online", "contact target node to disable the plugins. Changes are applied immediately."],
       ["--offline", "update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted."],
       ["--all", "disable all currently enabled plugins"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.plugins()
     ]
   end
 

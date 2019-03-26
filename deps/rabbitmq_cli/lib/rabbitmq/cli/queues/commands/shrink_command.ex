@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -61,6 +62,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def usage_additional() do
     [
       ["--errors-only", "only list queues which reported an error"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.quorum_queues()
     ]
   end
 

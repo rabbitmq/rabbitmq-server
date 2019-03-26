@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -33,11 +33,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "clear_global_parameter <key>"
+  def usage, do: "clear_global_parameter <name>"
+
+  def usage_additional() do
+    [
+      ["<name>", "parameter name (identifier)"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.parameters()
+    ]
+  end
 
   def help_section(), do: :parameters
 
-  def description(), do: "Clears a global runtime parameter."
+  def description(), do: "Clears a global runtime parameter"
 
   def banner([key], _) do
     "Clearing global runtime parameter \"#{key}\" ..."
