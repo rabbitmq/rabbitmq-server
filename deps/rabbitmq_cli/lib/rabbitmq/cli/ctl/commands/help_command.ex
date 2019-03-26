@@ -151,7 +151,10 @@ short            | long          | description
   end
 
   defp command_description(command) do
-    [CommandBehaviour.description(command) <> ".\n"]
+    case CommandBehaviour.description(command) do
+      ""    -> []
+      other -> [other <> ".\n"]
+    end
   end
 
   defp list_item_formatter([option, description]) do
