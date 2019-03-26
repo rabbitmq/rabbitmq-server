@@ -18,10 +18,19 @@
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 -include("rabbit_amqp1_0.hrl").
 
--export([formatter/0, scopes/0, switches/0, aliases/0,
-         usage/0, usage_additional/0, banner/2,
-         validate/2, merge_defaults/2, run/2, output/2,
-         help_section/0, description/0]).
+-export([formatter/0,
+         scopes/0,
+         switches/0,
+         aliases/0,
+         usage/0,
+         usage_additional/0,
+         banner/2,
+         validate/2,
+         merge_defaults/2,
+         run/2,
+         output/2,
+         help_section/0,
+         description/0]).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
 
@@ -43,12 +52,14 @@ merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false}, Opts)}.
 
 usage() ->
-    <<"list_amqp10_connections [<amqp10_connectioninfoitem> ...]">>.
+    <<"list_amqp10_connections [<column> ...]">>.
 
 usage_additional() ->
-      <<"<amqp10_connectioninfoitem> must be a member of the list [",
-        ('Elixir.Enum':join(?INFO_ITEMS, <<", ">>))/binary,
-        "].">>.
+    Prefix = <<" must be one of ">>,
+    InfoItems = 'Elixir.Enum':join(lists:usort(?INFO_ITEMS), <<", ">>),
+    [
+      {<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}
+    ].
 
 description() ->
     <<"Lists AMQP 1.0 connections">>.
