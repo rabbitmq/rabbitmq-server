@@ -164,6 +164,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
+    MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
+    MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
     DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
@@ -171,6 +173,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       become_leader_handler => {?MODULE, become_leader, [QName]},
       max_length => MaxLength,
       max_bytes => MaxBytes,
+      max_in_memory_length => MaxMemoryLength,
+      max_in_memory_bytes => MaxMemoryBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
       delivery_limit => DeliveryLimit
      }.

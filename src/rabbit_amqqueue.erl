@@ -685,6 +685,8 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
+     {<<"x-max-in-memory-length">>,    fun check_non_neg_int_arg/2},
+     {<<"x-max-in-memory-bytes">>,     fun check_non_neg_int_arg/2},
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},

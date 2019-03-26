@@ -46,6 +46,7 @@
          query_consumers/1,
          query_stat/1,
          query_single_active_consumer/1,
+         query_in_memory_usage/1,
          usage/1,
 
          zero/1,
@@ -130,6 +131,8 @@ update_config(Conf, State) ->
     SHI = maps:get(release_cursor_interval, Conf, ?RELEASE_CURSOR_EVERY),
     MaxLength = maps:get(max_length, Conf, undefined),
     MaxBytes = maps:get(max_bytes, Conf, undefined),
+    MaxMemoryLength = maps:get(max_in_memory_length, Conf, undefined),
+    MaxMemoryBytes = maps:get(max_in_memory_bytes, Conf, undefined),
     DeliveryLimit = maps:get(delivery_limit, Conf, undefined),
     ConsumerStrategy = case maps:get(single_active_consumer_on, Conf, false) of
                            true ->
@@ -143,6 +146,8 @@ update_config(Conf, State) ->
                                 become_leader_handler = BLH,
                                 max_length = MaxLength,
                                 max_bytes = MaxBytes,
+                                max_in_memory_length = MaxMemoryLength,
+                                max_in_memory_bytes = MaxMemoryBytes,
                                 consumer_strategy = ConsumerStrategy,
                                 delivery_limit = DeliveryLimit}}.
 
@@ -267,6 +272,7 @@ apply(Meta, #checkout{spec = {dequeue, Settlement},
                                      {once, 1, simple_prefetch},
                                      State0),
             {success, _, MsgId, Msg, State2} = checkout_one(State1),
+            %% TODO handle this checkout_one!!!
             case Settlement of
                 unsettled ->
                     {_, Pid} = ConsumerId,
@@ -698,6 +704,10 @@ query_single_active_consumer(_) ->
 query_stat(#?MODULE{consumers = Consumers} = State) ->
     {messages_ready(State), maps:size(Consumers)}.
 
+query_in_memory_usage(#?MODULE{msg_bytes_in_memory = Bytes,
+                               msgs_ready_in_memory = Length}) ->
+    {Length, Bytes}.
+
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
     case ets:lookup(rabbit_fifo_usage, Name) of
@@ -878,11 +888,14 @@ apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
 
 drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects0) ->
     case take_next_msg(State0) of
-        {FullMsg = {_MsgId, {RaftIdxToDrop, {_Header, Msg}}},
+        {FullMsg = {_MsgId, {RaftIdxToDrop, {#{size := Bytes} = Header, Msg}}},
          State1} ->
             Indexes = rabbit_fifo_index:delete(RaftIdxToDrop, Indexes0),
-            Bytes = message_size(Msg),
-            State = add_bytes_drop(Bytes, State1#?MODULE{ra_indexes = Indexes}),
+            State1 = add_bytes_drop(Bytes, State1#?MODULE{ra_indexes = Indexes}),
+            State = case Msg of
+                        'empty' -> subtract_in_memory_counts(Header, State1);
+                        _ -> State1
+                    end,
             Effects = dead_letter_effects(maxlen, #{none => FullMsg},
                                           State, Effects0),
             {State, Effects};
@@ -897,8 +910,15 @@ enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages,
                                 low_msg_num = LowMsgNum,
                                 next_msg_num = NextMsgNum} = State0) ->
     Size = message_size(RawMsg),
-    Msg = {RaftIdx, {#{size => Size}, RawMsg}}, % indexed message with header map
-    State = add_bytes_enqueue(Size, State0),
+    {State1, Msg} =
+        case evaluate_memory_limit(Size, State0) of
+            true ->
+                {State0, {RaftIdx, {#{size => Size}, 'empty'}}}; % indexed message with header map
+            false ->
+                {add_in_memory_counts(Size, State0),
+                 {RaftIdx, {#{size => Size}, RawMsg}}} % indexed message with header map
+        end,
+    State = add_bytes_enqueue(Size, State1),
     State#?MODULE{messages = Messages#{NextMsgNum => Msg},
                 % this is probably only done to record it when low_msg_num
                 % is undefined
@@ -1033,10 +1053,10 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
     Checked = maps:without(MsgIds, Checked0),
     Discarded = maps:with(MsgIds, Checked0),
     MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
-    State1 = lists:foldl(fun({_, {_, {_, RawMsg}}}, Acc) ->
-                                 add_bytes_settle(RawMsg, Acc);
-                            ({'$prefix_msg', _} = M, Acc) ->
-                                 add_bytes_settle(M, Acc)
+    State1 = lists:foldl(fun({_, {_, {Header, _}}}, Acc) ->
+                                 add_bytes_settle(Header, Acc);
+                            ({'$prefix_msg', Header}, Acc) ->
+                                 add_bytes_settle(Header, Acc)
                          end, State0, maps:values(Discarded)),
     %% need to pass the length of discarded as $prefix_msgs would be filtered
     %% by the above list comprehension
@@ -1115,7 +1135,7 @@ return_one(0, {'$prefix_msg', Header0},
             Checked = Con#consumer.checked_out,
             {State1, Effects} = complete(ConsumerId, [], 1, Con, Checked,
                                           Effects0, State0),
-            {add_bytes_settle(Msg, State1), Effects};
+            {add_bytes_settle(Header, State1), Effects};
         _ ->
             %% this should not affect the release cursor in any way
             {add_bytes_return(Msg,
@@ -1139,7 +1159,11 @@ return_one(MsgNum, {RaftId, {Header0, RawMsg}},
             Checked = Con#consumer.checked_out,
             {State1, Effects1} = complete(ConsumerId, [RaftId], 1, Con, Checked,
                                           Effects, State0),
-            {add_bytes_settle(RawMsg, State1), Effects1};
+            State2 = case RawMsg of
+                         'empty' -> State1;
+                         _ -> add_in_memory_counts(maps:get(size, Header), State1)
+                     end,
+            {add_bytes_settle(Header, State2), Effects1};
         _ ->
             %% this should not affect the release cursor in any way
             {add_bytes_return(RawMsg,
@@ -1171,6 +1195,8 @@ checkout(#{index := Index}, State0, Effects0) ->
             {State, ok, Effects}
     end.
 
+checkout0({success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State}, Effects, Acc) ->
+    checkout0(checkout_one(State), [send_log_effect(ConsumerId, RaftIdx, MsgId, Header) | Effects], Acc);
 checkout0({success, ConsumerId, MsgId, Msg, State}, Effects, Acc0) ->
     DelMsg = {MsgId, Msg},
     Acc = maps:update_with(ConsumerId,
@@ -1201,6 +1227,15 @@ evaluate_limit(OldIndexes, Result,
         false ->
             {State0, Result, Effects0}
     end.
+
+evaluate_memory_limit(_Size, #?MODULE{cfg = #cfg{max_in_memory_length = undefined,
+                                                 max_in_memory_bytes = undefined}}) ->
+    false;
+evaluate_memory_limit(Size, #?MODULE{cfg = #cfg{max_in_memory_length = MaxLength,
+                                                max_in_memory_bytes = MaxBytes},
+                                     msg_bytes_in_memory = Bytes,
+                                     msgs_ready_in_memory = Length}) ->
+    (Length >= MaxLength) orelse ((Bytes + Size) > MaxBytes).
 
 append_send_msg_effects(Effects, AccMap) when map_size(AccMap) == 0 ->
     Effects;
@@ -1259,6 +1294,11 @@ take_next_msg(#?MODULE{returns = Returns,
 send_msg_effect({CTag, CPid}, Msgs) ->
     {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}.
 
+send_log_effect({CTag, CPid}, RaftIdx, MsgId, Header) ->
+    {log, RaftIdx, fun({enqueue, _, _, Msg}) ->
+                           {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, Msg}}]}, ra_event}
+                   end}.
+
 checkout_one(#?MODULE{service_queue = SQ0,
                       messages = Messages0,
                       consumers = Cons0} = InitState) ->
@@ -1298,8 +1338,13 @@ checkout_one(#?MODULE{service_queue = SQ0,
                                     {'$prefix_msg', _} ->
                                         {add_bytes_checkout(ConsumerMsg, State1),
                                          ConsumerMsg};
-                                    {_, {_, {_, RawMsg} = M}} ->
-                                        {add_bytes_checkout(RawMsg, State1),
+                                    {_, {_, {Header, 'empty'}} = M} ->
+                                        {add_bytes_checkout(maps:get(size, Header), State1),
+                                         M};
+                                    {_, {_, {Header, RawMsg} = M}} ->
+                                        {subtract_in_memory_counts(
+                                           Header,
+                                           add_bytes_checkout(RawMsg, State1)),
                                          M}
                                 end,
                             {success, ConsumerId, Next, Msg, State};
@@ -1505,8 +1550,7 @@ add_bytes_checkout(Msg, #?MODULE{msg_bytes_checkout = Checkout,
     State#?MODULE{msg_bytes_checkout = Checkout + Bytes,
                   msg_bytes_enqueue = Enqueue - Bytes}.
 
-add_bytes_settle(Msg, #?MODULE{msg_bytes_checkout = Checkout} = State) ->
-    Bytes = message_size(Msg),
+add_bytes_settle(#{size := Bytes}, #?MODULE{msg_bytes_checkout = Checkout} = State) ->
     State#?MODULE{msg_bytes_checkout = Checkout - Bytes}.
 
 add_bytes_return(Msg, #?MODULE{msg_bytes_checkout = Checkout,
@@ -1514,6 +1558,17 @@ add_bytes_return(Msg, #?MODULE{msg_bytes_checkout = Checkout,
     Bytes = message_size(Msg),
     State#?MODULE{msg_bytes_checkout = Checkout - Bytes,
                   msg_bytes_enqueue = Enqueue + Bytes}.
+
+add_in_memory_counts(Bytes, #?MODULE{msg_bytes_in_memory = InMemoryBytes,
+                                     msgs_ready_in_memory = InMemoryCount} = State) ->
+    State#?MODULE{msg_bytes_in_memory = InMemoryBytes + Bytes,
+                  msgs_ready_in_memory = InMemoryCount + 1}.
+
+subtract_in_memory_counts(#{size := Bytes},
+                          #?MODULE{msg_bytes_in_memory = InMemoryBytes,
+                                   msgs_ready_in_memory = InMemoryCount} = State) ->
+    State#?MODULE{msg_bytes_in_memory = InMemoryBytes - Bytes,
+                  msgs_ready_in_memory = InMemoryCount - 1}.
 
 message_size(#basic_message{content = Content}) ->
     #content{payload_fragments_rev = PFR} = Content,
