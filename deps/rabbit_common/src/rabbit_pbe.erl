@@ -23,10 +23,10 @@
 %% Supported ciphers and hashes
 
 supported_ciphers() ->
-    NotSupportedByUs = [%% These ciphers should be supported in a future version.
-                        aes_128_ccm, aes_192_ccm, aes_256_ccm,
-                        aes_128_ctr, aes_192_ctr, aes_256_ctr,
-                        aes_128_gcm, aes_192_gcm, aes_256_gcm,
+    NotSupportedByUs = [aes_ccm, aes_128_ccm, aes_192_ccm, aes_256_ccm,
+                        aes_gcm, aes_128_gcm, aes_192_gcm, aes_256_gcm,
+                        aes_ecb, aes_128_ecb, aes_192_ecb, aes_256_ecb,
+                        aes_ctr,
                         chacha20, chacha20_poly1305,
                         %% These are aliases that correspond to multiple ciphers.
                         aes_ccm, aes_ctr, aes_gcm,
@@ -159,6 +159,12 @@ iv_length(aes_cbc256) -> 16;
 iv_length(aes_128_cbc) -> 16;
 iv_length(aes_192_cbc) -> 16;
 iv_length(aes_256_cbc) -> 16;
+iv_length(aes_128_cfb8) -> 16;
+iv_length(aes_192_cfb8) -> 16;
+iv_length(aes_256_cfb8) -> 16;
+iv_length(aes_128_cfb128) -> 16;
+iv_length(aes_192_cfb128) -> 16;
+iv_length(aes_256_cfb128) -> 16;
 iv_length(aes_ige256) -> 32.
 
 key_length(des_cbc) -> 8;
@@ -182,6 +188,12 @@ key_length(aes_cbc256) -> 32;
 key_length(aes_128_cbc) -> 16;
 key_length(aes_192_cbc) -> 24;
 key_length(aes_256_cbc) -> 32;
+key_length(aes_128_cfb8) -> 16;
+key_length(aes_192_cfb8) -> 24;
+key_length(aes_256_cfb8) -> 32;
+key_length(aes_128_cfb128) -> 16;
+key_length(aes_192_cfb128) -> 24;
+key_length(aes_256_cfb128) -> 32;
 key_length(aes_ige256) -> 16.
 
 block_size(aes_cbc) -> 32;
