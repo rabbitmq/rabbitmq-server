@@ -15,12 +15,23 @@
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
--behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 -include("rabbit_mqtt.hrl").
 
--export([formatter/0, scopes/0, switches/0, aliases/0,
-         usage/0, usage_additional/0, banner/2,
-         validate/2, merge_defaults/2, run/2, output/2, description/0,
+-behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
+
+-export([formatter/0,
+         scopes/0,
+         switches/0,
+         aliases/0,
+         usage/0,
+         usage_additional/0,
+         usage_doc_guides/0,
+         banner/2,
+         validate/2,
+         merge_defaults/2,
+         run/2,
+         output/2,
+         description/0,
          help_section/0]).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
@@ -51,9 +62,14 @@ usage() ->
     <<"list_mqtt_connections [<mqtt_connectioninfoitem> ...]">>.
 
 usage_additional() ->
-      <<"<mqtt_connectioninfoitem> must be a member of the list [",
-        ('Elixir.Enum':join(?INFO_ITEMS, <<", ">>))/binary,
-        "].">>.
+    Prefix = <<" must be one of ">>,
+    InfoItems = 'Elixir.Enum':join(lists:usort(?INFO_ITEMS), <<", ">>),
+    [
+      {<<"<mqtt_connectioninfoitem>">>, <<Prefix/binary, InfoItems/binary>>}
+    ].
+
+usage_doc_guides() ->
+    [?MQTT_GUIDE_URL].
 
 run(Args, #{node := NodeName,
                     timeout := Timeout,
