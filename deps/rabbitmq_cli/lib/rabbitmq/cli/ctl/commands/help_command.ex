@@ -87,7 +87,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     Enum.join([base_usage(command, opts)] ++
               command_description(command) ++
               additional_usage(command) ++
-              relevant_dog_guides(command) ++
+              relevant_doc_guides(command) ++
               general_options_usage(),
               "\n\n") <> "\n"
   end
@@ -177,7 +177,7 @@ short            | long          | description
     end
   end
 
-  defp relevant_dog_guides(command) do
+  defp relevant_doc_guides(command) do
     guide_list =
       case CommandBehaviour.usage_doc_guides(command) do
         list when is_list(list) -> list |> Enum.map(fn ln -> " * #{ln}\n" end)
