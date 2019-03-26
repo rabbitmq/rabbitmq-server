@@ -11,16 +11,19 @@
 %%  The Original Code is RabbitMQ.
 %%
 %%  The Initial Developer of the Original Code is GoPivotal, Inc.
-%%  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%  Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.FederationStatusCommand').
+
+-include("rabbit_federation.hrl").
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
 -export([
          usage/0,
          usage_additional/0,
+         usage_doc_guides/0,
          flags/0,
          validate/2,
          merge_defaults/2,
@@ -43,7 +46,12 @@ usage() ->
     <<"federation_status [--only-down]">>.
 
 usage_additional() ->
-    <<"--only-down: only display links that failed or are not currently connected">>.
+    [
+      {<<"--only-down">>, <<"only display links that failed or are not currently connected">>}
+    ].
+
+usage_doc_guides() ->
+    [?FEDERATION_GUIDE_URL].
 
 help_section() ->
     {plugin, federation}.

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Federation.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -record(upstream, {uris,
@@ -42,3 +42,5 @@
 -define(MAX_HOPS_ARG,   <<"x-max-hops">>).
 -define(NODE_NAME_ARG,  <<"x-downstream-name">>).
 -define(DEF_PREFETCH, 1000).
+
+-define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/federation.html">>).
