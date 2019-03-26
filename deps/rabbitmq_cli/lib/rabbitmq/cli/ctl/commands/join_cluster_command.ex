@@ -80,11 +80,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   end
 
   def usage() do
-    "join_cluster [--disc|--ram] <existing_cluster_member_node>"
+    "join_cluster [--disc|--ram] <existing_cluster_member>"
   end
 
   def usage_additional() do
     [
+      ["<existing_cluster_member>", "Existing cluster member (node) to join"],
       ["--disc", "new node should be a disk one (stores its schema on disk). Highly recommended, used by default."],
       ["--ram", "new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first."]
     ]
