@@ -16,6 +16,8 @@
 defmodule RabbitMQ.CLI.CommandBehaviour do
   alias RabbitMQ.CLI.Core.Helpers
 
+  @type pair_of_strings :: nonempty_list(String.t())
+
   @callback usage() :: String.t() | [String.t()]
   # validates CLI arguments
   @callback validate(list(), map()) :: :ok | {:validation_failure, atom() | {atom(), String.t()}}
@@ -52,7 +54,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback scopes() :: [atom()] | nil
   @callback description() :: String.t()
   @callback help_section() :: String.t()
-  @callback usage_additional() :: String.t() | [String.t()] | [[String.t(), String.t()]] | [{String.t(), String.t()}]
+  @callback usage_additional() :: String.t() | [String.t()] | nonempty_list(pair_of_strings()) | [{String.t(), String.t()}]
   ## Erlang distribution control
   ## :cli - default rabbitmqctl generated node name
   ## :none - disable erlang distribution
