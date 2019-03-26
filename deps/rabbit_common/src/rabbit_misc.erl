@@ -706,15 +706,30 @@ pid_change_node(Pid, NewNode) ->
 node_to_fake_pid(Node) ->
     compose_pid(Node, 0, 0, 0).
 
+-define(HAS_NEW_PID_EXT, false).
+-ifdef(OTP_RELEASE).
+-if(?OTP_RELEASE >= 22).
+-undef(HAS_NEW_PID_EXT).
+-define(HAS_NEW_PID_EXT, true).
+-endif.
+-endif.
+
 decompose_pid(Pid) when is_pid(Pid) ->
     %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
     %% 8.7)
     Node = node(Pid),
     BinPid = term_to_binary(Pid),
     ByteSize = byte_size(BinPid),
-    NodeByteSize = (ByteSize - 11),
-    <<131, 103, _NodePrefix:NodeByteSize/binary, Id:32, Ser:32, Cre:8>> = BinPid,
-    {Node, Cre, Id, Ser}.
+    case ?HAS_NEW_PID_EXT of
+        true ->
+            NodeByteSize = (ByteSize - 14),
+            <<131, 88, _NodePrefix:NodeByteSize/binary, Id:32, Ser:32, Cre:32>> = BinPid,
+            {Node, Cre, Id, Ser};
+        false ->
+            NodeByteSize = (ByteSize - 11),
+            <<131, 103, _NodePrefix:NodeByteSize/binary, Id:32, Ser:32, Cre:8>> = BinPid,
+            {Node, Cre, Id, Ser}
+    end.
 
 compose_pid(Node, Cre, Id, Ser) ->
     <<131,NodeEnc/binary>> = term_to_binary(Node),
