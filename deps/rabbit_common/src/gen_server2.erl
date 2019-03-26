@@ -114,6 +114,12 @@
 %%
 -module(gen_server2).
 
+-ifdef(OTP_RELEASE).
+-if(?OTP_RELEASE >= 22).
+-compile(nowarn_deprecated_function).
+-endif.
+-endif.
+
 %%% ---------------------------------------------------
 %%%
 %%% The idea behind THIS server is that the user module
