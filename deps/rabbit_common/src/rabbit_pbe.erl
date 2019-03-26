@@ -47,6 +47,7 @@ supported_ciphers() ->
     NotSupportedByUs = [aes_ccm, aes_128_ccm, aes_192_ccm, aes_256_ccm,
                         aes_gcm, aes_128_gcm, aes_192_gcm, aes_256_gcm,
                         aes_ecb, aes_128_ecb, aes_192_ecb, aes_256_ecb,
+                        aes_ctr,
                         chacha20, chacha20_poly1305,
                         blowfish_ecb, des_ecb, rc4],
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
@@ -188,10 +189,6 @@ iv_length(aes_256_cfb8) -> 16;
 iv_length(aes_128_cfb128) -> 16;
 iv_length(aes_192_cfb128) -> 16;
 iv_length(aes_256_cfb128) -> 16;
-iv_length(aes_ctr) -> 16;
-iv_length(aes_128_ctr) -> 16;
-iv_length(aes_192_ctr) -> 16;
-iv_length(aes_256_ctr) -> 16;
 iv_length(aes_ige256) -> 32.
 
 key_length(des_cbc) -> 8;
@@ -221,10 +218,6 @@ key_length(aes_256_cfb8) -> 32;
 key_length(aes_128_cfb128) -> 16;
 key_length(aes_192_cfb128) -> 24;
 key_length(aes_256_cfb128) -> 32;
-key_length(aes_ctr) -> 32;
-key_length(aes_128_ctr) -> 16;
-key_length(aes_192_ctr) -> 24;
-key_length(aes_256_ctr) -> 32;
 key_length(aes_ige256) -> 16.
 
 block_size(aes_cbc) -> 16;
