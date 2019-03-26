@@ -59,13 +59,13 @@ merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false}, Opts)}.
 
 usage() ->
-    <<"list_mqtt_connections [<mqtt_connectioninfoitem> ...]">>.
+    <<"list_mqtt_connections [<column> ...]">>.
 
 usage_additional() ->
     Prefix = <<" must be one of ">>,
     InfoItems = 'Elixir.Enum':join(lists:usort(?INFO_ITEMS), <<", ">>),
     [
-      {<<"<mqtt_connectioninfoitem>">>, <<Prefix/binary, InfoItems/binary>>}
+      {<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}
     ].
 
 usage_doc_guides() ->
