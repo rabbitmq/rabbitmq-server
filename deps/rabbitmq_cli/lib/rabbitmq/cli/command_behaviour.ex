@@ -52,7 +52,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback scopes() :: [atom()] | nil
   @callback description() :: String.t()
   @callback help_section() :: String.t()
-  @callback usage_additional() :: String.t() | [String.t()]
+  @callback usage_additional() :: String.t() | [String.t()] | [[String.t(), String.t()]] | [{String.t(), String.t()}]
   ## Erlang distribution control
   ## :cli - default rabbitmqctl generated node name
   ## :none - disable erlang distribution
