@@ -162,6 +162,12 @@ var HELP = {
     'queue-max-length-bytes':
       'Total body size for ready messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length-bytes</a>" argument.)',
 
+    'queue-max-in-memory-length':
+      'How many (ready) messages a quorum queue can contain in memory before it starts storing them on disk only.<br/>(Sets the x-max-in-memory-length argument.)',
+
+    'queue-max-in-memory-bytes':
+      'Total body size for ready messages a quorum queue can contain in memory before it starts storing them on disk only.<br/>(Sets the x-max-in-memory-bytes argument.)',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
