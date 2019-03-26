@@ -16,10 +16,13 @@
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ShovelStatusCommand').
 
+-include("rabbit_shovel.hrl").
+
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
 -export([
          usage/0,
+         usage_doc_guides/0,
          flags/0,
          validate/2,
          merge_defaults/2,
@@ -39,7 +42,10 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"shovel_status">>.
+    <<"shovel_status">>.
+
+usage_doc_guides() ->
+    [?SHOVEL_GUIDE_URL].
 
 help_section() ->
     {plugin, shovel}.

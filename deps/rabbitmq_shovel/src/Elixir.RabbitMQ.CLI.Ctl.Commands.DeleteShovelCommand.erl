@@ -16,11 +16,14 @@
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteShovelCommand').
 
+-include("rabbit_shovel.hrl").
+
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
 -export([
          usage/0,
          usage_additional/0,
+         usage_doc_guides/0,
          validate/2,
          merge_defaults/2,
          banner/2,
@@ -40,7 +43,12 @@ usage() ->
     <<"delete_shovel [--vhost <vhost>] <name>">>.
 
 usage_additional() ->
-    <<"<name>: Shovel to delete">>.
+    [
+      {<<"<name>">>, <<"Shovel to delete">>}
+    ].
+
+usage_doc_guides() ->
+    [?SHOVEL_GUIDE_URL].
 
 description() ->
     <<"Deletes a Shovel">>.
