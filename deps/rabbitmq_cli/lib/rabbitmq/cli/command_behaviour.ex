@@ -36,6 +36,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @optional_callbacks formatter: 0,
                       scopes: 0,
                       usage_additional: 0,
+                      usage_doc_guides: 0,
                       description: 0,
                       help_section: 0,
                       switches: 0,
@@ -55,6 +56,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback description() :: String.t()
   @callback help_section() :: String.t()
   @callback usage_additional() :: String.t() | [String.t()] | nonempty_list(pair_of_strings()) | [{String.t(), String.t()}]
+  @callback usage_doc_guides() :: String.t() | [String.t()]
   ## Erlang distribution control
   ## :cli - default rabbitmqctl generated node name
   ## :none - disable erlang distribution
@@ -141,6 +143,10 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
 
   def usage_additional(cmd) do
     Helpers.apply_if_exported(cmd, :usage_additional, [], [])
+  end
+
+  def usage_doc_guides(cmd) do
+    Helpers.apply_if_exported(cmd, :usage_doc_guides, [], [])
   end
 
   def formatter(cmd) do

@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{Helpers, DocGuide}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -34,11 +34,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
     ])
   end
 
-  def usage, do: "clear_policy [--vhost <vhost>] <key>"
+  def usage, do: "clear_policy [--vhost <vhost>] <name>"
+
+  def usage_additional() do
+    [
+      ["<name>", "name of policy to clear (remove)"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.parameters()
+    ]
+  end
 
   def help_section(), do: :policies
 
-  def description(), do: "Clears a policy"
+  def description(), do: "Clears (removes) a policy"
 
   def banner([key], %{vhost: vhost}) do
     "Clearing policy \"#{key}\" on vhost \"#{vhost}\" ..."
