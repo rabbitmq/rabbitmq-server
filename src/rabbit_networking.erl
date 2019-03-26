@@ -389,6 +389,7 @@ force_connection_event_refresh(Ref) ->
     [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.
 
+-spec failed_to_recv_proxy_header(_, _) -> no_return().
 failed_to_recv_proxy_header(Ref, Error) ->
     Msg = case Error of
         closed -> "error when receiving proxy header: TCP socket was ~p prematurely";
