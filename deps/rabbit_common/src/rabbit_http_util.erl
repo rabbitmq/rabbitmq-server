@@ -683,9 +683,9 @@ path_split_test() ->
 
 urlsplit_test() ->
     {"", "", "/foo", "", "bar?baz"} = urlsplit("/foo#bar?baz"),
-    {"http", "host:port", "/foo", "", "bar?baz"} =
-        urlsplit("http://host:port/foo#bar?baz"),
-    {"http", "host", "", "", ""} = urlsplit("http://host"),
+    {"https", "host:port", "/foo", "", "bar?baz"} =
+        urlsplit("https://host:port/foo#bar?baz"),
+    {"https", "host", "", "", ""} = urlsplit("https://host"),
     {"", "", "/wiki/Category:Fruit", "", ""} =
         urlsplit("/wiki/Category:Fruit"),
     ok.
@@ -701,8 +701,8 @@ urlsplit_path_test() ->
 
 urlunsplit_test() ->
     "/foo#bar?baz" = urlunsplit({"", "", "/foo", "", "bar?baz"}),
-    "http://host:port/foo#bar?baz" =
-        urlunsplit({"http", "host:port", "/foo", "", "bar?baz"}),
+    "https://host:port/foo#bar?baz" =
+        urlunsplit({"https", "host:port", "/foo", "", "bar?baz"}),
     ok.
 
 urlunsplit_path_test() ->

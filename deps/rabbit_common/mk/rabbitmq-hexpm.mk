@@ -4,7 +4,7 @@
 
 .PHONY: hex-publish hex-publish-docs
 
-HEXPM_URL = https://github.com/rabbitmq/hexpm-cli/releases/download/v0.3.0/hexpm
+HEXPM_URL = https://github.com/rabbitmq/hexpm-cli/releases/latest/download/hexpm
 HEXPM_CLI = $(ERLANG_MK_TMP)/hexpm
 
 $(HEXPM_CLI):

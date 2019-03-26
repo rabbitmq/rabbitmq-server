@@ -99,7 +99,7 @@
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
-%% retrieved via the world wide web at http://www.erlang.org/.
+%% retrieved via the world wide web at https://www.erlang.org/.
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -113,6 +113,12 @@
 %%     $Id$
 %%
 -module(gen_server2).
+
+-ifdef(OTP_RELEASE).
+-if(?OTP_RELEASE >= 22).
+-compile(nowarn_deprecated_function).
+-endif.
+-endif.
 
 %%% ---------------------------------------------------
 %%%

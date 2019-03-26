@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -570,7 +570,7 @@ format_inet_error0(timeout) -> "timed out";
 format_inet_error0(Error)   -> inet:format_error(Error).
 
 %% This is a modified version of Luke Gorrie's pmap -
-%% http://lukego.livejournal.com/6753.html - that doesn't care about
+%% https://lukego.livejournal.com/6753.html - that doesn't care about
 %% the order in which results are received.
 %%
 %% WARNING: This is is deliberately lightweight rather than robust -- if F
@@ -1021,7 +1021,7 @@ os_cmd(Command) ->
     case os:type() of
         {win32, _} ->
             %% Clink workaround; see
-            %% http://code.google.com/p/clink/issues/detail?id=141
+            %% https://code.google.com/p/clink/issues/detail?id=141
             os:cmd(" " ++ Command);
         _ ->
             %% Don't just return "/bin/sh: <cmd>: not found" if not found
@@ -1073,7 +1073,7 @@ version() ->
     {ok, VSN} = application:get_key(rabbit, vsn),
     VSN.
 
-%% See http://www.erlang.org/doc/system_principles/versions.html
+%% See https://www.erlang.org/doc/system_principles/versions.html
 otp_release() ->
     File = filename:join([code:root_dir(), "releases",
                           erlang:system_info(otp_release), "OTP_VERSION"]),

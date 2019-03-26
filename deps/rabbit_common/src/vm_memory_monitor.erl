@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
-%% at http://www.mozilla.org/MPL/
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
@@ -355,7 +355,7 @@ set_mem_limits(State, MemLimit) ->
                   "Only ~p MiB (~p bytes) of ~p MiB (~p bytes) memory usable due to "
                   "limited address space.~n"
                   "Crashes due to memory exhaustion are possible - see~n"
-                  "http://www.rabbitmq.com/memory.html#address-space~n",
+                  "https://www.rabbitmq.com/memory.html#address-space~n",
                   [trunc(Limit/?ONE_MiB), Limit, trunc(TotalMemory/?ONE_MiB),
                    TotalMemory]),
                 Limit;
@@ -422,7 +422,7 @@ emit_update_info(AlarmState, MemUsed, MemLimit) ->
       "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
       [AlarmState, MemUsed, MemLimit]).
 
-%% According to http://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
+%% According to https://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
 %% Windows has 2GB and 8TB of address space for 32 and 64 bit accordingly.
 get_vm_limit({win32,_OSname}) ->
     case erlang:system_info(wordsize) of
@@ -436,7 +436,7 @@ get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
         4 -> 2*1024*1024*1024;          %% 2 GB for 32 bits  2^31
         8 -> 256*1024*1024*1024*1024    %% 256 TB for 64 bits 2^48
-             %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
+             %%https://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
 
 %%----------------------------------------------------------------------------

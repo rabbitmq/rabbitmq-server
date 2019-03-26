@@ -9,7 +9,7 @@
 %%% @copyright (C) 2011, Erlware LLC
 %%% @doc
 %%%  Helper functions for working with semver versioning strings.
-%%%  See http://semver.org/ for the spec.
+%%%  See https://semver.org/ for the spec.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(rabbit_semver).
