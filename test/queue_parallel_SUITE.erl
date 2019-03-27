@@ -62,7 +62,9 @@ groups() ->
       [
        {classic_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds]},
        {mirrored_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds]},
-       {quorum_queue, [parallel], AllTests ++ [delete_immediately_by_pid_fails]}
+       {quorum_queue, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]}
       ]}
     ].
 
@@ -93,6 +95,28 @@ init_per_group(quorum_queue, Config) ->
             rabbit_ct_helpers:set_config(
               Config,
               [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+               {queue_durable, true}]);
+        Skip ->
+            Skip
+    end;
+init_per_group(quorum_queue_in_memory_limit, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+        ok ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                             {<<"x-max-in-memory-length">>, long, 1}]},
+               {queue_durable, true}]);
+        Skip ->
+            Skip
+    end;
+init_per_group(quorum_queue_in_memory_bytes, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+        ok ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                             {<<"x-max-in-memory-bytes">>, long, 1}]},
                {queue_durable, true}]);
         Skip ->
             Skip
