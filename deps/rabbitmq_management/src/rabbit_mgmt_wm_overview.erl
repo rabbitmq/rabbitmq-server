@@ -41,7 +41,13 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     SRP = get_sample_retention_policies(),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
-    ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
+    ExchangeTypes = lists:sort(
+        fun(ET1, ET2) ->
+            proplists:get_value(name, ET1, none)
+            =<
+            proplists:get_value(name, ET2, none)
+        end,
+        rabbit_mgmt_external_stats:list_registry_plugins(exchange)),
     Overview0 = [{management_version,        version(rabbitmq_management)},
                  {rates_mode,                RatesMode},
                  {sample_retention_policies, SRP},
