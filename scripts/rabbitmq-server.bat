@@ -48,6 +48,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+CALL :convert_forward_slashes !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE
 CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
@@ -59,6 +60,7 @@ if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
     )
 )
 
+CALL :convert_forward_slashes !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE
 CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
@@ -100,6 +102,7 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE!" (
     )
 )
 
+CALL :convert_forward_slashes !RABBITMQ_CONFIG_ARG_FILE! RABBITMQ_CONFIG_ARG_FILE
 CALL :get_noex !RABBITMQ_CONFIG_ARG_FILE! RABBITMQ_CONFIG_ARG_FILE_NOEX
 
 if not "!RABBITMQ_CONFIG_ARG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_ARG_FILE!" (
@@ -274,6 +277,13 @@ EXIT /B 0
 
 :get_noex
 set "%~2=%~dpn1"
+EXIT /B 0
+
+rem Convert unix style path separators into windows style path separators
+rem needed for comparing with _NOEX variables
+rem rabbitmq/rabbitmq-server#1962
+:convert_forward_slashes
+set "%~2=%~dpf1"
 EXIT /B 0
 
 endlocal
