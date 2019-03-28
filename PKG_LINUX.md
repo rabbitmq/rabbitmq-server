@@ -10,7 +10,7 @@ $script = <<SCRIPT
 export LANG='C.UTF-8'
 export DEBIAN_FRONTEND=noninteractive
 
-echo 'deb http://httpredir.debian.org/debian jessie-backports main' >> /etc/apt/sources.list.d/backports.list
+echo 'deb http://cdn-fastly.deb.debian.org/debian jessie-backports main' >> /etc/apt/sources.list.d/backports.list
 
 wget https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
 dpkg -i erlang-solutions_1.0_all.deb

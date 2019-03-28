@@ -26,7 +26,7 @@ LimitNOFILE=32768
 # The following setting will automatically restart RabbitMQ
 # in the event of a failure. systemd service restarts are not a
 # replacement for service monitoring. Please see
-# http://www.rabbitmq.com/monitoring.html
+# https://www.rabbitmq.com/monitoring.html
 Restart=on-failure
 RestartSec=10
 WorkingDirectory=/var/lib/rabbitmq

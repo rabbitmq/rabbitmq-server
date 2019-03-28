@@ -6,12 +6,12 @@ Version: %%VERSION%%
 Release: 1%{?dist}
 License: MPLv1.1 and MIT and ASL 2.0 and BSD
 Group: %{group_tag}
-Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{upstream_version}/%{name}-%{upstream_version}.tar.xz
+Source: https://www.rabbitmq.com/releases/rabbitmq-server/v%{upstream_version}/%{name}-%{upstream_version}.tar.xz
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.logrotate
 Source3: rabbitmq-server.service
 Source4: rabbitmq-server.tmpfiles
-URL: http://www.rabbitmq.com/
+URL: https://www.rabbitmq.com/
 BuildArch: noarch
 BuildRequires: erlang >= %{erlang_minver}, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
 

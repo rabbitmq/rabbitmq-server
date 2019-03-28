@@ -14,7 +14,7 @@ set -e
 #        * <deconfigured's-postinst> `abort-deconfigure' `in-favour'
 #          <failed-install-package> <version> `removing'
 #          <conflicting-package> <version>
-# for details, see http://www.debian.org/doc/debian-policy/ or
+# for details, see https://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
 

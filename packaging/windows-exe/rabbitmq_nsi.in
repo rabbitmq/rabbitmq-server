@@ -279,7 +279,7 @@ Function findErlang
 
   ${If} $2 = "not-found"
     MessageBox MB_YESNO|MB_ICONEXCLAMATION "Erlang could not be detected.$\nYou must install Erlang before installing RabbitMQ. Would you like the installer to open a browser window to the Erlang download site?" IDNO abort
-    ExecShell "open" "http://www.erlang.org/download.html"
+    ExecShell "open" "https://www.erlang.org/download.html"
     abort:
     Abort
   ${Else}
@@ -292,7 +292,7 @@ Function findErlang
 
     ReadRegStr $0 HKLM "Software\Ericsson\Erlang\$2" ""
 
-    ; See http://nsis.sourceforge.net/Setting_Environment_Variables
+    ; See https://nsis.sourceforge.io/Setting_Environment_Variables
     WriteRegExpandStr ${env_hklm} ERLANG_HOME $0
     SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 
