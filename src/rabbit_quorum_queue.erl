@@ -61,7 +61,9 @@
          members,
          open_files,
          single_active_consumer_pid,
-         single_active_consumer_ctag
+         single_active_consumer_ctag,
+         messages_ram,
+         message_bytes_ram
         ]).
 
 -define(RPC_TIMEOUT, 1000).
@@ -973,6 +975,16 @@ i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
             ''
     end;
 i(type, _) -> quorum;
+i(messages_ram, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    {ok, {_, {Length, _}}, _} = ra:local_query(QPid,
+                                          fun rabbit_fifo:query_in_memory_usage/1),
+    Length;
+i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    {ok, {_, {_, Bytes}}, _} = ra:local_query(QPid,
+                                         fun rabbit_fifo:query_in_memory_usage/1),
+    Bytes;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->
