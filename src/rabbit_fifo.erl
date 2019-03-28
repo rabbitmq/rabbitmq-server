@@ -1192,7 +1192,7 @@ return_all(State0, Checked0, Effects0, ConsumerId, Consumer) ->
 %% reverses the effects list
 checkout(#{index := Index}, State0, Effects0) ->
     {State1, _Result, Effects1} = checkout0(checkout_one(State0),
-                                            Effects0, #{}),
+                                            Effects0, {#{}, #{}}),
     case evaluate_limit(State0#?MODULE.ra_indexes, false,
                         State1, Effects1) of
         {State, true, Effects} ->
@@ -1201,21 +1201,26 @@ checkout(#{index := Index}, State0, Effects0) ->
             {State, ok, Effects}
     end.
 
-checkout0({success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State}, Effects, Acc) ->
-    checkout0(checkout_one(State), [send_log_effect(ConsumerId, RaftIdx, MsgId, Header) | Effects], Acc);
-checkout0({success, ConsumerId, MsgId, Msg, State}, Effects, Acc0) ->
+checkout0({success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State}, Effects,
+          {SendAcc, LogAcc0}) ->
+    DelMsg = {RaftIdx, {MsgId, Header}},
+    LogAcc = maps:update_with(ConsumerId,
+                              fun (M) -> [DelMsg | M] end,
+                              [DelMsg], LogAcc0),
+    checkout0(checkout_one(State), Effects, {SendAcc, LogAcc});
+checkout0({success, ConsumerId, MsgId, Msg, State}, Effects, {SendAcc0, LogAcc}) ->
     DelMsg = {MsgId, Msg},
-    Acc = maps:update_with(ConsumerId,
-                           fun (M) -> [DelMsg | M] end,
-                           [DelMsg], Acc0),
-    checkout0(checkout_one(State), Effects, Acc);
-checkout0({Activity, State0}, Effects0, Acc) ->
+    SendAcc = maps:update_with(ConsumerId,
+                               fun (M) -> [DelMsg | M] end,
+                               [DelMsg], SendAcc0),
+    checkout0(checkout_one(State), Effects, {SendAcc, LogAcc});
+checkout0({Activity, State0}, Effects0, {SendAcc, LogAcc}) ->
     Effects1 = case Activity of
                    nochange ->
-                       append_send_msg_effects(Effects0, Acc);
+                       append_send_msg_effects(append_log_effects(Effects0, LogAcc), SendAcc);
                    inactive ->
                        [{aux, inactive}
-                        | append_send_msg_effects(Effects0, Acc)]
+                        | append_send_msg_effects(append_log_effects(Effects0, LogAcc), SendAcc)]
                end,
     {State0, ok, lists:reverse(Effects1)}.
 
@@ -1250,6 +1255,11 @@ append_send_msg_effects(Effects0, AccMap) ->
                                 [send_msg_effect(C, lists:reverse(Msgs)) | Ef]
                         end, Effects0, AccMap),
     [{aux, active} | Effects].
+
+append_log_effects(Effects0, AccMap) ->
+    maps:fold(fun (C, Msgs, Ef) ->
+                      [send_log_effect(C, lists:reverse(Msgs)) | Ef]
+              end, Effects0, AccMap).
 
 %% next message is determined as follows:
 %% First we check if there are are prefex returns
@@ -1300,14 +1310,18 @@ take_next_msg(#?MODULE{returns = Returns,
 send_msg_effect({CTag, CPid}, Msgs) ->
     {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}.
 
-send_log_effect({CTag, CPid}, RaftIdx, MsgId, Header) ->
-    {log, RaftIdx, fun({enqueue, _, _, Msg}) ->
-                           {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, Msg}}]}, ra_event}
-                   end}.
+send_log_effect({CTag, CPid}, IdxMsgs) ->
+    {RaftIdxs, Data} = lists:unzip(IdxMsgs),
+    {log, RaftIdxs, fun(Log) ->
+                            Msgs = lists:zipwith(fun({enqueue, _, _, Msg}, {MsgId, Header}) ->
+                                                         {MsgId, {Header, Msg}}
+                                                 end, Log, Data),
+                            {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}
+                    end}.
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
     {log, RaftIdx, fun({enqueue, _, _, Msg}) ->
-                           {wrap_reply, From, {dequeue, {MsgId, {Header, Msg}}, Ready}}
+                           {reply, From, {wrap_reply, {dequeue, {MsgId, {Header, Msg}}, Ready}}}
                    end}.
 
 checkout_one(#?MODULE{service_queue = SQ0,
