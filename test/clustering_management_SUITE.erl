@@ -55,7 +55,8 @@ groups() ->
               force_boot,
               status_with_alarm,
               pid_file_and_await_node_startup,
-              await_running_count
+              await_running_count,
+              start_with_invalid_schema_in_path
             ]},
           {cluster_size_4, [], [
               forget_promotes_offline_slave
@@ -120,6 +121,42 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
+
+start_with_invalid_schema_in_path(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    stop_app(Rabbit),
+    stop_app(Hare),
+
+    create_bad_schema(Rabbit, Hare, Config),
+
+    start_app(Hare),
+    case start_app(Rabbit) of
+        ok  -> ok;
+        ErrRabbit -> error({unable_to_start_with_bad_schema_in_work_dir, ErrRabbit})
+    end.
+
+create_bad_schema(Rabbit, Hare, Config) ->
+
+    {ok, RabbitMnesiaDir} = rpc:call(Rabbit, application, get_env, [mnesia, dir]),
+    {ok, HareMnesiaDir} = rpc:call(Hare, application, get_env, [mnesia, dir]),
+    %% Make sure we don't use the current dir:
+    PrivDir = ?config(priv_dir, Config),
+    ct:pal("Priv dir ~p~n", [PrivDir]),
+    ok = filelib:ensure_dir(filename:join(PrivDir, "file")),
+
+    ok = rpc:call(Rabbit, file, set_cwd, [PrivDir]),
+    ok = rpc:call(Hare, file, set_cwd, [PrivDir]),
+
+    ok = rpc:call(Rabbit, application, unset_env, [mnesia, dir]),
+    ok = rpc:call(Hare, application, unset_env, [mnesia, dir]),
+    ok = rpc:call(Rabbit, mnesia, create_schema, [[Rabbit, Hare]]),
+    ok = rpc:call(Rabbit, mnesia, start, []),
+    {atomic,ok} = rpc:call(Rabbit, mnesia, create_table,
+                                   [rabbit_queue, [{ram_copies, [Rabbit, Hare]}]]),
+    stopped = rpc:call(Rabbit, mnesia, stop, []),
+    ok = rpc:call(Rabbit, application, set_env, [mnesia, dir, RabbitMnesiaDir]),
+    ok = rpc:call(Hare, application, set_env, [mnesia, dir, HareMnesiaDir]).
 
 join_and_part_cluster(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),

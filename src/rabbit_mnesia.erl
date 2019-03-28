@@ -945,10 +945,13 @@ with_running_or_clean_mnesia(Fun) ->
         false ->
             SavedMnesiaDir = dir(),
             application:unset_env(mnesia, dir),
+            SchemaLoc = application:get_env(mnesia, schema_location, opt_disc),
+            application:set_env(mnesia, schema_location, ram),
             mnesia:start(),
             Result = Fun(),
             application:stop(mnesia),
             application:set_env(mnesia, dir, SavedMnesiaDir),
+            application:set_env(mnesia, schema_location, SchemaLoc),
             Result
     end.
 
