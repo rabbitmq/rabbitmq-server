@@ -97,13 +97,13 @@ init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
 
     UseHTTPAuth = application:get_env(rabbitmq_web_stomp, use_http_auth, false),
     StompConfig0 = #stomp_configuration{implicit_connect = false},
+    UserConfig = application:get_env(rabbitmq_stomp, default_user, undefined),
+    StompConfig1 = rabbit_stomp:parse_default_user(UserConfig, StompConfig0),
     StompConfig = case UseHTTPAuth of
         true ->
             case AuthHd of
                 undefined ->
                     %% We fall back to the default STOMP credentials.
-                    UserConfig = application:get_env(rabbitmq_stomp, default_user, undefined),
-                    StompConfig1 = rabbit_stomp:parse_default_user(UserConfig, StompConfig0),
                     StompConfig1#stomp_configuration{force_default_creds = true};
                 _ ->
                     {basic, HTTPLogin, HTTPPassCode}
@@ -114,7 +114,7 @@ init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
                       force_default_creds = true}
             end;
         false ->
-            StompConfig0
+            StompConfig1
     end,
 
     AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web STOMP', 0}),
