@@ -652,7 +652,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
       {"RABBITMQ_CONFIG_FILE=~s", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~s", [StartArgs1]},
-      "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short",
+      "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
       {"TEST_TMPDIR=~s", [PrivDir]}
       | ExtraArgs],
     case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
