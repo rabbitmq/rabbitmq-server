@@ -141,6 +141,9 @@
         <th class="horizontal">Total</th>
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
+        <% if (is_quorum(queue)) { %>
+        <th class="horizontal">In memory ready</th>
+        <% } %>
         <% if (is_classic(queue)) { %>
         <th class="horizontal">In memory</th>
         <th class="horizontal">Persistent</th>
@@ -161,10 +164,10 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
-        <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ram) %>
         </td>
+        <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_persistent) %>
         </td>
@@ -187,10 +190,10 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
         </td>
-        <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_ram) %>
         </td>
+        <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
         </td>
