@@ -54,7 +54,7 @@ end_per_group(_, Config) ->
 
 init_per_testcase(TestCase, Config) ->
     meck:new(rabbit_quorum_queue, [passthrough]),
-    meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _) -> ok end),
+    meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _, _) -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
                 fun (_, _) -> ok end),
     ra_server_sup_sup:remove_all(),

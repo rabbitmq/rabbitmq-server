@@ -480,9 +480,12 @@ tick_test(_) ->
     {S3, {_, _}} = deq(4, Cid2, unsettled, S2),
     {S4, _, _} = apply(meta(5), rabbit_fifo:make_return(Cid, [MsgId]), S3),
 
-    [{mod_call, _, _,
+    [{mod_call, rabbit_quorum_queue, handle_tick,
       [#resource{},
-       {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3}]}, {aux, emit}] = rabbit_fifo:tick(1, S4),
+       {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3},
+       [_Node]
+      ]},
+     {aux, emit}] = rabbit_fifo:tick(1, S4),
     ok.
 
 
@@ -921,10 +924,11 @@ single_active_consumer_all_disconnected_test(_) ->
 
 single_active_consumer_state_enter_leader_include_waiting_consumers_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
-        queue_resource => rabbit_misc:r("/", queue,
-            atom_to_binary(?FUNCTION_NAME, utf8)),
-        release_cursor_interval => 0,
-        single_active_consumer_on => true}),
+                    queue_resource =>
+                    rabbit_misc:r("/", queue,
+                                  atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
 
     DummyFunction = fun() -> ok  end,
     Pid1 = spawn(DummyFunction),
@@ -1201,6 +1205,54 @@ single_active_with_credited_test(_) ->
                  State3#rabbit_fifo.consumers),
     ?assertMatch([{C2, #consumer{credit = 4}}],
                  State3#rabbit_fifo.waiting_consumers),
+    ok.
+
+purge_nodes_test(_) ->
+    Node = purged@node,
+    ThisNode = node(),
+    EnqPid = test_util:fake_pid(Node),
+    EnqPid2 = test_util:fake_pid(node()),
+    ConPid = test_util:fake_pid(Node),
+    Cid = {<<"tag">>, ConPid},
+    % WaitingPid = test_util:fake_pid(Node),
+
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    single_active_consumer_on => false}),
+    {State1, _, _} = apply(meta(1),
+                           rabbit_fifo:make_enqueue(EnqPid, 1, msg1),
+                           State0),
+    {State2, _, _} = apply(meta(2),
+                           rabbit_fifo:make_enqueue(EnqPid2, 1, msg2),
+                           State1),
+    {State3, _} = check(Cid, 3, 1000, State2),
+    {State4, _, _} = apply(meta(4),
+                           {down, EnqPid, noconnection},
+                           State3),
+    ?assertMatch(
+       [{mod_call, rabbit_quorum_queue, handle_tick,
+         [#resource{}, _Metrics,
+          [ThisNode, Node]
+         ]},
+        {aux, emit}] , rabbit_fifo:tick(1, State4)),
+    %% assert there are both enqueuers and consumers
+    {State, _, _} = apply(meta(5),
+                          rabbit_fifo:make_purge_nodes([Node]),
+                          State4),
+
+    %% assert there are no enqueuers nor consumers
+    ?assertMatch(#rabbit_fifo{enqueuers = Enqs} when map_size(Enqs) == 1,
+                                                     State),
+
+    ?assertMatch(#rabbit_fifo{consumers = Cons} when map_size(Cons) == 0,
+                                                     State),
+    ?assertMatch(
+       [{mod_call, rabbit_quorum_queue, handle_tick,
+         [#resource{}, _Metrics,
+          [ThisNode]
+         ]},
+        {aux, emit}] , rabbit_fifo:tick(1, State)),
     ok.
 
 meta(Idx) ->
