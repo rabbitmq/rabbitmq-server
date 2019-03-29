@@ -519,7 +519,8 @@ parse_line_linux(Line) ->
         end,
     Value1 = case UnitRest of
         []     -> list_to_integer(Value); %% no units
-        ["kB"] -> list_to_integer(Value) * 1024
+        ["kB"] -> list_to_integer(Value) * 1024;
+        ["KB"] -> list_to_integer(Value) * 1024
     end,
     {list_to_atom(Name), Value1}.
 
