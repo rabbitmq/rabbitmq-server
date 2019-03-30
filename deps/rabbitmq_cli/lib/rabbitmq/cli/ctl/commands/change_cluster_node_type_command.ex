@@ -14,6 +14,8 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(args, opts) do
@@ -50,7 +52,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   end
 
   def usage() do
-    "change_cluster_node_type <disc|ram>"
+    "change_cluster_node_type <disc | ram>"
+  end
+
+  def usage_additional() do
+    [
+      ["<disc | ram>", "New node type"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering()
+    ]
   end
 
   def help_section(), do: :cluster_management

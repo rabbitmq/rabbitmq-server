@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -64,16 +66,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def banner(_, _), do: nil
 
-  def usage, do: "exec <expr> [--offline]"
+  def usage, do: "exec <expression> [--offline]"
 
   def usage_additional() do
     [
-      ["--offline", "do not initialize Erlang distribution"]
+      ["<expression>", "Expression to evaluate"],
+      ["--offline", "disable inter-node communication"]
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.cli(),
+      DocGuide.monitoring(),
+      DocGuide.troubleshooting()
+    ]
+  end
 
   def help_section(), do: :operations
 
-  def description(), do: "Executes Elixir code on the CLI node"
+  def description(), do: "Evaluates a snippet of Elixir code on the CLI node"
 end

@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "list_consumers [-p vhost] [--no-table-headers] [<column> ...]"
+    "list_consumers [--vhost <vhost>] [--no-table-headers] [<column> ...]"
   end
 
   def usage_additional() do

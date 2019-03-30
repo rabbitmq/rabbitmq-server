@@ -16,6 +16,8 @@
 alias RabbitMQ.CLI.Core.Helpers
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -42,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   end
 
   def validate(args, _) when length(args) < 2 do
-    {:validation_failure, {:bad_argument, "Please provide a value to decode and a passphrase."}}
+    {:validation_failure, {:bad_argument, "Please provide a value to decode and a passphrase"}}
   end
 
   def validate(args, _) when length(args) > 2 do
@@ -52,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   def validate(args, opts) when length(args) === 2 do
     case {supports_cipher(opts.cipher), supports_hash(opts.hash), opts.iterations > 0} do
       {false, _, _} ->
-        {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
+        {:validation_failure, {:bad_argument, "The requested cipher is not supported"}}
 
       {_, false, _} ->
         {:validation_failure, {:bad_argument, "The requested hash is not supported"}}
@@ -101,6 +103,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
       ["--cipher <cipher>", "cipher suite to use"],
       ["--hash <hash>", "hashing function to use"],
       ["--iterations <iterations>", "number of iteration to apply"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.configuration()
     ]
   end
 

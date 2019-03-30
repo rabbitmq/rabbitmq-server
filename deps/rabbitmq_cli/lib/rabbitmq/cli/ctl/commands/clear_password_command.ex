@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -34,9 +34,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "clear_password <username>"
+
+  def usage_additional() do
+    [
+      ["<username>", "Name of the user whose password should be cleared"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
+    ]
+  end
+
   def help_section(), do: :user_management
 
-  def description(), do: "Removes the user password"
+  def description(), do: "Clears (resets) password and disables password login for a user"
 
   def banner([user], _), do: "Clearing password for user \"#{user}\" ..."
 end

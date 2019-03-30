@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -35,6 +35,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def usage, do: "clear_vhost_limits [--vhost <vhost>]"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts()
+    ]
+  end
 
   def help_section(), do: :virtual_hosts
 

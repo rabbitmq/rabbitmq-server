@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -47,11 +49,25 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def usage, do: "eval <expr>"
+  def usage, do: "eval <expression>"
+
+  def usage_additional() do
+    [
+      ["<expression>", "Expression to evaluate"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.cli(),
+      DocGuide.monitoring(),
+      DocGuide.troubleshooting()
+    ]
+  end
 
   def help_section(), do: :operations
 
-  def description(), do: "Executes Erlang code on the RabbitMQ node"
+  def description(), do: "Evaluates a snippet of Erlang code on the target node"
 
   def banner(_, _), do: nil
 

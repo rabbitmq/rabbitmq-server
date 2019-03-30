@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def switches(), do: [if_empty: :boolean, if_unused: :boolean, timeout: :integer]
@@ -119,6 +121,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.queues()
+    ]
+  end
 
   def help_section(), do: :queues
 

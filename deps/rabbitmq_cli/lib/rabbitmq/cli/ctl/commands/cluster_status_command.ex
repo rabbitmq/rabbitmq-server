@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -47,6 +49,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "cluster_status"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering(),
+      DocGuide.cluster_formation(),
+      DocGuide.monitoring()
+    ]
+  end
 
   def help_section(), do: :cluster_management
 

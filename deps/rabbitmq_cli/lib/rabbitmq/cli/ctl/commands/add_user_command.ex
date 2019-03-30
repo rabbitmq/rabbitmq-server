@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
-  alias RabbitMQ.CLI.Core.{ExitCodes, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -51,6 +51,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
     [
       ["<username>", "Self-explanatory"],
       ["<password>", "Password this user will authenticate with. Use a blank string to disable password-based authentication."]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
     ]
   end
 

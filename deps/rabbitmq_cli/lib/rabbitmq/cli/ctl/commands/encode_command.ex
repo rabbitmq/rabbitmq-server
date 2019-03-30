@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -91,6 +91,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       ["--cipher <cipher>", "cipher suite to use"],
       ["--hash <hash>", "hashing function to use"],
       ["--iterations <iterations>", "number of iteration to apply"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.configuration()
     ]
   end
 

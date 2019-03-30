@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def switches(), do: [global: :boolean, per_connection_delay: :integer, limit: :integer]
@@ -78,7 +80,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   end
 
   def usage do
-    "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
+    "close_all_connections [--vhost <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
   end
 
   def usage_additional do
@@ -86,6 +88,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
       ["--global", "consider connections across all virtual hosts"],
       ["--limit <number>", "close up to this many connections"],
       ["--per-connection-delay <milliseconds>", "inject a delay between closures"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.connections()
     ]
   end
 

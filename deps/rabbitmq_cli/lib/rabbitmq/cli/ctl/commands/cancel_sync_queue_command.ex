@@ -14,6 +14,8 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -35,7 +37,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
     )
   end
 
-  def usage, do: "cancel_sync_queue [--vhost <vhost>] queue"
+  def usage, do: "cancel_sync_queue [--vhost <vhost>] <queue>"
+
+  def usage_additional() do
+    [
+      ["<queue>", "Queue name"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.mirroring()
+    ]
+  end
 
   def help_section(), do: :replication
 
