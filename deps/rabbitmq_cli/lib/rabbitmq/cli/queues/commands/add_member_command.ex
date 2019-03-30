@@ -42,11 +42,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "add_member [--vhost <vhost>] <queuename> <node>"
+  def usage, do: "add_member [--vhost <vhost>] <queue> <node>"
 
   def usage_additional do
     [
-      ["<queuename>", "quorum queue name"],
+      ["<queue>", "quorum queue name"],
       ["<node>", "node to add to the Raft cluster of the queue"]
     ]
   end
