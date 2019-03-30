@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -31,6 +33,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "list_hashes"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.configuration(),
+      DocGuide.tls()
+    ]
+  end
 
   def help_section(), do: :observability_and_health_checks
 

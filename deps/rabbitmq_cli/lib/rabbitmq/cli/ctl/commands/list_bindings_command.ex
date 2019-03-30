@@ -69,15 +69,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     "list_bindings [--vhost <vhost>] [--no-table-headers] [<column> ...]"
   end
 
-  def help_section(), do: :observability_and_health_checks
-
-  def description(), do: "Lists all bindings on a vhost"
-
   def usage_additional() do
     [
       ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
     ]
   end
+
+  def help_section(), do: :observability_and_health_checks
+
+  def description(), do: "Lists all bindings on a vhost"
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."
 end

@@ -15,6 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.Ctl.InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -48,10 +49,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
 
   def banner(_, _), do: "Listing feature flags ..."
 
-  def help_section(), do: :feature_flags
-
-  def description(), do: "Lists feature flags"
-
   def usage, do: "list_feature_flags [<column> ...]"
 
   def usage_additional() do
@@ -59,6 +56,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
       ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
     ]
   end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.feature_flags()
+    ]
+  end
+
+  def help_section(), do: :feature_flags
+
+  def description(), do: "Lists feature flags"
 
   #
   # Implementation

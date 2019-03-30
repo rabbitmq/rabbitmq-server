@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -44,8 +46,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
   end
 
   def usage, do: "list_user_permissions [--no-table-headers] <username>"
+
+  def usage_additional do
+    [
+      ["<username>", "Name of the user"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control(),
+      DocGuide.virtual_hosts()
+    ]
+  end
+
   def help_section(), do: :access_control
-  def description(), do: "Lists user permissions"
+  def description(), do: "Lists permissions of a user across all virtual hosts"
 
   def banner([username], _), do: "Listing permissions for user \"#{username}\" ..."
 end

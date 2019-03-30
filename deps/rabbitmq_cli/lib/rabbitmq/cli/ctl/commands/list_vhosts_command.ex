@@ -14,12 +14,11 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.Ctl.InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   @info_keys ~w(name tracing cluster_state)a
 
@@ -50,16 +49,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
     |> filter_by_arg(args)
   end
 
-  def usage, do: "list_vhosts [--no-table-headers] [<column> ...]"
-  def help_section(), do: :access_control
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def description(), do: "Lists virtual hosts"
+  def usage, do: "list_vhosts [--no-table-headers] [<column> ...]"
 
   def usage_additional() do
     [
       ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
     ]
   end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts(),
+      DocGuide.access_control()
+    ]
+  end
+
+  def help_section(), do: :access_control
+
+  def description(), do: "Lists virtual hosts"
+
+  def banner(_, _), do: "Listing vhosts ..."
 
   #
   # Implementation
@@ -79,6 +90,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
       |> Enum.map(fn arg -> {arg, vhost[arg]} end)
     end)
   end
-
-  def banner(_, _), do: "Listing vhosts ..."
 end

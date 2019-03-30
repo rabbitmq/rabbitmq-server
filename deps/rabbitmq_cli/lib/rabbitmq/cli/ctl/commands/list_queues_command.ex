@@ -132,8 +132,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")],
       ["--online", "lists only queues on online (reachable) nodes"],
       ["--offline", "lists only queues on offline (unreachable) nodes"],
-      ["--local", "only return queues hosted on the target node"],
-      ["--formatter <json | csv>", "alternative formatter to use, JSON or CSV"]
+      ["--local", "only return queues hosted on the target node"]
     ]
   end
 

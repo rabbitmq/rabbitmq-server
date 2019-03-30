@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceGcCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -26,11 +28,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceGcCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def usage, do: "force_gc"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.memory_use()
+    ]
+  end
+
   def help_section(), do: :operations
 
   def description, do: "Makes all Erlang processes on the target node perform/schedule a full sweep garbage collection"
-
-  def usage, do: "force_gc"
 
   def banner([], %{node: node_name}), do: "Will ask all processes on node #{node_name} to schedule a full sweep GC"
 end

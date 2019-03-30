@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -81,7 +81,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.consumers()
+    ]
+  end
+
   def banner(_, %{vhost: vhost}), do: "Listing consumers in vhost #{vhost} ..."
+
+  #
+  # Implementation
+  #
 
   # add missing fields if response comes from node < 3.8
   def fill_consumer_active_fields({[], {chunk, :continue}}) do

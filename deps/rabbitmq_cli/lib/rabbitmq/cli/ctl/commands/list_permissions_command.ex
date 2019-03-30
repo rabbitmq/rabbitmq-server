@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -41,6 +43,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_permissions [--vhost <vhost>] [--no-table-headers]"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control(),
+      DocGuide.virtual_hosts()
+    ]
+  end
+
   def help_section(), do: :access_control
   def description(), do: "Lists user permissions in a virtual host"
 
