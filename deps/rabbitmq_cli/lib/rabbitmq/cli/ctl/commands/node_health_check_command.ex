@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   @default_timeout 70_000
@@ -70,8 +72,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def usage, do: "node_health_check"
 
+  def usage_additional() do
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.monitoring()
+    ]
+  end
+
   def help_section(), do: :observability_and_health_checks
-  def description(), do: "Performs several health checks of the target node"
+  def description(), do: "Performs several opinionated health checks of the target node"
 
   def banner(_, %{node: node_name, timeout: timeout}) do
     ["Timeout: #{trunc(timeout / 1000)} seconds ...", "Checking health of node #{node_name} ..."]

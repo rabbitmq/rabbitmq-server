@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
@@ -44,6 +46,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "purge_queue <queue>"
+
+  def usage_additional() do
+    [
+      ["<queue>", "Name of the queue to purge"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.queues()
+    ]
+  end
 
   def help_section(), do: :queues
 

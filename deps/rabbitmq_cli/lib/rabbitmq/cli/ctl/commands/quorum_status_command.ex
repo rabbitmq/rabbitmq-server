@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   def scopes(), do: [:ctl, :diagnostics, :queues]
 
@@ -37,7 +39,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
-    "quorum_status [--vhost <vhost>] <queuename>"
+    "quorum_status [--vhost <vhost>] <queue>"
+  end
+
+  def usage_additional do
+    [
+      ["<queue>", "Name of the queue"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.quorum_queues()
+    ]
   end
 
   def help_section(), do: :queues

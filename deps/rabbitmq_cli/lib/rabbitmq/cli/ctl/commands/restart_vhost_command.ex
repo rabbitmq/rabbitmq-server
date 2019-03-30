@@ -16,6 +16,8 @@
 alias RabbitMQ.CLI.Core.ExitCodes
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
@@ -46,9 +48,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
 
   def usage, do: "restart_vhost [--vhost <vhost>]"
 
+  def usage_additional() do
+    [
+      ["--vhost", "Virtual host name"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts(),
+      DocGuide.monitoring()
+    ]
+  end
+
   def help_section(), do: :virtual_hosts
 
-  def description(), do: "Restarts a failed vhost data storage and queues"
+  def description(), do: "Restarts a failed vhost data stores and queues"
 
   def banner(_, %{node: node_name, vhost: vhost}) do
     "Trying to restart vhost '#{vhost}' on node '#{node_name}' ..."
