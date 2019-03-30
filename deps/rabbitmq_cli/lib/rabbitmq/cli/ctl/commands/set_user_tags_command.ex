@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -47,6 +47,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.management(),
+      DocGuide.access_control()
+    ]
+  end
 
   def help_section(), do: :user_management
 

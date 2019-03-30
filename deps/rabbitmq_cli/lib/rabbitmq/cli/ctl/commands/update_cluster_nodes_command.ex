@@ -11,10 +11,10 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
-## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2016-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
-  alias RabbitMQ.CLI.Core.{Config, Helpers}
+  alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -34,12 +34,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   end
 
   def usage() do
-    "update_cluster_nodes <existing_cluster_member_node_to_seed_from>"
+    "update_cluster_nodes <seed_node>"
+  end
+
+  def usage_additional() do
+    [
+      ["<seed_node>", "Cluster node to seed known cluster members from"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering()
+    ]
   end
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Instructs an already clustered node to contact <clusternode> to cluster when waking up"
+  def description(), do: "Instructs a cluster member node to sync the list of known cluster members from <seed_node>"
 
   def banner([seed_node], %{node: node_name}) do
     "Will seed #{node_name} from #{seed_node} on next start"

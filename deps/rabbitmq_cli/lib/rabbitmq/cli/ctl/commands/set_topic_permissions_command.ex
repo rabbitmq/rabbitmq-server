@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -43,8 +43,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage,
-    do: "set_topic_permissions [--vhost <vhost>] <username> <exchange> <write_pattern> <read_pattern>"
+  def usage do
+    "set_topic_permissions [--vhost <vhost>] <username> <exchange> <write> <read>"
+  end
+
+  def usage_additional do
+    [
+      ["<username>", "Self-explanatory"],
+      ["<exchange>", "Topic exchange to set the permissions for"],
+      ["<write>", "Write permission pattern"],
+      ["<read>", "Read permission pattern"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
+    ]
+  end
 
   def help_section(), do: :access_control
 

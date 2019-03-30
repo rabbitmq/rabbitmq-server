@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -60,6 +60,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control(),
+      DocGuide.virtual_hosts()
+    ]
+  end
 
   def help_section(), do: :access_control
   def description(), do: "Sets user permissions for a vhost"

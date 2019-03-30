@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(_, opts) do
@@ -30,9 +32,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
     end
   end
 
-use RabbitMQ.CLI.DefaultOutput
+  use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "trace_on [--vhost <vhost>]"
+  def usage do
+    "trace_on [--vhost <vhost>]"
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.firehose(),
+      DocGuide.virtual_hosts()
+    ]
+  end
 
   def help_section(), do: :virtual_hosts
 
