@@ -167,8 +167,14 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     "#{running_version} (pending upgrade to #{version})"
   end
 
-  ## Do not print legend in minimal mode
+  ## Do not print legend in minimal, quiet or silent mode
   defp legend(_, :minimal, _) do
+    []
+  end
+  defp legend(_, _, %{quiet: true}) do
+    []
+  end
+  defp legend(_, _, %{silent: true}) do
     []
   end
 
