@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -106,11 +106,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage,
-    do: [
-      "set_vm_memory_high_watermark <fraction>",
-      "set_vm_memory_high_watermark absolute <value>"
+  def usage do
+    "set_vm_memory_high_watermark <fraction> | absolute <value>"
+  end
+
+  def usage_additional() do
+    [
+      ["<fraction>", "New limit as a fraction of total memory reported by the OS"],
+      ["absolute <value>", "New limit as an absolute value with units, e.g. 1GB"]
     ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.alarms(),
+      DocGuide.memory_use(),
+    ]
+  end
 
   def help_section(), do: :configuration
 

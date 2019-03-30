@@ -42,6 +42,8 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   #
 
   Macros.defguide("access_control")
+  Macros.defguide("alarms")
+  Macros.defguide("disk_alarms")
   Macros.defguide("alternate_exchange", path_segment: "ae")
   Macros.defguide("cli")
   Macros.defguide("channels")
@@ -52,6 +54,7 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("consumers")
   Macros.defguide("erlang_versions", path_segment: "which-erlang")
   Macros.defguide("feature_flags", domain: "next.rabbitmq.com")
+  Macros.defguide("firehose")
   Macros.defguide("mirroring", path_segment: "ha")
   Macros.defguide("logging")
   Macros.defguide("management")

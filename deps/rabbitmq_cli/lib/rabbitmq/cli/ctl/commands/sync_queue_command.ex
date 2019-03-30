@@ -14,6 +14,8 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(args, opts) do
@@ -35,7 +37,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "sync_queue [--vhost <vhost>] queue"
+  def usage do
+    "sync_queue [--vhost <vhost>] <queue>"
+  end
+
+  def usage_additional() do
+    [
+      ["<queue>", "Name of the queue to synchronise"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.mirroring()
+    ]
+  end
 
   def help_section(), do: :replication
 

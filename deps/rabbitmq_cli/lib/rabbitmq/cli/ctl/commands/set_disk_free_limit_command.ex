@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -85,7 +85,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   def banner([arg], %{node: node_name}),
     do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
 
-  def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
+  def usage, do: "set_disk_free_limit <disk_limit> | mem_relative <fraction>"
+
+  def usage_additional() do
+    [
+      ["<disk_limit>", "New limit as an absolute value with units, e.g. 1GB"],
+      ["mem_relative <fraction>", "New limit as a fraction of total memory reported by the OS"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.disk_alarms(),
+      DocGuide.alarms()
+    ]
+  end
 
   def help_section(), do: :configuration
 

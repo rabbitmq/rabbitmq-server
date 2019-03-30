@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -36,6 +36,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "set_vhost_limits [--vhost <vhost>] <definition>"
+
+  def usage_additional() do
+    [
+      ["<definition>", "Limit definitions, must be a valid JSON document"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts()
+    ]
+  end
 
   def help_section(), do: :virtual_hosts
 
