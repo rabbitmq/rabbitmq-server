@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -73,16 +73,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
     "list_connections [--no-table-headers] [<column> ...]"
   end
 
+  def usage_additional() do
+    [
+      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.connections()
+    ]
+  end
+
   def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Lists AMQP 0.9.1 connections for the node"
-
-  def usage_additional() do
-    [
-      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")],
-      ["--formatter <json | csv>", "alternative formatter to use, JSON or CSV"]
-    ]
-  end
 
   def banner(_, _), do: "Listing connections ..."
 end

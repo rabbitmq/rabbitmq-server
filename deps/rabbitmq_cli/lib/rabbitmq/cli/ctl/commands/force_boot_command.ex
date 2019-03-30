@@ -13,9 +13,9 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Config
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
+  alias RabbitMQ.CLI.Core.{Config, DocGuide}
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -52,9 +52,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
 
   def usage, do: "force_boot"
 
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering()
+    ]
+  end
+
   def help_section(), do: :cluster_management
 
-  def description(), do: "Ensures that the node will start next time, even if it was not the last to shut down"
+  def description(), do: "Forces node to start even if it cannot contact or rejoin any of its previously known peers"
 
   def banner(_, _), do: nil
 end

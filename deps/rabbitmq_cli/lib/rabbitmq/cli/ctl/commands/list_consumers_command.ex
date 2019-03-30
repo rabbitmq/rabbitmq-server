@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -74,6 +74,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def usage_additional() do
     [
       ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.consumers()
     ]
   end
 

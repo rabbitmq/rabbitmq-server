@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -66,6 +66,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "hipe_compile <directory>"
+
+  def usage_additional do
+    [
+      ["<directory>", "Target directory for HiPE-compiled modules"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.configuration(),
+      DocGuide.erlang_versions()
+    ]
+  end
 
   def help_section(), do: :operations
 

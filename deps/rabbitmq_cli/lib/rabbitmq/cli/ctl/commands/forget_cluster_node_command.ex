@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
-  alias RabbitMQ.CLI.Core.{Distribution, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Distribution, Validators}
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -73,6 +73,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   def usage_additional() do
     [
       ["--offline", "try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering(),
+      DocGuide.cluster_formation()
     ]
   end
 

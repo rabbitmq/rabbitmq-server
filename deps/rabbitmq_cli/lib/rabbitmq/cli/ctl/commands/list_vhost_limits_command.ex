@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -77,6 +79,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts()
+    ]
+  end
 
   def help_section(), do: :virtual_hosts
 

@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
-  alias RabbitMQ.CLI.Core.ExitCodes
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -34,6 +34,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "force_reset"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering()
+    ]
+  end
 
   def help_section(), do: :cluster_management
 
