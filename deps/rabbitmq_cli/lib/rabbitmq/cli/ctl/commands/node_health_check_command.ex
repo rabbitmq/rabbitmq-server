@@ -72,12 +72,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def usage, do: "node_health_check"
 
-  def usage_additional() do
-    [
-      ["<column>", "must be one of " <> Enum.join(Enum.sort(@info_keys), ", ")]
-    ]
-  end
-
   def usage_doc_guides() do
     [
       DocGuide.monitoring()
