@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -26,6 +28,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "rotate_logs"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.logging()
+    ]
+  end
 
   def help_section(), do: :node_management
 

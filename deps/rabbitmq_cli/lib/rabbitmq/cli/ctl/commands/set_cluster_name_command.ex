@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -37,7 +37,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
 
   def usage, do: "set_cluster_name <name>"
 
+  def usage_additional() do
+    [
+      ["<name>", "New cluster name"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts(),
+      DocGuide.access_control()
+    ]
+  end
+
   def help_section(), do: :configuration
 
-  def description(), do: "Sets the cluster name to name"
+  def description(), do: "Sets the cluster name"
 end

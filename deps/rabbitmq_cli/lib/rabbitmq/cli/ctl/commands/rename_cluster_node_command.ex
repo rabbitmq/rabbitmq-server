@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   require Integer
-  alias RabbitMQ.CLI.Core.Validators
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -57,6 +57,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   def usage() do
     "rename_cluster_node <oldnode1> <newnode1> [oldnode2] [newnode2] ..."
+  end
+
+  def usage_additional() do
+    [
+      ["<oldnode>", "Original node name"],
+      ["<newnode>", "New node name"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.clustering()
+    ]
   end
 
   def help_section(), do: :cluster_management
