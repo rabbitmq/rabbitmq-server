@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "clear_permissions [-p vhost] <username>"
+  def usage, do: "clear_permissions [--vhost <vhost>] <username>"
 
   def usage_additional() do
     [
@@ -43,6 +43,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
+    ]
+  end
 
   def help_section(), do: :access_control
   def description(), do: "Revokes user permissions for a vhost"

@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(args, opts), do: {args, opts}
@@ -42,6 +44,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
     ]
   end
 
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
+    ]
+  end
 
   def help_section(), do: :user_management
 

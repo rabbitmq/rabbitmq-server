@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -36,6 +36,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
   end
 
   def usage, do: "change_password <username> <password>"
+
+  def usage_additional() do
+    [
+      ["<username>", "Name of the user whose password should be changed"],
+      ["<password>", "New password to set"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
+    ]
+  end
 
   def help_section(), do: :user_management
 

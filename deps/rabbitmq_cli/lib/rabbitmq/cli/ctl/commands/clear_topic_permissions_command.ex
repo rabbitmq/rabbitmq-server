@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -53,7 +53,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand do
     ])
   end
 
-  def usage, do: "clear_topic_permissions [-p vhost] <username> [<exchange>]"
+  def usage, do: "clear_topic_permissions [--vhost <vhost>] <username> [<exchange>]"
+
+  def usage_additional() do
+    [
+      ["<username>", "Name of the user whose topic permissions should be revoked"],
+      ["<exchange>", "Exchange the permissions are for"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
+    ]
+  end
+
   def help_section(), do: :access_control
   def description(), do: "Clears user topic permissions for a vhost or exchange"
 

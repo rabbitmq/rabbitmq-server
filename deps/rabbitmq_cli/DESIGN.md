@@ -158,7 +158,7 @@ Then the alias can be called like this:
 ```
 rabbitmqctl delete_vhost_queues -p vhost1
 # or
-rabbitmqctl delete_vhost_queues ---vhost vhost1
+rabbitmqctl delete_vhost_queues ---vhost <vhost>1
 ```
 
 Keep in mind that `eval` command can accept only [global arguments](#global-arguments) as named,

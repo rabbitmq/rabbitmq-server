@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
 
   def usage_additional() do
     [
-      ["<name>", "name of policy to clear (remove)"]
+      ["<name>", "Name of policy to clear (remove)"]
     ]
   end
 

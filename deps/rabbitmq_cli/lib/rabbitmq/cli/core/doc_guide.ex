@@ -41,11 +41,15 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   # API
   #
 
+  Macros.defguide("access_control")
   Macros.defguide("alternate_exchange", path_segment: "ae")
+  Macros.defguide("cli")
   Macros.defguide("clustering")
   Macros.defguide("cluster_formation")
+  Macros.defguide("connections")
   Macros.defguide("configuration", path_segment: "configure")
   Macros.defguide("consumers")
+  Macros.defguide("mirroring", path_segment: "ha")
   Macros.defguide("logging")
   Macros.defguide("management")
   Macros.defguide("monitoring")
@@ -53,4 +57,6 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("plugins")
   Macros.defguide("queues")
   Macros.defguide("quorum_queues", domain: "next.rabbitmq.com")
+  Macros.defguide("troubleshooting")
+  Macros.defguide("virtual_hosts", path_segments: "vhosts")
 end

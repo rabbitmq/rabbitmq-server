@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -29,6 +29,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "delete_vhost <vhost>"
+
+  def usage_additional() do
+    [
+      ["<vhost>", "Name of the virtual host to delete."]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.virtual_hosts()
+    ]
+  end
 
   def help_section(), do: :virtual_hosts
 
