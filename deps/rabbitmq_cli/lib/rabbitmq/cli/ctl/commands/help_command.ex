@@ -78,7 +78,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     Enum.join(
       tool_usage(tool_name) ++
         [Enum.join(["Available commands:"] ++ commands_description(), "\n")] ++
-        help_additional(tool_name),
+        help_footer(tool_name),
       "\n\n"
     ) <> "\n"
   end
@@ -193,7 +193,7 @@ short            | long          | description
     end
   end
 
-  defp help_additional(tool_name) do
+  defp help_footer(tool_name) do
     ["Use '#{tool_name} help <command>' to learn more about a specific command"]
   end
 
