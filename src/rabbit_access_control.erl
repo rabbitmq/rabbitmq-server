@@ -125,20 +125,30 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
--spec check_vhost_access
-        (rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_net:socket() | #authz_socket_info{}) ->
-            'ok' | rabbit_types:channel_exit().
+get_authz_data_from({ip, Address}) ->
+    #{peeraddr => Address};
+get_authz_data_from({socket, Sock}) ->
+    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
+    #{peeraddr => Address};
+get_authz_data_from(undefined) ->
+    undefined.
 
+% Note: ip can be either a tuple or, a binary if reverse_dns_lookups
+% is enabled and it's a direct connection.
+-spec check_vhost_access(User :: rabbit_types:user(),
+                         VHostPath :: rabbit_types:vhost(),
+                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address() | binary()} | undefined) ->
+    'ok' | rabbit_types:channel_exit().
 check_vhost_access(User = #user{username       = Username,
-                                authz_backends = Modules}, VHostPath, Sock) ->
+                                authz_backends = Modules}, VHostPath, AuthzRawData) ->
+    AuthzData = get_authz_data_from(AuthzRawData),
     lists:foldl(
       fun({Mod, Impl}, ok) ->
               check_access(
                 fun() ->
                         rabbit_vhost:exists(VHostPath) andalso
                             Mod:check_vhost_access(
-                              auth_user(User, Impl), VHostPath, Sock)
+                              auth_user(User, Impl), VHostPath, AuthzData)
                 end,
                 Mod, "access to vhost '~s' refused for user '~s'",
                 [VHostPath, Username], not_allowed);

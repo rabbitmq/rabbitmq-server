@@ -181,14 +181,11 @@ notify_auth_result(Username, AuthResult, ExtraProps) ->
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
-authz_socket_info_direct(Infos) ->
-    #authz_socket_info{sockname={proplists:get_value(host, Infos),
-                                 proplists:get_value(port, Infos)},
-                       peername={proplists:get_value(peer_host, Infos),
-                                 proplists:get_value(peer_port, Infos)}}.
-
 connect1(User, VHost, Protocol, Pid, Infos) ->
-    try rabbit_access_control:check_vhost_access(User, VHost, authz_socket_info_direct(Infos)) of
+    % Note: peer_host can be either a tuple or
+    % a binary if reverse_dns_lookups is enabled
+    PeerHost = proplists:get_value(peer_host, Infos),
+    try rabbit_access_control:check_vhost_access(User, VHost, {ip, PeerHost}) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
 	      rabbit_core_metrics:connection_created(Pid, Infos),
               rabbit_event:notify(connection_created, Infos),

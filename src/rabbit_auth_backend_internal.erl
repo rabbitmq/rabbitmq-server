@@ -113,7 +113,7 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-check_vhost_access(#auth_user{username = Username}, VHostPath, _Sock) ->
+check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
     case mnesia:dirty_read({rabbit_user_permission,
                             #user_vhost{username     = Username,
                                         virtual_host = VHostPath}}) of
