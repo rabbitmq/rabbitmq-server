@@ -25,8 +25,6 @@
 -record(auth_user, {username,
                     tags,
                     impl}).
-%% Passed to authz backends.
--record(authz_socket_info, {sockname, peername}).
 
 %% Implementation for the internal auth backend
 -record(internal_user, {
