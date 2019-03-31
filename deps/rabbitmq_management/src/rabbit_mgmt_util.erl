@@ -110,8 +110,8 @@ user_matches_vhost(ReqData, User) ->
         not_found -> true;
         none      -> true;
         V         ->
-            SocketInfo = authz_socket_info(ReqData),
-            lists:member(V, list_login_vhosts(User, SocketInfo))
+            AuthzData = get_authz_data(ReqData),
+            lists:member(V, list_login_vhosts(User, AuthzData))
     end.
 
 user_matches_vhost_visible(ReqData, User) ->
@@ -119,16 +119,13 @@ user_matches_vhost_visible(ReqData, User) ->
         not_found -> true;
         none      -> true;
         V         ->
-            SocketInfo = authz_socket_info(ReqData),
-            lists:member(V, list_visible_vhosts(User, SocketInfo))
+            AuthzData = get_authz_data(ReqData),
+            lists:member(V, list_visible_vhosts(User, AuthzData))
     end.
 
-authz_socket_info(ReqData) ->
-    Host = cowboy_req:host(ReqData),
-    Port = cowboy_req:port(ReqData),
-    Peer = cowboy_req:peer(ReqData),
-    #authz_socket_info{ sockname = {Host, Port},
-                        peername = Peer}.
+get_authz_data(ReqData) ->
+    {PeerAddress, _PeerPort} = cowboy_req:peer(ReqData),
+    {ip, PeerAddress}.
 
 %% Used for connections / channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
@@ -934,8 +931,8 @@ filter_vhost(List, ReqData, Context) ->
                true  -> fun list_visible_vhosts/2;
                false -> fun list_login_vhosts/2
            end,
-    SocketInfo = authz_socket_info(ReqData),
-    VHosts = Fn(User, SocketInfo),
+    AuthzData = get_authz_data(ReqData),
+    VHosts = Fn(User, AuthzData),
     [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
 filter_user(List, _ReqData, #context{user = User}) ->
@@ -987,15 +984,15 @@ intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 list_visible_vhosts(User) ->
     list_visible_vhosts(User, undefined).
 
-list_visible_vhosts(User = #user{tags = Tags}, Sock) ->
+list_visible_vhosts(User = #user{tags = Tags}, AuthzData) ->
     case is_monitor(Tags) of
         true  -> rabbit_vhost:list();
-        false -> list_login_vhosts(User, Sock)
+        false -> list_login_vhosts(User, AuthzData)
     end.
 
-list_login_vhosts(User, Sock) ->
+list_login_vhosts(User, AuthzData) ->
     [V || V <- rabbit_vhost:list(),
-          case catch rabbit_access_control:check_vhost_access(User, V, Sock) of
+          case catch rabbit_access_control:check_vhost_access(User, V, AuthzData) of
               ok -> true;
               _  -> false
           end].
