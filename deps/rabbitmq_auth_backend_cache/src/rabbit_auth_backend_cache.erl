@@ -43,7 +43,8 @@ user_login_authorization(Username) ->
         end).
 
 check_vhost_access(#auth_user{} = AuthUser, VHostPath, Sock) ->
-    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, Sock]},
+    ClientAddress = extract_address(Sock),
+    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, ClientAddress]},
         fun(true)  -> success;
            (false) -> refusal;
            ({error, _} = Err) -> Err;
@@ -107,3 +108,16 @@ should_cache(Result, Fun) ->
         {refusal, true} -> true;
         _               -> false
     end.
+
+extract_address(undefined) ->
+    undefined;
+extract_address(none) ->
+    undefined;
+% for native direct connections the address is set to unknown
+extract_address(#authz_socket_info{peername = {unknown, _Port}}) ->
+    undefined;
+extract_address(#authz_socket_info{peername = {Address, _Port}}) ->
+    Address;
+extract_address(Sock) ->
+    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
+    Address.
