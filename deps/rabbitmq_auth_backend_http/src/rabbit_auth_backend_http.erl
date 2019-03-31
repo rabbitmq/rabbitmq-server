@@ -58,11 +58,11 @@ user_login_authorization(Username, AuthProps) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, Sock) ->
+check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, #{peeraddr := PeerAddr}) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-                          {ip,       extract_address(Sock)},
-                          {tags, join_tags(Tags)}]).
+                          {ip,       parse_peeraddr(PeerAddr)},
+                          {tags,     join_tags(Tags)}]).
 
 check_resource_access(#auth_user{username = Username, tags = Tags},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
@@ -171,14 +171,10 @@ join_tags(Tags) ->
   Strings = [rabbit_data_coercion:to_list(T) || T <- Tags],
   string:join(Strings, " ").
 
-%%--------------------------------------------------------------------
+parse_peeraddr(PeerAddr) ->
+    handle_inet_ntoa_peeraddr(inet:ntoa(PeerAddr), PeerAddr).
 
-extract_address(undefined) -> undefined;
-% for native direct connections the address is set to unknown
-extract_address(#authz_socket_info{peername = {unknown, _Port}}) -> undefined;
-extract_address(#authz_socket_info{peername = {Address, _Port}}) -> inet_parse:ntoa(Address);
-extract_address(Sock) ->
-    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
-    inet_parse:ntoa(Address).
-
-%%--------------------------------------------------------------------
+handle_inet_ntoa_peeraddr({error, einval}, PeerAddr) ->
+    rabbit_data_coercion:to_list(PeerAddr);
+handle_inet_ntoa_peeraddr(PeerAddrStr, _PeerAddr0) ->
+    PeerAddrStr.
