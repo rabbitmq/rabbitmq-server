@@ -54,15 +54,17 @@ make
 
 ### `rabbitmqctl`
 
-See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for details.
+See `rabbitmqctl help` and [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for details.
 
 ### `rabbitmq-plugins`
 
-See the [rabbitmq-plugins man page](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html) for details.
+See `rabbitmq-plugins help` and [rabbitmq-plugins man page](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html) for details.
 
 ### `rabbitmq-diagnostics`
 
-See `rabbitmq-diagnostics --help`.
+See `rabbitmq-diagnostics help` and [rabbitmq-diagnostics man page](https://www.rabbitmq.com/rabbitmq-diagnostics.8.html).
+
+
 
 
 ## Testing
