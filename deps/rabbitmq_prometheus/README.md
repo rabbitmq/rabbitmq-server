@@ -1,25 +1,37 @@
-# RabbitMQ Prometheus.io core metrics exporter
+# Prometheus Exporter of Core (Raw, Unaggregated) RabbitMQ Metrics
 
 ## Getting Started
 
-This is an Prometheus.io core metrics exporter plugin for RabbitMQ.
+This is a Prometheus exporter of core (raw, unaggregated) RabbitMQ metrics.
 
-The plugin is included in the RabbitMQ distribution.  To enable
-it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
+## Project Maturity
+
+This plugin is currently very immature and not ready for public consumption. The plan is to include
+it into a future RabbitMQ release.
+
+
+## Enable the Plugin
+
+To enable it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
 
     rabbitmq-plugins enable rabbitmq_prometheus
 
+
+## Usage
+
 Default port used by the plugin is `15673`.
+
 
 ## Configuration
 
 This exporter supports the following options via `rabbitmq_prometheus` app env:
- - `path` - scrape endpoint. Default is `"metrics"`.
- - `ssl_config`
- - `tcp_config`
- 
+
+ * `path` defines a scrape endpoint. Default is `"metrics"`.
+ * `ssl_config`
+ * `tcp_config`
+
 Sample `/etc/rabbitmq/rabbitmq.config`:
-       
+
 ```erlang
 [
  {rabbitmq_exporter, [
