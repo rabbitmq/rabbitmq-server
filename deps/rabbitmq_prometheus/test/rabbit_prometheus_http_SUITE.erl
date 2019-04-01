@@ -116,7 +116,7 @@ get_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
     %% Let's check that the body looks like a valid response
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
-    Port = proplists:get_value(prometheus_port, Config, 15673),
+    Port = proplists:get_value(prometheus_port, Config, 15692),
     URI = lists:flatten(io_lib:format("http://localhost:~p/metricsooops", [Port])),
     {ok, {{_, CodeAct, _}, _, _}} = httpc:request(get, {URI, []}, ?HTTPC_OPTS, []),
     ?assertMatch(404, CodeAct).
@@ -157,7 +157,7 @@ metrics_test(Config) ->
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),
-    Port = proplists:get_value(prometheus_port, Config, 15673),
+    Port = proplists:get_value(prometheus_port, Config, 15692),
     URI = lists:flatten(io_lib:format("http://localhost:~p~s", [Port, Path])),
     {ok, {{_HTTP, CodeAct, _}, Headers, Body}} =
         httpc:request(get, {URI, ReqHeaders}, ?HTTPC_OPTS, []),

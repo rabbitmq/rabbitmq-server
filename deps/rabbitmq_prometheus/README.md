@@ -19,7 +19,7 @@ To enable it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugin
 
 ## Usage
 
-Default port used by the plugin is `15673`.
+Default port used by the plugin is `15692`.
 
 
 ## Configuration
@@ -36,7 +36,7 @@ Sample `/etc/rabbitmq/rabbitmq.config`:
 [
  {rabbitmq_exporter, [
    {path, "/mymetrics"},
-   {tcp_config, [{port, 15673}]}
+   {tcp_config, [{port, 15692}]}
  ]}
 ].
 ```

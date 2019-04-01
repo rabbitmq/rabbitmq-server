@@ -24,7 +24,7 @@
 
 -define(TCP_CONTEXT, rabbitmq_prometheus_tcp).
 -define(TLS_CONTEXT, rabbitmq_prometheus_tls).
--define(DEFAULT_PORT, 15673).
+-define(DEFAULT_PORT, 15692).
 
 start(_Type, _StartArgs) ->
     %% TCP listener uses prometheus.tcp.*.
