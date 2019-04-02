@@ -673,7 +673,8 @@ add_member(VHost, Name, Node) ->
                 true ->
                     case lists:member(Node, QNodes) of
                         true ->
-                            {error, already_a_member};
+                          %% idempotent by design
+                          ok;
                         false ->
                             add_member(Q, Node)
                     end
@@ -719,16 +720,12 @@ delete_member(VHost, Name, Node) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             QNodes = amqqueue:get_quorum_nodes(Q),
-            case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
+            case lists:member(Node, QNodes) of
                 false ->
-                    {error, node_not_running};
+                    %% idempotent by design
+                    ok;
                 true ->
-                    case lists:member(Node, QNodes) of
-                        false ->
-                            {error, not_a_member};
-                        true ->
-                            delete_member(Q, Node)
-                    end
+                    delete_member(Q, Node)
             end;
         {error, not_found} = E ->
                     E
@@ -743,7 +740,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
             %% deleting the last member is not allowed
             {error, last_node};
         _ ->
-            case ra:leave_and_delete_server(ServerId) of
+            case ra:leave_and_delete_server(amqqueue:get_pid(Q), ServerId) of
                 ok ->
                     Fun = fun(Q1) ->
                                   amqqueue:set_quorum_nodes(

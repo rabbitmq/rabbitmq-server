@@ -54,8 +54,9 @@ groups() ->
                                             add_member_not_found,
                                             delete_member_not_running,
                                             delete_member_classic,
-                                            delete_member_not_found,
-                                            delete_member]
+                                            delete_member_queue_not_found,
+                                            delete_member,
+                                            delete_member_not_a_member]
                        ++ all_tests()},
                       {cluster_size_2, [], memory_tests()},
                       {cluster_size_3, [], [
@@ -1228,7 +1229,8 @@ add_member_already_a_member(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?assertEqual({error, already_a_member},
+    %% idempotent by design
+    ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, add_member,
                           [<<"/">>, QQ, Server])).
 
@@ -1266,7 +1268,8 @@ delete_member_not_running(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?assertEqual({error, node_not_running},
+    %% it should be possible to delete members that are not online (e.g. decomissioned)
+    ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, 'rabbit@burrow'])).
 
@@ -1279,7 +1282,7 @@ delete_member_classic(Config) ->
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, CQ, Server])).
 
-delete_member_not_found(Config) ->
+delete_member_queue_not_found(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
     ?assertEqual({error, not_found},
@@ -1295,11 +1298,22 @@ delete_member(Config) ->
     timer:sleep(100),
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
-                          [<<"/">>, QQ, Server])),
-    ?assertEqual({error, not_a_member},
-                 rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Server])).
 
+delete_member_not_a_member(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(100),
+    ?assertEqual(ok,
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Server])),
+    %% idempotent by design
+    ?assertEqual(ok,
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Server])).
 
 cleanup_data_dir(Config) ->
     %% This test is slow, but also checks that we handle properly errors when
