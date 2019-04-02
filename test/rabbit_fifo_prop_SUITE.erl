@@ -38,7 +38,10 @@ all_tests() ->
      scenario14,
      scenario15,
      scenario16,
-     scenario17
+     scenario17,
+     scenario18,
+     scenario19,
+     scenario20
     ].
 
 groups() ->
@@ -293,15 +296,65 @@ scenario17(_Config) ->
                        }, Commands),
     ok.
 
+scenario18(_Config) ->
+    E = c:pid(0,176,1),
+    Commands = [make_enqueue(E,1,<<"1">>),
+                make_enqueue(E,2,<<"2">>),
+                make_enqueue(E,3,<<"3">>),
+                make_enqueue(E,4,<<"4">>),
+                make_enqueue(E,5,<<"5">>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        %% max_length => 3,
+                        max_in_memory_length => 1}, Commands),
+    ok.
+
+scenario19(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [make_enqueue(E,1,<<"1">>),
+                make_enqueue(E,2,<<"2">>),
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E,3,<<"3">>),
+                make_settle(C1, [0, 1])
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_in_memory_bytes => 370,
+                        max_in_memory_length => 1}, Commands),
+    ok.
+
+scenario20(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [make_enqueue(E,1,<<>>),
+                make_enqueue(E,2,<<>>),
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                {down, C1Pid, noconnection},
+                make_enqueue(E,3,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,4,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,5,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,6,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,7,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0>>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_bytes => 97,
+                        max_in_memory_length => 1}, Commands),
+    ok.
+
 snapshots(_Config) ->
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
-                      frequency([{10, {0, 0, false, 0}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength,
+                       InMemoryBytes},
+                      frequency([{10, {0, 0, false, 0, 0, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
-                                      oneof([range(1, 3), undefined])
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined])
                                      }}]),
                       ?FORALL(O, ?LET(Ops, log_gen(250), expand(Ops)),
                               collect({log_size, length(O)},
@@ -310,15 +363,19 @@ snapshots(_Config) ->
                                                Length,
                                                Bytes,
                                                SingleActiveConsumer,
-                                               DeliveryLimit), O))))
+                                               DeliveryLimit,
+                                               InMemoryLength,
+                                               InMemoryBytes), O))))
       end, [], 2500).
 
-config(Name, Length, Bytes, SingleActive, DeliveryLimit) ->
+config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemoryBytes) ->
     #{name => Name,
       max_length => map_max(Length),
       max_bytes => map_max(Bytes),
       single_active_consumer_on => SingleActive,
-      delivery_limit => map_max(DeliveryLimit)}.
+      delivery_limit => map_max(DeliveryLimit),
+      max_in_memory_length => map_max(InMemoryLength),
+      max_in_memory_bytes => map_max(InMemoryBytes)}.
 
 map_max(0) -> undefined;
 map_max(N) -> N.
