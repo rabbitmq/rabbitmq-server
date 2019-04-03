@@ -44,12 +44,12 @@
 
 quorum_queue_migration(FeatureName, _FeatureProps, enable) ->
     Tables = ?quorum_queue_tables,
-    rabbit_table:wait(Tables),
+    rabbit_table:wait(Tables, _Retry = true),
     Fields = amqqueue:fields(amqqueue_v2),
     migrate_to_amqqueue_with_type(FeatureName, Tables, Fields);
 quorum_queue_migration(_FeatureName, _FeatureProps, is_enabled) ->
     Tables = ?quorum_queue_tables,
-    rabbit_table:wait(Tables),
+    rabbit_table:wait(Tables, _Retry = true),
     Fields = amqqueue:fields(amqqueue_v2),
     mnesia:table_info(rabbit_queue, attributes) =:= Fields andalso
     mnesia:table_info(rabbit_durable_queue, attributes) =:= Fields.
