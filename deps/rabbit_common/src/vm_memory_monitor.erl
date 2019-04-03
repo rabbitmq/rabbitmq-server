@@ -443,21 +443,35 @@ get_vm_limit(_OsType) ->
 %% Internal Helpers
 %%----------------------------------------------------------------------------
 cmd(Command) ->
+    cmd(Command, true).
+
+cmd(Command, ThrowIfMissing) ->
     Exec = hd(string:tokens(Command, " ")),
-    case os:find_executable(Exec) of
-        false -> throw({command_not_found, Exec});
-        _     -> os:cmd(Command)
+    case {ThrowIfMissing, os:find_executable(Exec)} of
+        {true, false} ->
+            throw({command_not_found, Exec});
+        {false, false} ->
+            {error, command_not_found};
+        {_, _Filename} ->
+            os:cmd(Command)
     end.
 
+default_linux_pagesize(CmdOutput) ->
+    rabbit_log:warning(
+      "Failed to get memory page size, using 4096. Reason: ~s",
+      [CmdOutput]),
+    4096.
+
 get_linux_pagesize() ->
-    CmdOutput = cmd("getconf PAGESIZE"),
-    case re:run(CmdOutput, "^[0-9]+", [{capture, first, list}]) of
-        {match, [Match]} -> list_to_integer(Match);
-        _ ->
-            rabbit_log:warning(
-                "Failed to get memory page size, using 4096:~n~p~n",
-                [CmdOutput]),
-            4096
+    case cmd("getconf PAGESIZE", false) of
+        {error, command_not_found} ->
+            default_linux_pagesize("getconf not found in PATH");
+        CmdOutput ->
+            case re:run(CmdOutput, "^[0-9]+", [{capture, first, list}]) of
+                {match, [Match]} -> list_to_integer(Match);
+                _ ->
+                    default_linux_pagesize(CmdOutput)
+            end
     end.
 
 %% get_total_memory(OS) -> Total
