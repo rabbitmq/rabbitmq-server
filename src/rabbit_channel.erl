@@ -155,7 +155,7 @@
              confirm_enabled,
              %% publisher confirm delivery tag sequence
              publish_seqno,
-             %% a dtree used to track unconfirmed
+             %% an unconfirmed_messages data structure used to track unconfirmed
              %% (to publishers) messages
              unconfirmed,
              %% a list of tags for published messages that were
@@ -518,7 +518,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 delivering_queues       = sets:new(),
                 confirm_enabled         = false,
                 publish_seqno           = 1,
-                unconfirmed             = dtree:empty(),
+                unconfirmed             = unconfirmed_messages:new(),
                 rejected                = [],
                 confirmed               = [],
                 reply_consumer          = none,
@@ -708,9 +708,14 @@ handle_cast({mandatory_received, _MsgSeqNo}, State) ->
 handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     %% It does not matter which queue rejected the message,
     %% if any queue rejected it - it should not be confirmed.
-    {MXs, UC1} = dtree:take_one(MsgSeqNo, UC),
+    {MaybeRejected, UC1} = unconfirmed_messages:reject_msg(MsgSeqNo, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    noreply_coalesce(record_rejects(MXs, State#ch{unconfirmed = UC1}));
+    case MaybeRejected of
+        not_confirmed ->
+            noreply_coalesce(State#ch{unconfirmed = UC1});
+        {rejected, MX} ->
+            noreply_coalesce(record_rejects([MX], State#ch{unconfirmed = UC1}))
+    end;
 
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
@@ -766,9 +771,12 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                 eol ->
                     State1 = handle_consuming_queue_down_or_eol(Name, State0),
                     State2 = handle_delivering_queue_down(Name, State1),
-                    %% TODO: this should use dtree:take/3
-                    {MXs, UC1} = dtree:take(Name, State2#ch.unconfirmed),
-                    State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
+                    {ConfirmMXs, RejectMXs, UC1} =
+                        unconfirmed_messages:forget_ref(Name, State2#ch.unconfirmed),
+                    %% Deleted queue is a special case.
+                    %% Do not nack rejected messages.
+                    State3 = record_confirms(ConfirmMXs ++ RejectMXs,
+                                             State2#ch{unconfirmed = UC1}),
                     erase_queue_stats(QName),
                     noreply_coalesce(
                       State3#ch{queue_states = maps:remove(Name, QueueStates),
@@ -1818,14 +1826,33 @@ track_delivering_queue(NoAck, QPid, QName,
                                      false -> sets:add_element(QRef, DQ)
                                  end}.
 
-handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC})
+handle_publishing_queue_down(QPid, Reason,
+                             State = #ch{unconfirmed = UC,
+                                         queue_names = QNames})
   when ?IS_CLASSIC(QPid) ->
-    case rabbit_misc:is_abnormal_exit(Reason) of
-        true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
-                 record_rejects(MXs, State#ch{unconfirmed = UC1});
-        false -> {MXs, UC1} = dtree:take(QPid, UC),
-                 record_confirms(MXs, State#ch{unconfirmed = UC1})
-
+    case maps:get(QPid, QNames, none) of
+        %% The queue is unknown, the confirm must have been processed already
+        none   -> State;
+        _QName ->
+            case {rabbit_misc:is_abnormal_exit(Reason), Reason} of
+                {true, _} ->
+                    {RejectMXs, UC1} =
+                        unconfirmed_messages:reject_all_for_queue(QPid, UC),
+                    record_rejects(RejectMXs, State#ch{unconfirmed = UC1});
+                {false, normal} ->
+                    {ConfirmMXs, RejectMXs, UC1} =
+                        unconfirmed_messages:forget_ref(QPid, UC),
+                    %% Deleted queue is a special case.
+                    %% Do not nack rejected messages.
+                    record_confirms(ConfirmMXs ++ RejectMXs,
+                                    State#ch{unconfirmed = UC1});
+                {false, _} ->
+                    {ConfirmMXs, RejectMXs, UC1} =
+                        unconfirmed_messages:forget_ref(QPid, UC),
+                    State1 = record_confirms(ConfirmMXs,
+                                             State#ch{unconfirmed = UC1}),
+                    record_rejects(RejectMXs, State1)
+            end
     end;
 handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
     error(quorum_queues_should_never_be_monitored).
@@ -2139,21 +2166,33 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     %% frequently would in fact be more expensive in the common case.
     {QNames1, QMons1} =
         lists:foldl(fun (Q, {QNames0, QMons0}) when ?is_amqqueue(Q) ->
-                            QPid = amqqueue:get_pid(Q),
-                            QRef = qpid_to_ref(QPid),
-                            QName = amqqueue:get_name(Q),
-                            {case maps:is_key(QRef, QNames0) of
-                                 true  -> QNames0;
-                                 false -> maps:put(QRef, QName, QNames0)
-                             end, maybe_monitor(QPid, QMons0)}
-                    end, {QNames, maybe_monitor_all(DeliveredQPids, QMons)}, Qs),
+            QPid = amqqueue:get_pid(Q),
+            QRef = qpid_to_ref(QPid),
+            QName = amqqueue:get_name(Q),
+            case ?IS_CLASSIC(QRef) of
+                true ->
+                    SPids = amqqueue:get_slave_pids(Q),
+                    NewQNames =
+                        maps:from_list([{Ref, QName} || Ref <- [QRef | SPids]]),
+                    {maps:merge(NewQNames, QNames0),
+                     maybe_monitor_all([QPid | SPids], QMons0)};
+                false ->
+                    {maps:put(QRef, QName, QNames0), QMons0}
+            end
+        end,
+        {QNames, QMons}, Qs),
     State1 = State#ch{queue_names    = QNames1,
                       queue_monitors = QMons1},
     %% NB: the order here is important since basic.returns must be
     %% sent before confirms.
     ok = process_routing_mandatory(Mandatory, AllDeliveredQRefs,
                                    Message, State1),
-    State2 = process_routing_confirm(Confirm, AllDeliveredQRefs , MsgSeqNo,
+    AllDeliveredQNames = [ QName || QRef        <- AllDeliveredQRefs,
+                                    {ok, QName} <- [maps:find(QRef, QNames1)]],
+    State2 = process_routing_confirm(Confirm,
+                                     AllDeliveredQRefs,
+                                     AllDeliveredQNames,
+                                     MsgSeqNo,
                                      XName, State1),
     case rabbit_event:stats_level(State, #ch.stats_timer) of
         fine ->
@@ -2179,16 +2218,22 @@ process_routing_mandatory(_Mandatory = false,
 process_routing_mandatory(_, _, _, _) ->
     ok.
 
-process_routing_confirm(false, _, _, _, State) ->
+process_routing_confirm(false, _, _, _, _, State) ->
     State;
-process_routing_confirm(true, [], MsgSeqNo, XName, State) ->
+process_routing_confirm(true, [], _, MsgSeqNo, XName, State) ->
     record_confirms([{MsgSeqNo, XName}], State);
-process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
-    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QRefs, XName,
-                                        State#ch.unconfirmed)}.
+process_routing_confirm(true, QRefs, QNames, MsgSeqNo, XName, State) ->
+    State#ch{unconfirmed =
+        unconfirmed_messages:insert(MsgSeqNo, QNames, QRefs, XName,
+                                    State#ch.unconfirmed)}.
 
-confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
-    {MXs, UC1} = dtree:take(MsgSeqNos, QRef, UC),
+confirm(MsgSeqNos, QRef, State = #ch{queue_names = QNames, unconfirmed = UC}) ->
+    %% NOTE: if queue name does not exist here it's likely that the ref also
+    %% does not exist in unconfirmed messages.
+    %% ignore value does not change anything.
+    QName = maps:get(QRef, QNames, ignore),
+    {MXs, UC1} =
+        unconfirmed_messages:confirm_multiple_msg_ref(MsgSeqNos, QName, QRef, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
@@ -2250,9 +2295,9 @@ send_confirms(Cs, Rs, State) ->
 
 coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #ch{unconfirmed = UC}) ->
     SMsgSeqNos = lists:usort(MsgSeqNos),
-    UnconfirmedCutoff = case dtree:is_empty(UC) of
+    UnconfirmedCutoff = case unconfirmed_messages:is_empty(UC) of
                  true  -> lists:last(SMsgSeqNos) + 1;
-                 false -> {SeqNo, _XName} = dtree:smallest(UC), SeqNo
+                 false -> unconfirmed_messages:smallest(UC)
              end,
     Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
     {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
@@ -2271,7 +2316,7 @@ ack_len(Acks) -> lists:sum([length(L) || {ack, L} <- Acks]).
 maybe_complete_tx(State = #ch{tx = {_, _}}) ->
     State;
 maybe_complete_tx(State = #ch{unconfirmed = UC}) ->
-    case dtree:is_empty(UC) of
+    case unconfirmed_messages:is_empty(UC) of
         false -> State;
         true  -> complete_tx(State#ch{confirmed = []})
     end.
@@ -2311,7 +2356,7 @@ i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
 i(source,         #ch{cfg = #conf{source = ChSrc}})   -> ChSrc;
 i(name,           State)                           -> name(State);
 i(consumer_count,          #ch{consumer_mapping = CM})    -> maps:size(CM);
-i(messages_unconfirmed,    #ch{unconfirmed = UC})         -> dtree:size(UC);
+i(messages_unconfirmed,    #ch{unconfirmed = UC})         -> unconfirmed_messages:size(UC);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) -> ?QUEUE:len(UAMQ);
 i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> ?QUEUE:len(Msgs);
 i(messages_uncommitted,    #ch{})                         -> 0;
