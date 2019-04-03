@@ -44,7 +44,9 @@ user_login_authorization(Username) ->
 
 check_vhost_access(#auth_user{} = AuthUser, VHostPath, Sock) ->
     ClientAddress = extract_address(Sock),
-    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, ClientAddress]},
+    % the underlying backend uses the socket, but only
+    % the client address is used in the key of the cache entry
+    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, Sock], [AuthUser, VHostPath, ClientAddress]},
         fun(true)  -> success;
            (false) -> refusal;
            ({error, _} = Err) -> Err;
@@ -70,18 +72,20 @@ check_topic_access(#auth_user{} = AuthUser,
         end).
 
 with_cache(BackendType, {F, A}, Fun) ->
+    with_cache(BackendType, {F, A, A}, Fun);
+with_cache(BackendType, {F, OriginalArguments, ArgumentsForCache}, Fun) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
-    case AuthCache:get({F, A}) of
+    case AuthCache:get({F, ArgumentsForCache}) of
         {ok, Result} ->
             Result;
         {error, not_found} ->
             Backend = get_cached_backend(BackendType),
             {ok, TTL} = application:get_env(rabbitmq_auth_backend_cache,
                                             cache_ttl),
-            BackendResult = apply(Backend, F, A),
+            BackendResult = apply(Backend, F, OriginalArguments),
             case should_cache(BackendResult, Fun) of
-                true  -> ok = AuthCache:put({F, A}, BackendResult, TTL);
+                true  -> ok = AuthCache:put({F, ArgumentsForCache}, BackendResult, TTL);
                 false -> ok
             end,
             BackendResult
