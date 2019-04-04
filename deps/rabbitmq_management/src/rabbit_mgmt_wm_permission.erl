@@ -88,15 +88,24 @@ perms(ReqData) ->
                 not_found ->
                     not_found;
                 VHost ->
-                    Perms =
-                        rabbit_auth_backend_internal:list_user_vhost_permissions(
-                          User, VHost),
-                    case Perms of
-                        [Rest] -> [{user,  User},
-                                   {vhost, VHost} | Rest];
-                        []     -> none
-                    end
+                    rabbit_mgmt_util:catch_no_user_vhost(
+                        fun() ->
+                            Perms =
+                                rabbit_auth_backend_internal:list_user_vhost_permissions(
+                                  User, VHost),
+                            case Perms of
+                                [Rest] -> [{user,  User},
+                                           {vhost, VHost} | Rest];
+                                []     -> none
+                            end
+                        end,
+                        fun() -> not_found end)
             end;
         {error, _} ->
             not_found
     end.
+
+
+
+
+

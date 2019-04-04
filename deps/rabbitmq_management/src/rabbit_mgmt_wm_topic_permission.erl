@@ -94,14 +94,18 @@ topic_perms(ReqData) ->
                 not_found ->
                     not_found;
                 VHost ->
-                    Perms =
-                        rabbit_auth_backend_internal:list_user_vhost_topic_permissions(
-                          User, VHost),
-                    case Perms of
-                        []     -> none;
-                        TopicPermissions -> [[{user, User}, {vhost, VHost} | TopicPermission]
-                        || TopicPermission <- TopicPermissions]
-                    end
+                    rabbit_mgmt_util:catch_no_user_vhost(
+                        fun() ->
+                            Perms =
+                                rabbit_auth_backend_internal:list_user_vhost_topic_permissions(
+                                  User, VHost),
+                            case Perms of
+                                []     -> none;
+                                TopicPermissions -> [[{user, User}, {vhost, VHost} | TopicPermission]
+                                || TopicPermission <- TopicPermissions]
+                            end
+                        end,
+                        fun() -> not_found end)
             end;
         {error, _} ->
             not_found
