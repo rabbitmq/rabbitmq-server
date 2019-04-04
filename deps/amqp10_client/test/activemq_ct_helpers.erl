@@ -85,7 +85,23 @@ start_activemq_nodes(Config) ->
 wait_for_activemq_nodes(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Ports = rabbit_ct_broker_helpers:get_node_configs(Config, tcp_port_amqp),
-    _ = [wait_for_activemq_port(Hostname, Port, 20) || Port <- Ports],
+    wait_for_activemq_ports(Config, Hostname, Ports).
+
+wait_for_activemq_ports(Config, Hostname, [Port | Rest]) ->
+    ct:pal(?LOW_IMPORTANCE, "Waiting for ActiveMQ on port ~b", [Port]),
+    case wait_for_activemq_port(Hostname, Port, 60) of
+        ok ->
+            ct:pal(?LOW_IMPORTANCE, "ActiveMQ ready on port ~b", [Port]),
+            wait_for_activemq_ports(Config, Hostname, Rest);
+        {error, _} ->
+            Msg = lists:flatten(
+                    io_lib:format(
+                      "Failed to start ActiveMQ on port ~b; see ActiveMQ logs",
+                      [Port])),
+            ct:pal(?LOW_IMPORTANCE, Msg, []),
+            {skip, Msg}
+    end;
+wait_for_activemq_ports(Config, _, []) ->
     Config.
 
 wait_for_activemq_port(_, _, 0) ->
@@ -93,9 +109,10 @@ wait_for_activemq_port(_, _, 0) ->
 wait_for_activemq_port(Hostname, Port, Retries) ->
     case gen_tcp:connect(Hostname, Port, []) of
         {ok, Connection} ->
-            gen_tcp:close(Connection);
+            gen_tcp:close(Connection),
+            ok;
         {error, econnrefused} ->
-            timer:sleep(500),
+            timer:sleep(1000),
             wait_for_activemq_port(Hostname, Port, Retries - 1);
         Error ->
             Error
