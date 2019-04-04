@@ -2684,9 +2684,24 @@ cors_test(Config) ->
     {ok, {_, HdNoMaxAgeCORS, _}} = req(Config, options, "/overview",
                                        [{"origin", "https://rabbitmq.com"}, auth_header("guest", "guest")]),
     false = lists:keymember("access-control-max-age", 1, HdNoMaxAgeCORS),
+
+    %% Check OPTIONS method in all paths
+    check_cors_all_endpoints(Config),
     %% Disable CORS again.
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
     passed.
+
+check_cors_all_endpoints(Config) ->
+    Endpoints = get_all_http_endpoints(),
+
+    [begin
+        ct:pal("Options for ~p~n", [EP]),
+        {ok, {{_, 200, _}, _, _}} = req(Config, options, EP, [{"origin", "https://rabbitmq.com"}])
+    end
+     || EP <- Endpoints].
+
+get_all_http_endpoints() ->
+    [ Path || {Path, _, _} <- rabbit_mgmt_dispatcher:dispatcher() ].
 
 vhost_limits_list_test(Config) ->
     [] = http_get(Config, "/vhost-limits", ?OK),

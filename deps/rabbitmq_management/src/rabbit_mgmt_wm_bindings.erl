@@ -54,6 +54,10 @@ resource_exists(ReqData, {Mode, Context}) ->
 content_types_accepted(ReqData, Context) ->
     {[{'*', accept_content}], ReqData, Context}.
 
+%% Methods to add to the CORS header.
+%% This clause is called by rabbit_mgmt_cors:handle_options/2
+allowed_methods(undefined, undefined) ->
+    {[<<"HEAD">>, <<"GET">>, <<"POST">>, <<"OPTIONS">>], undefined, undefined};
 allowed_methods(ReqData, {Mode, Context}) ->
     {case Mode of
          source_destination -> [<<"HEAD">>, <<"GET">>, <<"POST">>, <<"OPTIONS">>];
