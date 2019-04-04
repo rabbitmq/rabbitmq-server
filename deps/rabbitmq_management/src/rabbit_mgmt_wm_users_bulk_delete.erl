@@ -41,7 +41,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"POST">>], ReqData, Context}.
+    {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
