@@ -50,7 +50,8 @@ all_tests() ->
      single_active_02,
      single_active_03,
      single_active_ordering,
-     single_active_ordering_01
+     single_active_ordering_01,
+     in_memory_limit
      % single_active_ordering_02
     ].
 
@@ -545,6 +546,31 @@ single_active_ordering_02(_Config) ->
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
+in_memory_limit(_Config) ->
+    Size = 2000,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength, InMemoryBytes},
+                      frequency([{10, {0, 0, false, 0, 0, 0}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      boolean(),
+                                      oneof([range(1, 3), undefined]),
+                                      range(1, 10),
+                                      range(1, 1000)
+                                     }}]),
+                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops)),
+                              collect({log_size, length(O)},
+                                      in_memory_limit_prop(
+                                        config(?FUNCTION_NAME,
+                                               Length,
+                                               Bytes,
+                                               SingleActiveConsumer,
+                                               DeliveryLimit,
+                                               InMemoryLength,
+                                               InMemoryBytes), O))))
+      end, [], Size).
+
 config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemoryBytes) ->
     #{name => Name,
       max_length => map_max(Length),
@@ -556,6 +582,40 @@ config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemor
 
 map_max(0) -> undefined;
 map_max(N) -> N.
+
+in_memory_limit_prop(Conf0, Commands) ->
+    Conf = Conf0#{release_cursor_interval => 100},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    try run_log(test_init(Conf), Entries) of
+        {_State, Effects} ->
+            %% validate message ordering
+            lists:foldl(fun ({log, Idxs, _}, ReleaseCursorIdx) ->
+                                validate_idx_order(Idxs, ReleaseCursorIdx),
+                                ReleaseCursorIdx;
+                            ({release_cursor, Idx, _}, _) ->
+                                Idx;
+                            (_, Acc) ->
+                                Acc
+                        end, 0, Effects),
+            true;
+        _ ->
+            true
+    catch
+        Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+            ct:pal("Err: ~p~n", [Err]),
+            false
+    end.
+
+validate_idx_order(Idxs, ReleaseCursorIdx) ->
+    Min = lists:min(Idxs),
+    case Min < ReleaseCursorIdx of
+        true ->
+            throw({invalid_log_index, Min, ReleaseCursorIdx});
+        false ->
+            ok
+    end.
 
 single_active_prop(Conf0, Commands, ValidateOrder) ->
     Conf = Conf0#{release_cursor_interval => 100},
