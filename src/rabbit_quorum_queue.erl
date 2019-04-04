@@ -28,7 +28,7 @@
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
--export([become_leader/2, handle_tick/2]).
+-export([become_leader/2, handle_tick/3]).
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
 -export([open_files/1]).
@@ -249,7 +249,9 @@ rpc_delete_metrics(QName) ->
     ets:delete(queue_metrics, QName),
     ok.
 
-handle_tick(QName, {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack}) ->
+handle_tick(QName,
+            {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack},
+            Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
     Self = self(),
@@ -272,7 +274,21 @@ handle_tick(QName, {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack}) ->
                                                     {messages_ready, MR},
                                                     {messages_unacknowledged, MU},
                                                     {reductions, R}]),
-                      ok = repair_leader_record(QName, Self)
+                      ok = repair_leader_record(QName, Self),
+                      ExpectedNodes = rabbit_mnesia:cluster_nodes(all),
+                      case Nodes -- ExpectedNodes of
+                          [] ->
+                              ok;
+                          Stale ->
+                              rabbit_log:info("~s: stale nodes detected. Purging ~w~n",
+                                              [rabbit_misc:rs(QName), Stale]),
+                              %% pipeline purge command
+                              {ok, Q} = rabbit_amqqueue:lookup(QName),
+                              ok = ra:pipeline_command(amqqueue:get_pid(Q),
+                                                       rabbit_fifo:make_purge_nodes(Stale)),
+
+                              ok
+                      end
               end),
     ok.
 
@@ -663,7 +679,8 @@ add_member(VHost, Name, Node) ->
                 true ->
                     case lists:member(Node, QNodes) of
                         true ->
-                            {error, already_a_member};
+                          %% idempotent by design
+                          ok;
                         false ->
                             add_member(Q, Node)
                     end
@@ -709,16 +726,12 @@ delete_member(VHost, Name, Node) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             QNodes = amqqueue:get_quorum_nodes(Q),
-            case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
+            case lists:member(Node, QNodes) of
                 false ->
-                    {error, node_not_running};
+                    %% idempotent by design
+                    ok;
                 true ->
-                    case lists:member(Node, QNodes) of
-                        false ->
-                            {error, not_a_member};
-                        true ->
-                            delete_member(Q, Node)
-                    end
+                    delete_member(Q, Node)
             end;
         {error, not_found} = E ->
                     E
@@ -733,7 +746,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
             %% deleting the last member is not allowed
             {error, last_node};
         _ ->
-            case ra:leave_and_delete_server(ServerId) of
+            case ra:leave_and_delete_server(amqqueue:get_pid(Q), ServerId) of
                 ok ->
                     Fun = fun(Q1) ->
                                   amqqueue:set_quorum_nodes(

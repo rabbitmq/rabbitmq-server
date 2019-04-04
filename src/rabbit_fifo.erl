@@ -63,6 +63,7 @@
          make_discard/2,
          make_credit/4,
          make_purge/0,
+         make_purge_nodes/1,
          make_update_config/1
         ]).
 
@@ -84,6 +85,7 @@
                  delivery_count :: non_neg_integer(),
                  drain :: boolean()}).
 -record(purge, {}).
+-record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
 
 -opaque protocol() ::
@@ -94,6 +96,7 @@
     #discard{} |
     #credit{} |
     #purge{} |
+    #purge_nodes{} |
     #update_config{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
@@ -189,11 +192,9 @@ apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
 apply(Meta, #return{msg_ids = MsgIds, consumer_id = ConsumerId},
       #?MODULE{consumers = Cons0} = State) ->
     case Cons0 of
-        #{ConsumerId := Con0 = #consumer{checked_out = Checked0}} ->
-            Checked = maps:without(MsgIds, Checked0),
+        #{ConsumerId := #consumer{checked_out = Checked0}} ->
             Returned = maps:with(MsgIds, Checked0),
-            MsgNumMsgs = maps:values(Returned),
-            return(Meta, ConsumerId, MsgNumMsgs, Con0, Checked, [], State);
+            return(Meta, ConsumerId, Returned, [], State);
         _ ->
             {State, ok}
     end;
@@ -322,7 +323,7 @@ apply(#{index := RaftIdx}, #purge{},
     %% reverse the effects ourselves
     {State, {purge, Total},
      lists:reverse([garbage_collection | Effects])};
-apply(_, {down, Pid, noconnection},
+apply(Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
                waiting_consumers = Waiting0,
@@ -330,17 +331,30 @@ apply(_, {down, Pid, noconnection},
     Node = node(Pid),
     %% if the pid refers to the active consumer, mark it as suspected and return
     %% it to the waiting queue
-    {State1, Effects0} = case maps:to_list(Cons0) of
-                 [{{_, P} = Cid, C}] when node(P) =:= Node ->
-                     %% the consumer should be returned to waiting
-                     %%
-                     Effs = consumer_update_active_effects(
-                             State0, Cid, C, false, suspected_down, []),
-                     {State0#?MODULE{consumers = #{},
-                                    waiting_consumers = Waiting0 ++ [{Cid, C}]},
-                      Effs};
-                 _ -> {State0, []}
-             end,
+    {State1, Effects0} =
+        case maps:to_list(Cons0) of
+            [{{_, P} = Cid, C0}] when node(P) =:= Node ->
+                %% the consumer should be returned to waiting
+                %% and checked out messages should be returned
+                Effs = consumer_update_active_effects(
+                         State0, Cid, C0, false, suspected_down, []),
+                Checked = C0#consumer.checked_out,
+                Credit = increase_credit(C0, maps:size(Checked)),
+                {St, Effs1} = return_all(State0, Effs,
+                                         Cid, C0#consumer{credit = Credit}),
+                %% if the consumer was cancelled there is a chance it got
+                %% removed when returning hence we need to be defensive here
+                Waiting = case St#?MODULE.consumers of
+                              #{Cid := C} ->
+                                  Waiting0 ++ [{Cid, C}];
+                              _ ->
+                                  Waiting0
+                          end,
+                {St#?MODULE{consumers = #{},
+                            waiting_consumers = Waiting},
+                 Effs1};
+            _ -> {State0, []}
+        end,
     WaitingConsumers = update_waiting_consumer_status(Node, State1,
                                                       suspected_down),
 
@@ -354,8 +368,8 @@ apply(_, {down, Pid, noconnection},
                        (_, E) -> E
                     end, Enqs0),
     Effects = [{monitor, node, Node} | Effects1],
-    {State#?MODULE{enqueuers = Enqs}, ok, Effects};
-apply(_, {down, Pid, noconnection},
+    checkout(Meta, State#?MODULE{enqueuers = Enqs}, Effects);
+apply(Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                enqueuers = Enqs0} = State0) ->
     %% A node has been disconnected. This doesn't necessarily mean that
@@ -367,23 +381,22 @@ apply(_, {down, Pid, noconnection},
     %% all pids for the disconnected node will be marked as suspected not just
     %% the one we got the `down' command for
     Node = node(Pid),
-    ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
 
-    {Cons, State, Effects1} =
-        maps:fold(fun({_, P} = K, #consumer{checked_out = Checked0,
-                                            status = up} = C,
-                      {Co, St0, Eff}) when node(P) =:= Node ->
-                          {St, Eff0} = return_all(St0, Checked0, Eff, K, C),
-                          Credit = increase_credit(C, maps:size(Checked0)),
-                          Eff1 = ConsumerUpdateActiveFun(St, K, C, false,
-                                                         suspected_down, Eff0),
-                          {maps:put(K, C#consumer{status = suspected_down,
-                                                  credit = Credit,
-                                                  checked_out = #{}}, Co),
-                           St, Eff1};
-                     (K, C, {Co, St, Eff}) ->
-                          {maps:put(K, C, Co), St, Eff}
-                  end, {#{}, State0, []}, Cons0),
+    {State, Effects1} =
+        maps:fold(
+          fun({_, P} = Cid, #consumer{checked_out = Checked0,
+                                      status = up} = C0,
+              {St0, Eff}) when node(P) =:= Node ->
+                  Credit = increase_credit(C0, map_size(Checked0)),
+                  C = C0#consumer{status = suspected_down,
+                                  credit = Credit},
+                  {St, Eff0} = return_all(St0, Eff, Cid, C),
+                  Eff1 = consumer_update_active_effects(St, Cid, C, false,
+                                                        suspected_down, Eff0),
+                  {St, Eff1};
+             (_, _, {St, Eff}) ->
+                  {St, Eff}
+          end, {State0, []}, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{status = suspected_down};
                        (_, E) -> E
@@ -392,34 +405,15 @@ apply(_, {down, Pid, noconnection},
     % Monitor the node so that we can "unsuspect" these processes when the node
     % comes back, then re-issue all monitors and discover the final fate of
     % these processes
-    Effects2 = case maps:size(Cons) of
-                   0 ->
-                       [{aux, inactive}, {monitor, node, Node}];
-                   _ ->
-                       [{monitor, node, Node}]
-               end ++ Effects1,
-    %% TODO: should we run a checkout here?
-    {State#?MODULE{consumers = Cons, enqueuers = Enqs}, ok, Effects2};
-apply(Meta, {down, Pid, _Info}, #?MODULE{consumers = Cons0,
-                                         enqueuers = Enqs0} = State0) ->
-    % Remove any enqueuer for the same pid and enqueue any pending messages
-    % This should be ok as we won't see any more enqueues from this pid
-    State1 = case maps:take(Pid, Enqs0) of
-                 {#enqueuer{pending = Pend}, Enqs} ->
-                     lists:foldl(fun ({_, RIdx, RawMsg}, S) ->
-                                         enqueue(RIdx, RawMsg, S)
-                                 end, State0#?MODULE{enqueuers = Enqs}, Pend);
-                 error ->
-                     State0
-             end,
-    {Effects1, State2} = handle_waiting_consumer_down(Pid, State1),
-    % return checked out messages to main queue
-    % Find the consumers for the down pid
-    DownConsumers = maps:keys(
-                      maps:filter(fun({_, P}, _) -> P =:= Pid end, Cons0)),
-    {State, Effects} = lists:foldl(fun(ConsumerId, {S, E}) ->
-                                           cancel_consumer(ConsumerId, S, E, down)
-                                   end, {State2, Effects1}, DownConsumers),
+    Effects = case maps:size(State#?MODULE.consumers) of
+                  0 ->
+                      [{aux, inactive}, {monitor, node, Node}];
+                  _ ->
+                      [{monitor, node, Node}]
+              end ++ Effects1,
+    checkout(Meta, State#?MODULE{enqueuers = Enqs}, Effects);
+apply(Meta, {down, Pid, _Info}, State0) ->
+    {State, Effects} = handle_down(Pid, State0),
     checkout(Meta, State, Effects);
 apply(Meta, {nodeup, Node}, #?MODULE{consumers = Cons0,
                                      enqueuers = Enqs0,
@@ -450,15 +444,49 @@ apply(Meta, {nodeup, Node}, #?MODULE{consumers = Cons0,
                           Acc
                   end, {Cons0, SQ0, Monitors}, Cons0),
     Waiting = update_waiting_consumer_status(Node, State0, up),
-    State1 = State0#?MODULE{consumers = Cons1, enqueuers = Enqs1,
+    State1 = State0#?MODULE{consumers = Cons1,
+                            enqueuers = Enqs1,
                             service_queue = SQ,
                             waiting_consumers = Waiting},
     {State, Effects} = activate_next_consumer(State1, Effects1),
     checkout(Meta, State, Effects);
 apply(_, {nodedown, _Node}, State) ->
     {State, ok};
+apply(_, #purge_nodes{nodes = Nodes}, State0) ->
+    {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
+                                           purge_node(Node, S, E)
+                                   end, {State0, []}, Nodes),
+    {State, ok, Effects};
 apply(Meta, #update_config{config = Conf}, State) ->
     checkout(Meta, update_config(Conf, State), []).
+
+purge_node(Node, State, Effects) ->
+    lists:foldl(fun(Pid, {S0, E0}) ->
+                        {S, E} = handle_down(Pid, S0),
+                        {S, E0 ++ E}
+                end, {State, Effects}, all_pids_for(Node, State)).
+
+%% any downs that re not noconnection
+handle_down(Pid, #?MODULE{consumers = Cons0,
+                          enqueuers = Enqs0} = State0) ->
+    % Remove any enqueuer for the same pid and enqueue any pending messages
+    % This should be ok as we won't see any more enqueues from this pid
+    State1 = case maps:take(Pid, Enqs0) of
+                 {#enqueuer{pending = Pend}, Enqs} ->
+                     lists:foldl(fun ({_, RIdx, RawMsg}, S) ->
+                                         enqueue(RIdx, RawMsg, S)
+                                 end, State0#?MODULE{enqueuers = Enqs}, Pend);
+                 error ->
+                     State0
+             end,
+    {Effects1, State2} = handle_waiting_consumer_down(Pid, State1),
+    % return checked out messages to main queue
+    % Find the consumers for the down pid
+    DownConsumers = maps:keys(
+                      maps:filter(fun({_, P}, _) -> P =:= Pid end, Cons0)),
+    lists:foldl(fun(ConsumerId, {S, E}) ->
+                        cancel_consumer(ConsumerId, S, E, down)
+                end, {State2, Effects1}, DownConsumers).
 
 consumer_active_flag_update_function(#?MODULE{cfg = #cfg{consumer_strategy = competing}}) ->
     fun(State, ConsumerId, Consumer, Active, ActivityStatus, Effects) ->
@@ -558,8 +586,10 @@ tick(_Ts, #?MODULE{cfg = #cfg{name = Name,
                query_consumer_count(State), % Consumers
                EnqueueBytes,
                CheckoutBytes},
+    %% TODO: call a handler that works out if any known nodes need to be
+    %% purged and emit a command effect to append this to the log
     [{mod_call, rabbit_quorum_queue,
-      handle_tick, [QName, Metrics]}, {aux, emit}].
+      handle_tick, [QName, Metrics, all_nodes(State)]}, {aux, emit}].
 
 -spec overview(state()) -> map().
 overview(#?MODULE{consumers = Cons,
@@ -811,9 +841,9 @@ consumer_update_active_effects(#?MODULE{cfg = #cfg{resource = QName}},
       | Effects].
 
 cancel_consumer0(ConsumerId, #?MODULE{consumers = C0} = S0, Effects0, Reason) ->
-    case maps:take(ConsumerId, C0) of
-        {Consumer, Cons1} ->
-            {S, Effects2} = maybe_return_all(ConsumerId, Consumer, Cons1, S0,
+    case C0 of
+        #{ConsumerId := Consumer} ->
+            {S, Effects2} = maybe_return_all(ConsumerId, Consumer, S0,
                                              Effects0, Reason),
             %% The effects are emitted before the consumer is actually removed
             %% if the consumer has unacked messages. This is a bit weird but
@@ -826,7 +856,7 @@ cancel_consumer0(ConsumerId, #?MODULE{consumers = C0} = S0, Effects0, Reason) ->
                 _ ->
                     {S, Effects}
             end;
-        error ->
+        _ ->
             %% already removed: do nothing
             {S0, Effects0}
     end.
@@ -863,9 +893,9 @@ activate_next_consumer(#?MODULE{consumers = Cons,
 
 
 
-maybe_return_all(ConsumerId, #consumer{checked_out = Checked0} = Consumer,
-                 Cons1, #?MODULE{consumers = C0,
-                                 service_queue = SQ0} = S0,
+maybe_return_all(ConsumerId, Consumer,
+                 #?MODULE{consumers = C0,
+                          service_queue = SQ0} = S0,
                  Effects0, Reason) ->
     case Reason of
         consumer_cancel ->
@@ -875,11 +905,12 @@ maybe_return_all(ConsumerId, #consumer{checked_out = Checked0} = Consumer,
                                                        credit = 0,
                                                        status = cancelled},
                                      C0, SQ0, Effects0),
-            {S0#?MODULE{consumers = Cons, service_queue = SQ}, Effects1};
+            {S0#?MODULE{consumers = Cons,
+                        service_queue = SQ}, Effects1};
         down ->
-            {S1, Effects1} = return_all(S0, Checked0, Effects0, ConsumerId,
-                                        Consumer),
-            {S1#?MODULE{consumers = Cons1}, Effects1}
+            {S1, Effects1} = return_all(S0, Effects0, ConsumerId, Consumer),
+            {S1#?MODULE{consumers = maps:remove(ConsumerId, S1#?MODULE.consumers)},
+             Effects1}
     end.
 
 apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
@@ -1009,41 +1040,46 @@ maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
 snd(T) ->
     element(2, T).
 
-return(Meta, ConsumerId, MsgNumMsgs, Con0, Checked,
-       Effects0, #?MODULE{consumers = Cons0, service_queue = SQ0} = State0) ->
-    Con = Con0#consumer{checked_out = Checked,
-                        credit = increase_credit(Con0, length(MsgNumMsgs))},
-    {Cons, SQ, Effects1} = update_or_remove_sub(ConsumerId, Con, Cons0,
-                                               SQ0, Effects0),
-    {State1, Effects2} = lists:foldl(
-                           fun({'$prefix_msg', _} = Msg, {S0, E0}) ->
-                                   return_one(0, Msg, S0, E0,
-                                              ConsumerId, Con);
-                              ({'$empty_msg', _} = Msg, {S0, E0}) ->
-                                   return_one(0, Msg, S0, E0,
-                                              ConsumerId, Con);
-                              ({MsgNum, Msg}, {S0, E0}) ->
-                                   return_one(MsgNum, Msg, S0, E0,
-                                              ConsumerId, Con)
-                           end, {State0, Effects1}, MsgNumMsgs),
-    checkout(Meta, State1#?MODULE{consumers = Cons,
-                                  service_queue = SQ},
-             Effects2).
+return(Meta, ConsumerId, Returned,
+       Effects0, #?MODULE{service_queue = SQ0} = State0) ->
+    {State1, Effects1} = maps:fold(
+                          fun(MsgId, {Tag, _} = Msg, {S0, E0}) when Tag == '$prefix_msg';
+                                                                    Tag == '$empty_msg'->
+                                  return_one(MsgId, 0, Msg, S0, E0, ConsumerId);
+                             (MsgId, {MsgNum, Msg}, {S0, E0}) ->
+                                  return_one(MsgId, MsgNum, Msg, S0, E0,
+                                             ConsumerId)
+                          end, {State0, Effects0}, Returned),
+    #{ConsumerId := Con0} = Cons0 = State1#?MODULE.consumers,
+    Con = Con0#consumer{credit = increase_credit(Con0, map_size(Returned))},
+    {Cons, SQ, Effects2} = update_or_remove_sub(ConsumerId, Con, Cons0,
+                                                SQ0, Effects1),
+    State = State1#?MODULE{consumers = Cons,
+                           service_queue = SQ},
+    checkout(Meta, State, Effects2).
 
 % used to processes messages that are finished
-complete(ConsumerId, MsgRaftIdxs, NumDiscarded,
-         Con0, Checked, Effects0,
+complete(ConsumerId, Discarded,
+         #consumer{checked_out = Checked} = Con0, Effects0,
          #?MODULE{consumers = Cons0, service_queue = SQ0,
                   ra_indexes = Indexes0} = State0) ->
+    MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
     %% credit_mode = simple_prefetch should automatically top-up credit
     %% as messages are simple_prefetch or otherwise returned
-    Con = Con0#consumer{checked_out = Checked,
-                        credit = increase_credit(Con0, NumDiscarded)},
+    Con = Con0#consumer{checked_out = maps:without(maps:keys(Discarded), Checked),
+                        credit = increase_credit(Con0, maps:size(Discarded))},
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                SQ0, Effects0),
     Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0,
                           MsgRaftIdxs),
-    {State0#?MODULE{consumers = Cons,
+    State1 = lists:foldl(fun({_, {_, {Header, _}}}, Acc) ->
+                                 add_bytes_settle(Header, Acc);
+                            ({'$prefix_msg', Header}, Acc) ->
+                                 add_bytes_settle(Header, Acc);
+                            ({'$empty_msg', Header}, Acc) ->
+                                 add_bytes_settle(Header, Acc)
+                         end, State0, maps:values(Discarded)),
+    {State1#?MODULE{consumers = Cons,
                     ra_indexes = Indexes,
                     service_queue = SQ}, Effects}.
 
@@ -1062,21 +1098,9 @@ increase_credit(#consumer{credit = Current}, Credit) ->
 complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
                       #consumer{checked_out = Checked0} = Con0,
                       Effects0, State0) ->
-    Checked = maps:without(MsgIds, Checked0),
     Discarded = maps:with(MsgIds, Checked0),
-    MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
-    State1 = lists:foldl(fun({_, {_, {Header, _}}}, Acc) ->
-                                 add_bytes_settle(Header, Acc);
-                            ({'$prefix_msg', Header}, Acc) ->
-                                 add_bytes_settle(Header, Acc);
-                            ({'$empty_msg', Header}, Acc) ->
-                                 add_bytes_settle(Header, Acc)
-                         end, State0, maps:values(Discarded)),
-    %% need to pass the length of discarded as $prefix_msgs would be filtered
-    %% by the above list comprehension
-    {State2, Effects1} = complete(ConsumerId, MsgRaftIdxs,
-                                  maps:size(Discarded),
-                                  Con0, Checked, Effects0, State1),
+    {State2, Effects1} = complete(ConsumerId, Discarded, Con0,
+                                  Effects0, State0),
     {State, ok, Effects} = checkout(Meta, State2, Effects1),
     % settle metrics are incremented separately
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
@@ -1136,79 +1160,80 @@ find_next_cursor(Smallest, Cursors0, Potential) ->
             {Potential, Cursors0}
     end.
 
-return_one(0, {Tag, Header0},
+return_one(MsgId, 0, {Tag, Header0},
            #?MODULE{returns = Returns,
+                    consumers = Consumers,
                     cfg = #cfg{delivery_limit = DeliveryLimit}} = State0,
-           Effects0, ConsumerId, Con) when Tag == '$prefix_msg'; Tag == '$empty_msg'->
-    Header = maps:update_with(delivery_count,
-                              fun (C) -> C+1 end,
+           Effects0, ConsumerId) when Tag == '$prefix_msg'; Tag == '$empty_msg' ->
+    #consumer{checked_out = Checked} = Con0 = maps:get(ConsumerId, Consumers),
+    Header = maps:update_with(delivery_count, fun (C) -> C+1 end,
                               1, Header0),
     Msg = {Tag, Header},
     case maps:get(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
-            Checked = Con#consumer.checked_out,
-            {State1, Effects} = complete(ConsumerId, [], 1, Con, Checked,
-                                          Effects0, State0),
-            {add_bytes_settle(Header, State1), Effects};
+            complete(ConsumerId, #{MsgId => Msg}, Con0, Effects0, State0);
         _ ->
             %% this should not affect the release cursor in any way
+            Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked)},
             State1 = case Tag of
                          '$empty_msg' -> State0;
                          _ -> add_in_memory_counts(maps:get(size, Header), State0)
                      end,
-            {add_bytes_return(Header,
-                              State1#?MODULE{returns = lqueue:in(Msg, Returns)}),
+            {add_bytes_return(
+               Header,
+               State1#?MODULE{consumers = Consumers#{ConsumerId => Con},
+                              returns = lqueue:in(Msg, Returns)}),
              Effects0}
     end;
-return_one(MsgNum, {RaftId, {Header0, RawMsg}},
+return_one(MsgId, MsgNum, {RaftId, {Header0, RawMsg}},
            #?MODULE{returns = Returns,
+                    consumers = Consumers,
                     cfg = #cfg{delivery_limit = DeliveryLimit}} = State0,
-           Effects0, ConsumerId, Con) ->
-    Header = maps:update_with(delivery_count,
-                              fun (C) -> C+1 end,
+           Effects0, ConsumerId) ->
+    #consumer{checked_out = Checked} = Con0 = maps:get(ConsumerId, Consumers),
+    Header = maps:update_with(delivery_count, fun (C) -> C+1 end,
                               1, Header0),
     Msg = {RaftId, {Header, RawMsg}},
     case maps:get(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
             DlMsg = {MsgNum, Msg},
-            Effects = dead_letter_effects(delivery_limit,
-                                          #{none => DlMsg},
+            Effects = dead_letter_effects(delivery_limit, #{none => DlMsg},
                                           State0, Effects0),
-            Checked = Con#consumer.checked_out,
-            {State1, Effects1} = complete(ConsumerId, [RaftId], 1, Con, Checked,
-                                          Effects, State0),
-            {add_bytes_settle(Header, State1), Effects1};
+            complete(ConsumerId, #{MsgId => DlMsg}, Con0, Effects, State0);
         _ ->
+            Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked)},
+            %% this should not affect the release cursor in any way
             State1 = case RawMsg of
                          'empty' -> State0;
                          _ -> add_in_memory_counts(maps:get(size, Header), State0)
                      end,
-            %% this should not affect the release cursor in any way
-            {add_bytes_return(Header,
-                              State1#?MODULE{returns =
-                                                 lqueue:in({MsgNum, Msg}, Returns)}),
+            {add_bytes_return(
+               Header,
+               State1#?MODULE{consumers = Consumers#{ConsumerId => Con},
+                              returns = lqueue:in({MsgNum, Msg}, Returns)}),
              Effects0}
     end.
 
-return_all(State0, Checked0, Effects0, ConsumerId, Consumer) ->
+return_all(#?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
+           #consumer{checked_out = Checked0} = Con) ->
     %% need to sort the list so that we return messages in the order
     %% they were checked out
     Checked = lists:sort(maps:to_list(Checked0)),
-    lists:foldl(fun ({_, {'$prefix_msg', _} = Msg}, {S, E}) ->
-                        return_one(0, Msg, S, E, ConsumerId, Consumer);
-                    ({_, {'$empty_msg', _} = Msg}, {S, E}) ->
-                        return_one(0, Msg, S, E, ConsumerId, Consumer);
-                    ({_, {MsgNum, Msg}}, {S, E}) ->
-                        return_one(MsgNum, Msg, S, E, ConsumerId, Consumer)
-                end, {State0, Effects0}, Checked).
+    State = State0#?MODULE{consumers = Cons#{ConsumerId => Con}},
+    lists:foldl(fun ({MsgId, {'$prefix_msg', _} = Msg}, {S, E}) ->
+                        return_one(MsgId, 0, Msg, S, E, ConsumerId);
+                    ({MsgId, {'$empty_msg', _} = Msg}, {S, E}) ->
+                        return_one(MsgId, 0, Msg, S, E, ConsumerId);
+                    ({MsgId, {MsgNum, Msg}}, {S, E}) ->
+                        return_one(MsgId, MsgNum, Msg, S, E, ConsumerId)
+                end, {State, Effects0}, Checked).
 
 %% checkout new messages to consumers
 %% reverses the effects list
 checkout(#{index := Index}, State0, Effects0) ->
     {State1, _Result, Effects1} = checkout0(checkout_one(State0),
                                             Effects0, {#{}, #{}}),
-    case evaluate_limit(State0#?MODULE.ra_indexes, false,
-                        State1, Effects1) of
+    case evaluate_limit(false, State1, Effects1) of
         {State, true, Effects} ->
             update_smallest_raft_index(Index, State, Effects);
         {State, false, Effects} ->
@@ -1238,17 +1263,16 @@ checkout0({Activity, State0}, Effects0, {SendAcc, LogAcc}) ->
                end,
     {State0, ok, lists:reverse(Effects1)}.
 
-evaluate_limit(_OldIndexes, Result,
+evaluate_limit(Result,
                #?MODULE{cfg = #cfg{max_length = undefined,
                                    max_bytes = undefined}} = State,
                Effects) ->
     {State, Result, Effects};
-evaluate_limit(OldIndexes, Result,
-               State0, Effects0) ->
+evaluate_limit(Result, State0, Effects0) ->
     case is_over_limit(State0) of
         true ->
             {State, Effects} = drop_head(State0, Effects0),
-            evaluate_limit(OldIndexes, true, State, Effects);
+            evaluate_limit(true, State, Effects);
         false ->
             {State0, Result, Effects0}
     end.
@@ -1596,6 +1620,10 @@ make_credit(ConsumerId, Credit, DeliveryCount, Drain) ->
 -spec make_purge() -> protocol().
 make_purge() -> #purge{}.
 
+-spec make_purge_nodes([node()]) -> protocol().
+make_purge_nodes(Nodes) ->
+    #purge_nodes{nodes = Nodes}.
+
 -spec make_update_config(config()) -> protocol().
 make_update_config(Config) ->
     #update_config{config = Config}.
@@ -1642,6 +1670,39 @@ message_size(B) when is_binary(B) ->
 message_size(Msg) ->
     %% probably only hit this for testing so ok to use erts_debug
     erts_debug:size(Msg).
+
+all_nodes(#?MODULE{consumers = Cons0,
+                   enqueuers = Enqs0,
+                   waiting_consumers = WaitingConsumers0}) ->
+    Nodes0 = maps:fold(fun({_, P}, _, Acc) ->
+                               Acc#{node(P) => ok}
+                       end, #{}, Cons0),
+    Nodes1 = maps:fold(fun(P, _, Acc) ->
+                               Acc#{node(P) => ok}
+                       end, Nodes0, Enqs0),
+    maps:keys(
+      lists:foldl(fun({{_, P}, _}, Acc) ->
+                          Acc#{node(P) => ok}
+                  end, Nodes1, WaitingConsumers0)).
+
+all_pids_for(Node, #?MODULE{consumers = Cons0,
+                            enqueuers = Enqs0,
+                            waiting_consumers = WaitingConsumers0}) ->
+    Cons = maps:fold(fun({_, P}, _, Acc)
+                           when node(P) =:= Node ->
+                             [P | Acc];
+                        (_, _, Acc) -> Acc
+                     end, [], Cons0),
+    Enqs = maps:fold(fun(P, _, Acc)
+                           when node(P) =:= Node ->
+                             [P | Acc];
+                        (_, _, Acc) -> Acc
+                     end, Cons, Enqs0),
+    lists:foldl(fun({{_, P}, _}, Acc)
+                      when node(P) =:= Node ->
+                        [P | Acc];
+                   (_, Acc) -> Acc
+                end, Enqs, WaitingConsumers0).
 
 suspected_pids_for(Node, #?MODULE{consumers = Cons0,
                                   enqueuers = Enqs0,

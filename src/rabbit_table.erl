@@ -16,7 +16,7 @@
 
 -module(rabbit_table).
 
--export([create/0, create_local_copy/1, wait_for_replicated/1, wait/1,
+-export([create/0, create_local_copy/1, wait_for_replicated/1, wait/1, wait/2,
          force_load/0, is_present/0, is_empty/0, needs_default_data/0,
          check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
          wait_for_replicated/0]).
