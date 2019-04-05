@@ -83,12 +83,12 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
     |> display_list_items(info_keys)
   end
 
-  def simplify_emission_error({:badrpc, {'EXIT', {{:nocatch, error}, _}}}) do
-    error
+  def simplify_emission_error({:badrpc, {:EXIT, {{:nocatch, error}, error_details}}}) do
+    {error, error_details}
   end
 
-  def simplify_emission_error({{:nocatch, error}, _}) do
-    error
+  def simplify_emission_error({{:nocatch, error}, error_details}) do
+    {error, error_details}
   end
 
   def simplify_emission_error(other) do
@@ -102,7 +102,7 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
       _ -> true
     end)
     |> Stream.map(fn
-      {:error, _} = error ->
+      {:error, error} ->
         error
 
       # here item is a list of keyword lists:
