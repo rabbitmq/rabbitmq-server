@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def switches(), do: [sample_interval: :integer]
@@ -60,6 +62,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
   def usage_additional() do
     [
       ["--sample-interval <seconds>", "sampling interval to use in seconds"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.runtime_tuning()
     ]
   end
 

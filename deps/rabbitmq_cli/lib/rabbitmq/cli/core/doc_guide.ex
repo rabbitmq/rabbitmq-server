@@ -64,6 +64,7 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("plugins")
   Macros.defguide("queues")
   Macros.defguide("quorum_queues", domain: "next.rabbitmq.com")
+  Macros.defguide("runtime_tuning", path_segment: "runtime")
   Macros.defguide("tls", path_segment: "ssl")
   Macros.defguide("troubleshooting")
   Macros.defguide("virtual_hosts", path_segments: "vhosts")
