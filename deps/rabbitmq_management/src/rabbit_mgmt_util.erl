@@ -49,7 +49,7 @@
 -export([direct_request/6]).
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
--export([catch_no_user_vhost/2]).
+-export([catch_no_such_user_or_vhost/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -1090,8 +1090,8 @@ qs_val(Name, ReqData) ->
     Qs = cowboy_req:parse_qs(ReqData),
     proplists:get_value(Name, Qs, undefined).
 
--spec catch_no_user_vhost(fun(() -> Result), Replacement) -> Result | Replacement.
-catch_no_user_vhost(Fun, Replacement) ->
+-spec catch_no_such_user_or_vhost(fun(() -> Result), Replacement) -> Result | Replacement.
+catch_no_such_user_or_vhost(Fun, Replacement) ->
     try
         Fun()
     catch throw:{error, {E, _}} when E =:= no_such_user; E =:= no_such_vhost ->

@@ -42,7 +42,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    rabbit_mgmt_util:catch_no_user_vhost(
+    rabbit_mgmt_util:catch_no_such_user_or_vhost(
         fun() ->
             Perms = rabbit_auth_backend_internal:list_user_permissions(User),
             rabbit_mgmt_util:reply_list([[{user, User} | Rest] || Rest <- Perms],
