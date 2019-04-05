@@ -42,9 +42,15 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    Perms = rabbit_auth_backend_internal:list_user_permissions(User),
-    rabbit_mgmt_util:reply_list([[{user, User} | Rest] || Rest <- Perms],
-                                ["vhost", "user"], ReqData, Context).
+    rabbit_mgmt_util:catch_no_such_user_or_vhost(
+        fun() ->
+            Perms = rabbit_auth_backend_internal:list_user_permissions(User),
+            rabbit_mgmt_util:reply_list([[{user, User} | Rest] || Rest <- Perms],
+                                        ["vhost", "user"], ReqData, Context)
+        end,
+        fun() ->
+            rabbit_mgmt_util:bad_request(vhost_or_user_not_found, ReqData, Context)
+        end).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
