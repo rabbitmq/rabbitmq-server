@@ -62,6 +62,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
     end
   end
 
+  def run(args, %{
+        node: node_name,
+        global: global_opt,
+        per_connection_delay: delay,
+        limit: limit
+      }) do
+        run(args, %{
+              node: node_name,
+              vhost: nil,
+              global: global_opt,
+              per_connection_delay: delay,
+              limit: limit
+            })
+  end
+
   def output({:stream, stream}, _opts) do
     {:stream, Stream.filter(stream, fn x -> x != :ok end)}
   end
