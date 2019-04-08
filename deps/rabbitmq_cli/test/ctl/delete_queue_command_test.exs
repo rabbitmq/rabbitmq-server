@@ -25,7 +25,6 @@ defmodule DeleteQueueCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
@@ -41,11 +40,35 @@ defmodule DeleteQueueCommandTest do
 
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], %{vhost: "/", if_empty: false, if_unused: false}}
-    assert @command.merge_defaults([], %{vhost: "non_default", if_empty: true}) == {[], %{vhost: "non_default", if_empty: true, if_unused: false}}
+    assert @command.merge_defaults([], %{vhost: "non_default", if_empty: true}) ==
+            {[], %{vhost: "non_default", if_empty: true, if_unused: false}}
+  end
+
+  test "validate: providing no queue name fails validation", context do
+    assert match?(
+      {:validation_failure, :not_enough_args},
+      @command.validate([], context[:opts])
+    )
+  end
+
+  test "validate: providing an empty queue name fails validation", context do
+    assert match?(
+      {:validation_failure, {:bad_argument, "queue name cannot be an empty string"}},
+      @command.validate([""], context[:opts])
+    )
+  end
+
+  test "validate: providing a non-blank queue name and -u succeeds", context do
+    assert @command.validate(["a-queue"], %{
+      node: get_rabbit_hostname(),
+      vhost: @vhost,
+      timeout: context[:test_timeout],
+      if_unused: false
+    }) == :ok
   end
 
   @tag test_timeout: 30000
-  test "request to an existent queue on active node succeeds", context do
+  test "run: request to an existent queue on active node succeeds", context do
     add_vhost @vhost
     set_permissions @user, @vhost, [".*", ".*", ".*"]
     on_exit(context, fn -> delete_vhost(@vhost) end)
@@ -61,7 +84,7 @@ defmodule DeleteQueueCommandTest do
   end
 
   @tag test_timeout: 30000
-  test "request to a non-existent queue on active node returns not found", context do
+  test "run: request to a non-existent queue on active node returns not found", context do
     assert @command.run(["non-existent"], context[:opts]) == {:error, :not_found}
   end
 

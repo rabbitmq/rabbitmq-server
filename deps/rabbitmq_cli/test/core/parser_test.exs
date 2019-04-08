@@ -253,6 +253,13 @@ defmodule ParserTest do
        %{vhost: "my_vhost", herring: "atlantic", garbage: true}, []}
   end
 
+  test "parse/1 expands command-defined aliases" do
+    command_line = ["herring_gull", "fly", "-g"]
+    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
+    assert @subject.parse(command_line) ==
+      {command, "herring_gull", ["fly"], %{garbage: true}, []}
+  end
+
   test "parse/1 returns invalid/extra options for command" do
     command_line = ["pacific_gull", "fly",
                     "--herring", "atlantic",
