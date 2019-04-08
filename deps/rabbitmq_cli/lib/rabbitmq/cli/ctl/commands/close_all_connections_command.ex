@@ -53,7 +53,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
       _ ->
         :rabbit_misc.rpc_call(
           node_name,
-          # As of 3.7.15, this function was moved to the rabbit_connection_tracking module with a stub.
+          # As of 3.7.15, this function was moved to the rabbit_connection_tracking module.
+          # rabbit_connection_tracking_handler still contains a delegating function with the same name.
           # Continue using this one for now for maximum CLI/server version compatibility. MK.
           :rabbit_connection_tracking_handler,
           :close_connections,
