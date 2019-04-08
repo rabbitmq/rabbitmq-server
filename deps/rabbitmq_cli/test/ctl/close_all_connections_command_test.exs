@@ -54,52 +54,48 @@ defmodule CloseAllConnectionsCommandTest do
 
   test "run: a close connections request in an existing vhost with all defaults closes all connections", context do
     with_connection(@vhost, fn(_) ->
-      Process.sleep(500)
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
-      [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
+      [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes, 50)
       opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 1 connections"} == @command.run(["test"], opts)
-      Process.sleep(500)
-      assert fetch_connection_vhosts(node, nodes) == []
+      Process.sleep(100)
+      assert fetch_connection_vhosts(node, nodes, 50) == []
     end)
   end
 
   test "run: close a limited number of connections in an existing vhost closes a subset of connections", context do
     with_connections([@vhost, @vhost, @vhost], fn(_) ->
-      Process.sleep(500)
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
-      [[vhost: @vhost], [vhost: @vhost], [vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
+      [[vhost: @vhost], [vhost: @vhost], [vhost: @vhost]] = fetch_connection_vhosts(node, nodes, 50)
       opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0, limit: 2}
       assert {:ok, "Closed 2 connections"} == @command.run(["test"], opts)
-      Process.sleep(500)
-      assert fetch_connection_vhosts(node, nodes) == [[vhost: @vhost]]
+      Process.sleep(100)
+      assert fetch_connection_vhosts(node, nodes, 50) == [[vhost: @vhost]]
     end)
   end
 
   test "run: a close connections request for a non-existing vhost does nothing", context do
-    close_all_connections(get_rabbit_hostname())
     with_connection(@vhost, fn(_) ->
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
-      [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
-      opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 0}
+      [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes, 50)
+      opts = %{node: node, vhost: "non_existent-9288737", global: false, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 0 connections"} == @command.run(["test"], opts)
-      assert fetch_connection_vhosts(node, nodes) == [[vhost: @vhost]]
+      assert fetch_connection_vhosts(node, nodes, 50) == [[vhost: @vhost]]
     end)
   end
 
   test "run: a close connections request to an existing node with --global (all vhosts)", context do
     with_connection(@vhost, fn(_) ->
-      Process.sleep(500)
       node = @helpers.normalise_node(context[:node], :shortnames)
       nodes = @helpers.nodes_in_cluster(node)
-      [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
-      opts = %{node: node, vhost: "fakeit", global: true, per_connection_delay: 0, limit: 0}
+      [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes, 50)
+      opts = %{node: node, global: true, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 1 connections"} == @command.run(["test"], opts)
-      Process.sleep(500)
-      assert fetch_connection_vhosts(node, nodes) == []
+      Process.sleep(100)
+      assert fetch_connection_vhosts(node, nodes, 50) == []
     end)
   end
 
@@ -134,7 +130,7 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   defp fetch_connection_vhosts(node, nodes) do
-    fetch_connection_vhosts(node, nodes, 10)
+    fetch_connection_vhosts(node, nodes, 50)
   end
 
   defp fetch_connection_vhosts(node, nodes, retries) do
@@ -151,7 +147,7 @@ defmodule CloseAllConnectionsCommandTest do
         {xs, 0} ->
           xs
         {[], n} when n >= 0 ->
-          Process.sleep(100)
+          Process.sleep(10)
           fetch_connection_vhosts(node, nodes, retries - 1)
         _ ->
           xs
