@@ -41,6 +41,8 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({:badrpc_multi, _, _} = input), do: {:error, input}
   defp normalize_output({:badrpc, :nodedown} = input), do: {:error, input}
   defp normalize_output({:badrpc, :timeout} = input), do: {:error, input}
+  defp normalize_output({:badrpc, {:timeout, _n}} = input), do: {:error, input}
+  defp normalize_output({:badrpc, {:timeout, _n, _msg}} = input), do: {:error, input}
   defp normalize_output({:badrpc, {:EXIT, reason}}), do: {:error, reason}
 
   defp normalize_output({:error, format, args})

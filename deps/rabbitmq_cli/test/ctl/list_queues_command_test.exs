@@ -72,7 +72,7 @@ defmodule ListQueuesCommandTest do
   @tag test_timeout: 0
   test "run: timeout causes command to return badrpc", context do
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
-      [{:error, {:badrpc, {:timeout, 0.0, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}}]
+      [{:badrpc, {:timeout, 0.0, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}]
   end
 
   @tag test_timeout: 1
@@ -83,7 +83,7 @@ defmodule ListQueuesCommandTest do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
-      [{:error, {:badrpc, {:timeout, 0.001, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}}]
+      [{:badrpc, {:timeout, 0.001, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}]
     for i <- 1..n do
         delete_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
@@ -145,29 +145,4 @@ defmodule ListQueuesCommandTest do
     assert run_command_to_list(@command, [["name"], context[:opts]]) == [[name: "test_queue_1"]]
     assert run_command_to_list(@command, [["name"], %{context[:opts] | :vhost => other_vhost}]) == [[name: "test_queue_2"]]
   end
-
-  # TODO: list online/offline queues. Require cluster add/remove
-  # test "list online queues do not show offline queues", context do
-  #   other_node = @secondary_node
-  #   declare_queue("online_queue", @vhost, true)
-  #   publish_messages(@vhost, "online_queue", 3)
-  #   #declare on another node
-  #   declare_queue_on_node(other_node, "offline_queue", @vhost, true)
-  #   publish_messages(@vhost, "offline_queue", 3)
-  #   stop_node(other_node)
-
-  #   assert run_command_to_list(@command, [["name"], %{context[:opts] | online: true}]) == [[name: "online_queue"]]
-  # end
-
-  # test "list offline queues do not show online queues", context do
-  #   other_node = @secondary_node
-  #   declare_queue("online_queue", @vhost, true)
-  #   publish_messages(@vhost, "online_queue", 3)
-  #   #declare on another node
-  #   declare_queue_on_node(other_node, "offline_queue", @vhost, true)
-  #   publish_messages(@vhost, "offline_queue", 3)
-  #   stop_node(other_node)
-
-  #   assert run_command_to_list(@command, [["name"], %{context[:opts] | offline: true}]) == [[name: "offline_queue"]]
-  # end
 end
