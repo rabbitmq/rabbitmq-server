@@ -19,36 +19,36 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def switches(), do: [if_empty: :boolean, if_unused: :boolean, timeout: :integer]
-  def aliases(), do: [e: :if_empty, u: :is_unused, t: :timeout]
+  def aliases(), do: [e: :if_empty, u: :if_unused, t: :timeout]
 
-  def merge_defaults(args, options) do
+  def merge_defaults(args, opts) do
     {
       args,
-      Map.merge(%{if_empty: false, if_unused: false, vhost: "/"}, options)
+      Map.merge(%{if_empty: false, if_unused: false, vhost: "/"}, opts)
     }
+  end
+
+  def validate([], _opts) do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate(args, _opts) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate([""], _opts) do
+    {
+      :validation_failure,
+      {:bad_argument, "queue name cannot be an empty string"}
+    }
+  end
+
+  def validate([_], _opts) do
+    :ok
   end
 
   ## Validate rabbit application is running
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
-  def validate([], _options) do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate(args, _options) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([""], _options) do
-    {
-      :validation_failure,
-      {:bad_argument, "queue name cannot be empty string."}
-    }
-  end
-
-  def validate([_], _options) do
-    :ok
-  end
 
   def run([qname], %{
         node: node,
@@ -112,12 +112,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
       Enum.join(Enum.concat([if_empty_str, if_unused_str]), "and ") <> "..."
   end
 
-  def usage(), do: "delete_queue queue_name [--if_empty|-e] [--if_unused|-u]"
+  def usage(), do: "delete_queue queue_name [--if-empty|-e] [--if-unused|-u]"
 
   def usage_additional() do
     [
-      ["--if_empty", "delete the queue if it is empty (has no messages ready for delivery)"],
-      ["--if_unused", "delete the queue only if it has no consumers"]
+      ["--if-empty", "delete the queue if it is empty (has no messages ready for delivery)"],
+      ["--if-unused", "delete the queue only if it has no consumers"]
     ]
   end
 
