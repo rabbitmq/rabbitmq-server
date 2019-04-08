@@ -27,6 +27,9 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
+%% for compatibility with previous versions of CLI tools
+-export([close_connections/3]).
+
 -include_lib("rabbit.hrl").
 -import(rabbit_misc, [pget/2]).
 
@@ -89,3 +92,6 @@ terminate(_Arg, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+close_connections(Tracked, Message, Delay) ->
+  rabbit_connection_tracking:close_connections(Tracked, Message, Delay).
