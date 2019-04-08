@@ -60,7 +60,7 @@ defmodule ListConsumersCommandTest do
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
       assert run_command_to_list(@command, [["queue_name"], context[:opts]]) ==
-        [{:error, {:badrpc, {:timeout, 0.0}}}]
+        [{:badrpc, {:timeout, 0.0}}]
   end
 
   test "run: no consumers for no open connections", context do

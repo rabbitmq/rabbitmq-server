@@ -60,7 +60,7 @@ defmodule ListConnectionsCommandTest do
   @tag test_timeout: 0
   test "run: timeout causes command to return badrpc", context do
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
-      [{:error, {:badrpc, {:timeout, 0.0}}}]
+      [{:badrpc, {:timeout, 0.0}}]
   end
 
   test "run: filter single key", context do
