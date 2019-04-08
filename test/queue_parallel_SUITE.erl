@@ -52,8 +52,6 @@ groups() ->
                 consume_and_nack,
                 consume_and_requeue_multiple_nack,
                 consume_and_multiple_nack,
-                consumer_timeout,
-                consumer_timeout_basic_get,
                 basic_cancel,
                 purge,
                 basic_recover,
@@ -136,9 +134,8 @@ init_per_group(Group, Config0) ->
         true ->
             ClusterSize = 2,
             Config = rabbit_ct_helpers:merge_app_env(
-                       Config0, {rabbit, [{channel_queue_cleanup_interval, 1000},
-                                          {quorum_tick_interval, 1000},
-                                          {consumer_timeout, 15000}]}),
+                       Config0, {rabbit, [{channel_tick_interval, 1000},
+                                          {quorum_tick_interval, 1000}]}),
             Config1 = rabbit_ct_helpers:set_config(
                         Config, [ {rmq_nodename_suffix, Group},
                                   {rmq_nodes_count, ClusterSize}
@@ -423,55 +420,6 @@ consume_and_multiple_nack(Config) ->
                                         requeue      = false}),
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
     rabbit_ct_client_helpers:close_channel(Ch),
-    ok.
-
-consumer_timeout(Config) ->
-    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    QName = ?config(queue_name, Config),
-    declare_queue(Ch, Config, QName),
-    publish(Ch, QName, [<<"msg1">>]),
-    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
-    receive
-        {#'basic.deliver'{delivery_tag = _,
-                          redelivered  = false}, _} ->
-            %% do nothing with the delivery should trigger timeout
-            receive
-                #'basic.cancel'{ } ->
-                    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-                    ok
-            after 30000 ->
-                      flush(1),
-                      exit(cancel_never_happened)
-            end
-    after 5000 ->
-              exit(deliver_timeout)
-    end,
-    rabbit_ct_client_helpers:close_channel(Ch),
-    ok.
-
-consumer_timeout_basic_get(Config) ->
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    QName = ?config(queue_name, Config),
-    declare_queue(Ch, Config, QName),
-    publish(Ch, QName, [<<"msg1">>]),
-    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    [_DelTag] = consume(Ch, QName, [<<"msg1">>]),
-    erlang:monitor(process, Conn),
-    erlang:monitor(process, Ch),
-    receive
-        {'DOWN', _, process, Ch, _} -> ok
-    after 30000 ->
-              flush(1),
-              exit(channel_exit_expected)
-    end,
-    receive
-        {'DOWN', _, process, Conn, _} ->
-              flush(1),
-              exit(unexpected_connection_exit)
-    after 2000 ->
-              ok
-    end,
     ok.
 
 subscribe_and_requeue_nack(Config) ->

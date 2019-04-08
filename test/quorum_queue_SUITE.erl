@@ -172,7 +172,7 @@ init_per_group(Group, Config) ->
         ok ->
             ok = rabbit_ct_broker_helpers:rpc(
                    Config2, 0, application, set_env,
-                   [rabbit, channel_queue_cleanup_interval, 100]),
+                   [rabbit, channel_tick_interval, 100]),
             %% HACK: the larger cluster sizes benefit for a bit more time
             %% after clustering before running the tests.
             case Group of
