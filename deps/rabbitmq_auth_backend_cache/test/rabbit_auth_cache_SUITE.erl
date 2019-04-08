@@ -149,7 +149,7 @@ get_deleted(Config) ->
 
 
 random_timing(Config) ->
-    random_timing(Config, 2000, 1000).
+    random_timing(Config, 30000, 1000).
 
 random_timing(Config, MaxTTL, Parallel) ->
     AuthCacheModule = ?config(auth_cache_module, Config),
