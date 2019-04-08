@@ -15,7 +15,7 @@ defmodule ListExchangesCommandTest do
                       {"amq.topic", :topic},
                       {"", :direct}]
   @default_options %{vhost: "/", table_headers: true}
-  
+
   defp default_exchange_names() do
     {names, _types} = Enum.unzip(@default_exchanges)
     names
@@ -77,7 +77,7 @@ defmodule ListExchangesCommandTest do
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
-      [{:error, {:badrpc, {:timeout, 0.0}}}]
+      [{:badrpc, {:timeout, 0.0}}]
   end
 
   test "run: show default exchanges by default", context do
