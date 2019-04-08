@@ -32,6 +32,7 @@ groups() ->
     [
      {non_parallel_tests, [],
       [ queue_stats,
+        quorum_queue_stats,
         connection_stats,
         channel_stats,
         vhost_stats,
@@ -180,6 +181,88 @@ queue_stats(Config) ->
                                       [queue_exchange_stats_publish, {{Q, X}, 5}]),
 
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"queue_stats">>}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+
+    ok.
+
+quorum_queue_stats(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    amqp_channel:call(Ch,
+                      #'queue.declare'{queue = <<"quorum_queue_stats">>,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    timer:sleep(1150),
+
+    Q = q(<<"quorum_queue_stats">>),
+
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                 [queue_stats, {Q, infos}]),
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                 [queue_msg_stats, {{Q, 5}, slide}]),
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                 [queue_process_stats, {{Q, 5}, slide}]),
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                 [queue_msg_rates, {{Q, 5}, slide}]),
+
+    rabbit_ct_broker_helpers:rpc(Config, B, ets, insert,
+                                 [queue_stats, {Q, infos}]),
+    rabbit_ct_broker_helpers:rpc(Config, B, ets, insert,
+                                 [queue_msg_stats, {{Q, 5}, slide}]),
+    rabbit_ct_broker_helpers:rpc(Config, B, ets, insert,
+                                 [queue_process_stats, {{Q, 5}, slide}]),
+    rabbit_ct_broker_helpers:rpc(Config, B, ets, insert,
+                                 [queue_msg_rates, {{Q, 5}, slide}]),
+
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                       [queue_stats, Q]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                       [queue_msg_stats, {Q, 5}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                       [queue_process_stats, {Q, 5}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                       [queue_msg_rates, {Q, 5}]),
+
+    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
+                                       [queue_stats, Q]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
+                                       [queue_msg_stats, {Q, 5}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
+                                       [queue_process_stats, {Q, 5}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
+                                       [queue_msg_rates, {Q, 5}]),
+
+    {ok, _, {_, Leader}} = rabbit_ct_broker_helpers:rpc(Config, B, ra, members,
+                                                        [{'%2F_quorum_queue_stats', B}]),
+    [Follower] = [A, B] -- [Leader],
+
+    %% Trigger gc. When the gen_server:call returns, the gc has already finished.
+    rabbit_ct_broker_helpers:rpc(Config, Leader, erlang, send, [rabbit_mgmt_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Leader, gen_server, call, [rabbit_mgmt_gc, test]),
+    rabbit_ct_broker_helpers:rpc(Config, Follower, erlang, send, [rabbit_mgmt_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Follower, gen_server, call, [rabbit_mgmt_gc, test]),
+
+    [] = rabbit_ct_broker_helpers:rpc(Config, Follower, ets, lookup,
+                                      [queue_stats, Q]),
+    [] = rabbit_ct_broker_helpers:rpc(Config, Follower, ets, lookup,
+                                      [queue_msg_stats, {Q, 5}]),
+    [] = rabbit_ct_broker_helpers:rpc(Config, Follower, ets, lookup,
+                                      [queue_process_stats, {Q, 5}]),
+    [] = rabbit_ct_broker_helpers:rpc(Config, Follower, ets, lookup,
+                                      [queue_msg_rates, {Q, 5}]),
+
+    [_] = rabbit_ct_broker_helpers:rpc(Config, Leader, ets, lookup,
+                                       [queue_stats, Q]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, Leader, ets, lookup,
+                                       [queue_msg_stats, {Q, 5}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, Leader, ets, lookup,
+                                       [queue_process_stats, {Q, 5}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, Leader, ets, lookup,
+                                       [queue_msg_rates, {Q, 5}]),
+
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"quorum_queue_stats">>}),
     rabbit_ct_client_helpers:close_channel(Ch),
 
     ok.
