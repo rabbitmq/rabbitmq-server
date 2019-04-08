@@ -753,7 +753,7 @@ decompose_pid(Pid) when is_pid(Pid) ->
 
 compose_pid(Node, Cre, Id, Ser) ->
     <<131,NodeEnc/binary>> = term_to_binary(Node),
-    binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>).
+    binary_to_term(<<131,88,NodeEnc/binary,Id:32,Ser:32,Cre:32>>).
 
 version_compare(A, B, eq)  -> rabbit_semver:eql(A, B);
 version_compare(A, B, lt)  -> rabbit_semver:lt(A, B);
