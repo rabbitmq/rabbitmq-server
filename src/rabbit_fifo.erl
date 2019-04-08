@@ -287,7 +287,7 @@ apply(#{from := From} = Meta, #checkout{spec = {dequeue, Settlement},
             case Msg of
                 {RaftIdx, {Header, 'empty'}} ->
                     %% TODO add here new log effect with reply
-                    {State, '$ra_no_return',
+                    {State, '$ra_no_reply',
                      reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From)};
                 _ ->
                     {State, {dequeue, {MsgId, Msg}, Ready-1}, Effects}
