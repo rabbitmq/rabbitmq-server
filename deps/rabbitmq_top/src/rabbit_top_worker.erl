@@ -113,21 +113,29 @@ reductions(Props) ->
     R.
 
 ets_tables(_OldTables) ->
-    lists:filtermap(
-        fun(Table) ->
-            case table_info(Table) of
-                undefined -> false;
-                Info      -> {true, Info}
-            end
+    F = fun
+            (Table) ->
+                case table_info(Table) of
+                    undefined -> false;
+                    Info      -> {true, Info}
+                end
         end,
-        ets:all()).
+    lists:filtermap(F, ets:all()).
 
 table_info(Table) ->
-    Info = lists:map(fun
-                        ({memory, MemWords}) -> {memory, bytes(MemWords)};
-                        (Other) -> Other
-                     end,
-                     ets:info(Table)),
+    TableInfo = ets:info(Table),
+    map_table_info(Table, TableInfo).
+
+map_table_info(Table, undefined) ->
+    undefined;
+map_table_info(_Table, TableInfo) ->
+    F = fun
+            ({memory, MemWords}) ->
+                {memory, bytes(MemWords)};
+            (Other) ->
+                Other
+        end,
+    Info = lists:map(F, TableInfo),
     {owner, OwnerPid} = lists:keyfind(owner, 1, Info),
     case process_info(OwnerPid, registered_name) of
         []                           -> Info;
