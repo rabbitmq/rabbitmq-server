@@ -16,8 +16,9 @@
 defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   import RabbitCommon.Records
 
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
+  import RabbitMQ.CLI.Core.{CodePath, Paths}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -47,9 +48,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def validate_execution_environment(args, opts) do
     Validators.chain(
       [
-        &Helpers.require_rabbit_and_plugins/2,
+        &require_rabbit_and_plugins/2,
         &PluginHelpers.enabled_plugins_file/2,
-        &Helpers.plugins_dir/2
+        &plugins_dir/2
       ],
       [args, opts]
     )

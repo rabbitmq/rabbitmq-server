@@ -22,8 +22,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   errors. This command is meant to be used in health checks.
   """
 
-  alias RabbitMQ.CLI.Core.Helpers
-
   import RabbitMQ.CLI.Diagnostics.Helpers,
     only: [
       listeners_on: 2,
@@ -32,6 +30,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
       listener_maps: 1,
       check_listener_connectivity: 3
     ]
+  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -99,7 +98,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
       | listener_lines(failures)
     ]
 
-    {:error, Enum.join(lines, Helpers.line_separator())}
+    {:error, Enum.join(lines, line_separator())}
   end
 
   def description(), do: "Basic TCP connectivity health check for each listener's port on the target node"

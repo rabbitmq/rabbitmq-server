@@ -14,18 +14,36 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide}
+  import RabbitMQ.CLI.Core.Platform, only: [os_name: 1]
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
+
+  @default_timeout 60_000
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
+  def merge_defaults(args, opts) do
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+
+    {args, Map.merge(opts, %{timeout: timeout})}
+  end
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
-  def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit, :status, [])
+  def run([], %{node: node_name, timeout: timeout}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit, :status, [], timeout)
   end
 
+  def output({:error, :timeout}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
+     "Error: timed out while waiting for a response from #{node_name}."}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang

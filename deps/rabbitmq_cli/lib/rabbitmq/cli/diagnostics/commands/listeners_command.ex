@@ -21,10 +21,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   errors. This command is not meant to be used in health checks.
   """
 
-  alias RabbitMQ.CLI.Core.Helpers
-
   import RabbitMQ.CLI.Diagnostics.Helpers,
     only: [listeners_on: 2, listener_lines: 1, listener_maps: 1, listener_rows: 1]
+  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -81,7 +80,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   def output(listeners, _opts) do
     lines = listener_lines(listeners)
 
-    {:ok, Enum.join(lines, Helpers.line_separator())}
+    {:ok, Enum.join(lines, line_separator())}
   end
 
   def help_section(), do: :observability_and_health_checks

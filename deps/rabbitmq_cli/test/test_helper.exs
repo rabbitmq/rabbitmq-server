@@ -19,7 +19,9 @@ ExUnit.start()
 defmodule TestHelper do
   import ExUnit.Assertions
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
+
   alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers, NodeName}
+  import RabbitMQ.CLI.Core.Platform
 
   def get_rabbit_hostname(node_name_type \\ :shortnames) do
     Helpers.get_rabbit_hostname(node_name_type)
@@ -463,7 +465,7 @@ defmodule TestHelper do
   def get_opts_with_plugins_directories(context, plugins_directories) do
     opts = context[:opts]
     plugins_dir = opts[:plugins_dir]
-    all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], Helpers.path_separator())
+    all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], path_separator())
     %{opts | plugins_dir: to_charlist(all_directories)}
   end
 

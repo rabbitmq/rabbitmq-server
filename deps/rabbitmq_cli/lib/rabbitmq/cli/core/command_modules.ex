@@ -13,11 +13,13 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.{Config, Helpers}
-alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
-alias RabbitMQ.CLI.CommandBehaviour
-
 defmodule RabbitMQ.CLI.Core.CommandModules do
+  alias RabbitMQ.CLI.Core.Config
+  alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
+  alias RabbitMQ.CLI.CommandBehaviour
+
+  import RabbitMQ.CLI.Core.CodePath
+
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
 
   def module_map(opts \\ %{}) do
@@ -60,7 +62,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def plugin_modules(opts) do
-    Helpers.require_rabbit(opts)
+    require_rabbit(opts)
 
     enabled_plugins =
       try do
@@ -98,7 +100,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
         :ok
 
       _ ->
-        Helpers.add_plugins_to_load_path(opts)
+        add_plugins_to_load_path(opts)
         Enum.each(missing, fn app -> Application.load(app) end)
     end
 
