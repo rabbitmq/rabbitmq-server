@@ -20,7 +20,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
   @default_timeout 60_000
 
   def scopes(), do: [:ctl, :diagnostics]
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
     timeout =
@@ -33,6 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
@@ -63,6 +65,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     end
   end
 
+  def output(:ok, _) do
+    {:ok, "Ping succeeded"}
+  end
+
+  def output({:error, :timeout}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
+     "Error: timed out while waiting for a response from #{node_name}."}
+  end
+  use RabbitMQ.CLI.DefaultOutput
+
   def usage() do
     "ping"
   end
@@ -86,15 +98,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
   def banner([], %{node: node_name, timeout: _timeout}) do
     "Will ping #{node_name}. This only checks if the OS process is running and registered with epmd."
   end
-
-  def output(:ok, _) do
-    {:ok, "Ping succeeded"}
-  end
-
-  def output({:error, :timeout}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     "Error: timed out while waiting for a response from #{node_name}."}
-  end
-
-  use RabbitMQ.CLI.DefaultOutput
 end
