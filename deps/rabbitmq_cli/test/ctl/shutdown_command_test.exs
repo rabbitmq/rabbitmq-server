@@ -44,7 +44,7 @@ defmodule ShutdownCommandTest do
   end
 
   test "validate: in wait mode, always assumes @localhost nodes are local" do
-    assert @command.validate([], %{wait: true, node: :'rabbit@localhost'}) == :ok
+    assert @command.validate([], %{wait: true, node: :rabbit@localhost}) == :ok
   end
 
   test "validate: in no wait mode, passes unconditionally", context do
