@@ -66,7 +66,8 @@ var COLUMNS =
       'Message rates': [['rate-in',         'rate in',                true],
                         ['rate-out',        'rate out',               true]]},
      'queues' :
-     {'Overview': [['features',             'Features (with policy)', true],
+     {'Overview': [['type',                 'Type',                   true],
+                   ['features',             'Features (with policy)', true],
                    ['features_no_policy',   'Features (no policy)',   false],
                    ['policy',               'Policy',                 false],
                    ['consumers',            'Consumer count',         false],

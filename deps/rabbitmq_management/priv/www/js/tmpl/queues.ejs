@@ -24,6 +24,9 @@
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',         'node') %></th>
 <% } %>
+<% if (show_column('queues', 'type')) { %>
+    <th><%= fmt_sort('Type', 'type') %></th>
+<% } %>
 <% if (show_column('queues', 'features')) { %>
     <th>Features</th>
 <% } %>
@@ -110,6 +113,9 @@
       <% } %>
      <% } %>
    </td>
+<% } %>
+<% if (show_column('queues', 'type')) { %>
+   <td><%= fmt_string(queue.arguments['x-queue-type'], '') %></td>
 <% } %>
 <% if (show_column('queues', 'features')) { %>
    <td class="c">
