@@ -1,12 +1,10 @@
 PROJECT = rabbitmq_prometheus
 PROJECT_MOD = rabbit_prometheus_app
 
-dep_prometheus = hex 3.5.1
-dep_prometheus_httpd = hex 2.1.8
-dep_accept = hex 0.3.3
-dep_prometheus_cowboy = hex 0.1.4
+TEST_DEPS = eunit_formatters
+EUNIT_OPTS = no_tty, {report, {eunit_progress, [colored, profile]}}
 
-DEPS = rabbit_common rabbit prometheus accept rabbitmq_web_dispatch
+DEPS = rabbit_common rabbit rabbitmq_management_agent prometheus_cowboy prometheus prometheus_httpd accept rabbitmq_web_dispatch
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

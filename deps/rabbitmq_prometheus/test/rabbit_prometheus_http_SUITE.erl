@@ -39,7 +39,7 @@ groups() ->
      {default_config, [], all_tests()},
      {config_path, [], all_tests()},
      {config_port, [], all_tests()},
-     {with_metrics, [], [metrics_test]}
+     {with_metrics, [], [metrics_test, metrics_node_label_test]}
     ].
 
 all_tests() ->
@@ -147,13 +147,29 @@ gzip_encoding_test(Config) ->
 metrics_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
     %% Let's check that the body looks like a valid response
-    ct:pal("BODY ~p", [Body]),
+    ct:pal(Body),
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_queue_get_total", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_queue_exchange_publish_total", [{capture, none}])).
+
+metrics_node_label_test(Config) ->
+    {_Headers, Body} = http_get(Config, [], 200),
+    Lines = string:split(Body, "\n", all),
+    [
+        case string:str(Line, "node=") of
+            0 -> ct:fail("node label missing from metric '~s'", [Line]);
+            _ -> ok
+        end
+        ||
+        Line <- Lines,
+        lists:prefix(
+            prometheus_rabbitmq_core_metrics_collector:metric_prefix(),
+            Line
+        )
+    ].
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),

@@ -18,7 +18,8 @@
          register/1,
          deregister_cleanup/1,
          collect_mf/2,
-         collect_metrics/2]).
+         collect_metrics/2,
+         metric_prefix/0]).
 
 -import(prometheus_model_helpers, [create_mf/4,
                                    create_mf/5,
@@ -169,7 +170,7 @@ register(Registry) ->
 
 deregister_cleanup(_) -> ok.
 
-collect_mf(_Registry, Callback) ->    
+collect_mf(_Registry, Callback) ->
     [begin
          Data = ets:tab2list(Table),
          mf(Callback, Contents, Data)
@@ -201,11 +202,8 @@ collect_metrics(_, {Type, Fun, Items}) ->
 labels(Item) ->
     label(element(1, Item)).
 
-label(A) when is_atom(A) ->
-    %% Don't need node label
-    [];
 label(L) ->
-    label0(L).
+    [{node, node()}] ++ label0(L).
 
 label0(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
     [{vhost, VHost}, {exchange, Name}];
@@ -214,15 +212,18 @@ label0(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
 label0({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
             #resource{virtual_host = EVHost, kind = exchange, name = EName}}}) when is_pid(P) ->
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
-    [{channel, P}, {queue_vhost, QVHost}, {queue_name, QName},
-     {exchange_vhost, EVHost}, {exchange_name, EName}];
-label0({A1, A2}) when is_atom(A1) and is_atom(A2) ->
-    %% node_node_metrics, only need the remote node
-    [{node, A2}];
+    [{channel, P}, {queue_vhost, QVHost}, {queue, QName},
+     {exchange_vhost, EVHost}, {exchange, EName}];
 label0({I1, I2}) ->
-    label(I1) ++ label(I2);
+    label0(I1) ++ label0(I2);
 label0(P) when is_pid(P) ->
-    [{channel, P}].
+    [{channel, P}];
+label0(A) when is_atom(A) ->
+    [].
+
+% used for testing
+metric_prefix() ->
+    ?METRIC_NAME_PREFIX.
 
 metric(counter, Labels, Value) ->
     emit_counter_metric_if_defined(Labels, Value);
@@ -263,3 +264,82 @@ emit_gauge_metric_if_defined(Labels, Value) ->
     Value ->
       gauge_metric(Labels, Value)
   end.
+
+%%% ===================
+%%% Internal unit tests
+%%% ===================
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+label_generic_metric_test() ->
+    Metric = metric,
+    ?assertEqual([{node, node()}], label(Metric)),
+    ok.
+
+label_exchange_metric_test() ->
+    VHost = <<"/">>,
+    Exchange = "amqp.direct",
+    Metric = #resource{virtual_host = VHost, kind = exchange, name = Exchange},
+    ?assertEqual(
+       [{node, node()}, {vhost, VHost}, {exchange, Exchange}],
+       label(Metric)
+    ),
+    ok.
+
+label_channel_metric_test() ->
+    Pid = self(),
+    ?assertEqual(
+       [{node, node()}, {channel, Pid}],
+       label(Pid)
+    ),
+    ok.
+
+label_queue_metric_test() ->
+    VHost = <<"/">>,
+    Queue = "business.q",
+    Metric = #resource{virtual_host = VHost, kind = queue, name = Queue},
+    ?assertEqual(
+       [{node, node()}, {vhost, VHost}, {queue, Queue}],
+       label(Metric)
+    ),
+    ok.
+
+label_channel_and_queue_metric_test() ->
+    Pid = self(),
+    QVHost = <<"q.vhost">>,
+    EVHost = <<"x.vhost">>,
+    Queue = "business.q",
+    Exchange = "amqp.direct",
+    Metric = {
+        Pid,
+        {
+            #resource{virtual_host = QVHost, kind = queue, name = Queue},
+            #resource{virtual_host = EVHost, kind = exchange, name = Exchange}
+        }
+    },
+    ?assertEqual(
+        [
+            {node, node()},
+            {channel, Pid},
+            {queue_vhost, QVHost},
+            {queue, Queue},
+            {exchange_vhost, EVHost},
+            {exchange, Exchange}
+        ],
+        label(Metric)
+    ),
+    ok.
+
+label_multiple_metric_test() ->
+    Metric1 = foo,
+    Metric2 = bar,
+    ?assertEqual(
+        [
+            {node, node()}
+        ],
+        label({Metric1, Metric2})
+    ),
+    ok.
+
+-endif.
