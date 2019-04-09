@@ -128,7 +128,7 @@ table_info(Table) ->
     TableInfo = ets:info(Table),
     map_table_info(Table, TableInfo).
 
-map_table_info(Table, undefined) ->
+map_table_info(_Table, undefined) ->
     undefined;
 map_table_info(_Table, TableInfo) ->
     F = fun
