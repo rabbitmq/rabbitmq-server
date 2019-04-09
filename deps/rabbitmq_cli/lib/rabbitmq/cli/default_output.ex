@@ -44,7 +44,6 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({:badrpc, {:timeout, _n}} = input), do: {:error, input}
   defp normalize_output({:badrpc, {:timeout, _n, _msg}} = input), do: {:error, input}
   defp normalize_output({:badrpc, {:EXIT, reason}}), do: {:error, reason}
-
   defp normalize_output({:error, format, args})
        when (is_list(format) or is_binary(format)) and is_list(args) do
     {:error, to_string(:rabbit_misc.format(format, args))}
@@ -60,6 +59,9 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output(result) when not is_atom(result), do: {:ok, result}
 
   defp format_output({:error, _} = result) do
+    result
+  end
+  defp format_output({:error, _, _} = result) do
     result
   end
 
