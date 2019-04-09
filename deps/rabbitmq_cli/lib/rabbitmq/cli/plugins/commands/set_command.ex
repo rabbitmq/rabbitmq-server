@@ -15,7 +15,8 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Validators}
+  import RabbitMQ.CLI.Core.{CodePath, Paths}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -42,9 +43,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     Validators.chain(
       [
         &PluginHelpers.can_set_plugins_with_mode/2,
-        &Helpers.require_rabbit_and_plugins/2,
+        &require_rabbit_and_plugins/2,
         &PluginHelpers.enabled_plugins_file/2,
-        &Helpers.plugins_dir/2
+        &plugins_dir/2
       ],
       [args, opts]
     )

@@ -13,9 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-# Small helper functions, mostly related to connecting to RabbitMQ and
-# handling memory units.
-
 defmodule RabbitMQ.CLI.Core.Helpers do
   alias RabbitMQ.CLI.Core.{Config, NodeName}
   require Record
@@ -43,17 +40,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
       {:ok, normalised_node_opt} ->
         {:ok, Map.put(options, :node, normalised_node_opt)}
     end
-  end
-
-  def validate_step(:ok, step) do
-    case step.() do
-      {:error, err} -> {:validation_failure, err}
-      _ -> :ok
-    end
-  end
-
-  def validate_step({:validation_failure, err}, _) do
-    {:validation_failure, err}
   end
 
   def memory_units do
@@ -86,165 +72,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
       {:badrpc, _} = err -> err
       value -> fun.(value)
-    end
-  end
-
-  def plugins_dir(_, opts) do
-    plugins_dir(opts)
-  end
-
-  def plugins_dir(opts) do
-    case Config.get_option(:plugins_dir, opts) do
-      nil ->
-        {:error, :no_plugins_dir}
-
-      dir ->
-        paths = String.split(to_string(dir), path_separator())
-
-        case Enum.any?(paths, &File.dir?/1) do
-          true -> {:ok, dir}
-          false -> {:error, :plugins_dir_does_not_exist}
-        end
-    end
-  end
-
-  def require_rabbit_and_plugins(_, opts) do
-    require_rabbit_and_plugins(opts)
-  end
-
-  def require_rabbit_and_plugins(opts) do
-    with :ok <- require_rabbit(opts),
-         :ok <- add_plugins_to_load_path(opts),
-         do: :ok
-  end
-
-  def require_rabbit(_, opts) do
-    require_rabbit(opts)
-  end
-
-  def require_rabbit(opts) do
-    home = Config.get_option(:rabbitmq_home, opts)
-
-    case home do
-      nil ->
-        {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}}
-
-      _ ->
-        path = Path.join(home, "ebin")
-        Code.append_path(path)
-
-        case Application.load(:rabbit) do
-          :ok ->
-            Code.ensure_loaded(:rabbit_plugins)
-            :ok
-
-          {:error, {:already_loaded, :rabbit}} ->
-            Code.ensure_loaded(:rabbit_plugins)
-            :ok
-
-          {:error, err} ->
-            {:error, {:unable_to_load_rabbit, err}}
-        end
-    end
-  end
-
-  def rabbit_app_running?(%{node: node, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node, :rabbit, :is_running, [], timeout) do
-      true -> true
-      false -> false
-      other -> {:error, other}
-    end
-  end
-
-  def rabbit_app_running?(_, opts) do
-    rabbit_app_running?(opts)
-  end
-
-  def add_plugins_to_load_path(opts) do
-    with {:ok, plugins_dir} <- plugins_dir(opts) do
-      String.split(to_string(plugins_dir), path_separator())
-      |> Enum.map(&add_directory_plugins_to_load_path/1)
-
-      :ok
-    end
-  end
-
-  def add_directory_plugins_to_load_path(directory_with_plugins_inside_it) do
-    with {:ok, files} <- File.ls(directory_with_plugins_inside_it) do
-      Enum.map(
-        files,
-        fn filename ->
-          cond do
-            String.ends_with?(filename, [".ez"]) ->
-              Path.join([directory_with_plugins_inside_it, filename])
-              |> String.to_charlist()
-              |> add_archive_code_path()
-
-            File.dir?(filename) ->
-              Path.join([directory_with_plugins_inside_it, filename])
-              |> add_dir_code_path()
-
-            true ->
-              {:error, {:not_a_plugin, filename}}
-          end
-        end
-      )
-    end
-  end
-
-  defp add_archive_code_path(ez_dir) do
-    case :erl_prim_loader.list_dir(ez_dir) do
-      {:ok, [app_dir]} ->
-        app_in_ez = :filename.join(ez_dir, app_dir)
-        add_dir_code_path(app_in_ez)
-
-      _ ->
-        {:error, :no_app_dir}
-    end
-  end
-
-  defp add_dir_code_path(app_dir_0) do
-    app_dir = to_charlist(app_dir_0)
-
-    case :erl_prim_loader.list_dir(app_dir) do
-      {:ok, list} ->
-        case Enum.member?(list, 'ebin') do
-          true ->
-            ebin_dir = :filename.join(app_dir, 'ebin')
-            Code.append_path(ebin_dir)
-
-          false ->
-            {:error, :no_ebin}
-        end
-
-      _ ->
-        {:error, :app_dir_empty}
-    end
-  end
-
-  def require_mnesia_dir(opts) do
-    case Application.get_env(:mnesia, :dir) do
-      nil ->
-        case Config.get_option(:mnesia_dir, opts) do
-          nil -> {:error, :mnesia_dir_not_found}
-          val -> Application.put_env(:mnesia, :dir, to_charlist(val))
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
-  def require_feature_flags_file(opts) do
-    case Application.get_env(:rabbit, :feature_flags_file) do
-      nil ->
-        case Config.get_option(:feature_flags_file, opts) do
-          nil -> {:error, :feature_flags_file_not_found}
-          val -> Application.put_env(:rabbit, :feature_flags_file, to_charlist(val))
-        end
-
-      _ ->
-        :ok
     end
   end
 
@@ -305,20 +132,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     case function_exported?(mod, fun, length(args)) do
       true -> apply(mod, fun, args)
       false -> default
-    end
-  end
-
-  def path_separator() do
-    case :os.type() do
-      {:unix, _} -> ":"
-      {:win32, _} -> ";"
-    end
-  end
-
-  def line_separator() do
-    case :os.type() do
-      {:unix, _} -> "\n"
-      {:win32, _} -> "\r\n"
     end
   end
 

@@ -12,12 +12,13 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
-alias RabbitMQ.CLI.Core.Helpers, as: CliHelpers
-alias RabbitMQ.CLI.Core.{Config, Validators}
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   import Rabbitmq.Atom.Coerce
   import RabbitCommon.Records
+  import RabbitMQ.CLI.Core.Platform, only: [path_separator: 0]
+  import RabbitMQ.CLI.Core.{CodePath, Paths}
+  alias RabbitMQ.CLI.Core.{Config, Validators}
 
   def mode(opts) do
     %{online: online, offline: offline} = opts
@@ -49,7 +50,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def list(opts) do
-    {:ok, dir} = CliHelpers.plugins_dir(opts)
+    {:ok, dir} = plugins_dir(opts)
     add_all_to_path(dir)
     :lists.usort(:rabbit_plugins.list(to_charlist(dir)))
   end
@@ -82,7 +83,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   def set_enabled_plugins(plugins, opts) do
     plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
-    CliHelpers.require_rabbit_and_plugins(opts)
+    require_rabbit_and_plugins(opts)
     {:ok, plugins_file} = enabled_plugins_file(opts)
     write_enabled_plugins(plugin_atoms, plugins_file, opts)
   end
@@ -224,7 +225,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   defp add_all_to_path(plugins_directories) do
-    directories = String.split(to_string(plugins_directories), CliHelpers.path_separator())
+    directories = String.split(to_string(plugins_directories), path_separator())
 
     Enum.map(directories, fn directory ->
       with {:ok, subdirs} <- File.ls(directory) do

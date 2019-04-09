@@ -15,7 +15,8 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
+  import RabbitMQ.CLI.Core.{CodePath, Paths}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -51,9 +52,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   def validate_execution_environment(args, %{offline: true} = opts) do
     Validators.chain(
       [
-        &Helpers.require_rabbit_and_plugins/2,
+        &require_rabbit_and_plugins/2,
         &PluginHelpers.enabled_plugins_file/2,
-        &Helpers.plugins_dir/2
+        &plugins_dir/2
       ],
       [args, opts]
     )

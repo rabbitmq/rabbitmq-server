@@ -21,6 +21,7 @@ defmodule RabbitMQ.CLI.Formatters.StringPerLine do
 
   alias RabbitMQ.CLI.Formatters.FormatterHelpers
   alias RabbitMQ.CLI.Core.Helpers
+  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
@@ -36,7 +37,7 @@ defmodule RabbitMQ.CLI.Formatters.StringPerLine do
         separator =
           case previous do
             :empty -> ""
-            _ -> Helpers.line_separator()
+            _ -> line_separator()
           end
 
         format_element(element, separator, options)

@@ -22,10 +22,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   This command is meant to be used in health checks.
   """
 
-  alias RabbitMQ.CLI.Core.Helpers
-
   import RabbitMQ.CLI.Diagnostics.Helpers,
     only: [alarm_lines: 2, local_alarms: 2, clusterwide_alarms: 2]
+  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -81,7 +80,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   def output(alarms, %{node: node_name}) when is_list(alarms) do
     lines = alarm_lines(alarms, node_name)
 
-    {:error, Enum.join(lines, Helpers.line_separator())}
+    {:error, Enum.join(lines, line_separator())}
   end
 
   use RabbitMQ.CLI.DefaultOutput

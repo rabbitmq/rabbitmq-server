@@ -16,6 +16,8 @@
 # Provides common validation functions.
 defmodule RabbitMQ.CLI.Core.Validators do
   alias RabbitMQ.CLI.Core.Helpers
+  import RabbitMQ.CLI.Core.{CodePath, Paths}
+
 
   def chain([validator | rest], args) do
     case apply(validator, args) do
@@ -28,6 +30,17 @@ defmodule RabbitMQ.CLI.Core.Validators do
 
   def chain([], _) do
     :ok
+  end
+
+  def validate_step(:ok, step) do
+    case step.() do
+      {:error, err} -> {:validation_failure, err}
+      _ -> :ok
+    end
+  end
+
+  def validate_step({:validation_failure, err}, _) do
+    {:validation_failure, err}
   end
 
   def node_is_not_running(_, %{node: node_name}) do
@@ -45,24 +58,36 @@ defmodule RabbitMQ.CLI.Core.Validators do
   end
 
   def mnesia_dir_is_set(_, opts) do
-    case Helpers.require_mnesia_dir(opts) do
+    case require_mnesia_dir(opts) do
       :ok -> :ok
       {:error, err} -> {:validation_failure, err}
     end
   end
 
   def feature_flags_file_is_set(_, opts) do
-    case Helpers.require_feature_flags_file(opts) do
+    case require_feature_flags_file(opts) do
       :ok -> :ok
       {:error, err} -> {:validation_failure, err}
     end
   end
 
   def rabbit_is_loaded(_, opts) do
-    case Helpers.require_rabbit(opts) do
+    case require_rabbit(opts) do
       :ok -> :ok
       {:error, err} -> {:validation_failure, err}
     end
+  end
+
+  def rabbit_app_running?(%{node: node, timeout: timeout}) do
+    case :rabbit_misc.rpc_call(node, :rabbit, :is_running, [], timeout) do
+      true -> true
+      false -> false
+      other -> {:error, other}
+    end
+  end
+
+  def rabbit_app_running?(_, opts) do
+    rabbit_app_running?(opts)
   end
 
   def rabbit_is_running(args, opts) do
@@ -90,7 +115,7 @@ defmodule RabbitMQ.CLI.Core.Validators do
   end
 
   def rabbit_app_state(_, opts) do
-    case Helpers.rabbit_app_running?(opts) do
+    case rabbit_app_running?(opts) do
       true -> :running
       false -> :stopped
       {:error, err} -> {:error, err}

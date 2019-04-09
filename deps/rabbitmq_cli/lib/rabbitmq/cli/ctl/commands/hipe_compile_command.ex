@@ -14,7 +14,8 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
+  import RabbitMQ.CLI.Core.CodePath
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -30,13 +31,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
 
   def validate([target_dir], opts) do
     :ok
-    |> Helpers.validate_step(fn ->
+    |> Validators.validate_step(fn ->
       case acceptable_path?(target_dir) do
         true -> :ok
         false -> {:error, {:bad_argument, "Target directory path cannot be blank"}}
       end
     end)
-    |> Helpers.validate_step(fn ->
+    |> Validators.validate_step(fn ->
       case File.dir?(target_dir) do
         true ->
           :ok
@@ -53,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
           end
       end
     end)
-    |> Helpers.validate_step(fn -> Helpers.require_rabbit(opts) end)
+    |> Validators.validate_step(fn -> require_rabbit(opts) end)
   end
 
   def validate(_, _), do: {:validation_failure, :too_many_args}
