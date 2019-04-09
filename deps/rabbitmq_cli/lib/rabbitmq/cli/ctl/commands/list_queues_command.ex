@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   def switches(), do: [offline: :boolean,
                        online: :boolean,
                        local: :boolean,
-                       timeout: :integer ]
+                       timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   def info_keys(), do: @info_keys
