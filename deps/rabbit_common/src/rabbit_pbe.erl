@@ -33,11 +33,16 @@
 
 %% We only support block ciphers that use an initialization vector.
 
+%% @todo ctr_mode ciphers can be supported starting from OTP-22+
+%% without any additional change. stream_cipher ciphers can be
+%% supported starting from OTP-22+ by using the new encrypt/decrypt
+%% functions.
+
 supported_ciphers() ->
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
     lists:filter(fun(Cipher) ->
         Mode = maps:get(mode, crypto:cipher_info(Cipher)),
-        not lists:member(Mode, [ccm_mode, ecb_mode, gcm_mode, stream_cipher])
+        not lists:member(Mode, [ccm_mode, ctr_mode, ecb_mode, gcm_mode, stream_cipher])
     end,
     SupportedByCrypto).
 
@@ -47,6 +52,7 @@ supported_ciphers() ->
     NotSupportedByUs = [aes_ccm, aes_128_ccm, aes_192_ccm, aes_256_ccm,
                         aes_gcm, aes_128_gcm, aes_192_gcm, aes_256_gcm,
                         aes_ecb, aes_128_ecb, aes_192_ecb, aes_256_ecb,
+                        aes_ctr, aes_128_ctr, aes_192_ctr, aes_256_ctr,
                         chacha20, chacha20_poly1305,
                         blowfish_ecb, des_ecb, rc4],
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
