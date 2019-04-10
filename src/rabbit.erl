@@ -1031,8 +1031,9 @@ boot_delegate() ->
 -spec recover() -> 'ok'.
 
 recover() ->
-    rabbit_policy:recover(),
-    rabbit_vhost:recover().
+    ok = rabbit_policy:recover(),
+    ok = rabbit_vhost:recover(),
+    ok = lager_exchange_backend:maybe_init_exchange().
 
 -spec maybe_insert_default_data() -> 'ok'.
 
@@ -1058,6 +1059,7 @@ insert_default_data() ->
     DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
 
     ok = rabbit_vhost:add(DefaultVHostBin, ?INTERNAL_USER),
+    ok = lager_exchange_backend:maybe_init_exchange(),
     ok = rabbit_auth_backend_internal:add_user(
         DefaultUserBin,
         DefaultPassBin,
