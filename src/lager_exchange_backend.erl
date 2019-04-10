@@ -187,10 +187,11 @@ maybe_init_exchange(State) ->
 %% @private
 init_exchange(true) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
-    VHost = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
+    Exchange = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
     try
-        #exchange{} = rabbit_exchange:declare(VHost, topic, true, false, true, [], ?INTERNAL_USER),
-        {ok, #resource{virtual_host=DefaultVHost, kind=exchange, name=?LOG_EXCH_NAME}}
+        %% durable
+        #exchange{} = rabbit_exchange:declare(Exchange, topic, true, false, false, [], ?INTERNAL_USER),
+        {ok, #resource{virtual_host = DefaultVHost, kind = exchange, name = ?LOG_EXCH_NAME}}
     catch
         ErrType:Err ->
             rabbit_log:debug("Could not initialize exchange '~s' in vhost '~s', reason: ~p:~p",
