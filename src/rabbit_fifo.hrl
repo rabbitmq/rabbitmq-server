@@ -155,8 +155,8 @@
          %% overflow calculations).
          %% This is done so that consumers are still served in a deterministic
          %% order on recovery.
-         prefix_msgs = {[], []} :: {Return :: [msg_header()],
-                                    PrefixMsgs :: [msg_header()]},
+         prefix_msgs = {[], []} :: {Return :: [msg_header() | {'$empty_msg', msg_header()}],
+                                    PrefixMsgs :: [msg_header() | {msg_header(), 'empty'}]},
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% waiting consumers, one is picked active consumer is cancelled or dies
