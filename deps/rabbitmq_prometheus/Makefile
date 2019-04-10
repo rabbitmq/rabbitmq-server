@@ -4,7 +4,7 @@ PROJECT_MOD = rabbit_prometheus_app
 TEST_DEPS = eunit_formatters
 EUNIT_OPTS = no_tty, {report, {eunit_progress, [colored, profile]}}
 
-DEPS = rabbit_common rabbit rabbitmq_management_agent prometheus_cowboy prometheus prometheus_httpd accept rabbitmq_web_dispatch
+DEPS = rabbit_common rabbit rabbitmq_management_agent prometheus accept rabbitmq_web_dispatch
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
