@@ -194,7 +194,7 @@ init_exchange(true) ->
         {ok, #resource{virtual_host = DefaultVHost, kind = exchange, name = ?LOG_EXCH_NAME}}
     catch
         ErrType:Err ->
-            rabbit_log:debug("Could not initialize exchange '~s' in vhost '~s', reason: ~p:~p",
+            rabbit_log:error("Could not declare exchange '~s' in vhost '~s', reason: ~p:~p",
                              [?LOG_EXCH_NAME, DefaultVHost, ErrType, Err]),
             {ok, undefined}
     end;
