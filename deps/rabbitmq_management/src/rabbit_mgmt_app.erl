@@ -27,11 +27,16 @@
 -define(DEFAULT_PORT, 15672).
 
 start(_Type, _StartArgs) ->
-    %% Modern TCP listener uses management.tcp.*.
-    %% Legacy TCP (or TLS) listener uses management.listener.*.
-    %% Modern TLS listener uses management.ssl.*
-    start_configured_listener([], true),
-    rabbit_mgmt_sup_sup:start_link().
+    case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
+        false ->
+            %% Modern TCP listener uses management.tcp.*.
+            %% Legacy TCP (or TLS) listener uses management.listener.*.
+            %% Modern TLS listener uses management.ssl.*
+            start_configured_listener([], true),
+            rabbit_mgmt_sup_sup:start_link();
+        true ->
+            {error, "Metrics collection disabled in management agent"}
+    end.
 
 stop(_State) ->
     unregister_all_contexts(),
