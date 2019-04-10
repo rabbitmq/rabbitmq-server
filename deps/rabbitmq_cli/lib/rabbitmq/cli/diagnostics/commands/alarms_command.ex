@@ -21,9 +21,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
   errors. This command is not meant to be used in health checks.
   """
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
-
-  import RabbitMQ.CLI.Diagnostics.Helpers,
-    only: [alarm_lines: 2, local_alarms: 2, clusterwide_alarms: 2]
+  import RabbitMQ.CLI.Core.Alarms
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

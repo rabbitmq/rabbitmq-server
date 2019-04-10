@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortListenerCommand do
   This command is meant to be used in health checks.
   """
 
-  import RabbitMQ.CLI.Diagnostics.Helpers, only: [listeners_on: 2, listener_maps: 1]
+  import RabbitMQ.CLI.Core.Listeners, only: [listeners_on: 2, listener_maps: 1]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
