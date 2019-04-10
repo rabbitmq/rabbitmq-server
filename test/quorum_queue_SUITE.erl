@@ -123,6 +123,7 @@ all_tests() ->
      queue_length_in_memory_bytes_limit_basic_get,
      queue_length_in_memory_bytes_limit_subscribe,
      queue_length_in_memory_bytes_limit,
+     queue_length_in_memory_purge,
      in_memory
     ].
 
@@ -2080,6 +2081,33 @@ queue_length_in_memory_bytes_limit(Config) ->
     wait_for_messages(Config, [[QQ, <<"3">>, <<"3">>, <<"0">>]]),
 
     ?assertEqual([{2, byte_size(Msg2) + byte_size(Msg4)}],
+                 dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
+
+queue_length_in_memory_purge(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-in-memory-length">>, long, 2}])),
+
+    RaName = ra_name(QQ),
+    Msg1 = <<"msg1">>,
+    Msg2 = <<"msg11">>,
+    Msg3 = <<"msg111">>,
+
+    publish(Ch, QQ, Msg1),
+    publish(Ch, QQ, Msg2),
+    publish(Ch, QQ, Msg3),
+    wait_for_messages(Config, [[QQ, <<"3">>, <<"3">>, <<"0">>]]),
+
+    ?assertEqual([{2, byte_size(Msg1) + byte_size(Msg2)}],
+                 dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
+
+    {'queue.purge_ok', 3} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
+
+    ?assertEqual([{0, 0}],
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
 
 in_memory(Config) ->

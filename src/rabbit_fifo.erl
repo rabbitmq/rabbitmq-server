@@ -126,7 +126,7 @@
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->
     update_config(Conf, #?MODULE{cfg = #cfg{name = Name,
-                                          resource = Resource}}).
+                                            resource = Resource}}).
 
 update_config(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
@@ -317,7 +317,9 @@ apply(#{index := RaftIdx}, #purge{},
                                                   returns = lqueue:new(),
                                                   msg_bytes_enqueue = 0,
                                                   prefix_msgs = {[], []},
-                                                  low_msg_num = undefined},
+                                                  low_msg_num = undefined,
+                                                  msg_bytes_in_memory = 0,
+                                                  msgs_ready_in_memory = 0},
                                    []),
     %% as we're not checking out after a purge (no point) we have to
     %% reverse the effects ourselves
