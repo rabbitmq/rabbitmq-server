@@ -857,16 +857,12 @@ alarms() ->
     [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
 
 listeners() ->
-    Listeners = try
+    (Listeners) = try
                     rabbit_networking:active_listeners()
                 catch
                     exit:{aborted, _} -> []
                 end,
-    [{Protocol, Port, rabbit_misc:ntoa(IP)} ||
-        #listener{node       = Node,
-                  protocol   = Protocol,
-                  ip_address = IP,
-                  port       = Port} <- Listeners, Node =:= node()].
+    [L || L = #listener{node = Node} <- Listeners, Node =:= node()].
 
 %% TODO this only determines if the rabbit application has started,
 %% not if it is running, never mind plugins. It would be nice to have
