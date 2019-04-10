@@ -190,7 +190,7 @@ init_exchange(true) ->
     Exchange = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
     try
         %% durable
-        #exchange{} = rabbit_exchange:declare(Exchange, topic, true, false, false, [], ?INTERNAL_USER),
+        #exchange{} = rabbit_exchange:declare(Exchange, topic, true, false, true, [], ?INTERNAL_USER),
         {ok, Exchange}
     catch
         ErrType:Err ->
