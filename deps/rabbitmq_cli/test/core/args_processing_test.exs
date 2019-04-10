@@ -34,7 +34,7 @@ defmodule ArgsProcessingTest do
     |> Map.values
   end
 
-  defp line_filter([option, description]) do
+  defp line_filter([_, description]) do
     Regex.match?(~r/must be one of/, description)
   end
   defp line_filter(line) do

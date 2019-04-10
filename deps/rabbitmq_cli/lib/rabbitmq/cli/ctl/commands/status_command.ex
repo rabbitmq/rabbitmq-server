@@ -14,8 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide}
-  import RabbitMQ.CLI.Core.Platform, only: [os_name: 1]
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
