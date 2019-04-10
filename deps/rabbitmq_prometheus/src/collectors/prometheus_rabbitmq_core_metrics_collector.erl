@@ -15,7 +15,6 @@
 %%
 -module(prometheus_rabbitmq_core_metrics_collector).
 -export([register/0,
-         register/1,
          deregister_cleanup/1,
          collect_mf/2,
          collect_metrics/2,
@@ -163,10 +162,7 @@
 %%====================================================================
 
 register() ->
-  register(default).
-
-register(Registry) ->
-  ok = prometheus_registry:register_collector(Registry, ?MODULE).
+  ok = prometheus_registry:register_collector(?MODULE).
 
 deregister_cleanup(_) -> ok.
 
