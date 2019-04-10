@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   errors. This command is not meant to be used in health checks.
   """
 
-  import RabbitMQ.CLI.Diagnostics.Helpers,
+  import RabbitMQ.CLI.Core.Listeners,
     only: [listeners_on: 2, listener_lines: 1, listener_maps: 1, listener_rows: 1]
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 

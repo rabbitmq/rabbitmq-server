@@ -23,14 +23,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   """
 
   import RabbitMQ.CLI.Diagnostics.Helpers,
-    only: [
-      listeners_on: 2,
-      listener_lines: 1,
-      listener_map: 1,
-      listener_maps: 1,
-      check_listener_connectivity: 3
-    ]
+    only: [check_listener_connectivity: 3]
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
+  import RabbitMQ.CLI.Core.Listeners
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

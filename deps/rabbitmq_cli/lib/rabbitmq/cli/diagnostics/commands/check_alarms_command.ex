@@ -22,8 +22,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   This command is meant to be used in health checks.
   """
 
-  import RabbitMQ.CLI.Diagnostics.Helpers,
-    only: [alarm_lines: 2, local_alarms: 2, clusterwide_alarms: 2]
+  import RabbitMQ.CLI.Core.Alarms
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour

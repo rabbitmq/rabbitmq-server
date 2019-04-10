@@ -16,7 +16,7 @@
 defmodule ListenersCommandTest do
   use ExUnit.Case
   import TestHelper
-  import RabbitMQ.CLI.Diagnostics.Helpers, only: [listener_maps: 1]
+  import RabbitMQ.CLI.Core.Listeners, only: [listener_maps: 1]
 
   @command RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand
 
