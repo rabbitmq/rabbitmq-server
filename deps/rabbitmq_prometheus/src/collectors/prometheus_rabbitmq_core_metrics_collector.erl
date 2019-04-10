@@ -22,13 +22,8 @@
 
 -import(prometheus_model_helpers, [create_mf/4,
                                    create_mf/5,
-                                   label_pairs/1,
-                                   gauge_metrics/1,
-                                   gauge_metric/1,
                                    gauge_metric/2,
-                                   counter_metric/1,
                                    counter_metric/2,
-                                   untyped_metric/1,
                                    untyped_metric/2]).
 
 -include_lib("prometheus/include/prometheus.hrl").
@@ -40,7 +35,7 @@
 
 -define(METRICS,
         [
-         {connection_coarse_metrics, 
+         {connection_coarse_metrics,
           [{2, connection_recv_octects_total, counter, "Count of octects received on the connection."},
            {3, connection_send_octects_total, counter, "Count of octects sent on the connection."},
            {4, connection_reductions_total, counter, "Count of reductions that take place on the queue process."}
