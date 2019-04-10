@@ -857,7 +857,7 @@ alarms() ->
     [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
 
 listeners() ->
-    (Listeners) = try
+    Listeners = try
                     rabbit_networking:active_listeners()
                 catch
                     exit:{aborted, _} -> []
