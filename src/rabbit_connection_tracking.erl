@@ -263,35 +263,29 @@ tracked_connection_per_vhost_table_name_for(Node) ->
 register_connection(#tracked_connection{vhost = VHost, id = ConnId, node = Node} = Conn) when Node =:= node() ->
     TableName = tracked_connection_table_name_for(Node),
     PerVhostTableName = tracked_connection_per_vhost_table_name_for(Node),
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              %% upsert
-              case mnesia:dirty_read(TableName, ConnId) of
-                  []    ->
-                      mnesia:write(TableName, Conn, write),
-                      mnesia:dirty_update_counter(
-                        PerVhostTableName, VHost, 1);
-                  [_Row] ->
-                      ok
-              end,
-              ok
-      end).
+    %% upsert
+    case mnesia:dirty_read(TableName, ConnId) of
+      []    ->
+          mnesia:dirty_write(TableName, Conn),
+          mnesia:dirty_update_counter(
+            PerVhostTableName, VHost, 1);
+      [_Row] ->
+          ok
+    end,
+    ok.
 
 -spec unregister_connection(rabbit_types:connection_name()) -> ok.
 
 unregister_connection(ConnId = {Node, _Name}) when Node =:= node() ->
     TableName = tracked_connection_table_name_for(Node),
     PerVhostTableName = tracked_connection_per_vhost_table_name_for(Node),
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              case mnesia:dirty_read(TableName, ConnId) of
-                  []     -> ok;
-                  [Row] ->
-                      mnesia:dirty_update_counter(
-                        PerVhostTableName, Row#tracked_connection.vhost, -1),
-                      mnesia:delete({TableName, ConnId})
-              end
-      end).
+    case mnesia:dirty_read(TableName, ConnId) of
+        []     -> ok;
+        [Row] ->
+            mnesia:dirty_update_counter(
+                PerVhostTableName, Row#tracked_connection.vhost, -1),
+            mnesia:dirty_delete(TableName, ConnId)
+    end.
 
 
 -spec list() -> [rabbit_types:tracked_connection()].
@@ -350,15 +344,9 @@ count_connections_in(VirtualHost) ->
     lists:foldl(fun (Node, Acc) ->
                         Tab = tracked_connection_per_vhost_table_name_for(Node),
                         try
-                            N = case mnesia:transaction(
-                                       fun() ->
-                                               case mnesia:dirty_read({Tab, VirtualHost}) of
-                                                   []    -> 0;
-                                                   [Val] -> Val#tracked_connection_per_vhost.connection_count
-                                               end
-                                       end) of
-                                    {atomic,  Val}     -> Val;
-                                    {aborted, _Reason} -> 0
+                            N = case mnesia:dirty_read(Tab, VirtualHost) of
+                                    []    -> 0;
+                                    [Val] -> Val#tracked_connection_per_vhost.connection_count
                                 end,
                             Acc + N
                         catch _:Err  ->
