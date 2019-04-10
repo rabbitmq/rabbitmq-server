@@ -32,6 +32,7 @@
 -behaviour(prometheus_collector).
 
 -define(METRIC_NAME_PREFIX, "rabbitmq_").
+-define(NODE_LABEL, {node, node()}).
 
 -define(METRICS,
         [
@@ -174,45 +175,68 @@ collect_mf(_Registry, Callback) ->
 
 mf(Callback, Contents, Data) ->
     [begin
-         Fun = fun(D) -> element(Index, D) end,
-         Callback(create_mf(?METRIC_NAME(Name), Help, catch_boolean(Type), ?MODULE,
-                            {Type, Fun, Data}))
-     end || {Index, Name, Type, Help} <- Contents],
+        Fun = fun(D) -> element(Index, D) end,
+        Callback(
+            create_mf(
+                ?METRIC_NAME(Name),
+                Help,
+                catch_boolean(Type),
+                ?MODULE,
+                {Type, Fun, Data}
+            )
+        )
+    end || {Index, Name, Type, Help} <- Contents],
     [begin
-         Fun = fun(D) -> proplists:get_value(Key, element(Index, D)) end,
-         Callback(create_mf(?METRIC_NAME(Name), Help, catch_boolean(Type), ?MODULE,
-                            {Type, Fun, Data}))
-     end || {Index, Name, Type, Help, Key} <- Contents].
+        Fun = fun(D) -> proplists:get_value(Key, element(Index, D)) end,
+        Callback(
+            create_mf(
+                ?METRIC_NAME(Name),
+                Help,
+                catch_boolean(Type),
+                ?MODULE,
+                {Type, Fun, Data}
+            )
+        )
+    end || {Index, Name, Type, Help, Key} <- Contents].
 
 mf_totals(Callback, Name, Type, Help, Size) ->
-    Callback(create_mf(?METRIC_NAME(Name), Help, catch_boolean(Type), Size)).
+    Callback(
+        create_mf(
+            ?METRIC_NAME(Name),
+            Help,
+            catch_boolean(Type),
+            prepend_node_label(Size)
+        )
+    ).
+
+prepend_node_label(Item) when is_list(Item) ->
+    [?NODE_LABEL | Item];
+prepend_node_label(Item) ->
+    {[?NODE_LABEL], Item}.
 
 collect_metrics(_, {Type, Fun, Items}) ->
     [metric(Type, labels(Item), Fun(Item)) || Item <- Items].
 
 labels(Item) ->
-    label(element(1, Item)).
+    prepend_node_label(label(element(1, Item))).
 
-label(L) ->
-    [{node, node()}] ++ label0(L).
-
-label0(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
+label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
     [{vhost, VHost}, {exchange, Name}];
-label0(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
+label(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
     [{vhost, VHost}, {queue, Name}];
-label0({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
+label({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
             #resource{virtual_host = EVHost, kind = exchange, name = EName}}}) when is_pid(P) ->
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
     [{channel, P}, {queue_vhost, QVHost}, {queue, QName},
      {exchange_vhost, EVHost}, {exchange, EName}];
-label0({I1, I2}) ->
-    label0(I1) ++ label0(I2);
-label0(P) when is_pid(P) ->
+label({I1, I2}) ->
+    label(I1) ++ label(I2);
+label(P) when is_pid(P) ->
     [{channel, P}];
-label0(A) when is_atom(A) ->
+label(A) when is_atom(A) ->
     [].
 
-% used for testing
+% used in http Common Test Suite
 metric_prefix() ->
     ?METRIC_NAME_PREFIX.
 
@@ -263,73 +287,19 @@ emit_gauge_metric_if_defined(Labels, Value) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
-label_generic_metric_test() ->
+prepend_node_label_metric_test() ->
     Metric = metric,
-    ?assertEqual([{node, node()}], label(Metric)),
-    ok.
-
-label_exchange_metric_test() ->
-    VHost = <<"/">>,
-    Exchange = "amqp.direct",
-    Metric = #resource{virtual_host = VHost, kind = exchange, name = Exchange},
     ?assertEqual(
-       [{node, node()}, {vhost, VHost}, {exchange, Exchange}],
-       label(Metric)
+        {[{node, node()}], metric},
+        prepend_node_label(Metric)
     ),
     ok.
 
-label_channel_metric_test() ->
-    Pid = self(),
+prepend_node_label_list_test() ->
+    List = [metric],
     ?assertEqual(
-       [{node, node()}, {channel, Pid}],
-       label(Pid)
-    ),
-    ok.
-
-label_queue_metric_test() ->
-    VHost = <<"/">>,
-    Queue = "business.q",
-    Metric = #resource{virtual_host = VHost, kind = queue, name = Queue},
-    ?assertEqual(
-       [{node, node()}, {vhost, VHost}, {queue, Queue}],
-       label(Metric)
-    ),
-    ok.
-
-label_channel_and_queue_metric_test() ->
-    Pid = self(),
-    QVHost = <<"q.vhost">>,
-    EVHost = <<"x.vhost">>,
-    Queue = "business.q",
-    Exchange = "amqp.direct",
-    Metric = {
-        Pid,
-        {
-            #resource{virtual_host = QVHost, kind = queue, name = Queue},
-            #resource{virtual_host = EVHost, kind = exchange, name = Exchange}
-        }
-    },
-    ?assertEqual(
-        [
-            {node, node()},
-            {channel, Pid},
-            {queue_vhost, QVHost},
-            {queue, Queue},
-            {exchange_vhost, EVHost},
-            {exchange, Exchange}
-        ],
-        label(Metric)
-    ),
-    ok.
-
-label_multiple_metric_test() ->
-    Metric1 = foo,
-    Metric2 = bar,
-    ?assertEqual(
-        [
-            {node, node()}
-        ],
-        label({Metric1, Metric2})
+        [{node, node()}, metric],
+        prepend_node_label(List)
     ),
     ok.
 
