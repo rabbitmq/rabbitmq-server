@@ -33,7 +33,7 @@ defmodule NodeHealthCheckCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 200}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 20000}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
