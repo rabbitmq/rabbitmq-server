@@ -183,7 +183,13 @@ queue_sups() ->
 quorum_sups() ->
     %% TODO: in the future not all ra servers may be queues and we needs
     %% some way to filter this
-    [Pid || {_, Pid, _, _} <- supervisor:which_children(ra_server_sup_sup)].
+    case whereis(ra_server_sup_sup) of
+        undefined ->
+            [];
+        _ ->
+            [Pid || {_, Pid, _, _} <-
+                    supervisor:which_children(ra_server_sup_sup)]
+    end.
 
 msg_stores() ->
     all_vhosts_children(msg_store_transient)
