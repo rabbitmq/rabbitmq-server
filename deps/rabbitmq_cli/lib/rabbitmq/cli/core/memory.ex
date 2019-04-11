@@ -36,6 +36,9 @@ defmodule RabbitMQ.CLI.Core.Memory do
 
   def power_as_int(num, x, y), do: round(num * :math.pow(x, y))
 
+  def compute_relative_values(all_pairs) when is_map(all_pairs) do
+    compute_relative_values(Enum.into(all_pairs, []))
+  end
   def compute_relative_values(all_pairs) do
     num_pairs = Keyword.delete(all_pairs, :strategy)
     # Includes RSS, allocated and runtime-used ("erlang") values.
