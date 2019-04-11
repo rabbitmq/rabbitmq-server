@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
-  import RabbitMQ.CLI.Core.{Alarms, Listeners, Platform}
+  import RabbitMQ.CLI.Core.{Alarms, Listeners, Memory, Platform}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     ]
     runtime_section = [
       "\n#{bright("Runtime")}\n",
-      "Erlang version: #{m[:erlang_version]}",
+      "Erlang info line: #{m[:erlang_version]}",
       "Erlang processes used: #{m[:processes][:used]}, limit: #{m[:processes][:limit]}",
       "Run queue: #{m[:run_queue]}",
       "Net tick timeout: #{m[:net_ticktime]}"
@@ -70,11 +70,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
            [] -> ["(none)"]
            xs -> alarm_lines(xs, node_name)
          end
+
+    breakdown = compute_relative_values(m[:memory])
     memory_section = [
       "\n#{bright("Memory")}\n",
       "Calculation strategy: #{m[:vm_memory_calculation_strategy]}",
       "Memory high watermark: #{m[:vm_memory_high_watermark]}, limit in bytes: #{m[:vm_memory_limit]}"
-    ]
+    ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{val[:bytes]} bytes (#{val[:percentage]} %)" end)
+
     disk_space_section = [
       "\n#{bright("Free Disk Space")}\n",
       "Low free disk space watermark: #{m[:disk_free_limit]}",
@@ -132,7 +135,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
       alarms: Keyword.get(result, :alarms),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
-      memory: Keyword.get(result, :memory) |> Keyword.update(:total, [], fn x -> Enum.into(x, %{}) end) |> Enum.into(%{})
+      memory: Keyword.get(result, :memory) |> Enum.into(%{})
     }
   end
 
