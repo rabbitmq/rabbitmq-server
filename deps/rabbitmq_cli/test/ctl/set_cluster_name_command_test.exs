@@ -60,10 +60,9 @@ defmodule SetClusterNameCommandTest do
   end
 
   test "run: An invalid Rabbit node returns a bad rpc message" do
-    target = :jake@thedog
-    opts = %{node: target}
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    assert @command.run(["clustername"], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["clustername"], opts))
   end
 
   test "banner shows that the name is being set" do

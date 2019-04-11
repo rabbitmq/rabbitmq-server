@@ -65,10 +65,9 @@ defmodule ListPermissionsCommandTest do
   end
 
   test "run: on a bad RabbitMQ node, return a badrpc" do
-    target = :jake@thedog
-    opts = %{node: target, timeout: :infinity, vhost: "/"}
+    opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
 
-    assert @command.run([], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   @tag test_timeout: @default_timeout, vhost: @vhost

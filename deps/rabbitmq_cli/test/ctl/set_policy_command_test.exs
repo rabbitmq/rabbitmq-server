@@ -104,11 +104,9 @@ defmodule SetPolicyCommandTest do
   end
 
   test "run: an unreachable node throws a badrpc" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, vhost: "/", priority: 0, apply_to: "all", timeout: 200}
 
-    opts = %{node: target, vhost: "/", priority: 0, apply_to: "all"}
-
-    assert @command.run([@key, @pattern, @value], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([@key, @pattern, @value], opts))
   end
 
   @tag pattern: @pattern, key: @key, value: @value, vhost: "bad-vhost"

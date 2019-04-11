@@ -99,11 +99,9 @@ defmodule CloseAllConnectionsCommandTest do
     end)
   end
 
-  test "run: a close_all_connections request to non-existent RabbitMQ node returns nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, vhost: @vhost, global: true, per_connection_delay: 0, limit: 0}
-    assert match?({:badrpc, :nodedown}, @command.run(["test"], opts))
+  test "run: a close_all_connections request to non-existent RabbitMQ node returns a badrpc" do
+    opts = %{node: :jake@thedog, vhost: @vhost, global: true, per_connection_delay: 0, limit: 0, timeout: 200}
+    assert match?({:badrpc, _}, @command.run(["test"], opts))
   end
 
   test "banner for vhost option", context do

@@ -86,10 +86,8 @@ defmodule ClearPolicyCommandTest do
   end
 
   test "run: an unreachable node throws a badrpc" do
-    target = :jake@thedog
-
-    opts = %{node: target, vhost: "/"}
-    assert @command.run([@key], opts) == {:badrpc, :nodedown}
+    opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
+    assert match?({:badrpc, _}, @command.run([@key], opts))
   end
 
 

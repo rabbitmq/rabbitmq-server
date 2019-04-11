@@ -57,7 +57,7 @@ defmodule ListUsersCommandTest do
   end
 
   test "run: On an invalid rabbitmq node, return a bad rpc" do
-    assert @command.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, timeout: 200}))
   end
 
   @tag test_timeout: 30000
@@ -82,4 +82,3 @@ defmodule ListUsersCommandTest do
       =~ ~r/Listing users \.\.\./
   end
 end
-

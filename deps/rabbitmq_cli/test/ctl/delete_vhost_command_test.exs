@@ -56,11 +56,9 @@ defmodule DeleteVhostCommandTest do
   end
 
   test "run: A call to invalid or inactive RabbitMQ node returns a nodedown" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target}
-
-    assert @command.run(["na"], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["na"], opts))
   end
 
   @tag vhost: @vhost

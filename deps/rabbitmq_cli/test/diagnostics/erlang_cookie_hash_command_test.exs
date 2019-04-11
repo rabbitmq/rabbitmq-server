@@ -47,10 +47,8 @@ defmodule ErlangCookieHashCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    target = :jake@thedog
-
-    opts = %{node: target}
-    assert @command.run([], Map.merge(context[:opts], opts)) == {:badrpc, :nodedown}
+    opts = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], opts)))
   end
 
   test "run: returns the erlang cookie hash", context do

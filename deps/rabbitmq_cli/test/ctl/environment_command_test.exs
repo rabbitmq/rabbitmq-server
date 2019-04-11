@@ -42,12 +42,10 @@ defmodule EnvironmentCommandTest do
     assert @command.run([], context[:opts])[:rabbit] != nil
   end
 
-  test "run: environment request on nonexistent RabbitMQ node returns nodedown" do
-    target = :jake@thedog
+  test "run: environment request on nonexistent RabbitMQ node returns a badrpc" do
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target}
-
-    assert @command.run([], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

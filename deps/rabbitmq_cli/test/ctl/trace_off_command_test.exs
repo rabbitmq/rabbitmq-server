@@ -61,10 +61,8 @@ defmodule TraceOffCommandTest do
   end
 
   test "run: on an invalid RabbitMQ node, return a nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, vhost: "/"}
-    assert @command.run([], opts) == {:badrpc, :nodedown}
+    opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   @tag target: get_rabbit_hostname(), vhost: @default_vhost

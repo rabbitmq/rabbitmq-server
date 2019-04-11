@@ -81,11 +81,9 @@ defmodule SetPermissionsCommandTest do
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, vhost: @vhost, timeout: 200}
 
-    opts = %{node: target, vhost: @vhost}
-
-    assert @command.run([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([@user, ".*", ".*", ".*"], opts))
   end
 
   @tag user: "interloper", vhost: @root

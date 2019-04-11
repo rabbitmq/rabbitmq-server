@@ -92,11 +92,9 @@ defmodule ListParametersCommandTest do
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, vhost: @vhost, timeout: 200}
 
-    opts = %{node: target, vhost: @vhost, timeout: :infinity}
-
-    assert @command.run([], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root

@@ -33,7 +33,7 @@ defmodule ForceGcCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 70000}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 200}}
   end
 
 
@@ -45,10 +45,8 @@ defmodule ForceGcCommandTest do
     assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  test "run: request to a non-existent node returns nodedown" do
-    target = :jake@thedog
-
-    assert match?({:badrpc, _}, @command.run([], %{node: target, timeout: 70000}))
+  test "run: request to a non-existent node returns a badrpc" do
+    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, timeout: 200}))
   end
 
   test "run: request to a named, active node succeeds", context do

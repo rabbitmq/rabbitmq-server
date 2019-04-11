@@ -43,11 +43,9 @@ defmodule AwaitStartupCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "run: request to a non-existent node returns nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, timeout: 5}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+  test "run: request to a non-existent node returns a badrpc" do
+    opts = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "run: request to a fully booted node succeeds", context do
