@@ -51,7 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     m = result_map(result)
 
     process_section = [
-      "\n#{bright("OS Process")}\n",
+      "#{bright("OS Process")}\n",
       "PID: #{m[:pid]}",
       "OS: #{m[:os]}",
       # TODO: format
