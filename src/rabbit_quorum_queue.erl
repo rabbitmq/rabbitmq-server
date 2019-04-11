@@ -61,7 +61,9 @@
          members,
          open_files,
          single_active_consumer_pid,
-         single_active_consumer_ctag
+         single_active_consumer_ctag,
+         messages_ram,
+         message_bytes_ram
         ]).
 
 -define(RPC_TIMEOUT, 1000).
@@ -164,6 +166,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
+    MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
+    MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
     DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
@@ -171,6 +175,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       become_leader_handler => {?MODULE, become_leader, [QName]},
       max_length => MaxLength,
       max_bytes => MaxBytes,
+      max_in_memory_length => MaxMemoryLength,
+      max_in_memory_bytes => MaxMemoryBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
       delivery_limit => DeliveryLimit
      }.
@@ -982,6 +988,16 @@ i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
             ''
     end;
 i(type, _) -> quorum;
+i(messages_ram, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    {ok, {_, {Length, _}}, _} = ra:local_query(QPid,
+                                          fun rabbit_fifo:query_in_memory_usage/1),
+    Length;
+i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    {ok, {_, {_, Bytes}}, _} = ra:local_query(QPid,
+                                         fun rabbit_fifo:query_in_memory_usage/1),
+    Bytes;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->

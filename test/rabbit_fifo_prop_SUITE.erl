@@ -42,12 +42,16 @@ all_tests() ->
      scenario15,
      scenario16,
      scenario17,
+     scenario18,
+     scenario19,
+     scenario20,
      single_active,
      single_active_01,
      single_active_02,
      single_active_03,
      single_active_ordering,
-     single_active_ordering_01
+     single_active_ordering_01,
+     in_memory_limit
      % single_active_ordering_02
     ].
 
@@ -305,6 +309,53 @@ scenario17(_Config) ->
                        }, Commands),
     ok.
 
+scenario18(_Config) ->
+    E = c:pid(0,176,1),
+    Commands = [make_enqueue(E,1,<<"1">>),
+                make_enqueue(E,2,<<"2">>),
+                make_enqueue(E,3,<<"3">>),
+                make_enqueue(E,4,<<"4">>),
+                make_enqueue(E,5,<<"5">>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        %% max_length => 3,
+                        max_in_memory_length => 1}, Commands),
+    ok.
+
+scenario19(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [make_enqueue(E,1,<<"1">>),
+                make_enqueue(E,2,<<"2">>),
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E,3,<<"3">>),
+                make_settle(C1, [0, 1])
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_in_memory_bytes => 370,
+                        max_in_memory_length => 1}, Commands),
+    ok.
+
+scenario20(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [make_enqueue(E,1,<<>>),
+                make_enqueue(E,2,<<>>),
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                {down, C1Pid, noconnection},
+                make_enqueue(E,3,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,4,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,5,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,6,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
+                make_enqueue(E,7,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0>>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_bytes => 97,
+                        max_in_memory_length => 1}, Commands),
+    ok.
+
 single_active_01(_Config) ->
     C1Pid = test_util:fake_pid(rabbit@fake_node1),
     C1 = {<<0>>, C1Pid},
@@ -338,7 +389,7 @@ single_active_02(_Config) ->
                 make_checkout(C2, cancel),
                 {down,E,noconnection}
                 ],
-    Conf = config(?FUNCTION_NAME, undefined, undefined, true, 1),
+    Conf = config(?FUNCTION_NAME, undefined, undefined, true, 1, undefined, undefined),
     ?assert(single_active_prop(Conf, Commands, false)),
     ok.
 
@@ -356,7 +407,7 @@ single_active_03(_Config) ->
                 {down, Pid, noconnection},
                 {nodeup, node()}
                 ],
-    Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
+    Conf = config(?FUNCTION_NAME, 0, 0, true, 0, undefined, undefined),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
@@ -364,12 +415,15 @@ test_run_log(_Config) ->
     Fun = {-1, fun ({Prev, _}) -> {Prev + 1, Prev + 1} end},
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
-                      frequency([{10, {0, 0, false, 0}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength,
+                       InMemoryBytes},
+                      frequency([{10, {0, 0, false, 0, 0, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
-                                      oneof([range(1, 3), undefined])
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined])
                                      }}]),
                       ?FORALL(O, ?LET(Ops, log_gen(100), expand(Ops, Fun)),
                               collect({log_size, length(O)},
@@ -378,18 +432,23 @@ test_run_log(_Config) ->
                                                Length,
                                                Bytes,
                                                SingleActiveConsumer,
-                                               DeliveryLimit), O))))
+                                               DeliveryLimit,
+                                               InMemoryLength,
+                                               InMemoryBytes), O))))
       end, [], 10).
 
 snapshots(_Config) ->
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
-                      frequency([{10, {0, 0, false, 0}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength,
+                       InMemoryBytes},
+                      frequency([{10, {0, 0, false, 0, 0, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
-                                      oneof([range(1, 3), undefined])
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined])
                                      }}]),
                       ?FORALL(O, ?LET(Ops, log_gen(250), expand(Ops)),
                               collect({log_size, length(O)},
@@ -398,18 +457,22 @@ snapshots(_Config) ->
                                                Length,
                                                Bytes,
                                                SingleActiveConsumer,
-                                               DeliveryLimit), O))))
+                                               DeliveryLimit,
+                                               InMemoryLength,
+                                               InMemoryBytes), O))))
       end, [], 2500).
 
 single_active(_Config) ->
     Size = 2000,
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit},
-                      frequency([{10, {0, 0, 0}},
+              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, InMemoryBytes},
+                      frequency([{10, {0, 0, 0, 0, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
-                                      oneof([range(1, 3), undefined])
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined])
                                      }}]),
                       ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops)),
                               collect({log_size, length(O)},
@@ -418,7 +481,9 @@ single_active(_Config) ->
                                                Length,
                                                Bytes,
                                                true,
-                                               DeliveryLimit), O,
+                                               DeliveryLimit,
+                                               InMemoryLength,
+                                               InMemoryBytes), O,
                                         false))))
       end, [], Size).
 
@@ -433,6 +498,8 @@ single_active_ordering(_Config) ->
                                                         undefined,
                                                         undefined,
                                                         true,
+                                                        undefined,
+                                                        undefined,
                                                         undefined), O,
                                                  true)))
       end, [], Size).
@@ -454,7 +521,7 @@ single_active_ordering_01(_Config) ->
                 make_enqueue(E2, 1, 2),
                 make_settle(C1, [0])
                 ],
-    Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
+    Conf = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
@@ -475,19 +542,80 @@ single_active_ordering_02(_Config) ->
                 {down,E,noproc},
                 make_settle(C1, [0])
                 ],
-    Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
+    Conf = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
-config(Name, Length, Bytes, SingleActive, DeliveryLimit) ->
+in_memory_limit(_Config) ->
+    Size = 2000,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength, InMemoryBytes},
+                      frequency([{10, {0, 0, false, 0, 0, 0}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      boolean(),
+                                      oneof([range(1, 3), undefined]),
+                                      range(1, 10),
+                                      range(1, 1000)
+                                     }}]),
+                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops)),
+                              collect({log_size, length(O)},
+                                      in_memory_limit_prop(
+                                        config(?FUNCTION_NAME,
+                                               Length,
+                                               Bytes,
+                                               SingleActiveConsumer,
+                                               DeliveryLimit,
+                                               InMemoryLength,
+                                               InMemoryBytes), O))))
+      end, [], Size).
+
+config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemoryBytes) ->
     #{name => Name,
       max_length => map_max(Length),
       max_bytes => map_max(Bytes),
       single_active_consumer_on => SingleActive,
-      delivery_limit => map_max(DeliveryLimit)}.
+      delivery_limit => map_max(DeliveryLimit),
+      max_in_memory_length => map_max(InMemoryLength),
+      max_in_memory_bytes => map_max(InMemoryBytes)}.
 
 map_max(0) -> undefined;
 map_max(N) -> N.
+
+in_memory_limit_prop(Conf0, Commands) ->
+    Conf = Conf0#{release_cursor_interval => 100},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    try run_log(test_init(Conf), Entries) of
+        {_State, Effects} ->
+            %% validate message ordering
+            lists:foldl(fun ({log, Idxs, _}, ReleaseCursorIdx) ->
+                                validate_idx_order(Idxs, ReleaseCursorIdx),
+                                ReleaseCursorIdx;
+                            ({release_cursor, Idx, _}, _) ->
+                                Idx;
+                            (_, Acc) ->
+                                Acc
+                        end, 0, Effects),
+            true;
+        _ ->
+            true
+    catch
+        Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+            ct:pal("Err: ~p~n", [Err]),
+            false
+    end.
+
+validate_idx_order(Idxs, ReleaseCursorIdx) ->
+    Min = lists:min(Idxs),
+    case Min < ReleaseCursorIdx of
+        true ->
+            throw({invalid_log_index, Min, ReleaseCursorIdx});
+        false ->
+            ok
+    end.
 
 single_active_prop(Conf0, Commands, ValidateOrder) ->
     Conf = Conf0#{release_cursor_interval => 100},

@@ -108,7 +108,9 @@
          %% whether single active consumer is on or not for this queue
          consumer_strategy = competing :: consumer_strategy(),
          %% the maximum number of unsuccessful delivery attempts permitted
-         delivery_limit :: maybe(non_neg_integer())
+         delivery_limit :: maybe(non_neg_integer()),
+         max_in_memory_length :: maybe(non_neg_integer()),
+         max_in_memory_bytes :: maybe(non_neg_integer())
         }).
 
 -record(rabbit_fifo,
@@ -153,13 +155,15 @@
          %% overflow calculations).
          %% This is done so that consumers are still served in a deterministic
          %% order on recovery.
-         prefix_msgs = {[], []} :: {Return :: [msg_header()],
-                                    PrefixMsgs :: [msg_header()]},
+         prefix_msgs = {[], []} :: {Return :: [msg_header() | {'$empty_msg', msg_header()}],
+                                    PrefixMsgs :: [msg_header() | {msg_header(), 'empty'}]},
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% waiting consumers, one is picked active consumer is cancelled or dies
          %% used only when single active consumer is on
-         waiting_consumers = [] :: [{consumer_id(), consumer()}]
+         waiting_consumers = [] :: [{consumer_id(), consumer()}],
+         msg_bytes_in_memory = 0 :: non_neg_integer(),
+         msgs_ready_in_memory = 0 :: non_neg_integer()
         }).
 
 -type config() :: #{name := atom(),
@@ -169,5 +173,7 @@
                     release_cursor_interval => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
+                    max_in_memory_length => non_neg_integer(),
+                    max_in_memory_bytes => non_neg_integer(),
                     single_active_consumer_on => boolean(),
                     delivery_limit => non_neg_integer()}.

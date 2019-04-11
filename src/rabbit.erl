@@ -540,6 +540,8 @@ start_loaded_apps(Apps, RestartTypes) ->
     %% make Ra use a custom logger that dispatches to lager instead of the
     %% default OTP logger
     application:set_env(ra, logger_module, rabbit_log_ra_shim),
+    %% use a larger segments size for queues
+    application:set_env(ra, segment_max_entries, 32768),
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
             [];
