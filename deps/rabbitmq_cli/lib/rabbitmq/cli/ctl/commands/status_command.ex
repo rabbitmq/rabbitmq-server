@@ -15,6 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
+  import RabbitMQ.CLI.Core.{Listeners, Platform}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -43,6 +44,30 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: timed out while waiting for a response from #{node_name}."}
   end
+  def output(result, _opts) when is_list(result) do
+    m = %{
+      os: os_name(Keyword.get(result, :os)),
+      pid: Keyword.get(result, :pid),
+      erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
+      uptime: Keyword.get(result, :uptime),
+      processes: Enum.into(Keyword.get(result, :processes), %{}),
+      run_queue: Keyword.get(result, :run_queue),
+      net_ticktime: net_ticktime(result),
+      vm_memory_calculation_strategy: Keyword.get(result, :vm_memory_calculation_strategy),
+      vm_memory_high_watermark: Keyword.get(result, :vm_memory_high_watermark),
+      vm_memory_limit: Keyword.get(result, :vm_memory_limit),
+      disk_free_limit: Keyword.get(result, :disk_free_limit),
+      disk_free: Keyword.get(result, :disk_free),
+      file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
+      alarms: Keyword.get(result, :alarms),
+      listeners: listener_maps(Keyword.get(result, :listeners, [])),
+      memory: Enum.into(Keyword.get(result, :memory), %{})
+    }
+
+    IO.inspect(m)
+
+    {:ok, result}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
@@ -60,4 +85,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def description(), do: "Displays broker status information"
 
   def banner(_, %{node: node_name}), do: "Status of node #{node_name} ..."
+
+  #
+  # Implementation
+  #
+
+  defp net_ticktime(result) do
+    case Keyword.get(result, :kernel) do
+      {:net_ticktime, n}   -> n
+      n when is_integer(n) -> n
+      _                    -> :undefined
+    end
+  end
 end
