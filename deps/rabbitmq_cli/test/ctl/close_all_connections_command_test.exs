@@ -103,7 +103,7 @@ defmodule CloseAllConnectionsCommandTest do
     target = :jake@thedog
 
     opts = %{node: target, vhost: @vhost, global: true, per_connection_delay: 0, limit: 0}
-    assert match?({:badrpc, :nodedown}, @command.run(["test"], opts))
+    assert match?({:badrpc, _}, @command.run(["test"], opts))
   end
 
   test "banner for vhost option", context do

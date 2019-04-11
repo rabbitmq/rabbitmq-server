@@ -52,7 +52,7 @@ defmodule AddUserCommandTest do
     target = :jake@thedog
 
     opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run([context[:user], context[:password]], opts))
+    assert match?({:badrpc, _}, @command.run([context[:user], context[:password]], opts))
   end
 
   @tag user: "someone", password: "password"

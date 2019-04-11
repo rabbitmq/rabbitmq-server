@@ -66,7 +66,7 @@ defmodule SyncQueueCommandTest do
     target = :jake@thedog
 
     opts = %{node: target, vhost: @vhost}
-    assert match?({:badrpc, :nodedown}, @command.run(["q1"], opts))
+    assert match?({:badrpc, _}, @command.run(["q1"], opts))
   end
 
   test "banner", context do

@@ -42,7 +42,7 @@ defmodule StatusCommandTest do
     target = :jake@thedog
 
     opts = %{node: target, timeout: 60_000}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

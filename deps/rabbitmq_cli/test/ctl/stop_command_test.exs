@@ -49,7 +49,7 @@ defmodule StopCommandTest do
     target = :jake@thedog
 
     opts = %{node: target, idempotent: false}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "run: request to a non-existent node with --idempotent returns ok" do

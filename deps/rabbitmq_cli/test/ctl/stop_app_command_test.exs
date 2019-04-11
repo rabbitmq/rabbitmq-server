@@ -51,7 +51,7 @@ defmodule StopAppCommandTest do
     target = :jake@thedog
 
     opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

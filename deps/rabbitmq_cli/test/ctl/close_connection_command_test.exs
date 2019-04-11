@@ -72,7 +72,7 @@ defmodule CloseConnectionCommandTest do
     target = :jake@thedog
 
     opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run(["<rabbit@localhost.1.2.1>", "test"], opts))
+    assert match?({:badrpc, _}, @command.run(["<rabbit@localhost.1.2.1>", "test"], opts))
   end
 
   test "banner", context do

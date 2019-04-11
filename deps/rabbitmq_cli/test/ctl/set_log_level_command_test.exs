@@ -45,7 +45,7 @@ defmodule SetLogLevelCommandTest do
   test "run: request to a non-existent node returns nodedown", context do
     target = :jake@thedog
     opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run([context[:log_level]], opts))
+    assert match?({:badrpc, _}, @command.run([context[:log_level]], opts))
   end
 
   test "banner", context do

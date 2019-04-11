@@ -67,7 +67,7 @@ defmodule NodeHealthCheckCommandTest do
     target = :jake@thedog
 
 
-    assert match?({:badrpc, :nodedown}, @command.run([], %{node: target, timeout: 70000}))
+    assert match?({:badrpc, _}, @command.run([], %{node: target, timeout: 70000}))
   end
 
   test "banner", context do

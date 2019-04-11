@@ -58,8 +58,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert @command.run(["quorum-queue-a"],
-                        Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/"})) ==
-                          {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["quorum-queue-a"],
+                                Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/", timeout: 200})))
   end
 end

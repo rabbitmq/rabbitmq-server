@@ -73,7 +73,7 @@ defmodule MemoryBreakdownCommandTest do
     target = :jake@thedog
 
     opts = %{node: target, timeout: 5000, unit: "gb"}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

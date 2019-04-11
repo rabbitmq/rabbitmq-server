@@ -51,8 +51,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommandTest do
   end
 
   @tag test_timeout: 3000
-  test "run: targeting an unreachable node throws a badrpc", context do
-    assert @command.run(["quorum-queue-a", "rabbit@new-node"],
-                        Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/"})) == {:badrpc, :nodedown}
+  test "run: targeting an unreachable node throws a badrpc" do
+    assert match?({:badrpc, _}, @command.run(["quorum-queue-a", "rabbit@new-node"],
+                                             %{node: :jake@thedog, vhost: "/", timeout: 200}))
   end
 end

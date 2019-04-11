@@ -47,7 +47,7 @@ defmodule AwaitStartupCommandTest do
     target = :jake@thedog
 
     opts = %{node: target, timeout: 5}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "run: request to a fully booted node succeeds", context do
