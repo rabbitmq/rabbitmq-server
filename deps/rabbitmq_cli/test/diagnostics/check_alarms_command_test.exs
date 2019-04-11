@@ -16,6 +16,7 @@
 defmodule CheckAlarmsCommandTest do
   use ExUnit.Case
   import TestHelper
+  import RabbitMQ.CLI.Core.Alarms, only: [alarm_types: 1]
 
   @command RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand
 
@@ -69,7 +70,7 @@ defmodule CheckAlarmsCommandTest do
     # 2000 bytes will trigger an alarm
     set_vm_memory_high_watermark({:absolute, 2000})
 
-    assert [:memory] == status()[:alarms]
+    assert [:memory] == alarm_types(status()[:alarms])
     assert length(@command.run([], context[:opts])) == 1
 
     set_vm_memory_high_watermark(old_watermark)
