@@ -78,6 +78,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "Memory high watermark: #{m[:vm_memory_high_watermark]}, limit in bytes: #{m[:vm_memory_limit]}"
     ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{val[:bytes]} bytes (#{val[:percentage]} %)" end)
 
+    file_descriptors = [
+      "\n#{bright("File Descriptors")}\n",
+      "Total: #{m[:file_descriptors][:total_used]}, limit: #{m[:file_descriptors][:total_limit]}",
+      "Sockets: #{m[:file_descriptors][:sockets_used]}, limit: #{m[:file_descriptors][:sockets_limit]}"
+    ]
+
     disk_space_section = [
       "\n#{bright("Free Disk Space")}\n",
       "Low free disk space watermark: #{m[:disk_free_limit]}",
@@ -91,8 +97,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
            xs -> listener_lines(xs)
          end
     lines = process_section ++ runtime_section ++
-            alarms_section ++ memory_section ++ disk_space_section ++
-            listeners_section
+            alarms_section ++ memory_section ++ file_descriptors ++
+            disk_space_section ++ listeners_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
