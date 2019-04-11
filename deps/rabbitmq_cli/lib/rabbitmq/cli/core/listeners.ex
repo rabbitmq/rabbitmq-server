@@ -40,6 +40,9 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     end)
   end
 
+  def listener_map(listener) when is_map(listener) do
+    listener
+  end
   def listener_map(listener) do
     # Listener options are left out intentionally: they can contain deeply nested values
     # that are impossible to serialise to JSON.
