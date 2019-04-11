@@ -80,11 +80,9 @@ defmodule ListPoliciesCommandTest do
   end
 
   test "run: an unreachable node throws a badrpc" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, vhost: @vhost, timeout: 200}
 
-    opts = %{node: target, vhost: @vhost, timeout: :infinity}
-
-    assert @command.run([], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: @default_vhost

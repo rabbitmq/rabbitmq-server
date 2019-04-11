@@ -49,8 +49,8 @@ defmodule AddVhostCommandTest do
   end
 
   test "run: attempt to use an unreachable node returns a nodedown" do
-    opts = %{node: :jake@thedog, timeout: 3000}
-    assert @command.run(["na"], opts) == {:badrpc, :nodedown}
+    opts = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run(["na"], opts))
   end
 
   test "run: adding the same host twice is idempotent", context do

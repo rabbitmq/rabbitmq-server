@@ -45,13 +45,10 @@ defmodule RestartVhostCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "run: request to a non-existent node returns nodedown", _context do
-    target = :jake@thedog
-
-    opts = %{node: target, vhost: @vhost, timeout: @timeout}
-    # We use "self" node as the target. It's enough to trigger the error.
+  test "run: request to a non-existent node returns a badrpc", _context do
+    opts = %{node: :jake@thedog, vhost: @vhost, timeout: @timeout}
     assert match?(
-      {:badrpc, :nodedown},
+      {:badrpc, _},
       @command.run([], opts))
   end
 

@@ -59,25 +59,21 @@ defmodule UpdateClusterNodesCommandTest do
     start_rabbitmq_app()
   end
 
-  test "run: request to an unreachable node returns nodedown", context do
-    target = :jake@thedog
-
+  test "run: request to an unreachable node returns a badrpc", context do
     opts = %{
-      node: target
+      node: :jake@thedog,
+      timeout: 200
     }
-    # We use "self" node as the target. It's enough to trigger the error.
     assert match?(
       {:badrpc, :nodedown},
       @command.run([context[:opts][:node]], opts))
   end
 
-  test "run: specifying an unreachable node as seed returns nodedown", context do
-    target = :jake@thedog
-
+  test "run: specifying an unreachable node as seed returns a badrpc", context do
     stop_rabbitmq_app()
     assert match?(
-      {:badrpc_multi, :nodedown, [_]},
-      @command.run([target], context[:opts]))
+      {:badrpc_multi, _, [_]},
+      @command.run([:jake@thedog], context[:opts]))
     start_rabbitmq_app()
   end
 

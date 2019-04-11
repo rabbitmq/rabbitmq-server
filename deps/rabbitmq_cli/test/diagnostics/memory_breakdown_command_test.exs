@@ -70,10 +70,8 @@ defmodule MemoryBreakdownCommandTest do
   end
 
   test "run: request to a non-existent RabbitMQ node returns a nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, timeout: 5000, unit: "gb"}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    opts = %{node: :jake@thedog, timeout: 200, unit: "gb"}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

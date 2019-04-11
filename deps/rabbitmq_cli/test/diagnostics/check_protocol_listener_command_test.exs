@@ -50,7 +50,7 @@ defmodule CheckProtocolListenerCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert @command.run(["stomp"], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["stomp"], Map.merge(context[:opts], %{node: :jake@thedog})))
   end
 
   test "run: when a listener for the protocol is active, returns a success", context do

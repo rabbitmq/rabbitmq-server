@@ -72,11 +72,10 @@ defmodule ClearPermissionsTest do
   end
 
   test "run: on an invalid node, return a badrpc message" do
-    bad_node = :jake@thedog
     arg = ["some_name"]
-    opts = %{node: bad_node, vhost: ""}
+    opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
 
-    assert @command.run(arg, opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(arg, opts))
   end
 
   @tag user: @user, vhost: @specific_vhost

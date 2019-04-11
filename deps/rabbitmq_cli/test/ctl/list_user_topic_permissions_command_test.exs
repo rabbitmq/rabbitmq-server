@@ -71,11 +71,9 @@ defmodule ListUserTopicPermissionsCommandTest do
 ## --------------------------------- Flags ------------------------------------
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target, timeout: :infinity}
-
-    assert @command.run(["guest"], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["guest"], opts))
   end
 
   @tag test_timeout: :infinity

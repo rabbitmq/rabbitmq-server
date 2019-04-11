@@ -103,10 +103,9 @@ defmodule ListVhostsCommandTest do
   end
 
   test "run: on a bad RabbitMQ node, return a badrpc" do
-    target = :jake@thedog
-    opts = %{node: target, timeout: :infinity}
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    assert @command.run(["name"], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["name"], opts))
   end
 
   @tag test_timeout: :infinity

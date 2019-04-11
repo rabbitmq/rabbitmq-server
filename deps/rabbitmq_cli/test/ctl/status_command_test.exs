@@ -38,11 +38,9 @@ defmodule StatusCommandTest do
     assert @command.run([], context[:opts])[:pid] != nil
   end
 
-  test "run: request to a non-existent node returns nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, timeout: 60_000}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+  test "run: request to a non-existent node returns a badrpc" do
+    opts = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

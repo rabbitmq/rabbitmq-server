@@ -81,27 +81,23 @@ defmodule JoinClusterCommandTest do
     @command.run([context[:opts][:node]], context[:opts]))
   end
 
-  test "run: request to a non-existent node returns nodedown", context do
-    target = :jake@thedog
-
+  test "run: request to a non-existent node returns a badrpc", context do
     opts = %{
-      node: target,
+      node: :jake@thedog,
       disc: true,
       ram: false,
+      timeout: 200
     }
-    # We use "self" node as the target. It's enough to trigger the error.
     assert match?(
-      {:badrpc, :nodedown},
+      {:badrpc, _},
       @command.run([context[:opts][:node]], opts))
   end
 
-  test "run: joining a non-existent node returns nodedown", context do
-    target = :jake@thedog
-
+  test "run: joining a non-existent node returns a badrpc", context do
     stop_rabbitmq_app()
     assert match?(
-      {:badrpc_multi, :nodedown, [_]},
-      @command.run([target], context[:opts]))
+      {:badrpc_multi, _, [_]},
+      @command.run([:jake@thedog], context[:opts]))
     start_rabbitmq_app()
   end
 

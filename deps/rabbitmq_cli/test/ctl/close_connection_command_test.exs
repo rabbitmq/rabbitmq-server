@@ -68,11 +68,9 @@ defmodule CloseConnectionCommandTest do
       @command.run(["<#{node()}.2.121.12>", "test"], %{node: @helpers.normalise_node(context[:node], :shortnames)}))
   end
 
-  test "run: a close_connection request on nonexistent RabbitMQ node returns nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run(["<rabbit@localhost.1.2.1>", "test"], opts))
+  test "run: a close_connection request on nonexistent RabbitMQ node returns a badrpc" do
+    opts = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run(["<rabbit@localhost.1.2.1>", "test"], opts))
   end
 
   test "banner", context do
