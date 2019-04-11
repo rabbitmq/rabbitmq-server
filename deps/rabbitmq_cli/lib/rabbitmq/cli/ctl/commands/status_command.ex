@@ -61,12 +61,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
       alarms: Keyword.get(result, :alarms),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
-      memory: Enum.into(Keyword.get(result, :memory), %{})
+      memory: Keyword.get(result, :memory) |> Keyword.update(:total, [], fn x -> Enum.into(x, %{}) end) |> Enum.into(%{})
     }
 
-    IO.inspect(m)
-
-    {:ok, result}
+    {:ok, m}
   end
   use RabbitMQ.CLI.DefaultOutput
 
