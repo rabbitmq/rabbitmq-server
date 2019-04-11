@@ -1380,8 +1380,8 @@ send_log_effect({CTag, CPid}, IdxMsgs) ->
      end}.
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
-    {log, RaftIdx,
-     fun({enqueue, _, _, Msg}) ->
+    {log, [RaftIdx],
+     fun([{enqueue, _, _, Msg}]) ->
              [{reply, From, {wrap_reply,
                              {dequeue, {MsgId, {Header, Msg}}, Ready}}}]
      end}.
