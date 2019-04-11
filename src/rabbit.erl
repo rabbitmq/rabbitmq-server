@@ -854,7 +854,7 @@ alarms() ->
                                            fun rabbit_alarm:get_alarms/0),
     N = node(),
     %% [{{resource_limit,memory,rabbit@mercurio},[]}]
-    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+    [{resource_limit, Limit, Node} || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
 
 listeners() ->
     Listeners = try
