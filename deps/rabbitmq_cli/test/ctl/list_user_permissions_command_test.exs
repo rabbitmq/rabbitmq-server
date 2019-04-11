@@ -74,7 +74,7 @@ defmodule ListUserPermissionsCommandTest do
 ## --------------------------------- Flags ------------------------------------
 
   test "run: unreachable RabbitMQ node returns a badrpc" do
-    assert @command.run(["guest"], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["guest"], %{node: :jake@thedog, timeout: 200}))
   end
 
   @tag test_timeout: 30000, username: "guest"

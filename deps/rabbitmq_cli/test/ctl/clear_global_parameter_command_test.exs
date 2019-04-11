@@ -59,10 +59,8 @@ defmodule ClearGlobalParameterCommandTest do
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
-    target = :jake@thedog
-
-    opts = %{node: target}
-    assert @command.run([@key], opts) == {:badrpc, :nodedown}
+    opts = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run([@key], opts))
   end
 
   @tag key: @key

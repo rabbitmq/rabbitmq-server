@@ -96,7 +96,7 @@ defmodule ForgetClusterNodeCommandTest do
       @command.validate_execution_environment(["other_node@localhost"], opts_without_mnesia))
   end
 
-  test "run: online request to a non-existent node returns nodedown", context do
+  test "run: online request to a non-existent node returns a badrpc", context do
     assert match?(
       {:badrpc, :nodedown},
       @command.run([context[:opts][:node]],

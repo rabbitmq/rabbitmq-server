@@ -44,13 +44,10 @@ defmodule EvalCommandTest do
     assert @command.validate(["foo bar", "foo"], %{}) == {:validation_failure, "syntax error before: bar"}
   end
 
-  test "run: request to a non-existent node returns nodedown", _context do
-    target = :jake@thedog
+  test "run: request to a non-existent node returns a badrpc", _context do
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target}
-
-
-    assert @command.run(["ok."], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["ok."], opts))
   end
 
   test "run: evaluates provided Erlang expression", context do

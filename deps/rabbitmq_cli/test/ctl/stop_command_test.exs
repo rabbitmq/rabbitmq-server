@@ -45,17 +45,13 @@ defmodule StopCommandTest do
 
   # NB: as this commands shuts down the Erlang vm it isn't really practical to test it here
 
-  test "run: request to a non-existent node with --idempotent=false returns nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, idempotent: false}
+  test "run: request to a non-existent node with --idempotent=false returns a badrpc" do
+    opts = %{node: :jake@thedog, idempotent: false, timeout: 200}
     assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "run: request to a non-existent node with --idempotent returns ok" do
-    target = :jake@thedog
-
-    opts = %{node: target, idempotent: true}
+    opts = %{node: :jake@thedog, idempotent: true, timeout: 200}
     assert match?({:ok, _}, @command.run([], opts))
   end
 

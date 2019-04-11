@@ -84,7 +84,8 @@ defmodule ClearOperatorPolicyCommandTest do
   end
 
   test "run: an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run([@key], %{node: :jake@thedog, vhost: @vhost, timeout: 200}))
+    opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
+    assert match?({:badrpc, _}, @command.run([@key], opts))
   end
 
 

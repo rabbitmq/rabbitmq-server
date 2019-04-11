@@ -42,8 +42,8 @@ defmodule AwaitOnlineNodesCommandTest do
   end
 
   test "run: a call to an unreachable RabbitMQ node returns a nodedown" do
-    opts   = %{node: :jake@thedog, timeout: 3000}
-    assert @command.run(["1"], opts) == {:badrpc, :nodedown}
+    opts   = %{node: :jake@thedog, timeout: 200}
+    assert match?({:badrpc, _}, @command.run(["1"], opts))
   end
 
   test "banner", context do

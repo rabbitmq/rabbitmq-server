@@ -33,7 +33,7 @@ defmodule PingCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 70000}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 200}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
@@ -52,10 +52,8 @@ defmodule PingCommandTest do
     assert @command.run([], context[:opts])
   end
 
-  test "run: request to a non-existent node returns nodedown" do
-    target = :jake@thedog
-
-    assert match?({:error, _}, @command.run([], %{node: target, timeout: 70000}))
+  test "run: request to a non-existent node returns a badrpc" do
+    assert match?({:error, _}, @command.run([], %{node: :jake@thedog, timeout: 200}))
   end
 
   test "banner", context do

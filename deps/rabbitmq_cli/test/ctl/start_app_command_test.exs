@@ -51,10 +51,8 @@ defmodule StartAppCommandTest do
     assert :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])
   end
 
-  test "run: request to a non-existent node returns nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target}
+  test "run: request to a non-existent node returns a badrpc" do
+    opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run([], opts))
   end
 

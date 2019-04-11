@@ -87,11 +87,9 @@ defmodule SetVhostLimitsCommandTest do
   end
 
   test "run: an unreachable node throws a badrpc" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, vhost: "/", timeout: 200}
 
-    opts = %{node: target, vhost: "/"}
-
-    assert @command.run([@definition], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([@definition], opts))
   end
 
   @tag vhost: "bad-vhost"

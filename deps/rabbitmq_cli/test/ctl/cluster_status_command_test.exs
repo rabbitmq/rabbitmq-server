@@ -41,12 +41,10 @@ defmodule ClusterStatusCommandTest do
     assert @command.run([], context[:opts])[:nodes] != nil
   end
 
-  test "run: status request on nonexistent RabbitMQ node returns nodedown" do
-    target = :jake@thedog
+  test "run: status request on nonexistent RabbitMQ node returns a badrpc" do
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target}
-
-    assert @command.run([], opts) != nil
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

@@ -51,8 +51,8 @@ defmodule ErlangVersionCommandTest do
   end
 
   @tag test_timeout: 3000
-  test "run: targeting an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, details: false, timeout: 200}))
+  test "run: targeting an unreachable node throws a badrpc", context do
+    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, details: false})))
   end
 
   test "run: returns Erlang/OTP version on the target node", context do

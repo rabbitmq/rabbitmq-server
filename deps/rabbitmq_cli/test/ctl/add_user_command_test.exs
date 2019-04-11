@@ -48,10 +48,8 @@ defmodule AddUserCommandTest do
   end
 
   @tag user: "someone", password: "password"
-  test "run: request to a non-existent node returns nodedown", context do
-    target = :jake@thedog
-
-    opts = %{node: target}
+  test "run: request to a non-existent node returns a badrpc", context do
+    opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run([context[:user], context[:password]], opts))
   end
 

@@ -45,8 +45,8 @@ defmodule CheckPortConnectivityCommandTest do
   end
 
   @tag test_timeout: 3000
-  test "run: targeting an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, timeout: 200}))
+  test "run: targeting an unreachable node throws a badrpc", context do
+    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
   end
 
   test "run: tries to connect to every inferred active listener", context do

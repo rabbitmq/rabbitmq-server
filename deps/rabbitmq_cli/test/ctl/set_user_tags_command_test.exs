@@ -49,11 +49,9 @@ defmodule SetUserTagsCommandTest do
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target}
-
-    assert @command.run([@user, :imperator], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([@user, :imperator], opts))
   end
 
   @tag user: @user, tags: [:imperator]

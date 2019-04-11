@@ -49,11 +49,9 @@ defmodule DeleteUserCommandTest do
   end
 
   test "run: An invalid Rabbit node returns a bad rpc message" do
-    target = :jake@thedog
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    opts = %{node: target}
-
-    assert @command.run(["username"], opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(["username"], opts))
   end
 
   @tag user: @user

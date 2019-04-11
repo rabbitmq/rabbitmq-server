@@ -61,9 +61,7 @@ defmodule CancelSyncQueueCommandTest do
   end
 
   test "run: request to a non-existent RabbitMQ node returns a nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target, vhost: @vhost}
+    opts = %{node: :jake@thedog, vhost: @vhost, timeout: 200}
     assert match?({:badrpc, _}, @command.run(["q1"], opts))
   end
 

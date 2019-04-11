@@ -74,13 +74,8 @@ defmodule ChangeClusterNodeTypeCommandTest do
     @command.run(["ram"], context[:opts]))
   end
 
-  test "run: request to an unreachable node returns nodedown", _context do
-    target = :jake@thedog
-
-    opts = %{
-      node: target
-    }
-    # We use "self" node as the target. It's enough to trigger the error.
+  test "run: request to an unreachable node returns a badrpc", _context do
+    opts = %{node: :jake@thedog, timeout: 200}
     assert match?(
       {:badrpc, :nodedown},
       @command.run(["ram"], opts))
