@@ -16,6 +16,7 @@
 defmodule AlarmsCommandTest do
   use ExUnit.Case
   import TestHelper
+  import RabbitMQ.CLI.Core.Alarms, only: [alarm_types: 1]
 
   @command RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand
 
@@ -52,7 +53,7 @@ defmodule AlarmsCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
   end
 
   test "run: when target node has no alarms in effect, returns an empty list", context do
@@ -69,7 +70,7 @@ defmodule AlarmsCommandTest do
     # 2000 bytes will trigger an alarm
     set_vm_memory_high_watermark({:absolute, 2000})
 
-    assert [:memory] == status()[:alarms]
+    assert [:memory] == alarm_types(status()[:alarms])
     assert length(@command.run([], context[:opts])) == 1
 
     set_vm_memory_high_watermark(old_watermark)
