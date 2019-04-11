@@ -993,8 +993,9 @@ boot_delegate() ->
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
 recover() ->
-    rabbit_policy:recover(),
-    rabbit_vhost:recover().
+    ok = rabbit_policy:recover(),
+    ok = rabbit_vhost:recover(),
+    ok = lager_exchange_backend:maybe_init_exchange().
 
 maybe_insert_default_data() ->
     case rabbit_table:needs_default_data() of
@@ -1018,6 +1019,7 @@ insert_default_data() ->
     DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
 
     ok = rabbit_vhost:add(DefaultVHostBin, ?INTERNAL_USER),
+    ok = lager_exchange_backend:maybe_init_exchange(),
     ok = rabbit_auth_backend_internal:add_user(
         DefaultUserBin,
         DefaultPassBin,
