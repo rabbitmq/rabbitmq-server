@@ -1371,17 +1371,20 @@ send_msg_effect({CTag, CPid}, Msgs) ->
 
 send_log_effect({CTag, CPid}, IdxMsgs) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
-    {log, RaftIdxs, fun(Log) ->
-                            Msgs = lists:zipwith(fun({enqueue, _, _, Msg}, {MsgId, Header}) ->
-                                                         {MsgId, {Header, Msg}}
-                                                 end, Log, Data),
-                            {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}
-                    end}.
+    {log, RaftIdxs,
+     fun(Log) ->
+             Msgs = lists:zipwith(fun({enqueue, _, _, Msg}, {MsgId, Header}) ->
+                                          {MsgId, {Header, Msg}}
+                                  end, Log, Data),
+             [{send_msg, CPid, {delivery, CTag, Msgs}, ra_event}]
+     end}.
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
-    {log, RaftIdx, fun({enqueue, _, _, Msg}) ->
-                           {reply, From, {wrap_reply, {dequeue, {MsgId, {Header, Msg}}, Ready}}}
-                   end}.
+    {log, RaftIdx,
+     fun({enqueue, _, _, Msg}) ->
+             [{reply, From, {wrap_reply,
+                             {dequeue, {MsgId, {Header, Msg}}, Ready}}}]
+     end}.
 
 checkout_one(#?MODULE{service_queue = SQ0,
                       messages = Messages0,
