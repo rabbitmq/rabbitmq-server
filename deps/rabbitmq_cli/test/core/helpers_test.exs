@@ -15,7 +15,7 @@
 
 defmodule HelpersTest do
   alias RabbitMQ.CLI.Core.{Config, Helpers}
-  import RabbitMQ.CLI.Core.CodePath
+  import RabbitMQ.CLI.Core.{CodePath, Memory}
 
   use ExUnit.Case, async: false
   import TestHelper
@@ -29,28 +29,28 @@ defmodule HelpersTest do
   ## ------------------- memory_unit* tests --------------------
 
   test "an invalid memory unit fails " do
-    assert Helpers.memory_unit_absolute(10, "gigantibytes") == {:bad_argument, ["gigantibytes"]}
+    assert memory_unit_absolute(10, "gigantibytes") == {:bad_argument, ["gigantibytes"]}
   end
 
   test "an invalid number fails " do
-    assert Helpers.memory_unit_absolute("lots", "gigantibytes") == {:bad_argument, ["lots", "gigantibytes"]}
-    assert Helpers.memory_unit_absolute(-1, "gigantibytes") == {:bad_argument, [-1, "gigantibytes"]}
+    assert memory_unit_absolute("lots", "gigantibytes") == {:bad_argument, ["lots", "gigantibytes"]}
+    assert memory_unit_absolute(-1, "gigantibytes") == {:bad_argument, [-1, "gigantibytes"]}
   end
 
   test "valid number and unit returns a valid result  " do
-      assert Helpers.memory_unit_absolute(10, "k") == 10240
-      assert Helpers.memory_unit_absolute(10, "kiB") == 10240
-      assert Helpers.memory_unit_absolute(10, "M") == 10485760
-      assert Helpers.memory_unit_absolute(10, "MiB") == 10485760
-      assert Helpers.memory_unit_absolute(10, "G") == 10737418240
-      assert Helpers.memory_unit_absolute(10, "GiB")== 10737418240
-      assert Helpers.memory_unit_absolute(10, "kB")== 10000
-      assert Helpers.memory_unit_absolute(10, "MB")== 10000000
-      assert Helpers.memory_unit_absolute(10, "GB")== 10000000000
-      assert Helpers.memory_unit_absolute(10, "")  == 10
+      assert memory_unit_absolute(10, "k") == 10240
+      assert memory_unit_absolute(10, "kiB") == 10240
+      assert memory_unit_absolute(10, "M") == 10485760
+      assert memory_unit_absolute(10, "MiB") == 10485760
+      assert memory_unit_absolute(10, "G") == 10737418240
+      assert memory_unit_absolute(10, "GiB")== 10737418240
+      assert memory_unit_absolute(10, "kB")== 10000
+      assert memory_unit_absolute(10, "MB")== 10000000
+      assert memory_unit_absolute(10, "GB")== 10000000000
+      assert memory_unit_absolute(10, "")  == 10
   end
 
-  ## ------------------- normalise_node_option tests --------------------
+  ## ------------------- Helpers.normalise_node_option tests --------------------
 
   test "longnames: 'rabbit' as node name, correct domain is used" do
     default_name = Config.get_option(:node)
