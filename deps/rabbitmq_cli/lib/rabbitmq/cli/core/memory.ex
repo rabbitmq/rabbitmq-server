@@ -35,4 +35,37 @@ defmodule RabbitMQ.CLI.Core.Memory do
   def memory_unit_absolute(num, unit), do: {:bad_argument, [num, unit]}
 
   def power_as_int(num, x, y), do: round(num * :math.pow(x, y))
+
+  def compute_relative_values(all_pairs) do
+    num_pairs = Keyword.delete(all_pairs, :strategy)
+    # Includes RSS, allocated and runtime-used ("erlang") values.
+    # See https://github.com/rabbitmq/rabbitmq-server/pull/1404.
+    totals = Keyword.get(num_pairs, :total)
+    pairs = Keyword.delete(num_pairs, :total)
+    # Should not be necessary but be more defensive.
+    total =
+      max_of(totals) ||
+        Keyword.get(totals, :rss) ||
+        Keyword.get(totals, :allocated) ||
+        Keyword.get(totals, :erlang)
+
+    pairs
+    |> Enum.map(fn {k, v} ->
+      pg = (v / total) |> fraction_to_percent()
+      {k, %{bytes: v, percentage: pg}}
+    end)
+    |> Enum.sort_by(fn {_key, %{bytes: bytes}} -> bytes end, &>=/2)
+  end
+
+  #
+  # Implementation
+  #
+
+  defp fraction_to_percent(x) do
+    Float.round(x * 100, 2)
+  end
+
+  defp max_of(m) do
+    Keyword.values(m) |> Enum.max()
+  end
 end
