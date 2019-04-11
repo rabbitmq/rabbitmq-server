@@ -76,11 +76,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "Memory high watermark: #{m[:vm_memory_high_watermark]}, limit in bytes: #{m[:vm_memory_limit]}"
     ]
     disk_space_section = [
-
+      "\n#{bright("Free Disk Space")}\n",
+      "Low free disk space watermark: #{m[:disk_free_limit]}",
+      # TODO: format
+      "Free disk space: #{m[:disk_free]}"
     ]
     listeners_section = [
-
-    ]
+      "\n#{bright("Listeners")}\n",
+    ] ++ case m[:listeners] do
+           [] -> ["(none)"]
+           xs -> listener_lines(xs)
+         end
     lines = process_section ++ runtime_section ++
             alarms_section ++ memory_section ++ disk_space_section ++
             listeners_section
