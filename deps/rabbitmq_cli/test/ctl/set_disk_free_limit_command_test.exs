@@ -103,12 +103,12 @@ defmodule SetDiskFreeLimitCommandTest do
 
 ## ------------------------ run absolute command -------------------------------------------
 
+  @tag test_timeout: 3000
   test "run: an invalid node returns a bad rpc" do
-    node_name = :jake@thedog
     args = [@default_limit]
-    opts = %{node: node_name}
+    opts = %{node: :jake@thedog}
 
-    assert @command.run(args, opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(args, opts))
   end
 
   @tag limit: 2097152

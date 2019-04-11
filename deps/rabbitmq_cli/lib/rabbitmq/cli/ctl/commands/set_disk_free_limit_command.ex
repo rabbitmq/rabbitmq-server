@@ -14,7 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.DocGuide
+  import RabbitMQ.CLI.Core.Memory
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -38,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
         :ok
 
       {limit_val, units} ->
-        case Helpers.memory_unit_absolute(limit_val, units) do
+        case memory_unit_absolute(limit_val, units) do
           scaled_limit when is_integer(scaled_limit) -> :ok
           _ -> {:validation_failure, :bad_argument}
         end
@@ -136,7 +137,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   end
 
   defp set_disk_free_limit_in_units([limit_val, units], opts) do
-    case Helpers.memory_unit_absolute(limit_val, units) do
+    case memory_unit_absolute(limit_val, units) do
       scaled_limit when is_integer(scaled_limit) ->
         set_disk_free_limit_absolute([scaled_limit], opts)
     end

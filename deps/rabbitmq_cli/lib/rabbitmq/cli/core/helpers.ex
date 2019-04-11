@@ -42,28 +42,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
-  def memory_units do
-    ["k", "kiB", "M", "MiB", "G", "GiB", "kB", "MB", "GB", ""]
-  end
-
-  def memory_unit_absolute(num, unit) when is_number(num) and num < 0,
-    do: {:bad_argument, [num, unit]}
-
-  def memory_unit_absolute(num, "k") when is_number(num), do: power_as_int(num, 2, 10)
-  def memory_unit_absolute(num, "kiB") when is_number(num), do: power_as_int(num, 2, 10)
-  def memory_unit_absolute(num, "M") when is_number(num), do: power_as_int(num, 2, 20)
-  def memory_unit_absolute(num, "MiB") when is_number(num), do: power_as_int(num, 2, 20)
-  def memory_unit_absolute(num, "G") when is_number(num), do: power_as_int(num, 2, 30)
-  def memory_unit_absolute(num, "GiB") when is_number(num), do: power_as_int(num, 2, 30)
-  def memory_unit_absolute(num, "kB") when is_number(num), do: power_as_int(num, 10, 3)
-  def memory_unit_absolute(num, "MB") when is_number(num), do: power_as_int(num, 10, 6)
-  def memory_unit_absolute(num, "GB") when is_number(num), do: power_as_int(num, 10, 9)
-  def memory_unit_absolute(num, "") when is_number(num), do: num
-  def memory_unit_absolute(num, unit) when is_number(num), do: {:bad_argument, [unit]}
-  def memory_unit_absolute(num, unit), do: {:bad_argument, [num, unit]}
-
-  def power_as_int(num, x, y), do: round(num * :math.pow(x, y))
-
   def nodes_in_cluster(node, timeout \\ :infinity) do
     with_nodes_in_cluster(node, fn nodes -> nodes end, timeout)
   end

@@ -14,7 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.DocGuide
+  import RabbitMQ.CLI.Core.Memory
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -38,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
         {:validation_failure, :bad_argument}
 
       {_, rest} ->
-        case Enum.member?(Helpers.memory_units(), rest) do
+        case Enum.member?(memory_units(), rest) do
           true ->
             :ok
 
@@ -84,7 +85,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   def run(["absolute", arg], opts) do
     case Integer.parse(arg) do
       {num, rest} ->
-        valid_units = rest in Helpers.memory_units()
+        valid_units = rest in memory_units()
         set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
     end
   end
@@ -142,7 +143,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name})
        when num > 0 do
-    val = Helpers.memory_unit_absolute(num, rest)
+    val = memory_unit_absolute(num, rest)
 
     :rabbit_misc.rpc_call(
       node_name,

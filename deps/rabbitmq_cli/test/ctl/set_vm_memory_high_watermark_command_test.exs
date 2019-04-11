@@ -16,8 +16,7 @@
 defmodule SetVmMemoryHighWatermarkCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-
-  alias RabbitMQ.CLI.Core.Helpers
+  import RabbitMQ.CLI.Core.{Alarms, Memory}
 
   @command RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand
 
@@ -73,12 +72,12 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     assert @command.validate(["1.1"], context[:opts]) == {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
   end
 
+  @tag test_timeout: 3000
   test "run: on an invalid node, return a bad rpc" do
-    node_name = :jake@thedog
     args = [0.7]
-    opts = %{node: node_name}
+    opts = %{node: :jake@thedog, timeout: 200}
 
-    assert @command.run(args, opts) == {:badrpc, :nodedown}
+    assert match?({:badrpc, _}, @command.run(args, opts))
   end
 
 ## ---------------------------- Absolute tests --------------------------------
@@ -97,7 +96,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
   test "run: a single absolute integer return ok", context do
     assert @command.run(["absolute","10"], context[:opts]) == :ok
-    assert status()[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
+    assert status()[:vm_memory_high_watermark] == {:absolute, memory_unit_absolute(10, "")}
   end
 
   test "validate: a single absolute integer with an invalid memory unit fails ", context do
@@ -121,11 +120,11 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
 
   test "run: a single absolute integer with memory units return ok", context do
-    Helpers.memory_units
+    memory_units()
     |> Enum.each(fn mu ->
       arg = "10#{mu}"
       assert @command.run(["absolute",arg], context[:opts]) == :ok
-      assert status()[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, mu)}
+      assert status()[:vm_memory_high_watermark] == {:absolute, memory_unit_absolute(10, mu)}
     end)
   end
 
@@ -141,7 +140,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     ## this will trigger an alarm
     @command.run(["absolute", "2000"], context[:opts])
 
-    assert [:memory] == status()[:alarms]
+    assert [:memory] == alarm_types(status()[:alarms])
   end
 
   test "banner: absolute memory request prints info message", context do

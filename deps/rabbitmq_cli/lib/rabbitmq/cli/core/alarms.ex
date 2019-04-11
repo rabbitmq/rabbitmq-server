@@ -55,4 +55,18 @@ defmodule RabbitMQ.CLI.Core.Alarms do
       a_node != node_name
     end)
   end
+
+  def alarm_types(xs) do
+    Enum.map(xs, &alarm_type/1)
+  end
+
+  def alarm_type(val) when is_atom(val) do
+    val
+  end
+  def alarm_type({:resource_limit, val, _node}) do
+    val
+  end
+  def alarm_type({{:resource_limit, val, _node}, []}) do
+    val
+  end
 end
