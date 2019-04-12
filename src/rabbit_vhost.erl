@@ -21,7 +21,7 @@
 %%----------------------------------------------------------------------------
 
 -export([recover/0, recover/1]).
--export([add/2, delete/2, exists/1, list/0, with/2, with_user_and_vhost/3, assert/1, update/2,
+-export([add/2, delete/2, exists/1, list/0, count/0, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, limits_of/1, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
@@ -240,6 +240,10 @@ exists(VHostPath) ->
 
 list() ->
     mnesia:dirty_all_keys(rabbit_vhost).
+
+-spec count() -> non_neg_integer().
+count() ->
+    length(list()).
 
 -spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 
