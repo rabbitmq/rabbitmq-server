@@ -15,6 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.InformationUnit, as: IU
   import RabbitMQ.CLI.Core.{Alarms, Listeners, Memory, Platform}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -22,6 +23,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   @default_timeout 60_000
 
   def scopes(), do: [:ctl, :diagnostics]
+
+  def switches(), do: [unit: :string, timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
     timeout =
@@ -31,10 +35,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         other -> other
       end
 
-    {args, Map.merge(opts, %{timeout: timeout})}
+    {args, Map.merge(%{unit: "gb", timeout: timeout}, opts)}
   end
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
-  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
+
+  def validate(args, _) when length(args) > 0 do
+    {:validation_failure, :too_many_args}
+  end
+  def validate(_, %{unit: unit}) do
+    case IU.known_unit?(unit) do
+      true ->
+        :ok
+
+      false ->
+        {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
+    end
+  end
+  def validate(_, _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :status, [], timeout)
@@ -49,7 +65,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
     {:ok, m}
   end
-  def output(result, %{node: node_name}) when is_list(result) do
+  def output(result, %{node: node_name, unit: unit}) when is_list(result) do
     m = result_map(result)
 
     runtime_section = [
@@ -90,8 +106,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     memory_section = [
       "\n#{bright("Memory")}\n",
       "Calculation strategy: #{m[:vm_memory_calculation_strategy]}",
-      "Memory high watermark: #{m[:vm_memory_high_watermark]}, limit in bytes: #{m[:vm_memory_limit]}"
-    ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{val[:bytes]} bytes (#{val[:percentage]} %)" end)
+      "Memory high watermark: #{m[:vm_memory_high_watermark]}, limit: #{IU.convert(m[:vm_memory_limit], unit)} #{unit}"
+    ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)" end)
 
     file_descriptors = [
       "\n#{bright("File Descriptors")}\n",
@@ -101,9 +117,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
     disk_space_section = [
       "\n#{bright("Free Disk Space")}\n",
-      "Low free disk space watermark: #{m[:disk_free_limit]}",
-      # TODO: format
-      "Free disk space: #{m[:disk_free]}"
+      "Low free disk space watermark: #{IU.convert(m[:disk_free_limit], unit)} #{unit}",
+      "Free disk space: #{IU.convert(m[:disk_free], unit)} #{unit}"
     ]
 
     totals_section = [
@@ -129,7 +144,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 
-  def usage, do: "status"
+  def usage, do: "status [--unit <unit>]"
+
+  def usage_additional() do
+    [
+      ["--unit <bytes | mb | gb>", "byte multiple (bytes, megabytes, gigabytes) to use"],
+      ["--formatter <json>", "alternative formatter (JSON)"]
+    ]
+  end
 
   def usage_doc_guides() do
     [
@@ -139,7 +161,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Displays broker status information"
+  def description(), do: "Displays status of a node"
 
   def banner(_, %{node: node_name}), do: "Status of node #{node_name} ..."
 
