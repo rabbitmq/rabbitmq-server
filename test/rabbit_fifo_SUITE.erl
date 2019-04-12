@@ -1256,7 +1256,8 @@ purge_nodes_test(_) ->
     ok.
 
 meta(Idx) ->
-    #{index => Idx, term => 1}.
+    #{index => Idx, term => 1,
+      from => {make_ref(), self()}}.
 
 enq(Idx, MsgSeq, Msg, State) ->
     strip_reply(
