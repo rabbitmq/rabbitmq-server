@@ -52,20 +52,33 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def output(result, %{node: node_name}) when is_list(result) do
     m = result_map(result)
 
-    process_section = [
-      "#{bright("OS Process")}\n",
-      "PID: #{m[:pid]}",
+    runtime_section = [
+      "#{bright("Runtime")}\n",
+      "OS PID: #{m[:pid]}",
       "OS: #{m[:os]}",
       # TODO: format
-      "Uptime (seconds): #{m[:uptime]}"
+      "Uptime (seconds): #{m[:uptime]}",
+      "Node name: #{node_name}",
+      "Erlang configuration: #{m[:erlang_version]}",
+      "Erlang processes: #{m[:processes][:used]} used, #{m[:processes][:limit]} limit",
+      "Scheduler run queue: #{m[:run_queue]}",
+      "Cluster heartbeat timeout (net_ticktime): #{m[:net_ticktime]}"
     ]
-    runtime_section = [
-      "\n#{bright("Runtime")}\n",
-      "Erlang info line: #{m[:erlang_version]}",
-      "Erlang processes used: #{m[:processes][:used]}, limit: #{m[:processes][:limit]}",
-      "Run queue: #{m[:run_queue]}",
-      "Net tick timeout: #{m[:net_ticktime]}"
-    ]
+
+    plugin_section = [
+      "\n#{bright("Plugins")}\n",
+      "Enabled plugin file: #{m[:enabled_plugin_file]}",
+      "Enabled plugins:\n"
+    ] ++ Enum.map(m[:active_plugins], fn pl -> " * #{pl}" end)
+
+    config_section = [
+      "\n#{bright("Config files")}\n"
+    ] ++ Enum.map(m[:config_files], fn path -> " * #{path}" end)
+
+    log_section = [
+      "\n#{bright("Log file(s)")}\n"
+    ] ++ Enum.map(m[:log_files], fn path -> " * #{path}" end)
+
     alarms_section = [
       "\n#{bright("Alarms")}\n",
     ] ++ case m[:alarms] do
@@ -98,7 +111,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
            [] -> ["(none)"]
            xs -> listener_lines(xs)
          end
-    lines = process_section ++ runtime_section ++
+    lines = runtime_section ++ plugin_section ++ config_section ++ log_section ++
             alarms_section ++ memory_section ++ file_descriptors ++
             disk_space_section ++ listeners_section
 
@@ -143,7 +156,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
       alarms: Keyword.get(result, :alarms),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
-      memory: Keyword.get(result, :memory) |> Enum.into(%{})
+      memory: Keyword.get(result, :memory) |> Enum.into(%{}),
+
+      config_files: Keyword.get(result, :config_files) |> Enum.map(&to_string/1),
+      log_files: Keyword.get(result, :log_files) |> Enum.map(&to_string/1),
+
+      active_plugins: Keyword.get(result, :active_plugins) |> Enum.map(&to_string/1),
+      enabled_plugin_file: Keyword.get(result, :enabled_plugin_file) |> to_string
     }
   end
 
