@@ -847,7 +847,11 @@ status() ->
                                  T div 1000
                              end},
           {kernel,           {net_ticktime, net_kernel:get_net_ticktime()}}],
-    S1 ++ S2 ++ S3 ++ S4.
+    S5 = [{active_plugins, rabbit_plugins:active()},
+          {enabled_plugin_file, rabbit_plugins:enabled_plugins_file()}],
+    S6 = [{config_files, config_files()},
+           {log_files, log_locations()}],
+    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
