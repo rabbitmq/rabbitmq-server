@@ -105,6 +105,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       # TODO: format
       "Free disk space: #{m[:disk_free]}"
     ]
+
+    totals_section = [
+      "\n#{bright("Totals")}\n",
+      "Connection count: #{m[:totals][:connection_count]}",
+      "Queue count: #{m[:totals][:queue_count]}",
+      "Virtual host count: #{m[:totals][:virtual_host_count]}"
+    ]
+
     listeners_section = [
       "\n#{bright("Listeners")}\n",
     ] ++ case m[:listeners] do
@@ -113,7 +121,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
          end
     lines = runtime_section ++ plugin_section ++ config_section ++ log_section ++
             alarms_section ++ memory_section ++ file_descriptors ++
-            disk_space_section ++ listeners_section
+            disk_space_section ++ totals_section ++ listeners_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -162,7 +170,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       log_files: Keyword.get(result, :log_files) |> Enum.map(&to_string/1),
 
       active_plugins: Keyword.get(result, :active_plugins) |> Enum.map(&to_string/1),
-      enabled_plugin_file: Keyword.get(result, :enabled_plugin_file) |> to_string
+      enabled_plugin_file: Keyword.get(result, :enabled_plugin_file) |> to_string,
+
+      totals: Keyword.get(result, :totals)
     }
   end
 
