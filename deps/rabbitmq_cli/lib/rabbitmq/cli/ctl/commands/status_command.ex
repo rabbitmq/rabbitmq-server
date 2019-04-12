@@ -45,7 +45,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
      "Error: timed out while waiting for a response from #{node_name}."}
   end
   def output(result, %{formatter: "json"}) when is_list(result) do
-    {:ok, result_map(result)}
+    m = result_map(result) |> Map.update(:alarms, [], fn xs -> alarm_maps(xs) end)
+
+    {:ok, m}
   end
   def output(result, %{node: node_name}) when is_list(result) do
     m = result_map(result)

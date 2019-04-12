@@ -69,4 +69,29 @@ defmodule RabbitMQ.CLI.Core.Alarms do
   def alarm_type({{:resource_limit, val, _node}, []}) do
     val
   end
+
+  def alarm_maps(xs) do
+    Enum.map(xs, &alarm_map/1)
+  end
+  def alarm_map(:file_descriptor_limit) do
+    %{
+      type: :resource_limit,
+      resource: :file_descriptors,
+      node: node()
+    }
+  end
+  def alarm_map({{:resource_limit, kind, node}, _}) do
+    %{
+      type: :resource_limit,
+      resource: kind,
+      node: node
+    }
+  end
+  def alarm_map({:resource_limit, kind, node}) do
+    %{
+      type: :resource_limit,
+      resource: kind,
+      node: node
+    }
+  end
 end
