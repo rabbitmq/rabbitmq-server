@@ -851,7 +851,12 @@ status() ->
           {enabled_plugin_file, rabbit_plugins:enabled_plugins_file()}],
     S6 = [{config_files, config_files()},
            {log_files, log_locations()}],
-    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6.
+    S7 = [{totals, [
+            {virtual_host_count, rabbit_vhost:count()},
+            {connection_count, length(rabbit_networking:connections_local())},
+            {queue_count, total_queue_count()}
+          ]}],
+    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
@@ -867,6 +872,12 @@ listeners() ->
                     exit:{aborted, _} -> []
                 end,
     [L || L = #listener{node = Node} <- Listeners, Node =:= node()].
+
+total_queue_count() ->
+    lists:foldl(fun (VirtualHost, Acc) ->
+                  Acc + rabbit_amqqueue:count(VirtualHost)
+                end,
+                0, rabbit_vhost:list()).
 
 %% TODO this only determines if the rabbit application has started,
 %% not if it is running, never mind plugins. It would be nice to have
