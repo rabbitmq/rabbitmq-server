@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Core.Platform do
     "Linux"
   end
   def os_name({:unix, :darwin}) do
-    "MacOS"
+    "macOS"
   end
   def os_name({:unix, :freebsd}) do
     "FreeBSD"
