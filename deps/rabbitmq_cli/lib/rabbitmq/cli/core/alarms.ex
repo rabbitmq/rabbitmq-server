@@ -80,17 +80,17 @@ defmodule RabbitMQ.CLI.Core.Alarms do
       node: node()
     }
   end
-  def alarm_map({{:resource_limit, kind, node}, _}) do
+  def alarm_map({{:resource_limit, resource, node}, _}) do
     %{
       type: :resource_limit,
-      resource: kind,
+      resource: resource,
       node: node
     }
   end
-  def alarm_map({:resource_limit, kind, node}) do
+  def alarm_map({:resource_limit, resource, node}) do
     %{
       type: :resource_limit,
-      resource: kind,
+      resource: resource,
       node: node
     }
   end
