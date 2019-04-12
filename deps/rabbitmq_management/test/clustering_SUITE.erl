@@ -732,11 +732,11 @@ disable_plugin(Config) ->
     Node = get_node_config(Config, 0, nodename),
     Status0 = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit, status, []),
     Listeners0 = proplists:get_value(listeners, Status0),
-    ?assert(lists:keymember(http, 1, Listeners0)),
+    ?assert(lists:member(http, listener_protos(Listeners0))),
     rabbit_ct_broker_helpers:disable_plugin(Config, Node, 'rabbitmq_web_dispatch'),
     Status = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit, status, []),
     Listeners = proplists:get_value(listeners, Status),
-    ?assert(not lists:keymember(http, 1, Listeners)),
+    ?assert(not lists:member(http, listener_protos(Listeners))),
     rabbit_ct_broker_helpers:enable_plugin(Config, Node, 'rabbitmq_management').
 
 %%----------------------------------------------------------------------------
@@ -867,3 +867,14 @@ send_to_all_collectors(Msg) ->
           [{rabbit_mgmt_metrics_collector:name(Table), N} ! Msg
            || {Table, _} <- ?CORE_TABLES]
      end || N <- [node() | nodes()]].
+
+listener_protos(Listeners) ->
+  [listener_proto(L) || L <- Listeners].
+
+listener_proto(#listener{protocol = Proto}) ->
+  Proto;
+listener_proto(Proto) when is_atom(Proto) ->
+  Proto;
+%% rabbit:status/0 used this formatting before rabbitmq/rabbitmq-cli#340
+listener_proto({Proto, _Port, _Interface}) ->
+  Proto.
