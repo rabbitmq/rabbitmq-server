@@ -817,10 +817,12 @@ maybe_print_boot_progress(true, IterationsLeft) ->
                {memory, any()}].
 
 status() ->
+    {ok, Version} = application:get_key(rabbit, vsn),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
+          {rabbitmq_version,     Version},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
