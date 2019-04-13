@@ -74,6 +74,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "OS: #{m[:os]}",
       # TODO: format
       "Uptime (seconds): #{m[:uptime]}",
+      "RabbitMQ version: #{m[:rabbitmq_version]}",
       "Node name: #{node_name}",
       "Erlang configuration: #{m[:erlang_version]}",
       "Erlang processes: #{m[:processes][:used]} used, #{m[:processes][:limit]} limit",
@@ -178,6 +179,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     %{
       os: os_name(Keyword.get(result, :os)),
       pid: Keyword.get(result, :pid),
+      rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
       erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
       uptime: Keyword.get(result, :uptime),
       processes: Enum.into(Keyword.get(result, :processes), %{}),
