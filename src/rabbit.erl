@@ -850,7 +850,8 @@ status() ->
     S5 = [{active_plugins, rabbit_plugins:active()},
           {enabled_plugin_file, rabbit_plugins:enabled_plugins_file()}],
     S6 = [{config_files, config_files()},
-           {log_files, log_locations()}],
+           {log_files, log_locations()},
+           {data_directory, rabbit_mnesia:dir()}],
     S7 = [{totals, [
             {virtual_host_count, rabbit_vhost:count()},
             {connection_count, length(rabbit_networking:connections_local())},
