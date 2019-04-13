@@ -87,6 +87,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "Enabled plugins:\n"
     ] ++ Enum.map(m[:active_plugins], fn pl -> " * #{pl}" end)
 
+    data_directory_section = [
+      "\n#{bright("Data directory")}\n",
+      "Node data directory: #{m[:data_directory]}"
+    ]
+
     config_section = [
       "\n#{bright("Config files")}\n"
     ] ++ Enum.map(m[:config_files], fn path -> " * #{path}" end)
@@ -134,9 +139,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
            [] -> ["(none)"]
            xs -> listener_lines(xs)
          end
-    lines = runtime_section ++ plugin_section ++ config_section ++ log_section ++
-            alarms_section ++ memory_section ++ file_descriptors ++
-            disk_space_section ++ totals_section ++ listeners_section
+    lines = runtime_section ++ plugin_section ++ data_directory_section ++
+            config_section ++ log_section ++ alarms_section ++ memory_section ++
+            file_descriptors ++ disk_space_section ++ totals_section ++ listeners_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -188,6 +193,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),
 
+      data_directory: Keyword.get(result, :data_directory) |> to_string,
       config_files: Keyword.get(result, :config_files) |> Enum.map(&to_string/1),
       log_files: Keyword.get(result, :log_files) |> Enum.map(&to_string/1),
 
