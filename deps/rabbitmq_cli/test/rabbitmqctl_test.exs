@@ -92,7 +92,7 @@ defmodule RabbitMQCtlTest do
     end) =~ ~r/usage/i
   end
 
-  test "Short names without host connect properly" do
+  test "short node name without the host part connects properly" do
     command = ["status", "-n", "rabbit"]
     capture_io(:stderr, fn -> error_check(command, exit_ok()) end)
   end
