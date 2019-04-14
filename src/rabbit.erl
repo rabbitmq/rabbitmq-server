@@ -819,10 +819,12 @@ maybe_print_boot_progress(true, IterationsLeft) ->
                {memory, any()}].
 
 status() ->
+    {ok, Version} = application:get_key(rabbit, vsn),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
+          {rabbitmq_version,     Version},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
@@ -849,14 +851,24 @@ status() ->
                                  T div 1000
                              end},
           {kernel,           {net_ticktime, net_kernel:get_net_ticktime()}}],
-    S1 ++ S2 ++ S3 ++ S4.
+    S5 = [{active_plugins, rabbit_plugins:active()},
+          {enabled_plugin_file, rabbit_plugins:enabled_plugins_file()}],
+    S6 = [{config_files, config_files()},
+           {log_files, log_locations()},
+           {data_directory, rabbit_mnesia:dir()}],
+    S7 = [{totals, [
+            {virtual_host_count, rabbit_vhost:count()},
+            {connection_count, length(rabbit_networking:connections_local())},
+            {queue_count, total_queue_count()}
+          ]}],
+    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
                                            fun rabbit_alarm:get_alarms/0),
     N = node(),
     %% [{{resource_limit,memory,rabbit@mercurio},[]}]
-    [Limit || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+    [{resource_limit, Limit, Node} || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
 
 listeners() ->
     Listeners = try
@@ -864,11 +876,13 @@ listeners() ->
                 catch
                     exit:{aborted, _} -> []
                 end,
-    [{Protocol, Port, rabbit_misc:ntoa(IP)} ||
-        #listener{node       = Node,
-                  protocol   = Protocol,
-                  ip_address = IP,
-                  port       = Port} <- Listeners, Node =:= node()].
+    [L || L = #listener{node = Node} <- Listeners, Node =:= node()].
+
+total_queue_count() ->
+    lists:foldl(fun (VirtualHost, Acc) ->
+                  Acc + rabbit_amqqueue:count(VirtualHost)
+                end,
+                0, rabbit_vhost:list()).
 
 %% TODO this only determines if the rabbit application has started,
 %% not if it is running, never mind plugins. It would be nice to have
