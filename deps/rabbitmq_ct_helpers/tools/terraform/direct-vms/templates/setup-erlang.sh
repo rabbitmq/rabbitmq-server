@@ -210,13 +210,13 @@ install_kiex() {
 
 kiex_install_elixir() {
   export PATH=/usr/local/kiex/bin:$PATH
-  elixir_version=$(kiex list releases | tail -n 1 | awk '{print $1}')
-  kiex install $elixir_version
+  latest_elixir_version=$(kiex list releases | tail -n 1 | awk '{print $1}')
+  kiex install $latest_elixir_version
 
-  . /usr/local/kiex/elixirs/elixir-$elixir_version.env
+  . /usr/local/kiex/elixirs/elixir-$latest_elixir_version.env
   cat >> /etc/profile.d/erlang.sh <<EOF
 
-. /usr/local/kiex/elixirs/elixir-$elixir_version.env
+. /usr/local/kiex/elixirs/elixir-$latest_elixir_version.env
 EOF
 }
 
