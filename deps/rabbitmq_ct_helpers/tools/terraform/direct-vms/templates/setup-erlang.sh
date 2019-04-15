@@ -41,7 +41,7 @@ case "$erlang_version" in
     ;;
   21.*|20.*|19.3)
     readonly erlang_package_version="1:$erlang_version-1"
-    ;;  
+    ;;
   R16B03)
     readonly erlang_package_version='1:16.b.3-3'
     ;;
@@ -209,15 +209,29 @@ install_kiex() {
 }
 
 kiex_install_elixir() {
-  export PATH=/usr/local/kiex/bin:$PATH
-  latest_elixir_version=$(kiex list releases | tail -n 1 | awk '{print $1}')
-  kiex install $latest_elixir_version
+  case "$erlang_version" in
+    22.0)
+      url="https://github.com/elixir-lang/elixir/releases/download/v$elixir_version/Precompiled.zip"
+      wget -q -O/tmp/elixir.zip "$url"
 
-  . /usr/local/kiex/elixirs/elixir-$latest_elixir_version.env
-  cat >> /etc/profile.d/erlang.sh <<EOF
+      apt-get -qq install -y --no-install-recommends unzip
+
+      mkdir -p /usr/local/elixir
+      (cd /usr/local/elixir && unzip -q /tmp/elixir.zip)
+      export PATH=/usr/local/elixir/bin:$PATH
+      ;;
+    *)
+      export PATH=/usr/local/kiex/bin:$PATH
+      latest_elixir_version=$(kiex list releases | tail -n 1 | awk '{print $1}')
+      kiex install $latest_elixir_version
+
+      . /usr/local/kiex/elixirs/elixir-$latest_elixir_version.env
+      cat >> /etc/profile.d/erlang.sh <<EOF
 
 . /usr/local/kiex/elixirs/elixir-$latest_elixir_version.env
 EOF
+      ;;
+  esac
 }
 
 # --------------------------------------------------------------------
