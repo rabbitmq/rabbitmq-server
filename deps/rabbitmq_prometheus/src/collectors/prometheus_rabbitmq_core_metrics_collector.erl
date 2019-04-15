@@ -205,20 +205,15 @@ mf_totals(Callback, Name, Type, Help, Size) ->
             ?METRIC_NAME(Name),
             Help,
             catch_boolean(Type),
-            prepend_node_label(Size)
+            {[?NODE_LABEL], Size}
         )
     ).
-
-prepend_node_label(Item) when is_list(Item) ->
-    [?NODE_LABEL | Item];
-prepend_node_label(Item) ->
-    {[?NODE_LABEL], Item}.
 
 collect_metrics(_, {Type, Fun, Items}) ->
     [metric(Type, labels(Item), Fun(Item)) || Item <- Items].
 
 labels(Item) ->
-    prepend_node_label(label(element(1, Item))).
+    [?NODE_LABEL | label(element(1, Item))].
 
 label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
     [{vhost, VHost}, {exchange, Name}];
@@ -279,28 +274,3 @@ emit_gauge_metric_if_defined(Labels, Value) ->
     Value ->
       gauge_metric(Labels, Value)
   end.
-
-%%% ===================
-%%% Internal unit tests
-%%% ===================
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-prepend_node_label_metric_test() ->
-    Metric = metric,
-    ?assertEqual(
-        {[{node, node()}], metric},
-        prepend_node_label(Metric)
-    ),
-    ok.
-
-prepend_node_label_list_test() ->
-    List = [metric],
-    ?assertEqual(
-        [{node, node()}, metric],
-        prepend_node_label(List)
-    ),
-    ok.
-
--endif.
