@@ -38,7 +38,7 @@ docker_image_build: tests
 	  --build-arg PGP_KEYSERVER=pgpkeys.eu \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(PROJECT_VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest .
+	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest docker
 .PHONY: dib
 dib: docker_image_build
 
@@ -55,6 +55,7 @@ endef
 .PHONY: docker_image_run
 docker_image_run:
 	@docker run --interactive --tty \
+	  --publish=5672:5672 \
 	  --publish=15672:15672 \
 	  --publish=15692:15692 \
 	  pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION)

@@ -1,0 +1,66 @@
+# https://docs.docker.com/compose/compose-file/
+version: "3.7"
+
+# https://docs.docker.com/compose/compose-file/#networks
+networks:
+  rabbitmq-prometheus:
+
+# https://docs.docker.com/compose/compose-file/#volumes
+volumes:
+  rabbitmq-prometheus_prometheus:
+  rabbitmq-prometheus_grafana:
+
+services:
+  rabbitmq1: &rabbitmq
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8-2019.04.15
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "15672"
+    hostname: rabbitmq1
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+  rabbitmq2:
+    << : *rabbitmq
+    hostname: rabbitmq2
+  rabbitmq3:
+    << : *rabbitmq
+    hostname: rabbitmq3
+  perf-test:
+    # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
+    image: pivotalrabbitmq/perf-test:2.7.0
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URIS: "amqp://guest:guest@rabbitmq1:5672/%2f,amqp://guest:guest@rabbitmq2:5672/%2f,amqp://guest:guest@rabbitmq3:5672/%2f"
+      PRODUCERS: 3
+      CONSUMERS: 3
+      RATE: 1
+    entrypoint: []
+    command: /bin/bash -c "sleep 10 && bin/runjava com.rabbitmq.perf.PerfTest"
+    depends_on:
+      - rabbitmq1
+      - rabbitmq2
+      - rabbitmq3
+  prometheus:
+    # https://hub.docker.com/r/prom/prometheus/
+    image: prom/prometheus:v2.9.0
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - rabbitmq-prometheus_prometheus:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  grafana:
+    # https://hub.docker.com/r/grafana/grafana/
+    image: grafana/grafana:6.1.3
+    ports:
+      - "3000:3000"
+    networks:
+      - "rabbitmq-prometheus"
+    volumes:
+      - rabbitmq-prometheus_grafana:/var/lib/grafana
