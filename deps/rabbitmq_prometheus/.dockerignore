@@ -1,0 +1,7 @@
+.erlang.mk
+.git
+ebin
+logs
+src
+test
+tmp
