@@ -665,9 +665,9 @@ status_with_alarm(Config) ->
 
     %% When: we ask for cluster status.
     {ok, S} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["cluster_status"]),
+      ["cluster_status", "--silent"]),
     {ok, R} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Hare,
-      ["cluster_status"]),
+      ["cluster_status", "--silent"]),
 
     %% Then: both nodes have printed alarm information for eachother.
     ok = alarm_information_on_each_node(S, Rabbit, Hare),
@@ -866,18 +866,12 @@ declare(Ch, Name) ->
     Res.
 
 alarm_information_on_each_node(Output, Rabbit, Hare) ->
+    {ok, Tokens, _} = erl_scan:string(Output ++ "."),
+    {ok, Exprs} = erl_parse:parse_exprs(Tokens),
+    {value, Status, _} = erl_eval:exprs(Exprs, erl_eval:new_bindings()),
 
-    A = string:str(Output, "alarms"), true = A > 0,
-
-    %% Test that names are printed after `alarms': this counts on
-    %% output with a `{Name, Value}' kind of format, for listing
-    %% alarms, so that we can miss any node names in preamble text.
-    Alarms = string:substr(Output, A),
-    RabbitStr = atom_to_list(Rabbit),
-    HareStr = atom_to_list(Hare),
-    match = re:run(Alarms, "\\{'?" ++ RabbitStr ++ "'?,\\[memory\\]\\}",
-      [{capture, none}]),
-    match = re:run(Alarms, "\\{'?" ++ HareStr ++ "'?,\\[disk\\]\\}",
-      [{capture, none}]),
+    Alarms = proplists:get_value(alarms, Status),
+    ?assert(lists:member({Rabbit, [{resource_limit, memory, Rabbit}]}, Alarms)),
+    ?assert(lists:member({Hare, [{resource_limit, disk, Hare}]}, Alarms)),
 
     ok.
