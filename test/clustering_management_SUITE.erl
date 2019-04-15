@@ -871,7 +871,11 @@ alarm_information_on_each_node(Output, Rabbit, Hare) ->
     {value, Status, _} = erl_eval:exprs(Exprs, erl_eval:new_bindings()),
 
     Alarms = proplists:get_value(alarms, Status),
-    ?assert(lists:member({Rabbit, [{resource_limit, memory, Rabbit}]}, Alarms)),
-    ?assert(lists:member({Hare, [{resource_limit, disk, Hare}]}, Alarms)),
+    ?assert(
+       lists:member({Rabbit, [memory]}, Alarms) orelse
+       lists:member({Rabbit, [{resource_limit, memory, Rabbit}]}, Alarms)),
+    ?assert(
+       lists:member({Hare, [disk]}, Alarms) orelse
+       lists:member({Hare, [{resource_limit, disk, Hare}]}, Alarms)),
 
     ok.
