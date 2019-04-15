@@ -792,7 +792,7 @@ write_inetrc(Config) ->
 
 wait_for_ct_peers(Config) ->
     CTPeers = get_ct_peers(Config),
-    Timeout = 20 * 60 * 1000,
+    Timeout = 40 * 60 * 1000,
     {ok, TRef} = timer:send_after(Timeout, ct_peers_timeout),
     wait_for_ct_peers(Config, CTPeers, TRef).
 
