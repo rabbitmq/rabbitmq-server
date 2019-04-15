@@ -856,11 +856,16 @@ status() ->
     S6 = [{config_files, config_files()},
            {log_files, log_locations()},
            {data_directory, rabbit_mnesia:dir()}],
-    S7 = [{totals, [
-            {virtual_host_count, rabbit_vhost:count()},
-            {connection_count, length(rabbit_networking:connections_local())},
-            {queue_count, total_queue_count()}
-          ]}],
+    Totals = case rabbit:is_running() of
+                 true ->
+                     [{virtual_host_count, rabbit_vhost:count()},
+                      {connection_count,
+                       length(rabbit_networking:connections_local())},
+                      {queue_count, total_queue_count()}];
+                 false ->
+                     []
+             end,
+    S7 = [{totals, Totals}],
     S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7.
 
 alarms() ->
