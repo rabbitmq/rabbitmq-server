@@ -1,19 +1,4 @@
 {
-  "__inputs": [],
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "6.1.0"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -31,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": null,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -56,19 +41,20 @@
       "description": "File descriptor count and limit, as reported by the operating system. The count includes network sockets and file handles.\n\nTo optimize disk access RabbitMQ uses as many free descriptors as are available, so the count may safely approach the limit. However, if most of the file descriptors are used by sockets then persister performance will be negatively impacted.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
       "fill": 1,
       "gridPos": {
-        "h": 7,
+        "h": 6,
         "w": 5,
         "x": 0,
         "y": 1
       },
       "id": 2,
       "legend": {
-        "alignAsTable": true,
+        "alignAsTable": false,
         "avg": false,
         "current": true,
         "max": true,
         "min": true,
-        "show": true,
+        "rightSide": false,
+        "show": false,
         "total": false,
         "values": true
       },
@@ -144,19 +130,19 @@
       "description": "The network sockets count and limit managed by RabbitMQ.\n\nWhen the limit is exhausted RabbitMQ will stop accepting new network connections.\n\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
       "fill": 1,
       "gridPos": {
-        "h": 7,
+        "h": 6,
         "w": 5,
         "x": 5,
         "y": 1
       },
       "id": 5,
       "legend": {
-        "alignAsTable": true,
+        "alignAsTable": false,
         "avg": false,
         "current": true,
         "max": true,
         "min": true,
-        "show": true,
+        "show": false,
         "total": false,
         "values": true
       },
@@ -232,19 +218,19 @@
       "description": "All work happens in an Erlang process - it's the basic unit of concurrency. Think of an Erlang process as a lightweight thread. A RabbitMQ queue is an Erlang process. Same for a channel, connection, vhost or message store.",
       "fill": 1,
       "gridPos": {
-        "h": 7,
+        "h": 6,
         "w": 4,
         "x": 10,
         "y": 1
       },
       "id": 6,
       "legend": {
-        "alignAsTable": true,
+        "alignAsTable": false,
         "avg": false,
         "current": true,
         "max": true,
         "min": true,
-        "show": true,
+        "show": false,
         "total": false,
         "values": true
       },
@@ -320,19 +306,19 @@
       "description": "Memory Resident Set Size used by the Erlang VM, as measured by the OS kernel.\n\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)",
       "fill": 1,
       "gridPos": {
-        "h": 7,
+        "h": 6,
         "w": 5,
         "x": 14,
         "y": 1
       },
       "id": 7,
       "legend": {
-        "alignAsTable": true,
+        "alignAsTable": false,
         "avg": false,
         "current": true,
         "max": true,
         "min": true,
-        "show": true,
+        "show": false,
         "total": false,
         "values": true
       },
@@ -408,19 +394,19 @@
       "description": "* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Free Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Lazy Queues](https://www.rabbitmq.com/lazy-queues.html)",
       "fill": 1,
       "gridPos": {
-        "h": 7,
+        "h": 6,
         "w": 5,
         "x": 19,
         "y": 1
       },
       "id": 8,
       "legend": {
-        "alignAsTable": true,
+        "alignAsTable": false,
         "avg": false,
         "current": true,
         "max": true,
         "min": true,
-        "show": true,
+        "show": false,
         "total": false,
         "values": true
       },
@@ -534,7 +520,7 @@
     ]
   },
   "timezone": "",
-  "title": "RabbitMQ Overview",
+  "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
   "version": 5
 }
