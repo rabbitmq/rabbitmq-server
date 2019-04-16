@@ -66,7 +66,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     {:ok, m}
   end
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
-    IO.inspect(result)
     m = result_map(result)
 
     runtime_section = [
