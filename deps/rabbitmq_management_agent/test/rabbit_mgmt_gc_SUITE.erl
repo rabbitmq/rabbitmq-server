@@ -86,6 +86,15 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(quorum_queue_stats = Testcase, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+        ok ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase),
+            rabbit_ct_helpers:run_steps(
+              Config, rabbit_ct_client_helpers:setup_steps());
+        Skip ->
+            Skip
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     rabbit_ct_helpers:run_steps(Config,
