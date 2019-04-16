@@ -45,7 +45,7 @@ services:
       URIS: "amqp://guest:guest@rabbitmq1:5672/%2f,amqp://guest:guest@rabbitmq2:5672/%2f,amqp://guest:guest@rabbitmq3:5672/%2f"
       PRODUCERS: 3
       CONSUMERS: 3
-      RATE: 1
+      RATE: 10
     entrypoint: []
     command: /bin/bash -c "sleep 30 && bin/runjava com.rabbitmq.perf.PerfTest"
     depends_on:
