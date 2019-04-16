@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Memory do
+  alias RabbitMQ.CLI.InformationUnit, as: IU
+
   def memory_units do
     ["k", "kiB", "M", "MiB", "G", "GiB", "kB", "MB", "GB", ""]
   end
@@ -58,6 +60,44 @@ defmodule RabbitMQ.CLI.Core.Memory do
       {k, %{bytes: v, percentage: pg}}
     end)
     |> Enum.sort_by(fn {_key, %{bytes: bytes}} -> bytes end, &>=/2)
+  end
+
+  def formatted_watermark(val) when is_float(val) do
+    %{relative: val}
+  end
+  def formatted_watermark({:absolute, val}) do
+    %{absolute: parse_watermark(val)}
+  end
+  def formatted_watermark(val) when is_integer(val) do
+    %{absolute: parse_watermark(val)}
+  end
+  def formatted_watermark(val) when is_bitstring(val) do
+    %{absolute: parse_watermark(val)}
+  end
+  def formatted_watermark(val) when is_list(val) do
+    %{absolute: parse_watermark(val)}
+  end
+
+  def parse_watermark({:absolute, n}) do
+    case IU.parse(n) do
+      {:ok, parsed} -> parsed
+      err           -> err
+    end
+  end
+  def parse_watermark(n) when is_bitstring(n) do
+    case IU.parse(n) do
+      {:ok, parsed} -> parsed
+      err           -> err
+    end
+  end
+  def parse_watermark(n) when is_list(n) do
+    case IU.parse(n) do
+      {:ok, parsed} -> parsed
+      err           -> err
+    end
+  end
+  def parse_watermark(n) when is_float(n) do
+    n
   end
 
   #

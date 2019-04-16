@@ -66,6 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     {:ok, m}
   end
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
+    IO.inspect(result)
     m = result_map(result)
 
     runtime_section = [
@@ -109,10 +110,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
          end
 
     breakdown = compute_relative_values(m[:memory])
+
+    readable_watermark_setting = case m[:vm_memory_high_watermark_setting] do
+      %{:relative => val} -> "#{val} of available memory"
+      # absolute value
+      %{:absolute => val} -> "#{IU.convert(val, unit)} #{unit}"
+    end
     memory_section = [
       "\n#{bright("Memory")}\n",
       "Calculation strategy: #{m[:vm_memory_calculation_strategy]}",
-      "Memory high watermark: #{m[:vm_memory_high_watermark]}, limit: #{IU.convert(m[:vm_memory_limit], unit)} #{unit}"
+      "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{IU.convert(m[:vm_memory_high_watermark_limit], unit)} #{unit}"
     ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)" end)
 
     file_descriptors = [
@@ -185,12 +192,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       processes: Enum.into(Keyword.get(result, :processes), %{}),
       run_queue: Keyword.get(result, :run_queue),
       net_ticktime: net_ticktime(result),
+
       vm_memory_calculation_strategy: Keyword.get(result, :vm_memory_calculation_strategy),
-      vm_memory_high_watermark: Keyword.get(result, :vm_memory_high_watermark),
-      vm_memory_limit: Keyword.get(result, :vm_memory_limit),
+      vm_memory_high_watermark_setting: Keyword.get(result, :vm_memory_high_watermark) |> formatted_watermark,
+      vm_memory_high_watermark_limit: Keyword.get(result, :vm_memory_limit),
+
       disk_free_limit: Keyword.get(result, :disk_free_limit),
       disk_free: Keyword.get(result, :disk_free),
+
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
+
       alarms: Keyword.get(result, :alarms),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),

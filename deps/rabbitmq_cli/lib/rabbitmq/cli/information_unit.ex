@@ -35,6 +35,10 @@ defmodule RabbitMQ.CLI.InformationUnit do
     ])
   end
 
+  def parse(val) do
+    :rabbit_resource_monitor_misc.parse_information_unit(val)
+  end
+
   def convert(bytes, "bytes") do
     bytes
   end
