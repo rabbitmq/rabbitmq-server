@@ -16,7 +16,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.InformationUnit, as: IU
-  import RabbitMQ.CLI.Core.{Alarms, Listeners, Memory, Platform}
+  import RabbitMQ.CLI.Core.{Alarms, ANSI, Listeners, Memory, Platform}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -222,9 +222,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       n when is_integer(n) -> n
       _                    -> :undefined
     end
-  end
-
-  defp bright(string) do
-    "#{IO.ANSI.bright()}#{string}#{IO.ANSI.reset()}"
   end
 end
