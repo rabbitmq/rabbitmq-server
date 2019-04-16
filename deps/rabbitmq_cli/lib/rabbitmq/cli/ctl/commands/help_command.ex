@@ -19,6 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   alias RabbitMQ.CLI.Core.{CommandModules, Config, ExitCodes}
   alias RabbitMQ.CLI.Core.CommandModules
 
+  import RabbitMQ.CLI.Core.ANSI
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics, :plugins, :queues]
@@ -90,10 +92,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
               relevant_doc_guides(command) ++
               general_options_usage(),
               "\n\n") <> "\n"
-  end
-
-  defp bright(string) do
-    "#{IO.ANSI.bright()}#{string}#{IO.ANSI.reset()}"
   end
 
   defp tool_usage(tool_name) do
