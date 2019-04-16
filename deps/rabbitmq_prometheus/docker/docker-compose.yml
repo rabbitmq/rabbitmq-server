@@ -17,7 +17,8 @@ services:
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "15672"
+      - "15672:15672"
+      - "15692:15692"
     hostname: rabbitmq1
     environment:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
@@ -26,9 +27,15 @@ services:
   rabbitmq2:
     << : *rabbitmq
     hostname: rabbitmq2
+    ports:
+      - "25672:15672"
+      - "25692:15692"
   rabbitmq3:
     << : *rabbitmq
     hostname: rabbitmq3
+    ports:
+      - "35672:15672"
+      - "35692:15692"
   perf-test:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
     image: pivotalrabbitmq/perf-test:2.7.0
