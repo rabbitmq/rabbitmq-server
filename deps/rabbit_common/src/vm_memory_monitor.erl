@@ -47,7 +47,7 @@
          get_memory_calculation_strategy/0,
          get_rss_memory/0]).
 
-%% for tests
+%% for tests and CLI tools
 -export([parse_line_linux/1, parse_mem_limit/1]).
 
 -define(SERVER, ?MODULE).
