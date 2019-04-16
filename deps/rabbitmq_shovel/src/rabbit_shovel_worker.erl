@@ -62,6 +62,9 @@ handle_call(_Msg, _From, State) ->
 
 handle_cast(init, State = #state{config = Config0}) ->
     Config = rabbit_shovel_behaviour:connect_source(Config0),
+    %% this makes sure that connection pid is updated in case
+    %% any of the subsequent connection/init steps fail. See
+    %% rabbitmq/rabbitmq-shovel#54 for context.
     gen_server2:cast(self(), connect_dest),
     {noreply, State#state{config = Config}};
 handle_cast(connect_dest, State = #state{config = Config0}) ->
