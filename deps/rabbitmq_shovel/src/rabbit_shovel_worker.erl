@@ -60,16 +60,22 @@ init([Type, Name, Config0]) ->
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State = #state{config = Config}) ->
-    Config1 = rabbit_shovel_behaviour:connect_source(Config),
-    Config2 =  rabbit_shovel_behaviour:connect_dest(Config1),
+handle_cast(init, State = #state{config = Config0}) ->
+    Config = rabbit_shovel_behaviour:connect_source(Config0),
+    gen_server2:cast(self(), connect_dest),
+    {noreply, State#state{config = Config}};
+handle_cast(connect_dest, State = #state{config = Config0}) ->
+    Config = rabbit_shovel_behaviour:connect_dest(Config0),
+    gen_server2:cast(self(), init_shovel),
+    {noreply, State#state{config = Config}};
+handle_cast(init_shovel, State = #state{config = Config}) ->
     %% Don't trap exits until we have established connections so that
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-    Config3 = rabbit_shovel_behaviour:init_dest(Config2),
-    Config4 = rabbit_shovel_behaviour:init_source(Config3),
-    State1 = State#state{config = Config4},
+    Config1 = rabbit_shovel_behaviour:init_dest(Config),
+    Config2 = rabbit_shovel_behaviour:init_source(Config1),
+    State1 = State#state{config = Config2},
     ok = report_running(State1),
     {noreply, State1}.
 
