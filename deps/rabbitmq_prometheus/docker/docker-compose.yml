@@ -71,3 +71,6 @@ services:
       - "rabbitmq-prometheus"
     volumes:
       - rabbitmq-prometheus_grafana:/var/lib/grafana
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
+      - ./grafana/dashboards:/dashboards
