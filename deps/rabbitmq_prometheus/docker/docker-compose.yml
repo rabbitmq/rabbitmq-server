@@ -47,7 +47,7 @@ services:
       CONSUMERS: 3
       RATE: 1
     entrypoint: []
-    command: /bin/bash -c "sleep 10 && bin/runjava com.rabbitmq.perf.PerfTest"
+    command: /bin/bash -c "sleep 30 && bin/runjava com.rabbitmq.perf.PerfTest"
     depends_on:
       - rabbitmq1
       - rabbitmq2
