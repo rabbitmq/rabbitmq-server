@@ -23,7 +23,8 @@
           {ok, integer()} | {error, parse_error}.
 
 parse_information_unit(Value) when is_integer(Value) -> {ok, Value};
-parse_information_unit(Value) when is_list(Value) ->
+parse_information_unit(Value0) ->
+    Value = rabbit_data_coercion:to_list(Value0),
     case re:run(Value,
                 "^(?<VAL>[0-9]+)(?<UNIT>kB|KB|MB|GB|kb|mb|gb|Kb|Mb|Gb|kiB|KiB|MiB|GiB|kib|mib|gib|KIB|MIB|GIB|k|K|m|M|g|G)?$",
                 [{capture, all_but_first, list}]) of
