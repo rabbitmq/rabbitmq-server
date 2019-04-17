@@ -354,6 +354,10 @@ defmodule RabbitMQCtl do
     exit({:shutdown, code})
   end
 
+  defp format_error(:function_clause, _opts, _module) do
+    {:error, ExitCodes.exit_software(),
+      Exception.format_stacktrace()}
+  end
   defp format_error({:error, {:node_name, err_reason} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     node = opts[:node]

@@ -39,6 +39,15 @@ defmodule RabbitMQ.CLI.Core.Listeners do
       }"
     end)
   end
+  def listener_lines(listeners, node) do
+    listeners
+    |> listener_maps
+    |> Enum.map(fn %{interface: interface, port: port, protocol: protocol} ->
+      "Node: #{node}, interface: #{interface}, port: #{port}, protocol: #{protocol}, purpose: #{
+        protocol_label(to_atom(protocol))
+      }"
+    end)
+  end
 
   def listener_map(listener) when is_map(listener) do
     listener

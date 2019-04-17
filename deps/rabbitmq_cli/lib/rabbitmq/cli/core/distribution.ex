@@ -58,6 +58,13 @@ defmodule RabbitMQ.CLI.Core.Distribution do
     end
   end
 
+  def per_node_timeout(:infinity, _) do
+    :infinity
+  end
+  def per_node_timeout(timeout, node_count) do
+    Kernel.trunc(timeout / node_count)
+  end
+
   #
   # Implementation
   #

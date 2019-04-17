@@ -15,16 +15,33 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
+  import RabbitMQ.CLI.Core.{Alarms, ANSI, Listeners, Platform}
+  import RabbitMQ.CLI.Core.Distribution, only: [per_node_timeout: 2]
+  import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  @default_timeout 60_000
+
   def scopes(), do: [:ctl, :diagnostics]
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+
+  def merge_defaults(args, opts) do
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+
+    {args, Map.merge(%{timeout: timeout}, opts)}
+  end
+
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name}) do
+  def run([], %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, []) do
       {:badrpc, _} = err ->
         err
@@ -38,15 +55,83 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
             {:error, "Could not read mnesia files containing cluster status"}
 
           nodes ->
-            alarms_by_node = Enum.map(nodes, &alarms_by_node/1)
-            status ++ [{:alarms, alarms_by_node}]
+            count = length(nodes)
+            alarms_by_node    = Enum.map(nodes, fn n -> alarms_by_node(n, per_node_timeout(timeout, count)) end)
+            listeners_by_node = Enum.map(nodes, fn n -> listeners_of(n, per_node_timeout(timeout, count)) end)
+
+            status ++ [{:alarms, alarms_by_node}] ++ [{:listeners, listeners_by_node}]
         end
     end
   end
 
+  def output({:error, :timeout}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
+     "Error: timed out while waiting for a response from #{node_name}."}
+  end
+  def output(result, %{formatter: "json"}) when is_list(result) do
+    # format more data structures as map for sensible JSON output
+    m = result_map(result)
+          |> Map.update(:alarms, [], fn xs -> alarm_maps(xs) end)
+          |> Map.update(:listeners, %{}, fn m ->
+                                           Enum.map(m, fn {n, xs} -> {n, listener_maps(xs)} end) |> Enum.into(%{})
+                                         end)
+
+    {:ok, m}
+  end
+  def output(result, %{node: node_name}) when is_list(result) do
+    m = result_map(result)
+
+    cluster_name_section = [
+      "#{bright("Basics")}\n",
+      "Cluster name: #{m[:cluster_name]}"
+    ]
+
+    disk_nodes_section = [
+      "\n#{bright("Disk Nodes")}\n",
+    ] ++ node_lines(m[:disk_nodes])
+
+    ram_nodes_section = case m[:ram_nodes] do
+      [] -> []
+      xs -> [
+        "\n#{bright("RAM Nodes")}\n",
+      ] ++ node_lines(xs)
+    end
+
+    running_nodes_section = [
+      "\n#{bright("Running Nodes")}\n",
+    ] ++ node_lines(m[:running_nodes])
+
+    alarms_section = [
+      "\n#{bright("Alarms")}\n",
+    ] ++ case m[:alarms] do
+           [] -> ["(none)"]
+           xs -> alarm_lines(xs, node_name)
+         end
+
+    partitions_section = [
+      "\n#{bright("Network Partitions")}\n"
+    ] ++ case Map.size(m[:partitions]) do
+           0 -> ["(none)"]
+           _ -> partition_lines(m[:partitions])
+         end
+
+    listeners_section = [
+      "\n#{bright("Listeners")}\n"
+    ] ++ case Map.size(m[:listeners]) do
+           0 -> ["(none)"]
+           _ -> Enum.reduce(m[:listeners], [], fn {node, listeners}, acc ->
+                                                 acc ++ listener_lines(listeners, node)
+                                               end)
+         end
+
+    lines = cluster_name_section ++ disk_nodes_section ++ ram_nodes_section ++ running_nodes_section ++
+            alarms_section ++ partitions_section ++ listeners_section
+
+    {:ok, Enum.join(lines, line_separator())}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+  def formatter(), do: RabbitMQ.CLI.Formatters.String
 
   def usage, do: "cluster_status"
 
@@ -68,8 +153,53 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   # Implementation
   #
 
-  defp alarms_by_node(node) do
-    alarms = :rabbit_misc.rpc_call(node, :rabbit, :alarms, [])
+  defp result_map(result) do
+    # [{nodes,[{disc,[hare@warp10,rabbit@warp10]},{ram,[flopsy@warp10]}]},
+    #  {running_nodes,[flopsy@warp10,hare@warp10,rabbit@warp10]},
+    #  {cluster_name,<<"rabbit@localhost">>},
+    #  {partitions,[{flopsy@warp10,[rabbit@vagrant]},
+    #               {hare@warp10,[rabbit@vagrant]}]},
+    #  {alarms,[{flopsy@warp10,[]},
+    #           {hare@warp10,[]},
+    #           {rabbit@warp10,[{resource_limit,memory,rabbit@warp10}]}]}]
+    %{
+      cluster_name: Keyword.get(result, :cluster_name),
+      disk_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:disc, []),
+      ram_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:ram, []),
+      running_nodes: result |> Keyword.get(:running_nodes, []) |> Enum.map(&to_string/1),
+      alarms: Keyword.get(result, :alarms) |> Keyword.values |> Enum.concat |> Enum.uniq,
+      partitions: Keyword.get(result, :partitions, []) |> Enum.into(%{}),
+      listeners: Keyword.get(result, :listeners, []) |> Enum.into(%{})
+    }
+  end
+
+  defp alarms_by_node(node, timeout) do
+    alarms = case :rabbit_misc.rpc_call(to_atom(node), :rabbit, :alarms, [], timeout) do
+      {:badrpc, _} -> []
+      xs           -> xs
+    end
+
     {node, alarms}
+  end
+
+  defp listeners_of(node, timeout) do
+    # This may seem inefficient since this call returns all known listeners
+    # in the cluster, so why do we run it on every node? See the badrpc clause,
+    # some nodes may be inavailable or partitioned from other nodes. This way we
+    # gather as complete a picture as possible. MK.
+    listeners = case :rabbit_misc.rpc_call(to_atom(node), :rabbit_networking, :active_listeners, [], timeout) do
+      {:badrpc, _} -> []
+      xs           -> xs
+    end
+
+    {node, listeners_on(listeners, node)}
+  end
+
+  defp node_lines(nodes) do
+    Enum.map(nodes, &to_string/1) |> Enum.sort
+  end
+
+  defp partition_lines(mapping) do
+    Enum.map(mapping, fn {node, unreachable_peers} -> "Node #{node} cannot communicate with #{Enum.join(unreachable_peers, ", ")}" end)
   end
 end

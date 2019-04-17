@@ -23,22 +23,23 @@ defmodule ClusterStatusCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname()}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 12000}}
   end
 
   test "validate: argument count validates", context do
     assert @command.validate([], context[:opts]) == :ok
-    assert @command.validate(["extra"], context[:opts]) ==
-    {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
   test "run: status request on a named, active RMQ node is successful", context do
-    assert @command.run([], context[:opts])[:nodes] != nil
+    m = @command.run([], context[:opts])
+    assert m[:nodes] != nil
+    assert m[:partitions] != nil
+    assert m[:alarms] != nil
   end
 
   test "run: status request on nonexistent RabbitMQ node returns a badrpc" do
