@@ -44,8 +44,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_ | _] = args, %{node: node_name, timeout: time_out}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :info_all, [], time_out)
+  def run([_ | _] = args, %{node: node_name, timeout: timeout}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :info_all, [], timeout)
     |> filter_by_arg(args)
   end
 
