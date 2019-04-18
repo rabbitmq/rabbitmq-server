@@ -156,9 +156,18 @@ defmodule RabbitMQCtl do
     try do
       command.run(arguments, options) |> command.output(options)
     catch
-      _error_type, error ->
+      error_type, error ->
+        maybe_print_stacktrace(error, __STACKTRACE__, options)
         format_error(error, options, command)
     end
+  end
+
+  defp maybe_print_stacktrace(error, stacktrace, %{print_stacktrace: true}) do
+    IO.puts("Stack trace: \n")
+    IO.puts(Exception.format(:error, error, stacktrace))
+  end
+  defp maybe_print_stacktrace(_error, %{print_stacktrace: false}) do
+    nil
   end
 
   def handle_command_output(output, command, options, output_fun) do
