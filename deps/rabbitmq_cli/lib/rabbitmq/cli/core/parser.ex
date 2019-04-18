@@ -41,7 +41,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
       enabled_plugins_file: :string,
       aliases_file: :string,
       erlang_cookie: :atom,
-      help: :boolean
+      help: :boolean,
+      print_stacktrace: :boolean
     ]
   end
 
