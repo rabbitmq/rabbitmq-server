@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.VersionCommand do
-  alias RabbitMQ.CLI.Core.Validators
+  alias RabbitMQ.CLI.Core.{Validators, Version}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -28,14 +28,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.VersionCommand do
   end
 
   def run([], %{formatter: "json"}) do
-    {:ok, %{version: to_string(:rabbit_misc.version())}}
+    {:ok, %{version: Version.local_version()}}
   end
   def run([], %{formatter: "csv"}) do
-    row = [version: to_string(:rabbit_misc.version())]
+    row = [version: Version.local_version()]
     {:ok, [row]}
   end
   def run([], _opts) do
-    {:ok, to_string(:rabbit_misc.version())}
+    {:ok, Version.local_version()}
   end
   use RabbitMQ.CLI.DefaultOutput
 
