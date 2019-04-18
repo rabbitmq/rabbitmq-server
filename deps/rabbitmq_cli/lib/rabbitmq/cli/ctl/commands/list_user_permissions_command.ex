@@ -35,13 +35,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([username], %{node: node_name, timeout: time_out}) do
+  def run([username], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_auth_backend_internal,
       :list_user_permissions,
       [username],
-      time_out
+      timeout
     )
   end
 

@@ -28,13 +28,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserTopicPermissionsCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([username], %{node: node_name, timeout: time_out}) do
+  def run([username], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_auth_backend_internal,
       :list_user_topic_permissions,
       [username],
-      time_out
+      timeout
     )
   end
 
