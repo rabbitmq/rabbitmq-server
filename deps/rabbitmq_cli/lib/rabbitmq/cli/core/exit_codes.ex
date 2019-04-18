@@ -57,5 +57,6 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_code_for({:badrpc_multi, :nodedown, _}), do: exit_unavailable()
   def exit_code_for({:badrpc, :nodedown}), do: exit_unavailable()
   def exit_code_for({:node_name, _}), do: exit_dataerr()
+  def exit_code_for({:incompatible_version, _, _}), do: exit_unavailable()
   def exit_code_for({:error, _}), do: exit_unavailable()
 end
