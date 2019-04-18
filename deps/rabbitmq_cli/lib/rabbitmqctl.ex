@@ -156,7 +156,7 @@ defmodule RabbitMQCtl do
     try do
       command.run(arguments, options) |> command.output(options)
     catch
-      error_type, error ->
+      _error_type, error ->
         maybe_print_stacktrace(error, __STACKTRACE__, options)
         format_error(error, options, command)
     end
