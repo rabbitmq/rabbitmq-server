@@ -46,7 +46,7 @@ Build-Depends: debhelper (>= 9),
  erlang-dev (<< 1:22)   | esl-erlang (<< 1:22),
  erlang-src (>= 1:21.3) | esl-erlang (>= 1:21.3),
  erlang-src (<< 1:22)   | esl-erlang (<< 1:22),
- elixir (>= 1.6.6),
+ elixir (>= 1.7.4),
  zip,
  rsync
 Standards-Version: 3.9.6
