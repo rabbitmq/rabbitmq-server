@@ -52,13 +52,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_ff_extra, :cli_info, [], timeout) do
-      # server version does not provide rabbit_ff_extra
-      {:badrpc, {:EXIT, {:undef, _}}} ->
-        case Version.remote_version(node_name, timeout) do
-          {:badrpc, _} = err -> err
-          remote_vsn         ->
-            {:error, {:incompatible_version, Version.local_version(), remote_vsn}}
-        end
+      # Server does not support feature flags, consider none are available.
+      # See rabbitmq/rabbitmq-cli#344 for context. MK.
+      {:badrpc, {:EXIT, {:undef, _}}} -> []
       {:badrpc, _} = err    -> err
       val                   -> filter_by_arg(val, args)
     end
