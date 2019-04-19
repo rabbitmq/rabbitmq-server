@@ -28,6 +28,27 @@ defmodule JSONFormattingTest do
     :ok
   end
 
+  test "JSON output of status" do
+    set_scope(:ctl)
+
+    node = to_string(get_rabbit_hostname())
+    command = ["status", "-n", node, "--formatter=json"]
+    output = capture_io(:stdio, fn ->
+      error_check(command, exit_ok())
+    end)
+    {:ok, doc} = JSON.decode(output)
+
+    assert Map.has_key?(doc, "memory")
+    assert Map.has_key?(doc, "file_descriptors")
+    assert Map.has_key?(doc, "listeners")
+    assert Map.has_key?(doc, "processes")
+    assert Map.has_key?(doc, "os")
+    assert Map.has_key?(doc, "pid")
+    assert Map.has_key?(doc, "rabbitmq_version")
+
+    assert doc["alarms"] == []
+  end
+
   test "JSON output of cluster_status" do
     set_scope(:ctl)
 
