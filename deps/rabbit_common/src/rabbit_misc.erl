@@ -69,7 +69,8 @@
 -export([os_cmd/1]).
 -export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
--export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0, which_applications/0]).
+-export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0,
+         rabbitmq_and_erlang_versions/0, which_applications/0]).
 -export([sequence_error/1]).
 -export([check_expiry/1]).
 -export([base64url/1]).
@@ -242,6 +243,7 @@
 -spec otp_release() -> string().
 -spec otp_system_version() -> string().
 -spec platform_and_version() -> string().
+-spec rabbitmq_and_erlang_versions() -> {string(), string()}.
 -spec which_applications() -> [{atom(), string(), string()}].
 -spec sequence_error([({'error', any()} | any())]) ->
           {'error', any()} | any().
@@ -1076,6 +1078,9 @@ platform_and_version() ->
 
 otp_system_version() ->
     string:strip(erlang:system_info(system_version), both, $\n).
+
+rabbitmq_and_erlang_versions() ->
+  {version(), otp_release()}.
 
 %% application:which_applications(infinity) is dangerous, since it can
 %% cause deadlocks on shutdown. So we have to use a timeout variant,
