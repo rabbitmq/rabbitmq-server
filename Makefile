@@ -107,11 +107,7 @@ define PROJECT_ENV
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
-	    {config_entry_decoder, [{cipher, aes_cbc256},
-	                            {hash, sha512},
-	                            {iterations, 1000},
-	                            {passphrase, undefined}
-	                           ]},
+	    {config_entry_decoder, [{passphrase, undefined}]},
 
 	    %% rabbitmq-server#973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
