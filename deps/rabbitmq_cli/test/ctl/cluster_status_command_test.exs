@@ -35,11 +35,13 @@ defmodule ClusterStatusCommandTest do
     assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  test "run: status request on a named, active RMQ node is successful", context do
-    m = @command.run([], context[:opts])
-    assert m[:nodes] != nil
-    assert m[:partitions] != nil
-    assert m[:alarms] != nil
+  test "run: status request to a reachable node returns cluster information", context do
+    n = context[:opts][:node]
+    res = @command.run([], context[:opts])
+
+    assert Enum.member?(res[:nodes][:disc], n)
+    assert res[:partitions] == []
+    assert res[:alarms][n] == []
   end
 
   test "run: status request on nonexistent RabbitMQ node returns a badrpc" do

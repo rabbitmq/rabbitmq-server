@@ -58,8 +58,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
             count = length(nodes)
             alarms_by_node    = Enum.map(nodes, fn n -> alarms_by_node(n, per_node_timeout(timeout, count)) end)
             listeners_by_node = Enum.map(nodes, fn n -> listeners_of(n, per_node_timeout(timeout, count)) end)
+            versions_by_node  = Enum.map(nodes, fn n -> versions_by_node(n, per_node_timeout(timeout, count)) end)
 
-            status ++ [{:alarms, alarms_by_node}] ++ [{:listeners, listeners_by_node}]
+            status ++ [{:alarms, alarms_by_node}] ++ [{:listeners, listeners_by_node}] ++ [{:versions, versions_by_node}]
         end
     end
   end
@@ -101,6 +102,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       "\n#{bright("Running Nodes")}\n",
     ] ++ node_lines(m[:running_nodes])
 
+    versions_section = [
+      "\n#{bright("Versions")}\n",
+    ] ++ version_lines(m[:versions])
+
     alarms_section = [
       "\n#{bright("Alarms")}\n",
     ] ++ case m[:alarms] do
@@ -125,7 +130,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
          end
 
     lines = cluster_name_section ++ disk_nodes_section ++ ram_nodes_section ++ running_nodes_section ++
-            alarms_section ++ partitions_section ++ listeners_section
+            versions_section ++ alarms_section ++ partitions_section ++ listeners_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -169,7 +174,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       running_nodes: result |> Keyword.get(:running_nodes, []) |> Enum.map(&to_string/1),
       alarms: Keyword.get(result, :alarms) |> Keyword.values |> Enum.concat |> Enum.uniq,
       partitions: Keyword.get(result, :partitions, []) |> Enum.into(%{}),
-      listeners: Keyword.get(result, :listeners, []) |> Enum.into(%{})
+      listeners: Keyword.get(result, :listeners, []) |> Enum.into(%{}),
+      versions: Keyword.get(result, :versions, []) |> Enum.into(%{})
     }
   end
 
@@ -195,8 +201,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     {node, listeners_on(listeners, node)}
   end
 
+  defp versions_by_node(node, timeout) do
+    {rmq_vsn, otp_vsn} = case :rabbit_misc.rpc_call(
+                          to_atom(node), :rabbit_misc, :rabbitmq_and_erlang_versions, [], timeout) do
+      {:badrpc, _} -> {nil, nil}
+      pair         -> pair
+    end
+
+    {node, %{rabbitmq_version: to_string(rmq_vsn), erlang_version: to_string(otp_vsn)}}
+  end
+
   defp node_lines(nodes) do
     Enum.map(nodes, &to_string/1) |> Enum.sort
+  end
+
+  defp version_lines(mapping) do
+    Enum.map(mapping, fn {node, %{rabbitmq_version: rmq_vsn, erlang_version: otp_vsn}} ->
+                        "#{node}: RabbitMQ #{rmq_vsn} on Erlang #{otp_vsn}"
+                      end)
   end
 
   defp partition_lines(mapping) do
