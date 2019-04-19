@@ -169,6 +169,9 @@ defmodule RabbitMQCtl do
   defp maybe_print_stacktrace(_error, %{print_stacktrace: false}) do
     nil
   end
+  defp maybe_print_stacktrace(_error, _opts) do
+    nil
+  end
 
   def handle_command_output(output, command, options, output_fun) do
     case output do
