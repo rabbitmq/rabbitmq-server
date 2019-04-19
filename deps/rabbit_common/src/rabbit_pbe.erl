@@ -39,7 +39,7 @@
 %% functions.
 
 supported_ciphers() ->
-    SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
+    SupportedByCrypto = crypto:supports(ciphers),
     lists:filter(fun(Cipher) ->
         Mode = maps:get(mode, crypto:cipher_info(Cipher)),
         not lists:member(Mode, [ccm_mode, ctr_mode, ecb_mode, gcm_mode, stream_cipher])
