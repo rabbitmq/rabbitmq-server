@@ -27,6 +27,12 @@
 -endif.
 -endif.
 
+-ifdef(HAS_CRYPTO_INFO_FUNCTIONS).
+-define(DEFAULT_CIPHER, aes_256_cbc).
+-else.
+-define(DEFAULT_CIPHER, aes_cbc256).
+-endif.
+
 %% Supported ciphers and hashes
 
 -ifdef(HAS_CRYPTO_INFO_FUNCTIONS).
@@ -66,9 +72,9 @@ supported_ciphers() ->
 supported_hashes() ->
     proplists:get_value(hashs, crypto:supports()).
 
-%% Default encryption parameters (keep those in sync with rabbit.app.src)
+%% Default encryption parameters.
 default_cipher() ->
-    aes_cbc256.
+    ?DEFAULT_CIPHER.
 
 default_hash() ->
     sha512.
