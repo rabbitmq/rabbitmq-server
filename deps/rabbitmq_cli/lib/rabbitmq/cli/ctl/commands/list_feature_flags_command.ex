@@ -15,7 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Validators, Version}
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   alias RabbitMQ.CLI.Ctl.InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour

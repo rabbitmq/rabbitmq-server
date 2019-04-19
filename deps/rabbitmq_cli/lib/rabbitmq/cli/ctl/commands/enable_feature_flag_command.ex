@@ -16,20 +16,30 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
-  def validate([""], _), do: {:validation_failure, {:bad_argument, "feature_flag cannot be empty string."}}
+  def validate([""], _), do: {:validation_failure, {:bad_argument, "feature_flag cannot be an empty string."}}
   def validate([_], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([feature_flag], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable, [String.to_atom(feature_flag)])
+    case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable, [String.to_atom(feature_flag)]) do
+      # Server does not support feature flags, consider none are available.
+      # See rabbitmq/rabbitmq-cli#344 for context. MK.
+      {:badrpc, {:EXIT, {:undef, _}}} -> {:error, :unsupported}
+      {:badrpc, _} = err    -> err
+      other                 -> other
+    end
   end
+
+  def output({:error, :unsupported}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage, "This feature flag is not supported by node #{node_name}"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "enable_feature_flag <feature_flag>"
 
