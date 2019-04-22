@@ -2,6 +2,7 @@
 .git
 ebin
 logs
+prometheus
 src
 test
 tmp

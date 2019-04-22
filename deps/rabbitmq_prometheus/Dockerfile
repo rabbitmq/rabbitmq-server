@@ -255,7 +255,7 @@ VOLUME $RABBITMQ_DATA_DIR
 # https://docs.docker.com/samples/library/ubuntu/#locales
 ENV LANG=C.UTF-8 LANGUAGE=C.UTF-8 LC_ALL=C.UTF-8
 
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY docker/docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 4369 5671 5672 25672
@@ -289,9 +289,10 @@ EXPOSE 15671 15672
 
 # rabbitmq_prometheus
 ARG RABBITMQ_PROMETHEUS_VERSION
-COPY plugins/accept*.ez plugins/prometheus*.ez plugins/rabbitmq_prometheus*.ez /plugins/
+COPY plugins/accept*.ez plugins/prometheus*.ez plugins/rabbitmq_management*.ez plugins/rabbitmq_prometheus*.ez /plugins/
 RUN chmod a+r /plugins/*.ez && \
     chown rabbitmq:rabbitmq /plugins/*.ez && \
+    rm /plugins/rabbitmq_management-${RABBITMQ_VERSION}.ez /plugins/rabbitmq_management_agent-${RABBITMQ_VERSION}.ez && \
     rabbitmq-plugins enable --offline rabbitmq_prometheus && \
     rabbitmq-plugins is_enabled rabbitmq_prometheus --offline && \
     rabbitmq-plugins list | grep "rabbitmq_prometheus.*${RABBITMQ_PROMETHEUS_VERSION}"

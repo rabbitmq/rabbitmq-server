@@ -4,8 +4,11 @@ PROJECT_MOD = rabbit_prometheus_app
 TEST_DEPS = eunit_formatters
 EUNIT_OPTS = no_tty, {report, {eunit_progress, [colored, profile]}}
 
-DEPS = rabbit_common rabbit rabbitmq_management_agent prometheus accept rabbitmq_web_dispatch
-BUILD_DEPS = amqp_client
+DEPS = rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
+# Deps that are not applications
+# rabbitmq_management is added so that we build a custom version, for the Docker image
+BUILD_DEPS = accept amqp_client rabbit_common rabbitmq_management
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -16,10 +19,16 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+ifneq ($(DISABLE_METRICS_COLLECTOR),)
+BUILD_DEPS = accept amqp_client rabbit_common
+RABBITMQ_CONFIG_FILE = $(CURDIR)/rabbitmq-disable-metrics-collector.conf
+export RABBITMQ_CONFIG_FILE
+endif
+
 include rabbitmq-components.mk
 include erlang.mk
 
-DOCKER_IMAGE_VERSION := 3.8-2019.04.15
+DOCKER_IMAGE_VERSION := 3.8-2019.04.22
 
 .PHONY: docker_login
 docker_login:
@@ -39,7 +48,7 @@ docker_image_build: tests
 	  --build-arg PGP_KEYSERVER=pgpkeys.eu \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(PROJECT_VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest docker
+	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest .
 .PHONY: dib
 dib: docker_image_build
 
@@ -47,8 +56,8 @@ dib: docker_image_build
 docker_image_push:
 	@docker push pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) && \
 	docker push pivotalrabbitmq/rabbitmq-prometheus:latest
-.PHONY: dib
-dib: docker_image_build
+.PHONY: dip
+dip: docker_image_push
 
 define RUN_DOCKER_IMAGE
 endef

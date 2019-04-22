@@ -1,0 +1,6 @@
+scrape_configs:
+  - job_name: rabbitmq
+    scrape_interval: 5s
+    scrape_timeout: 4s
+    static_configs:
+      - targets: ['localhost:15692']
