@@ -23,6 +23,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_peer_discovery_k8s \
 	   rabbitmq_peer_discovery_consul \
 	   rabbitmq_peer_discovery_etcd \
+	   rabbitmq_prometheus \
 	   rabbitmq_random_exchange \
 	   rabbitmq_recent_history_exchange \
 	   rabbitmq_sharding \
