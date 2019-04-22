@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Console.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%   Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(cowboy_websocket_SUITE).
@@ -22,18 +22,34 @@
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
-    [{group, tests}].
+    [{group, integration},
+     {group, default_login_enabled},
+     {group, default_login_disabled}].
 
 groups() ->
     [
-     {tests, [],
+     {integration, [],
         [
-            connection,
+            connection_succeeds,
+            connection_fails,
             pubsub,
             pubsub_binary,
             disconnect,
             http_auth
-    ]}].
+      ]},
+      %% rabbitmq/rabbitmq-web-stomp#110
+      {default_login_enabled, [],
+          [
+              connection_with_explicitly_provided_correct_credentials,
+              connection_with_default_login_succeeds
+          ]},
+      %% rabbitmq/rabbitmq-web-stomp#110
+      {default_login_disabled, [],
+          [
+              connection_with_explicitly_provided_correct_credentials,
+              connection_without_credentials_fails
+          ]}
+    ].
 
 init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
@@ -64,7 +80,7 @@ end_per_testcase(http_auth, Config) ->
 end_per_testcase(_, Config) -> Config.
 
 
-connection(Config) ->
+connection_succeeds(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
     Protocol = ?config(protocol, Config),
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
@@ -72,6 +88,54 @@ connection(Config) ->
     {close, _} = rfc6455_client:close(WS),
     ok.
 
+connection_fails(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", [{"login", "uncorrect_$55"}, {"passcode", "uncorrect_$88"}]),
+    {<<"ERROR">>, _, <<"Access refused for user 'uncorrect_$55'\n">>} = raw_recv(WS),
+    {close, _} = rfc6455_client:close(WS),
+    ok.
+
+connection_with_explicitly_provided_correct_credentials(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    {close, _} = rfc6455_client:close(WS),
+    ok.
+
+connection_with_default_login_succeeds(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", []),
+
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    {close, _} = rfc6455_client:close(WS),
+    ok.
+connection_without_credentials_fails(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      application, set_env,
+                                      [rabbitmq_stomp, default_user, undefined]),
+
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT"),
+
+    {close, _} = raw_recv(WS),
+    ok.
+
+raw_send(WS, Command) ->
+    raw_send(WS, Command, [], <<>>).
 
 raw_send(WS, Command, Headers) ->
     raw_send(WS, Command, Headers, <<>>).
@@ -80,9 +144,10 @@ raw_send(WS, Command, Headers, Body) ->
     rfc6455_client:send(WS, Frame).
 
 raw_recv(WS) ->
-    {ok, P} = rfc6455_client:recv(WS),
-    stomp:unmarshal(P).
-
+    case rfc6455_client:recv(WS) of
+      {ok, P} -> stomp:unmarshal(P);
+      Other   -> Other
+    end.
 
 pubsub(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),

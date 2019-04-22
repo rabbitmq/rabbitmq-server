@@ -1,5 +1,5 @@
 PROJECT = rabbitmq_web_stomp
-PROJECT_DESCRIPTION = Rabbit WEB-STOMP - WebSockets to Stomp adapter
+PROJECT_DESCRIPTION = RabbitMQ STOMP-over-WebSockets support
 PROJECT_MOD = rabbit_ws_app
 
 define PROJECT_ENV
