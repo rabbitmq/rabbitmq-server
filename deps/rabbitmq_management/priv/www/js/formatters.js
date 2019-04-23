@@ -311,7 +311,7 @@ function fmt_rate_axis(num, max) {
 
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
-    return fmt_si_prefix(bytes, bytes, 1024, false) + 'B';
+    return fmt_si_prefix(bytes, bytes, 1024, false) + 'iB';
 }
 
 function fmt_bytes_axis(num, max) {
