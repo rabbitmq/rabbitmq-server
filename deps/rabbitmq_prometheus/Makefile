@@ -71,3 +71,15 @@ docker_image_run:
 	  pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION)
 .PHONY: dir
 dir: docker_image_run
+
+define CTOP_CONTAINER
+docker pull quay.io/vektorlab/ctop:latest && \
+docker run --rm --interactive --tty \
+  --cpus 0.5 --memory 128M \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
+  --name ctop_$(USER) \
+  quay.io/vektorlab/ctop:latest
+endef
+.PHONY: ctop
+ctop:
+	@$(CTOP_CONTAINER)
