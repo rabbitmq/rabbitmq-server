@@ -834,7 +834,7 @@ handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
                             QName = rabbit_quorum_queue:queue_name(QS),
                             [] /= rabbit_amqqueue:lookup([QName])
                     end, QueueStates0),
-    case evalauate_consumer_timeout(State0#ch{queue_states = QueueStates1}) of
+    case evaluate_consumer_timeout(State0#ch{queue_states = QueueStates1}) of
         {noreply, State} ->
             noreply(init_tick_timer(reset_tick_timer(State)));
         Return ->
@@ -2703,12 +2703,12 @@ queue_fold(Fun, Init, Q) ->
         {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
     end.
 
-evalauate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
-                                                    capabilities = Capabilities,
-                                                    consumer_timeout = Timeout},
-                                        queue_names = QNames,
-                                        queue_consumers = QCons,
-                                        unacked_message_q = UAMQ}) ->
+evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
+                                                   capabilities = Capabilities,
+                                                   consumer_timeout = Timeout},
+                                       queue_names = QNames,
+                                       queue_consumers = QCons,
+                                       unacked_message_q = UAMQ}) ->
     Now = os:system_time(millisecond),
     case ?QUEUE:peek(UAMQ) of
         {value, {_DTag, ConsumerTag, Time, {QPid, _Msg}}}
