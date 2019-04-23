@@ -578,7 +578,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of messages returned to publishers as unroutable",
+      "description": "Count of messages returned to publishers as unroutable. Requires messages to be published as mandatory.\n\n* [Ensuring Messages are routed](https://www.rabbitmq.com/reliability.html#producer)\n* [Unroutable Messages & Confirms](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 1,
       "gridPos": {
         "h": 6,
@@ -1259,5 +1259,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 10
+  "version": 1
 }

@@ -46,6 +46,8 @@ services:
       PRODUCERS: 3
       CONSUMERS: 3
       RATE: 10
+      CONFIRM: 1
+      FLAG: mandatory
     entrypoint: []
     command: /bin/bash -c "while sleep 1; do nc -zv rabbitmq1 5672 && nc -zv rabbitmq2 5672 && nc -zv rabbitmq3 5672 && break; done && bin/runjava com.rabbitmq.perf.PerfTest"
     depends_on:
