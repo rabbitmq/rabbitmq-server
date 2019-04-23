@@ -28,7 +28,7 @@ endif
 include rabbitmq-components.mk
 include erlang.mk
 
-DOCKER_IMAGE_VERSION := 3.8-2019.04.22
+DOCKER_IMAGE_VERSION := 3.8-$(shell date -u +'%Y.%m.%d')
 
 .PHONY: docker_login
 docker_login:
