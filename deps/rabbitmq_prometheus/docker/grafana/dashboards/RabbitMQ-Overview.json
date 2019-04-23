@@ -16,7 +16,6 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
   "links": [],
   "panels": [
     {
@@ -772,7 +771,7 @@
       "dashLength": 10,
       "dashes": false,
       "description": "Memory Resident Set Size used by the Erlang VM, as measured by the OS kernel.\n\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -812,7 +811,24 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1073741824,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 536870912,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -833,7 +849,7 @@
       "yaxes": [
         {
           "decimals": null,
-          "format": "bits",
+          "format": "bytes",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -860,8 +876,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Free Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Lazy Queues](https://www.rabbitmq.com/lazy-queues.html)",
-      "fill": 1,
+      "description": "* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Free Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)",
+      "fill": 0,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -907,7 +923,15 @@
           "fill": true,
           "line": true,
           "op": "lt",
-          "value": 52428800,
+          "value": 1073741824,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "lt",
+          "value": 2147483648,
           "yaxis": "left"
         }
       ],
@@ -957,8 +981,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "The network sockets count and limit managed by RabbitMQ.\n\nWhen the limit is exhausted RabbitMQ will stop accepting new network connections.\n\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
-      "fill": 1,
+      "description": "The network sockets count and limit managed by RabbitMQ.\n\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "fill": 0,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -998,7 +1022,24 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 500,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 250,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -1046,8 +1087,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "File descriptor count and limit, as reported by the operating system. The count includes network sockets and file handles.\n\nTo optimize disk access RabbitMQ uses as many free descriptors as are available, so the count may safely approach the limit. However, if most of the file descriptors are used by sockets then persister performance will be negatively impacted.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
-      "fill": 1,
+      "description": "File descriptor count and limit, as reported by the operating system. The count includes network sockets and file handles.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "fill": 0,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -1088,7 +1129,24 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 750,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 375,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -1137,7 +1195,7 @@
       "dashLength": 10,
       "dashes": false,
       "description": "All work happens in an Erlang process - it's the basic unit of concurrency. Think of an Erlang process as a lightweight thread. A RabbitMQ queue is an Erlang process. Same for a channel, connection, vhost or message store.",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -1177,7 +1235,24 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1000000,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 500000,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
