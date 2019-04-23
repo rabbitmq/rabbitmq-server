@@ -107,12 +107,18 @@ format_samples(Samples, ESamples, ETotal) ->
             append_full_sample(TS, Sample, SamplesAcc, TotalsAcc)
         end, {ESamples, ETotal}, Samples).
 
+%% Ts for "totals", Ss for "samples", Vs for "values"
+%%
 %% connection_stats_coarse_conn_stats, channel_stats_fine_stats,
-%% vhost_stats_fine_stats, channel_exchange_stats_fine_stats,
-%% queue_msg_stats, vhost_msg_stats
+%% vhost_stats_fine_stats, queue_msg_stats, vhost_msg_stats
 append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
      {V1 + T1, V2 + T2, V3 + T3}};
+%% channel_exchange_stats_fine_stats
+append_full_sample(TS, {V1, V2, V3, V4}, {S1, S2, S3, S4}, {T1, T2, T3, T4}) ->
+   {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3),
+     append_sample(V4, TS, S4)},
+    {V1 + T1, V2 + T2, V3 + T3, V4 + T4}};
 %% connection_churn_rates
 append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
            {S1, S2, S3, S4, S5, S6, S7},
@@ -189,7 +195,7 @@ format_rate(Type, {TR, TW}, {RR, RW}) when Type =:= vhost_msg_rates;
      {disk_writes, TW},
      {disk_writes_details, [{rate, RW}]}
     ];
-format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe})
+format_rate(Type, {TP, TC, TRe, TDrop}, {RP, RC, RRe, RDrop})
   when Type =:= channel_stats_fine_stats;
        Type =:= vhost_stats_fine_stats;
        Type =:= channel_exchange_stats_fine_stats ->
@@ -199,7 +205,9 @@ format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe})
      {confirm, TC},
      {confirm_details, [{rate, RC}]},
      {return_unroutable, TRe},
-     {return_unroutable_details, [{rate, RRe}]}
+     {return_unroutable_details, [{rate, RRe}]},
+     {drop_unroutable, TDrop},
+     {drop_unroutable_details, [{rate, RDrop}]}
     ];
 format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG, TGE},
         {RG, RGN, RD, RDN, RR, RA, RDG, RGE})
@@ -391,8 +399,8 @@ format_rate(Type, {TR, TW}, {RR, RW}, {SR, SW}, {STR, STW}, Length)
      {disk_writes_details, [{rate, RW},
                 {samples, SW}] ++ average(SW, STW, Length)}
     ];
-format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe},
-        {SP, SC, SRe}, {STP, STC, STRe}, Length)
+format_rate(Type, {TP, TC, TRe, TDrop}, {RP, RC, RRe, RDrop},
+        {SP, SC, SRe, SDrop}, {STP, STC, STRe, STDrop}, Length)
   when Type =:= channel_stats_fine_stats;
        Type =:= vhost_stats_fine_stats;
        Type =:= channel_exchange_stats_fine_stats ->
@@ -405,7 +413,10 @@ format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe},
             {samples, SC}] ++ average(SC, STC, Length)},
      {return_unroutable, TRe},
      {return_unroutable_details, [{rate, RRe},
-                  {samples, SRe}] ++ average(SRe, STRe, Length)}
+                  {samples, SRe}] ++ average(SRe, STRe, Length)},
+      {drop_unroutable, TDrop},
+      {drop_unroutable_details, [{rate, RDrop},
+                   {samples, SDrop}] ++ average(SDrop, STDrop, Length)}
     ];
 format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG, TGE},
             {RG, RGN, RD, RDN, RR, RA, RDG, RGE},
@@ -664,12 +675,23 @@ rate_from_last_increment(_Total, []) ->
 rate_from_last_increment(Total, [H | _T]) ->
     rate_from_difference(Total, H).
 
-rate_from_difference({TS0, {A0, A1, A2}}, {TS1, {B0, B1, B2}}) ->
-    Interval = TS0 - TS1,
-    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval)};
 rate_from_difference({TS0, {A0, A1}}, {TS1, {B0, B1}}) ->
     Interval = TS0 - TS1,
     {rate(A0, B0, Interval), rate(A1, B1, Interval)};
+rate_from_difference({TS0, {A0, A1, A2}}, {TS1, {B0, B1, B2}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval)};
+rate_from_difference({TS0, {A0, A1, A2, A3}}, {TS1, {B0, B1, B2, B3}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval), rate(A3, B3, Interval)};
+rate_from_difference({TS0, {A0, A1, A2, A3, A4}}, {TS1, {B0, B1, B2, B3, B4}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval), rate(A3, B3, Interval),
+     rate(A4, B4, Interval)};
+rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5}}, {TS1, {B0, B1, B2, B3, B4, B5}}) ->
+   Interval = TS0 - TS1,
+   {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval), rate(A3, B3, Interval),
+    rate(A4, B4, Interval), rate(A5, B5, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
              {TS1, {B0, B1, B2, B3, B4, B5, B6}}) ->
     Interval = TS0 - TS1,

@@ -54,8 +54,11 @@
 <% if (show_column('channels', 'rate-confirm')) { %>
     <th><%= fmt_sort('confirm', 'message_stats.confirm_details.rate') %></th>
 <% } %>
-<% if (show_column('channels', 'rate-return')) { %>
-    <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
+<% if (show_column('channels', 'rate-unroutable-drop')) { %>
+    <th><%= fmt_sort('unroutable (drop)', 'message_stats.drop_unroutable_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-unroutable-return')) { %>
+    <th><%= fmt_sort('unroutable (return)', 'message_stats.return_unroutable_details.rate') %></th>
 <% } %>
 <% if (show_column('channels', 'rate-deliver')) { %>
     <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %></th>
@@ -101,8 +104,11 @@
 <% if (show_column('channels', 'rate-confirm')) { %>
     <th>confirm</th>
 <% } %>
-<% if (show_column('channels', 'rate-return')) { %>
-    <th>return (mandatory)</th>
+<% if (show_column('channels', 'rate-unroutable-drop')) { %>
+    <th>unroutable (drop)</th>
+<% } %>
+<% if (show_column('channels', 'rate-unroutable-return')) { %>
+    <th>unroutable (return)</th>
 <% } %>
 <% if (show_column('channels', 'rate-deliver')) { %>
     <th>deliver / get</th>
@@ -172,7 +178,10 @@
 <% if (show_column('channels', 'rate-confirm')) { %>
     <td class="r"><%= fmt_detail_rate(channel.message_stats, 'confirm') %></td>
 <% } %>
-<% if (show_column('channels', 'rate-return')) { %>
+<% if (show_column('channels', 'rate-unroutable-drop')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'drop_unroutable') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-unroutable-return')) { %>
     <td class="r"><%= fmt_detail_rate(channel.message_stats, 'return_unroutable') %></td>
 <% } %>
 <% if (show_column('channels', 'rate-deliver')) { %>
