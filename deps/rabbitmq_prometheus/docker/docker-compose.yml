@@ -24,6 +24,11 @@ services:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
     volumes:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    # we want to simulate hitting thresholds
+    ulimits:
+      nofile:
+        soft: "1024"
+        hard: "2048"
   rabbitmq2:
     << : *rabbitmq
     hostname: rabbitmq2
