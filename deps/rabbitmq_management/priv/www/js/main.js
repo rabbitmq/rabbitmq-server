@@ -1589,7 +1589,13 @@ function get_chart_range_type(arg) {
     if (arg === 'lengths-over') {
         return 'global';
     }
+    if (arg === 'msg-rates-over') {
+        return 'global';
+    }
     if (arg === 'lengths-q') {
+        return 'basic';
+    }
+    if (arg === 'msg-rates-q') {
         return 'basic';
     }
     if (arg === 'queues') {
