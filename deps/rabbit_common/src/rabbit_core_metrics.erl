@@ -166,15 +166,19 @@ channel_stats(reductions, Id, Value) ->
 
 channel_stats(exchange_stats, publish, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, confirm, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, return_unroutable, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(exchange_stats, drop_unroutable, Id, Value) ->
+    %% Includes delete marker
+    _ = ets:update_counter(channel_exchange_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_exchange_stats, publish, Id, Value) ->
     %% Includes delete marker
@@ -225,7 +229,7 @@ channel_queue_exchange_down(Id) ->
 
 channel_exchange_down(Id) ->
     %% Delete marker
-    ets:update_element(channel_exchange_metrics, Id, {5, 1}),
+    ets:update_element(channel_exchange_metrics, Id, {6, 1}),
     ok.
 
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
