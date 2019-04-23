@@ -12,8 +12,8 @@ volumes:
 
 services:
   rabbitmq1: &rabbitmq
-    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8-2019.04.15
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8-2019.04.22
     networks:
       - "rabbitmq-prometheus"
     ports:
