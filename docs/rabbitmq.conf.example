@@ -307,14 +307,11 @@
 ##
 # vm_memory_high_watermark.absolute = 2GB
 ##
-## Supported unit symbols:
+## Supported units suffixes:
 ##
-## k, kiB: kibibytes (2^10 - 1,024 bytes)
-## M, MiB: mebibytes (2^20 - 1,048,576 bytes)
-## G, GiB: gibibytes (2^30 - 1,073,741,824 bytes)
-## kB: kilobytes (10^3 - 1,000 bytes)
-## MB: megabytes (10^6 - 1,000,000 bytes)
-## GB: gigabytes (10^9 - 1,000,000,000 bytes)
+## kb, KB: kibibytes (2^10 bytes)
+## mb, MB: mebibytes (2^20)
+## gb, GB: gibibytes (2^30)
 
 
 

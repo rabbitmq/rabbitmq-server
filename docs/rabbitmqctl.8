@@ -1836,8 +1836,8 @@ a floating point number greater than or equal to 0.
 .It Ar memory_limit
 The new memory limit at which flow control is triggered, expressed in
 bytes as an integer number greater than or equal to 0 or as a string
-with memory unit symbol(e.g. 512M or 1G).
-Available unit symbols are:
+with memory units (e.g. 512M or 1G).
+Available units are:
 .Bl -tag -width Ds
 .It Cm k , Cm kiB
 kibibytes (2^10 bytes)
@@ -1857,7 +1857,7 @@ gigabytes (10^9 bytes)
 .It Cm set_disk_free_limit Ar disk_limit
 .Bl -tag -width Ds
 .It Ar disk_limit
-Lower bound limit as an integer in bytes or a string with memory unit symbols
+Lower bound limit as an integer in bytes or a string with memory units
 (see vm_memory_high_watermark), e.g. 512M or 1G.
 Once free disk space reaches the limit, a disk alarm will be set.
 .El
