@@ -36,7 +36,7 @@ defmodule EnableFeatureFlagCommandTest do
   end
 
   test "validate: passing an empty string for feature_flag name is an arg error", context do
-    assert @command.validate([""], context[:opts]) == {:validation_failure, {:bad_argument, "feature_flag cannot be empty string."}}
+    assert match?({:validation_failure, {:bad_argument, _}}, @command.validate([""], context[:opts]))
   end
 
   test "run: passing a valid feature_flag name to a running RabbitMQ node succeeds", context do

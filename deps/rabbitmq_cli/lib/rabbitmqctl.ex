@@ -427,6 +427,10 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_code_for(result), "Virtual host '#{vhost}' does not exist"}
   end
 
+  defp format_error({:error, {:incompatible_version, local_version, remote_version} = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result), "Detected potential version incompatibility. CLI tool version: #{local_version}, server: #{remote_version}"}
+  end
+
   defp format_error({:error, {:timeout, to} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
 
