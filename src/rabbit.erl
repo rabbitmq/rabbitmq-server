@@ -320,13 +320,11 @@ ensure_config() ->
     case rabbit_config:validate_config_files() of
         ok -> ok;
         {error, {ErrFmt, ErrArgs}} ->
-            log_boot_error_and_exit(check_config_file, ErrFmt, ErrArgs)
+            throw({error, {check_config_file, ErrFmt, ErrArgs}})
     end,
     case rabbit_config:prepare_and_use_config() of
         {error, {generation_error, Error}} ->
-            log_boot_error_and_exit(generate_config_file,
-                                    "~nConfig file generation failed ~s",
-                                    Error);
+            throw({error, {generate_config_file, Error}});
         ok -> ok
     end.
 
@@ -1018,11 +1016,13 @@ boot_error(_, {could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}}) -
     log_boot_error_and_exit(
       timeout_waiting_for_tables,
       "~n" ++ Err ++ rabbit_nodes:diagnostics(Nodes), []);
-boot_error(Class, {error, {cannot_log_to_file, _, _}} = Reason) ->
+boot_error(_, {error, {cannot_log_to_file, ErrFmt, ErrArgs}}) ->
+    log_boot_error_and_exit(check_config_file, ErrFmt, ErrArgs);
+boot_error(_, {error, {generate_config_file, Error}}) ->
     log_boot_error_and_exit(
-      Reason,
-      "~nError description:~s",
-      [lager:pr_stacktrace(erlang:get_stacktrace(), {Class, Reason})]);
+      generate_config_file,
+      "~nConfig file generation failed ~s",
+      [Error]);
 boot_error(Class, Reason) ->
     LogLocations = log_locations(),
     log_boot_error_and_exit(
