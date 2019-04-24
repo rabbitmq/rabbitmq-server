@@ -109,11 +109,7 @@ define PROJECT_ENV
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
-	    {config_entry_decoder, [{cipher, aes_cbc256},
-	                            {hash, sha512},
-	                            {iterations, 1000},
-	                            {passphrase, undefined}
-	                           ]},
+	    {config_entry_decoder, [{passphrase, undefined}]},
 
 	    %% rabbitmq-server#973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
@@ -130,7 +126,8 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-	    {channel_queue_cleanup_interval, 60000},
+		%% interval at which the channel can perform periodic actions
+	    {channel_tick_interval, 60000},
 	    %% Default max message size is 128 MB
 	    {max_message_size, 134217728}
 	  ]

@@ -663,16 +663,27 @@ status_with_alarm(Config) ->
     rabbit_ct_broker_helpers:rabbitmqctl(Config, Hare,
       ["set_disk_free_limit", "2048G"]),
 
-    %% When: we ask for cluster status.
-    {ok, S} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["cluster_status", "--silent"]),
-    {ok, R} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Hare,
-      ["cluster_status", "--silent"]),
+    %% When: we ask for alarm status
+    S = rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                          rabbit_alarm, get_alarms, []),
+    R = rabbit_ct_broker_helpers:rpc(Config, Hare,
+                                          rabbit_alarm, get_alarms, []),
 
     %% Then: both nodes have printed alarm information for eachother.
     ok = alarm_information_on_each_node(S, Rabbit, Hare),
     ok = alarm_information_on_each_node(R, Rabbit, Hare).
 
+alarm_information_on_each_node(Result, Rabbit, Hare) ->
+    %% Example result:
+    %% [{{resource_limit,disk,'rmq-ct-status_with_alarm-2-24240@localhost'},
+    %%           []},
+    %% {{resource_limit,memory,'rmq-ct-status_with_alarm-1-24120@localhost'},
+    %%           []}]
+    Alarms = [A || {A, _} <- Result],
+    ?assert(lists:member({resource_limit, memory, Rabbit}, Alarms)),
+    ?assert(lists:member({resource_limit, disk, Hare}, Alarms)),
+
+    ok.
 
 pid_file_and_await_node_startup(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
@@ -864,18 +875,3 @@ declare(Ch, Name) ->
     amqp_channel:call(Ch, #'queue.bind'{queue    = Name,
                                         exchange = <<"amq.fanout">>}),
     Res.
-
-alarm_information_on_each_node(Output, Rabbit, Hare) ->
-    {ok, Tokens, _} = erl_scan:string(Output ++ "."),
-    {ok, Exprs} = erl_parse:parse_exprs(Tokens),
-    {value, Status, _} = erl_eval:exprs(Exprs, erl_eval:new_bindings()),
-
-    Alarms = proplists:get_value(alarms, Status),
-    ?assert(
-       lists:member({Rabbit, [memory]}, Alarms) orelse
-       lists:member({Rabbit, [{resource_limit, memory, Rabbit}]}, Alarms)),
-    ?assert(
-       lists:member({Hare, [disk]}, Alarms) orelse
-       lists:member({Hare, [{resource_limit, disk, Hare}]}, Alarms)),
-
-    ok.
