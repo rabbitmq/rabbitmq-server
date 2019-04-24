@@ -288,7 +288,7 @@ aggregate_entry({{_Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, DropUnrouta
                        policies = {_BPolicies, DPolicies, GPolicies},
                        lookup_exchange = ExchangeFun} = State) ->
     Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable, DropUnroutable),
-    {Publish, _, _} = Diff = get_difference(Id, Stats, State),
+    {Publish, _, _, _} = Diff = get_difference(Id, Stats, State),
     Ops1 = insert_entry_ops(vhost_stats_fine_stats, vhost(X), true, Diff, Ops0,
                             GPolicies),
     Ops2 = case ExchangeFun(X) of
