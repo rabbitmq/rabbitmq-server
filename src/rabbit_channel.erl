@@ -2061,8 +2061,9 @@ notify_limiter(Limiter, Acked) ->
 deliver_to_queues({#delivery{message   = #basic_message{exchange_name = XName},
                              confirm   = false,
                              mandatory = false},
-                   []}, State) -> %% optimisation
+                   _RoutedToQs = []}, State) -> %% optimisation
     ?INCR_STATS(exchange_stats, XName, 1, publish, State),
+    ?INCR_STATS(exchange_stats, XName, 1, drop_unroutable, State),
     State;
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                        exchange_name = XName},
