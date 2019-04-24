@@ -40,6 +40,12 @@ defmodule CipherSuitesCommandTest do
     assert @command.merge_defaults([], %{}) == {[], %{format: "erlang", all: false}}
   end
 
+  test "merge_defaults: format is case insensitive" do
+    assert @command.merge_defaults([], %{format: "OpenSSL"}) == {[], %{format: "openssl", all: false}}
+    assert @command.merge_defaults([], %{format: "Erlang"}) == {[], %{format: "erlang", all: false}}
+    assert @command.merge_defaults([], %{format: "Map"}) == {[], %{format: "map", all: false}}
+  end
+
   test "merge_defaults: OpenSSL format can be switched on" do
     assert @command.merge_defaults([], %{openssl_format: true}) == {[], %{format: "openssl", all: false}}
   end

@@ -19,13 +19,17 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def merge_defaults(args, opts) do
     format_opts = case opts do
-      %{openssl_format: true} -> %{format: "openssl"};
-      %{}                     -> %{format: "erlang"}
+      %{openssl_format: true} -> %{format: "openssl", all: false};
+      %{}                     -> %{format: "erlang", all: false}
     end
     {args, Map.merge(format_opts,
-                     Map.merge(%{all: false},
-                               Map.delete(opts, :openssl_format)))}
+                     Map.delete(case_insensitive_format(opts), :openssl_format))}
   end
+
+  defp case_insensitive_format(%{format: format} = opts) do
+    %{ opts | format: String.downcase(format) }
+  end
+  defp case_insensitive_format(opts), do: opts
 
   def switches(), do: [timeout: :integer,
                        openssl_format: :boolean,
