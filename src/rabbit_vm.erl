@@ -37,6 +37,7 @@ memory() ->
     MnesiaETS           = mnesia_memory(),
     MsgIndexETS         = ets_memory(msg_stores()),
     MetricsETS          = ets_memory([rabbit_metrics]),
+    QuorumETS           = ets_memory([ra_log_ets]),
     MetricsProc  = try
                        [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
                        M
@@ -87,7 +88,8 @@ memory() ->
 
      %% ETS
      {mnesia,               MnesiaETS},
-     {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS},
+     {quorum_ets,           QuorumETS},
+     {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS - QuorumETS},
 
      %% Messages (mostly, some binaries are not messages)
      {binary,               Bin},
