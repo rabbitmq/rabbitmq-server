@@ -117,6 +117,7 @@ defmodule ListConsumersCommandTest do
     Enum.each queue_types, fn queue_type ->
       queue_name = "active-activity-status-fields-" <> queue_type
       declare_queue(queue_name, @vhost, true, false, [{"x-queue-type", :longstr, queue_type}])
+      :timer.sleep(200)
       with_channel(@vhost, fn(channel) ->
         {:ok, tag1} = AMQP.Basic.consume(channel, queue_name)
         {:ok, tag2} = AMQP.Basic.consume(channel, queue_name)
@@ -144,6 +145,7 @@ defmodule ListConsumersCommandTest do
       queue_name = "single-active-consumer-" <> queue_type
       declare_queue(queue_name, @vhost, true, false,
         [{"x-single-active-consumer", :bool, true}, {"x-queue-type", :longstr, queue_type}])
+      :timer.sleep(200)
       with_channel(@vhost, fn(channel) ->
         {:ok, tag1} = AMQP.Basic.consume(channel, queue_name)
         {:ok, tag2} = AMQP.Basic.consume(channel, queue_name)
