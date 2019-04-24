@@ -377,6 +377,19 @@ lookup_all(Table, Ids, SecondKey) ->
     end.
 
 maybe_convert_for_compatibility(Table, Slide)
+  when Table =:= channel_stats_fine_stats orelse
+       Table =:= channel_exchange_stats_fine_stats orelse
+       Table =:= vhost_stats_fine_stats ->
+     ConversionNeeded = rabbit_feature_flags:is_disabled(
+                          drop_unroutable_metric),
+     case ConversionNeeded of
+         false ->
+             Slide;
+         true ->
+             %% drop_drop because the metric is named "drop_unroutable"
+             rabbit_mgmt_data_compat:drop_drop_unroutable_metric(Slide)
+     end;
+maybe_convert_for_compatibility(Table, Slide)
   when Table =:= channel_queue_stats_deliver_stats orelse
        Table =:= channel_stats_deliver_stats orelse
        Table =:= queue_stats_deliver_stats orelse

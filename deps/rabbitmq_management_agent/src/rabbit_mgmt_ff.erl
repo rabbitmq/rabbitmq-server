@@ -21,3 +21,9 @@
     #{desc          => "Count AMQP `basic.get` on empty queues in stats",
       stability     => stable
      }}).
+
+-rabbit_feature_flag(
+  {drop_unroutable_metric,
+   #{desc          => "Count unroutable publishes to be dropped in stats",
+     stability     => stable
+    }}).
