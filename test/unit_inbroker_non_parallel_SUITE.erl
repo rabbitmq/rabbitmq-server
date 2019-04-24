@@ -494,7 +494,7 @@ channel_statistics1(_Config) ->
                      [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 0, 0}] = ets:lookup(
                                                                 channel_queue_metrics,
                                                                 {Ch, QRes}),
-                     [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                     [{{Ch, X}, 1, 0, 0, 0, 0}] = ets:lookup(
                                                  channel_exchange_metrics,
                                                  {Ch, X}),
                      [{{Ch, {QRes, X}}, 1, 0}] = ets:lookup(
@@ -509,7 +509,7 @@ channel_statistics1(_Config) ->
                      [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 0, 1}] = ets:lookup(
                                                                 channel_queue_metrics,
                                                                 {Ch, QRes}),
-                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                 [{{Ch, X}, 1, 0, 0, 0, 0}] = ets:lookup(
                                              channel_exchange_metrics,
                                              {Ch, X}),
                  [{{Ch, {QRes, X}}, 1, 1}] = ets:lookup(
@@ -522,7 +522,7 @@ channel_statistics1(_Config) ->
     force_metric_gc(),
     Check4 = fun() ->
                  [] = ets:lookup(channel_queue_metrics, {Ch, QRes}),
-                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                 [{{Ch, X}, 1, 0, 0, 0, 0}] = ets:lookup(
                                              channel_exchange_metrics,
                                              {Ch, X}),
                  [] = ets:lookup(channel_queue_exchange_metrics,
