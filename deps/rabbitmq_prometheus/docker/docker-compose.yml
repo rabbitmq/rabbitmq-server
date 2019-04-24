@@ -44,7 +44,7 @@ services:
       - "7672:5672"
       - "35672:15672"
       - "35692:15692"
-  published-confirmed:
+  publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
     image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.24
     networks:
@@ -52,11 +52,12 @@ services:
     environment:
       URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
       QUEUE: published-confirmed
+      AUTOACK: "true"
       RATE: 10
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
       START_TIMEOUT: 30
-  published-unroutable:
+  unroutable:
     image: *perf-test-image
     networks:
       - "rabbitmq-prometheus"
@@ -66,7 +67,7 @@ services:
       CONSUMERS: 0
       FLAG: mandatory
       START_TIMEOUT: 30
-  slow-consumer:
+  slow-consumer-persistent:
     image: *perf-test-image
     networks:
       - "rabbitmq-prometheus"
@@ -74,6 +75,8 @@ services:
       URI: "amqp://guest:guest@rabbitmq3:5672/%2f"
       QUEUE: slow-consumer
       QUEUE_ARGS: x-max-length=1000
+      FLAG: persistent
+      AUTO_DELETE: "false"
       RATE: 30
       CONSUMER_RATE: 20
       AUTOACK: "false"
