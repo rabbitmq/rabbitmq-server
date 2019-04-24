@@ -17,6 +17,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     ports:
+      - "5672:5672"
       - "15672:15672"
       - "15692:15692"
     hostname: rabbitmq1
@@ -33,34 +34,52 @@ services:
     << : *rabbitmq
     hostname: rabbitmq2
     ports:
+      - "6672:5672"
       - "25672:15672"
       - "25692:15692"
   rabbitmq3:
     << : *rabbitmq
     hostname: rabbitmq3
     ports:
+      - "7672:5672"
       - "35672:15672"
       - "35692:15692"
-  perf-test:
+  published-confirmed:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: pivotalrabbitmq/perf-test:2.7.0
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.24
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URIS: "amqp://guest:guest@rabbitmq1:5672/%2f,amqp://guest:guest@rabbitmq2:5672/%2f,amqp://guest:guest@rabbitmq3:5672/%2f"
-      PRODUCERS: 3
-      CONSUMERS: 3
+      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      QUEUE: published-confirmed
       RATE: 10
       CONFIRM: 1
+      CONFIRM_TIMEOUT: 1
+      START_TIMEOUT: 30
+  published-unroutable:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
+      RATE: 20
+      CONSUMERS: 0
       FLAG: mandatory
-    entrypoint: []
-    command: /bin/bash -c "while sleep 1; do nc -zv rabbitmq1 5672 && nc -zv rabbitmq2 5672 && nc -zv rabbitmq3 5672 && break; done && bin/runjava com.rabbitmq.perf.PerfTest"
-    depends_on:
-      - rabbitmq1
-      - rabbitmq2
-      - rabbitmq3
+      START_TIMEOUT: 30
+  slow-consumer:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq3:5672/%2f"
+      QUEUE: slow-consumer
+      QUEUE_ARGS: x-max-length=1000
+      RATE: 30
+      CONSUMER_RATE: 20
+      AUTOACK: "false"
+      QOS: 40
+      START_TIMEOUT: 30
   prometheus:
-    # https://hub.docker.com/r/prom/prometheus/
     image: prom/prometheus:v2.9.0
     networks:
       - "rabbitmq-prometheus"

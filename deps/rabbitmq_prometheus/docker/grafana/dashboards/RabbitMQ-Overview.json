@@ -37,8 +37,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages published",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -127,8 +127,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages delivered to consumers",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -161,7 +161,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[1m]) + irate(rabbitmq_channel_queue_deliver_no_ack_total[1m]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -217,15 +217,15 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages acknowledged by consumers",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
         "x": 12,
         "y": 1
       },
-      "id": 15,
+      "id": 22,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -251,7 +251,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_redeliver_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_ack_total[1m]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -263,7 +263,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Redelivered / s",
+      "title": "Consumer ack / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -307,8 +307,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages ready to be delivered to clients",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -397,8 +397,8 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages confirmed",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -487,15 +487,15 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages delivered in acknowledgement mode to consumers",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
-        "x": 18,
+        "x": 6,
         "y": 7
       },
-      "id": 12,
+      "id": 20,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -510,7 +510,7 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "nullPointMode": "null",
+      "nullPointMode": "null as zero",
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -521,7 +521,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channel_messages_unconfirmed)) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[1m]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -533,7 +533,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Unconfirmed to publishers",
+      "title": "Delivered with ack / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -577,8 +577,188 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of messages returned to publishers as unroutable. Requires messages to be published as mandatory.\n\n* [Ensuring Messages are routed](https://www.rabbitmq.com/reliability.html#producer)\n* [Unroutable Messages & Confirms](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
-      "fill": 1,
+      "description": "Count of messages delivered in acknowledgement mode in response to `basic.get`",
+      "fill": 10,
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 7
+      },
+      "id": 23,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(irate(rabbitmq_channel_queue_get_total[1m]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Consumer get with ack / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of messages unacknowledged to consumers",
+      "fill": 10,
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "id": 19,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(rabbitmq_channel_messages_unacknowledged)) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Unacknowledged by consumers",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of mandatory messages returned to publishers as unroutable.\n\n* [Ensuring Messages are routed](https://www.rabbitmq.com/reliability.html#producer)\n* [Unroutable Messages & Confirms](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -667,15 +847,195 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 1,
+      "description": "Count of messages delivered in no-acknowledgement mode to consumers",
+      "fill": 10,
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 13
+      },
+      "id": 21,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_no_ack_total[1m]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Delivered auto ack / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of messages delivered in no-acknowledgement mode in response to `basic.get`",
+      "fill": 10,
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 13
+      },
+      "id": 24,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(irate(rabbitmq_channel_queue_get_no_ack_total[1m]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Consumer get auto ack / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of messages unconfirmed to publishers",
+      "fill": 10,
       "gridPos": {
         "h": 6,
         "w": 6,
         "x": 18,
         "y": 13
       },
-      "id": 19,
+      "id": 12,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -701,7 +1061,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channel_messages_unacknowledged)) by(node)",
+          "expr": "sum(round(rabbitmq_channel_messages_unconfirmed)) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -713,7 +1073,187 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Unacknowledged by consumers",
+      "title": "Unconfirmed to publishers",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of subset of delivered messages which had the redelivered flag set",
+      "fill": 10,
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 19
+      },
+      "id": 15,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(irate(rabbitmq_channel_queue_redeliver_total[1m]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Redelivered / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of `basic.get` operations on empty queues",
+      "fill": 10,
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 19
+      },
+      "id": 25,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(irate(rabbitmq_channel_queue_get_empty_total[1m]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Consumer get empty / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -757,7 +1297,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 25
       },
       "id": 4,
       "panels": [],
@@ -776,7 +1316,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 20
+        "y": 26
       },
       "id": 7,
       "legend": {
@@ -882,7 +1422,7 @@
         "h": 6,
         "w": 6,
         "x": 6,
-        "y": 20
+        "y": 26
       },
       "id": 8,
       "legend": {
@@ -987,7 +1527,7 @@
         "h": 6,
         "w": 6,
         "x": 12,
-        "y": 20
+        "y": 26
       },
       "id": 5,
       "legend": {
@@ -1093,7 +1633,7 @@
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 20
+        "y": 26
       },
       "id": 2,
       "legend": {
@@ -1200,7 +1740,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 26
+        "y": 32
       },
       "id": 6,
       "legend": {
