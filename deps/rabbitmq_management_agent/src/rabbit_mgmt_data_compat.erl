@@ -67,7 +67,7 @@ drop_drop_unroutable_metric(Slide) ->
     exometer_slide:map(
       fun
           (Value) when is_tuple(Value) andalso size(Value) =:= 4 ->
-              %% Remote the last element.
+              %% Remove the last element.
               list_to_tuple(
                 lists:sublist(
                   tuple_to_list(Value), size(Value) - 1));
