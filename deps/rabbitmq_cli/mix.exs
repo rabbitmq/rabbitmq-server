@@ -89,7 +89,7 @@ defmodule RabbitMQCtl.MixfileBase do
       {:json, "~> 1.2.0"},
       {:csv, "~> 2.0.0"},
 
-      {:amqp, "~> 1.1", only: :test},
+      {:amqp, "~> 1.2", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
       {:temp, "~> 0.4", only: :test},
     ]
