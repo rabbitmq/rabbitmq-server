@@ -70,23 +70,11 @@ cipher_suites_openssl(Mode, Version) ->
     ssl:cipher_suites(Mode, Version)).
 
 
-%% OTP-20.3 and OTP-21 have different modules containing cipher format functions
-%% This is not a hot codepath and `function_exported` should not slow things down much.
 format_cipher_erlang(Cipher) ->
-    case erlang:function_exported(ssl_cipher_format, suite, 1) of
-        true ->
-            ssl_cipher_format:erl_suite_definition(ssl_cipher_format:suite(Cipher));
-        false ->
-            ssl_cipher:erl_suite_definition(ssl_cipher:suite(Cipher))
-    end.
+    ssl_cipher_format:erl_suite_definition(ssl_cipher_format:suite(Cipher)).
 
 format_cipher_openssl(Cipher) ->
-    case erlang:function_exported(ssl_cipher_format, suite, 1) of
-        true ->
-            ssl_cipher_format:openssl_suite_name(ssl_cipher_format:suite(Cipher));
-        false ->
-            ssl_cipher:openssl_suite_name(ssl_cipher:suite(Cipher))
-    end.
+    ssl_cipher_format:openssl_suite_name(ssl_cipher_format:suite(Cipher)).
 
 -spec get_highest_protocol_version() -> tls_record:tls_version().
 get_highest_protocol_version() ->
