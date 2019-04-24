@@ -18,7 +18,9 @@
 
 -export([fill_get_empty_queue_metric/1,
          drop_get_empty_queue_metric/1,
-         fill_consumer_active_fields/1]).
+         fill_consumer_active_fields/1,
+         fill_drop_unroutable_metric/1,
+         drop_drop_unroutable_metric/1]).
 
 fill_get_empty_queue_metric(Slide) ->
     exometer_slide:map(
