@@ -18,50 +18,34 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    format_opts = case opts do
-      %{openssl_format: true} -> %{erlang_format: false, map_format: false};
-      %{erlang_format: true}  -> %{openssl_format: false, map_format: false};
-      %{map_format: true}     -> %{erlang_format: false, openssl_format: false}
-      %{} -> %{openssl_format: true, erlang_format: false, map_format: false}
-    end
-    {args, Map.merge(format_opts, Map.merge(%{all: false}, opts))}
+    {args, Map.merge(%{all: false, format: "openssl"}, case_insensitive_format(opts))}
   end
 
+  defp case_insensitive_format(%{format: format} = opts) do
+    %{ opts | format: String.downcase(format) }
+  end
+  defp case_insensitive_format(opts), do: opts
+
   def switches(), do: [timeout: :integer,
-                       openssl_format: :boolean,
-                       erlang_format: :boolean,
-                       map_format: :boolean,
+                       format: :string,
                        all: :boolean]
   def aliases(), do: [t: :timeout]
 
-  def validate(_, %{openssl_format: true, erlang_format: true}) do
-    {:validation_failure, {:bad_argument, "Cannot use multiple formats together"}}
+  def validate(_, %{format: format})
+      when format != "openssl" and format != "erlang" and format != "map" do
+    {:validation_failure, {:bad_argument, "Format should be either openssl, erlang or map"}}
   end
-
-  def validate(_, %{openssl_format: true, map_format: true}) do
-    {:validation_failure, {:bad_argument, "Cannot use multiple formats together"}}
-  end
-
-  def validate(_, %{erlang_format: true, map_format: true}) do
-    {:validation_failure, {:bad_argument, "Cannot use multiple formats together"}}
-  end
-
-  def validate(_, %{openssl_format: false, erlang_format: false, map_format: false}) do
-    {:validation_failure,
-     {:bad_argument, "At least one format must be selected"}}
-  end
-
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
 
   def validate(_, _), do: :ok
 
-  def run([], %{node: node_name, timeout: timeout} = opts) do
-    {mod, function} = case opts do
-      %{openssl_format: true} -> {:rabbit_ssl, :cipher_suites_openssl};
-      %{erlang_format: true}  -> {:rabbit_ssl, :cipher_suites_erlang};
-      %{map_format: true}     -> {:rabbit_ssl, :cipher_suites}
+  def run([], %{node: node_name, timeout: timeout, format: format} = opts) do
+    {mod, function} = case format do
+      "openssl" -> {:rabbit_ssl, :cipher_suites_openssl};
+      "erlang"  -> {:rabbit_ssl, :cipher_suites_erlang};
+      "map"     -> {:rabbit_ssl, :cipher_suites}
     end
     args = case opts do
       %{all: true} -> [:all];
@@ -70,23 +54,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     :rabbit_misc.rpc_call(node_name, mod, function, args, timeout)
   end
 
-  def banner([], %{openssl_format: true}), do: "Listing available cipher suites in the OpenSSL format"
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def banner([], %{erlang_format: true}), do: "Listing available cipher suites in the Erlang term format"
-
-  def banner([], %{map_format: true}), do: "Listing available cipher suites in the new map-based format"
+  def banner([], %{format: "openssl"}),  do: "Listing available cipher suites in the OpenSSL format"
+  def banner([], %{format: "erlang"}), do: "Listing available cipher suites in the Erlang term format"
+  def banner([], %{format: "map"}), do: "Listing available cipher suites in the new map-based format"
 
   def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Lists cipher suites available (but not necessarily allowed) on the target node"
 
-  def usage, do: "cipher_suites [--openssl-format | --erlang-format | --map-format] [--all]"
+  def usage, do: "cipher_suites [--format (openssl | erlang | map)] [--all]"
 
   def usage_additional() do
     [
-      ["--openssl-format", "use OpenSSL cipher suite format"],
-      ["--erlang-format", "use Erlang cipher suite format"],
-      ["--map-format", "use new map-based cipher suite format"],
+      ["--format", "an output format to use. Can be either openssl, erlang or map. Case insensitive"],
       ["--all", "list all available suites"]
     ]
   end
@@ -96,27 +78,27 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
     @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-    def format_output(item, %{erlang_format: true} = _opts) do
+    def format_output(item, %{format: "erlang"} = _opts) do
       to_string(:io_lib.format("~p", [item]))
     end
 
-    def format_output(item, %{map_format: true} = opts) do
+    def format_output(item, %{format: "map"} = opts) do
       to_string(:io_lib.format("~p", [item]))
     end
 
-    def format_output(item, %{openssl_format: true} = opts) do
+    def format_output(item, %{format: "openssl"} = opts) do
       RabbitMQ.CLI.Formatters.String.format_output(item, opts)
     end
 
-    def format_stream(stream, %{erlang_format: true} = opts) do
+    def format_stream(stream, %{format: "erlang"} = opts) do
       comma_separated(stream, opts)
     end
 
-    def format_stream(stream, %{map_format: true} = opts) do
+    def format_stream(stream, %{format: "map"} = opts) do
       comma_separated(stream, opts)
     end
 
-    def format_stream(stream, %{openssl_format: true} = opts) do
+    def format_stream(stream, %{format: 'openssl'} = opts) do
       Stream.map(
         stream,
         FormatterHelpers.without_errors_1(fn el ->
