@@ -39,7 +39,8 @@ groups() ->
           file_handle_cache, %% Change FHC limit.
           head_message_timestamp_statistics, %% Expect specific statistics.
           log_management, %% Check log files.
-          log_management_during_startup, %% Check log files.
+          log_file_initialised_during_startup,
+          log_file_fails_to_initialise_during_startup,
           externally_rotated_logs_are_automatically_reopened %% Check log files.
         ]}
     ].
@@ -271,11 +272,11 @@ log_management1(_Config) ->
     ok = test_logs_working([LogFile]),
     passed.
 
-log_management_during_startup(Config) ->
+log_file_initialised_during_startup(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, log_management_during_startup1, [Config]).
+      ?MODULE, log_file_initialised_during_startup1, [Config]).
 
-log_management_during_startup1(_Config) ->
+log_file_initialised_during_startup1(_Config) ->
     [LogFile|_] = rabbit:log_locations(),
     Suffix = ".0",
 
@@ -298,6 +299,23 @@ log_management_during_startup1(_Config) ->
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
+
+    %% clean up
+    ok = application:set_env(rabbit, lager_default_file, LogFile),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
+    passed.
+
+
+log_file_fails_to_initialise_during_startup(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, log_file_fails_to_initialise_during_startup1, [Config]).
+
+log_file_fails_to_initialise_during_startup1(_Config) ->
+    [LogFile|_] = rabbit:log_locations(),
+    Suffix = ".0",
 
     %% start application with logging to directory with no
     %% write permissions
