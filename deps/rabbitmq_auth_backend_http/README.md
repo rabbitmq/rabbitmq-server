@@ -57,6 +57,7 @@ Below is a minimal configuration file example.
 In `rabbitmq.conf`:
 
     auth_backends.1 = http
+    auth_http.http_method   = post
     auth_http.user_path     = http://some-server/auth/user
     auth_http.vhost_path    = http://some-server/auth/vhost
     auth_http.resource_path = http://some-server/auth/resource
