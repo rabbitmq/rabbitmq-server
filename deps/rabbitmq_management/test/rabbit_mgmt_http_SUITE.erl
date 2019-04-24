@@ -58,6 +58,7 @@ groups() ->
 all_tests() -> [
     cli_redirect_test,
     api_redirect_test,
+    stats_redirect_test,
     overview_test,
     auth_test,
     cluster_name_test,
@@ -2984,6 +2985,10 @@ cli_redirect_test(Config) ->
 
 api_redirect_test(Config) ->
     assert_permanent_redirect(Config, "api", "/api/index.html"),
+    passed.
+
+stats_redirect_test(Config) ->
+    assert_permanent_redirect(Config, "doc/stats.html", "/api/index.html"),
     passed.
 
 %% -------------------------------------------------------------------
