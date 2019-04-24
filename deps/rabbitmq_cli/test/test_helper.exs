@@ -268,6 +268,7 @@ defmodule TestHelper do
   end
 
   def with_connection(vhost, fun) do
+    Application.ensure_all_started(:amqp)
     {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
     ExUnit.Callbacks.on_exit(fn ->
       try do
@@ -280,6 +281,7 @@ defmodule TestHelper do
   end
 
   def with_connections(vhosts, fun) do
+    Application.ensure_all_started(:amqp)
     conns = for v <- vhosts do
       {:ok, conn} = AMQP.Connection.open(virtual_host: v)
       conn
