@@ -50,7 +50,8 @@
          {channel_exchange_metrics,
           [{2, channel_exchange_publish, gauge, "Count of messages published."},
            {3, channel_exchange_confirm, gauge, "Count of messages confirmed."},
-           {4, channel_exchange_return_unroutable, gauge, "Count of messages returned to publisher as unroutable."}
+           {4, channel_exchange_return_unroutable, gauge, "Count of messages returned to publisher as unroutable."},
+           {5, channel_exchange_drop_unroutable, gauge, "Count of unroutable non-mandatory messages."}
           ]},
          {channel_process_metrics,
           [{2, channel_process_reductions_total, counter, "Count of reductions that take place on the channel process."}
