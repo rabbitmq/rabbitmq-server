@@ -559,7 +559,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Published confirmed / s",
+      "title": "Confirmed to publishers / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -649,7 +649,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Published unroutable / s",
+      "title": "Returned to publishers / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2093,5 +2093,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 2
+  "version": 3
 }
