@@ -54,7 +54,7 @@ defmodule CipherSuitesCommandTest do
     assert @command.merge_defaults([], %{openssl_format: false}) == {[], %{format: "erlang", all: false}}
   end
 
-  test "merge_defaults: Can specify format" do
+  test "merge_defaults: format can be overridden" do
     assert @command.merge_defaults([], %{format: "map"}) == {[], %{format: "map", all: false}}
   end
 
