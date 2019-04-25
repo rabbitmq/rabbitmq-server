@@ -84,16 +84,16 @@
 -define(channel_consumer_created_stats(Queue, ChPid, ConsumerTag),
         {Queue, {ChPid, ConsumerTag}}).
 -define(channel_stats(Id, Props), {Id, Props}).
--define(channel_stats_fine_stats(Publish, Confirm, Return_unroutable),
-        {Publish, Confirm, Return_unroutable}).
--define(channel_exchange_stats_fine_stats(Publish, Confirm, Return_unroutable),
-        {Publish, Confirm, Return_unroutable}).
+-define(channel_stats_fine_stats(Publish, Confirm, ReturnUnroutable, DropUnroutable),
+        {Publish, Confirm, ReturnUnroutable, DropUnroutable}).
+-define(channel_exchange_stats_fine_stats(Publish, Confirm, ReturnUnroutable, DropUnroutable),
+        {Publish, Confirm, ReturnUnroutable, DropUnroutable}).
 -define(channel_queue_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
                                           Redeliver, Ack, Deliver_get, Get_empty),
         {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get,
          Get_empty}).
--define(vhost_stats_fine_stats(Publish, Confirm, Return_unroutable),
-        {Publish, Confirm, Return_unroutable}).
+-define(vhost_stats_fine_stats(Publish, Confirm, ReturnUnroutable, DropUnroutable),
+        {Publish, Confirm, ReturnUnroutable, DropUnroutable}).
 -define(queue_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
                                   Redeliver, Ack, Deliver_get, Get_empty),
         {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get,
@@ -156,7 +156,7 @@
             T when T =:= channel_stats_fine_stats;
                    T =:= channel_exchange_stats_fine_stats;
                    T =:= vhost_stats_fine_stats ->
-                [publish, confirm, return_unroutable];
+                [publish, confirm, return_unroutable, drop_unroutable];
             T when T =:= channel_queue_stats_deliver_stats;
                    T =:= queue_stats_deliver_stats;
                    T =:= vhost_stats_deliver_stats;

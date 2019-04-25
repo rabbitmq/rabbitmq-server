@@ -254,14 +254,14 @@ aggregate_entry({Id, Metrics}, NextStats, Ops0,
     Entry = ?channel_stats(Id, Ftd),
     Ops = insert_op(channel_stats, Id, Entry, Ops0),
     {NextStats, Ops, State};
-aggregate_entry({{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, 0},
+aggregate_entry({{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, DropUnroutable, 0},
                 NextStats, Ops0,
                 #state{table = channel_exchange_metrics,
                        policies = {BPolicies, DPolicies, GPolicies},
                        rates_mode = RatesMode,
                        lookup_exchange = ExchangeFun} = State) ->
-    Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable),
-    {Publish, _, _} = Diff = get_difference(Id, Stats, State),
+    Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable, DropUnroutable),
+    {Publish, _, _, _} = Diff = get_difference(Id, Stats, State),
 
     Ops1 = insert_entry_ops(channel_stats_fine_stats, Ch, true, Diff, Ops0,
                             BPolicies),
@@ -282,13 +282,13 @@ aggregate_entry({{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, 0},
                    Ops2
            end,
     {insert_old_aggr_stats(NextStats, Id, Stats), Ops3, State};
-aggregate_entry({{_Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, 1},
+aggregate_entry({{_Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, DropUnroutable, 1},
                 NextStats, Ops0,
                 #state{table = channel_exchange_metrics,
                        policies = {_BPolicies, DPolicies, GPolicies},
                        lookup_exchange = ExchangeFun} = State) ->
-    Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable),
-    {Publish, _, _} = Diff = get_difference(Id, Stats, State),
+    Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable, DropUnroutable),
+    {Publish, _, _, _} = Diff = get_difference(Id, Stats, State),
     Ops1 = insert_entry_ops(vhost_stats_fine_stats, vhost(X), true, Diff, Ops0,
                             GPolicies),
     Ops2 = case ExchangeFun(X) of
@@ -612,6 +612,10 @@ sum_entry({A0, A1}, {B0, B1}) ->
     {B0 + A0, B1 + A1};
 sum_entry({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
+sum_entry({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3};
+sum_entry({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4};
 sum_entry({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5};
 sum_entry({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
@@ -625,6 +629,10 @@ difference({A0, A1}, {B0, B1}) ->
     {B0 - A0, B1 - A1};
 difference({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 - A0, B1 - A1, B2 - A2};
+difference({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+    {B0 - A0, B1 - A1, B2 - A2, B3 - A3};
+difference({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+    {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4};
 difference({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5};
 difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->

@@ -18,7 +18,9 @@
 
 -export([fill_get_empty_queue_metric/1,
          drop_get_empty_queue_metric/1,
-         fill_consumer_active_fields/1]).
+         fill_consumer_active_fields/1,
+         fill_drop_unroutable_metric/1,
+         drop_drop_unroutable_metric/1]).
 
 fill_get_empty_queue_metric(Slide) ->
     exometer_slide:map(
@@ -26,8 +28,7 @@ fill_get_empty_queue_metric(Slide) ->
           (Value) when is_tuple(Value) andalso size(Value) =:= 8 ->
               Value;
           (Value) when is_tuple(Value) andalso size(Value) =:= 7 ->
-              %% We want to remote the last element, which is
-              %% the count of basic.get on empty queues.
+              %% Inject a 0 for the new metric
               list_to_tuple(
                 tuple_to_list(Value) ++ [0]);
           (Value) ->
@@ -38,12 +39,39 @@ drop_get_empty_queue_metric(Slide) ->
     exometer_slide:map(
       fun
           (Value) when is_tuple(Value) andalso size(Value) =:= 8 ->
-              %% We want to remote the last element, which is
+              %% We want to remove the last element, which is
               %% the count of basic.get on empty queues.
               list_to_tuple(
                 lists:sublist(
                   tuple_to_list(Value), size(Value) - 1));
           (Value) when is_tuple(Value) andalso size(Value) =:= 7 ->
+              Value;
+          (Value) ->
+              Value
+      end, Slide).
+
+fill_drop_unroutable_metric(Slide) ->
+    exometer_slide:map(
+      fun
+          (Value) when is_tuple(Value) andalso size(Value) =:= 4 ->
+              Value;
+          (Value) when is_tuple(Value) andalso size(Value) =:= 3 ->
+              %% Inject a 0
+              list_to_tuple(
+                tuple_to_list(Value) ++ [0]);
+          (Value) ->
+              Value
+      end, Slide).
+
+drop_drop_unroutable_metric(Slide) ->
+    exometer_slide:map(
+      fun
+          (Value) when is_tuple(Value) andalso size(Value) =:= 4 ->
+              %% Remove the last element.
+              list_to_tuple(
+                lists:sublist(
+                  tuple_to_list(Value), size(Value) - 1));
+          (Value) when is_tuple(Value) andalso size(Value) =:= 3 ->
               Value;
           (Value) ->
               Value

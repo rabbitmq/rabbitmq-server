@@ -214,6 +214,12 @@ add_to_total({A0, A1}, {B0, B1}) ->
     {B0 + A0, B1 + A1};
 add_to_total({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
+add_to_total({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3};
+add_to_total({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4};
+add_to_total({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5};
 add_to_total({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6};
 add_to_total({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
@@ -233,6 +239,12 @@ is_zeros({0}) ->
 is_zeros({0, 0}) ->
     true;
 is_zeros({0, 0, 0}) ->
+    true;
+is_zeros({0, 0, 0, 0}) ->
+    true;
+is_zeros({0, 0, 0, 0, 0}) ->
+    true;
+is_zeros({0, 0, 0, 0, 0, 0}) ->
     true;
 is_zeros({0, 0, 0, 0, 0, 0, 0}) ->
     true;
