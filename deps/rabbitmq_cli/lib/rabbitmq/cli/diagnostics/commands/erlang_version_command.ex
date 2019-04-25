@@ -16,15 +16,26 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [details: :boolean, timeout: :integer]
+  def switches() do
+    [details: :boolean, offline: :boolean, timeout: :integer]
+  end
   def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{details: false}, opts)}
+    {args, Map.merge(%{details: false, offline: false}, opts)}
   end
 
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
+  def run([], %{details: details, offline: true}) do
+    case details do
+      true ->
+        :rabbit_misc.otp_system_version()
+
+      false ->
+        :rabbit_misc.platform_and_version()
+    end
+  end
   def run([], %{node: node_name, timeout: timeout, details: details}) do
     case details do
       true ->
@@ -49,11 +60,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
 
   def usage_additional() do
     [
-      ["--details", "when set, display additional Erlang/OTP system information"]
+      ["--details", "when set, display additional Erlang/OTP system information"],
+      ["--offline", "when set, displays local Erlang/OTP version (that used by CLI tools)"]
     ]
   end
 
-
+  def banner([], %{offline: true}) do
+    "Will print local Erlang/OTP version ..."
+  end
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} for its Erlang/OTP version..."
   end
