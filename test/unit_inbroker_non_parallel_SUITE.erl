@@ -320,54 +320,52 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
     %% start application with logging to directory with no
     %% write permissions
     ok = rabbit:stop(),
-    NoPermission1 = "/var/empty/test.log",
-    delete_file(NoPermission1),
-    delete_file(filename:dirname(NoPermission1)),
-    ok = rabbit:stop(),
-    ok = application:set_env(rabbit, lager_default_file, NoPermission1),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-    ok = try rabbit:start() of
+
+    Run1 = fun() ->
+      NoPermission1 = "/var/empty/test.log",
+      delete_file(NoPermission1),
+      delete_file(filename:dirname(NoPermission1)),
+      ok = rabbit:stop(),
+      ok = application:set_env(rabbit, lager_default_file, NoPermission1),
+      application:unset_env(rabbit, log),
+      application:unset_env(lager, handlers),
+      application:unset_env(lager, extra_sinks),
+      rabbit:start()
+    end,
+
+    ok = try Run1() of
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_no_write_permission_dir_test})
     catch
-        _:{error, {cannot_log_to_file, _, Reason1}}
-            when Reason1 =:= enoent orelse Reason1 =:= eacces -> ok;
-        _:{error, {cannot_log_to_file, _,
-                  {cannot_create_parent_dirs, _, Reason1}}}
-            when Reason1 =:= eperm orelse
-                 Reason1 =:= eacces orelse
-                 Reason1 =:= enoent-> ok
+        _:could_not_initialise_logger -> ok
     end,
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
     NoPermission2 = "/var/empty/non-existent/test.log",
-    delete_file(NoPermission2),
-    delete_file(filename:dirname(NoPermission2)),
-    case rabbit:stop() of
-        ok                         -> ok;
-        {error, lager_not_running} -> ok
+
+    Run2 = fun() ->
+      delete_file(NoPermission2),
+      delete_file(filename:dirname(NoPermission2)),
+      case rabbit:stop() of
+          ok                         -> ok;
+          {error, lager_not_running} -> ok
+      end,
+      ok = application:set_env(rabbit, lager_default_file, NoPermission2),
+      application:unset_env(rabbit, log),
+      application:unset_env(lager, handlers),
+      application:unset_env(lager, extra_sinks),
+      rabbit:start()
     end,
-    ok = application:set_env(rabbit, lager_default_file, NoPermission2),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-    ok = try rabbit:start() of
+
+    ok = try Run2() of
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_parent_dirs_test})
     catch
-        _:{error, {cannot_log_to_file, _, Reason2}}
-            when Reason2 =:= enoent orelse Reason2 =:= eacces -> ok;
-        _:{error, {cannot_log_to_file, _,
-                   {cannot_create_parent_dirs, _, Reason2}}}
-            when Reason2 =:= eperm orelse
-                 Reason2 =:= eacces orelse
-                 Reason2 =:= enoent-> ok
+        _:could_not_initialise_logger -> ok
     end,
 
-    %% cleanup
+    %% clean up
     ok = application:set_env(rabbit, lager_default_file, LogFile),
     application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),

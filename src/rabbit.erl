@@ -461,9 +461,8 @@ start_it(StartFun) ->
                         true  -> ok;
                         false -> StartFun()
                     end
-                catch
-                    Class:Reason ->
-                        boot_error(Class, Reason)
+                catch Class:Reason ->
+                    boot_error(Class, Reason)
                 after
                     unlink(Marker),
                     Marker ! stop,
@@ -1016,13 +1015,23 @@ boot_error(_, {could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}}) -
     log_boot_error_and_exit(
       timeout_waiting_for_tables,
       "~n" ++ Err ++ rabbit_nodes:diagnostics(Nodes), []);
-boot_error(_, {error, {cannot_log_to_file, ErrFmt, ErrArgs}}) ->
-    log_boot_error_and_exit(check_config_file, ErrFmt, ErrArgs);
+boot_error(_, {error, {cannot_log_to_file, unknown, Reason}}) ->
+    log_boot_error_and_exit(could_not_initialise_logger,
+                            "failed to initialised logger: ~p~n",
+                            [Reason]);
+boot_error(_, {error, {cannot_log_to_file, LogFile,
+                        {cannot_create_parent_dirs, _, Reason}}}) ->
+    log_boot_error_and_exit(could_not_initialise_logger,
+                            "failed to create parent directory for log file at '~s', reason: ~p~n",
+                            [LogFile, Reason]);
+boot_error(_, {error, {cannot_log_to_file, LogFile, Reason}}) ->
+    log_boot_error_and_exit(could_not_initialise_logger,
+                            "failed to open log file at '~s', reason: ~p~n",
+                            [LogFile, Reason]);
 boot_error(_, {error, {generate_config_file, Error}}) ->
-    log_boot_error_and_exit(
-      generate_config_file,
-      "~nConfig file generation failed ~s",
-      [Error]);
+    log_boot_error_and_exit(generate_config_file,
+                            "~nConfig file generation failed ~s~n",
+                            [Error]);
 boot_error(Class, Reason) ->
     LogLocations = log_locations(),
     log_boot_error_and_exit(
