@@ -13,7 +13,8 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-          confirms_rejects_conflict
+          confirms_rejects_conflict,
+          policy_resets_to_default
         ]}
     ].
 
@@ -40,7 +41,11 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(Testcase, Config) ->
+init_per_testcase(policy_resets_to_default = Testcase, Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    rabbit_ct_helpers:testcase_started(
+        rabbit_ct_helpers:set_config(Config, [{conn, Conn}]), Testcase);
+init_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
 
@@ -48,6 +53,16 @@ init_per_testcase(Testcase, Config) ->
         rabbit_ct_helpers:set_config(Config, [{conn, Conn}, {conn1, Conn1}]),
         Testcase).
 
+end_per_testcase(policy_resets_to_default = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"policy_resets_to_default">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+
+    Conn = ?config(conn, Config),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"confirms_rejects_conflict">>}),
@@ -60,6 +75,8 @@ end_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
     rabbit_ct_client_helpers:close_connection(Conn1),
 
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+
 
 confirms_rejects_conflict(Config) ->
     Conn = ?config(conn, Config),
@@ -119,6 +136,91 @@ confirms_rejects_conflict(Config) ->
         ok -> ok;
         {error, E} -> error(E)
     end.
+
+policy_resets_to_default(Config) ->
+    Conn = ?config(conn, Config),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QueueName = <<"policy_resets_to_default">>,
+
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+
+    amqp_channel:call(Ch, #'queue.declare'{queue = QueueName,
+                                           durable = true
+                                           }),
+    MaxLength = 2,
+    rabbit_ct_broker_helpers:set_policy(
+        Config, 0,
+        QueueName, QueueName, <<"queues">>,
+        [{<<"max-length">>, MaxLength}, {<<"overflow">>, <<"reject-publish">>}]),
+
+    timer:sleep(1000),
+
+    [amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
+                           #amqp_msg{payload = <<"HI">>})
+     || _ <- lists:seq(1, MaxLength)],
+
+    assert_acks(MaxLength),
+
+    #'queue.declare_ok'{message_count = MaxLength} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = QueueName,
+                                               durable = true}),
+
+    RejectedMessage = <<"HI-rejected">>,
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
+                          #amqp_msg{payload = RejectedMessage}),
+
+    assert_nack(),
+
+    rabbit_ct_broker_helpers:set_policy(
+        Config, 0,
+        QueueName, QueueName, <<"queues">>,
+        [{<<"max-length">>, MaxLength}]),
+
+    NotRejectedMessage = <<"HI-not-rejected">>,
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
+                          #amqp_msg{payload = NotRejectedMessage}),
+
+    assert_ack(),
+
+    #'queue.declare_ok'{message_count = MaxLength} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = QueueName,
+                                               durable = true}),
+
+    Msgs = consume_all_messages(Ch, QueueName),
+    case {lists:member(RejectedMessage, Msgs), lists:member(NotRejectedMessage, Msgs)} of
+        {true, _}  -> error({message_should_be_rejected, RejectedMessage});
+        {_, false} -> error({message_should_be_enqueued, NotRejectedMessage});
+        _ -> ok
+    end.
+
+consume_all_messages(Ch, QueueName) ->
+    consume_all_messages(Ch, QueueName, []).
+
+consume_all_messages(Ch, QueueName, Msgs) ->
+    case amqp_channel:call(Ch, #'basic.get'{queue = QueueName, no_ack = true}) of
+        {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} ->
+            consume_all_messages(Ch, QueueName, [Msg | Msgs]);
+        #'basic.get_empty'{} -> Msgs
+    end.
+
+assert_ack() ->
+    receive {'basic.ack', _, _} -> ok
+    after 10000 -> error(timeout_waiting_for_ack)
+    end,
+    clean_acks_mailbox().
+
+assert_nack() ->
+    receive {'basic.nack', _, _, _} -> ok
+    after 10000 -> error(timeout_waiting_for_nack)
+    end,
+    clean_acks_mailbox().
+
+assert_acks(N) ->
+    receive {'basic.ack', N, _} -> ok
+    after 10000 -> error({timeout_waiting_for_ack, N})
+    end,
+    clean_acks_mailbox().
 
 validate_acks_mailbox() ->
     Result = validate_acks_mailbox({0, ok}),
