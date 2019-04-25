@@ -288,8 +288,18 @@ RUN set -eux; \
 	rabbitmqadmin --version
 EXPOSE 15671 15672
 
+
+
 # rabbitmq_prometheus
-ARG RABBITMQ_PROMETHEUS_VERSION
+#
+# https://github.com/rabbitmq/rabbitmq-server/pull/1988
+RUN rm /plugins/rabbit_common*.ez
+COPY plugins/rabbit_common*.ez  /plugins/
+RUN rm /opt/rabbitmq/ebin/rabbit_channel.beam
+COPY tmp/rabbitmq-server-1988/rabbit_channel.beam  /opt/rabbitmq/ebin/rabbit_channel.beam
+RUN rm /opt/rabbitmq/ebin/rabbit_core_metrics_gc.beam
+COPY tmp/rabbitmq-server-1988/rabbit_core_metrics_gc.beam  /opt/rabbitmq/ebin/rabbit_core_metrics_gc.beam
+
 RUN rm /plugins/accept*.ez
 COPY plugins/accept*.ez /plugins/
 RUN rm /plugins/prometheus*.ez
@@ -298,6 +308,8 @@ RUN rm /plugins/rabbitmq_management*.ez
 COPY plugins/rabbitmq_management*.ez  /plugins/
 RUN rm /plugins/rabbitmq_prometheus*.ez
 COPY plugins/rabbitmq_prometheus*.ez  /plugins/
+
+ARG RABBITMQ_PROMETHEUS_VERSION
 RUN chmod --recursive --verbose a+r /plugins/*.ez && \
     chown --recursive --verbose rabbitmq:rabbitmq /plugins && \
     rabbitmq-plugins enable --offline rabbitmq_prometheus && \
