@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   end
 
   def banner([], %{offline: true}) do
-    "Will print local Erlang/OTP version ..."
+    "CLI Erlang/OTP version ..."
   end
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} for its Erlang/OTP version..."
