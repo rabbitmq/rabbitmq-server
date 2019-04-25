@@ -459,6 +459,7 @@ format_range(Data, Key, Range0, Interval) ->
    rabbit_mgmt_stats:format_range(Range0, Now, Table, Interval, InstantRateFun,
                                   SamplesFun).
 
+%% basic.get-empty metric
 fetch_slides(Ele, Key, Data)
   when Key =:= channel_queue_stats_deliver_stats orelse
        Key =:= channel_stats_deliver_stats orelse
@@ -476,6 +477,23 @@ fetch_slides(Ele, Key, Data)
              || S <- Slides, not_found =/= S];
         Slide ->
             [rabbit_mgmt_data_compat:fill_get_empty_queue_metric(Slide)]
+    end;
+%% drop_unroutable metric
+fetch_slides(Ele, Key, Data)
+  when Key =:= channel_stats_fine_stats orelse
+       Key =:= channel_exchange_stats_fine_stats orelse
+       Key =:= vhost_stats_fine_stats orelse
+       (is_tuple(Key) andalso
+        (element(1, Key) =:= channel_stats_fine_stats orelse
+         element(1, Key) =:= channel_exchange_stats_fine_stats orelse
+         element(1, Key) =:= vhost_stats_fine_stats)) ->
+    case element(Ele, maps:get(Key, Data)) of
+        not_found -> [];
+        Slides when is_list(Slides) ->
+            [rabbit_mgmt_data_compat:fill_drop_unroutable_metric(S)
+             || S <- Slides, not_found =/= S];
+        Slide ->
+            [rabbit_mgmt_data_compat:fill_drop_unroutable_metric(Slide)]
     end;
 fetch_slides(Ele, Key, Data) ->
     case element(Ele, maps:get(Key, Data)) of
