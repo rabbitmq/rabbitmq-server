@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def validate(_, %{format: format})
       when format != "openssl" and format != "erlang" and format != "map" do
-    {:validation_failure, {:bad_argument, "Format should be either openssl, erlang or map"}}
+    {:validation_failure, {:bad_argument, "Format must be one of: openssl, erlang or map"}}
   end
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
@@ -62,21 +62,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def banner([], %{format: "openssl"}),  do: "Listing available cipher suites in the OpenSSL format"
-  def banner([], %{format: "erlang"}), do: "Listing available cipher suites in the Erlang term format"
-  def banner([], %{format: "map"}), do: "Listing available cipher suites in the new map-based format"
+  def banner([], %{format: "openssl"}),  do: "Listing available cipher suites in OpenSSL format"
+  def banner([], %{format: "erlang"}), do: "Listing available cipher suites in Erlang term format"
+  def banner([], %{format: "map"}), do: "Listing available cipher suites in map format"
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists cipher suites available (but not necessarily allowed) on the target node"
+  def description(), do: "Lists available (but not necessarily enabled) cipher suites on the target node"
 
   def usage, do: "cipher_suites [--format (openssl | erlang | map)] [--all]"
 
   def usage_additional() do
     [
-      ["--format", "an output format to use. Can be either openssl, erlang or map"],
+      ["--format", "output format to use: openssl, erlang or map"],
       ["--all", "list all available suites"],
-      ["--openssl_format", "use OpenSSL format. Deprecated: use --format=openssl instead"]
+      ["--openssl-format", "use OpenSSL format. Deprecated: use --format=openssl instead"]
     ]
   end
 
