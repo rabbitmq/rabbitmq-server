@@ -25,10 +25,10 @@ ENV OPENSSL_SOURCE_SHA256="5c557b023230413dfb0756f3137a13e6d726838ccd1430888ad15
 ENV OPENSSL_PGP_KEY_ID="0x8657ABB260F056B1E5190839D9C4D26D0E604491"
 
 # Use the latest stable Erlang/OTP release (https://github.com/erlang/otp/tags)
-ENV OTP_VERSION 21.3.5
+ENV OTP_VERSION 21.3.6
 # TODO add PGP checking when the feature will be added to Erlang/OTP's build system
 # http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
-ENV OTP_SOURCE_SHA256="1223b367f1f165fcbaaeea23e7dbc0fec2d2877d0c1b6bbeefef5ac3b1e528b6"
+ENV OTP_SOURCE_SHA256="6d310bd97c1d3ef64771143a5ace522ba5f916d501b277315a315e3760edfd0b"
 
 # Install dependencies required to build Erlang/OTP from source
 # http://erlang.org/doc/installation_guide/INSTALL.html
@@ -184,8 +184,9 @@ RUN set -eux; \
 	chmod 777 "$RABBITMQ_DATA_DIR" /etc/rabbitmq /tmp/rabbitmq-ssl /var/log/rabbitmq; \
 	ln -sf "$RABBITMQ_DATA_DIR/.erlang.cookie" /root/.erlang.cookie
 
-# Use the latest stable RabbitMQ release (https://www.rabbitmq.com/download.html)
-ENV RABBITMQ_VERSION 3.8.0-beta.3
+# Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
+ARG RABBITMQ_VERSION
+ENV RABBITMQ_VERSION=${RABBITMQ_VERSION}
 # https://www.rabbitmq.com/signatures.html#importing-gpg
 ENV RABBITMQ_PGP_KEY_ID="0x0A9AF2115F4687BD29803A206B73A36E6026DFCA"
 ENV RABBITMQ_HOME=/opt/rabbitmq
@@ -207,7 +208,7 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-	RABBITMQ_SOURCE_URL="https://github.com/rabbitmq/rabbitmq-server/releases/download/v$RABBITMQ_VERSION/rabbitmq-server-generic-unix-$RABBITMQ_VERSION.tar.xz"; \
+        RABBITMQ_SOURCE_URL="https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/$RABBITMQ_VERSION/rabbitmq-server-generic-unix-${RABBITMQ_VERSION}.tar.xz"; \
 	RABBITMQ_PATH="/usr/local/src/rabbitmq-$RABBITMQ_VERSION"; \
 	\
 	wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
@@ -289,10 +290,16 @@ EXPOSE 15671 15672
 
 # rabbitmq_prometheus
 ARG RABBITMQ_PROMETHEUS_VERSION
-COPY plugins/accept*.ez plugins/prometheus*.ez plugins/rabbitmq_management*.ez plugins/rabbitmq_prometheus*.ez /plugins/
-RUN chmod a+r /plugins/*.ez && \
-    chown rabbitmq:rabbitmq /plugins/*.ez && \
-    rm /plugins/rabbitmq_management-${RABBITMQ_VERSION}.ez /plugins/rabbitmq_management_agent-${RABBITMQ_VERSION}.ez && \
+RUN rm /plugins/accept*.ez
+COPY plugins/accept*.ez /plugins/
+RUN rm /plugins/prometheus*.ez
+COPY plugins/prometheus*.ez /plugins/
+RUN rm /plugins/rabbitmq_management*.ez
+COPY plugins/rabbitmq_management*.ez  /plugins/
+RUN rm /plugins/rabbitmq_prometheus*.ez
+COPY plugins/rabbitmq_prometheus*.ez  /plugins/
+RUN chmod --recursive --verbose a+r /plugins/*.ez && \
+    chown --recursive --verbose rabbitmq:rabbitmq /plugins && \
     rabbitmq-plugins enable --offline rabbitmq_prometheus && \
     rabbitmq-plugins is_enabled rabbitmq_prometheus --offline && \
     rabbitmq-plugins list | grep "rabbitmq_prometheus.*${RABBITMQ_PROMETHEUS_VERSION}"

@@ -1,6 +1,12 @@
-PROJECT = rabbitmq_prometheus
-PROJECT_MOD = rabbit_prometheus_app
+TODAY := $(shell date -u +'%Y.%m.%d')
+# Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.622
+DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
+# RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
+RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
 
+PROJECT := rabbitmq_prometheus
+PROJECT_MOD := rabbit_prometheus_app
 DEPS = rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
 # Deps that are not applications
 # rabbitmq_management is added so that we build a custom version, for the Docker image
@@ -27,8 +33,6 @@ endif
 include rabbitmq-components.mk
 include erlang.mk
 
-DOCKER_IMAGE_VERSION := 3.8-$(shell date -u +'%Y.%m.%d')
-
 .PHONY: docker_login
 docker_login:
 	@echo "$$(lpass show --password 7672183166535202820)" | \
@@ -42,9 +46,10 @@ docker_image: docker_image_build docker_image_push
 di: docker_image
 
 .PHONY: docker_image_build
-docker_image_build: tests
+docker_image_build:
 	@docker build --pull \
 	  --build-arg PGP_KEYSERVER=pgpkeys.eu \
+	  --build-arg RABBITMQ_VERSION=$(BASED_ON_RABBITMQ_VERSION) \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(PROJECT_VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest .
