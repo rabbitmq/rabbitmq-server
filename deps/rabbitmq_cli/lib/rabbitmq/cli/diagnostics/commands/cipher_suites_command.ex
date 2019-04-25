@@ -62,7 +62,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists available (but not necessarily enabled) cipher suites on the target node"
+  def description(), do: "Lists cipher suites enabled by default. To list all available cipher suites, add the --all argument."
 
   def usage, do: "cipher_suites [--format (openssl | erlang | map)] [--all]"
 
