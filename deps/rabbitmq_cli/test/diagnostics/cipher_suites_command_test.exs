@@ -30,44 +30,37 @@ defmodule CipherSuitesCommandTest do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 30000,
-        openssl_format: context[:openssl_format] || true,
-        erlang_format: context[:erlang_format] || false
+        format: context[:format] || "openssl",
+        all: false
       }}
   end
 
-  test "validate: providing no arguments passes validation", context do
+  test "merge_defaults: defaults to the OpenSSL format" do
+    assert @command.merge_defaults([], %{}) == {[], %{format: "openssl", all: false}}
+  end
+
+  test "merge_defaults: format is case insensitive" do
+    assert @command.merge_defaults([], %{format: "OpenSSL"}) == {[], %{format: "openssl", all: false}}
+    assert @command.merge_defaults([], %{format: "Erlang"}) == {[], %{format: "erlang", all: false}}
+    assert @command.merge_defaults([], %{format: "Map"}) == {[], %{format: "map", all: false}}
+  end
+
+  test "merge_defaults: format can be overridden" do
+    assert @command.merge_defaults([], %{format: "map"}) == {[], %{format: "map", all: false}}
+  end
+
+  test "validate: treats positional arguments as a failure", context do
+    assert @command.validate(["extra-arg"], context[:opts]) == {:validation_failure, :too_many_args}
+  end
+
+  test "validate: treats empty positional arguments and default switches as a success", context do
     assert @command.validate([], context[:opts]) == :ok
   end
 
-  test "validate: providing --openssl-format passes validation", context do
-    assert @command.validate([], Map.merge(%{openssl_format: true}, context[:opts])) == :ok
-  end
-
-  test "validate: providing --erlang-format passes validation", context do
-    assert @command.validate([], Map.merge(%{erlang_format: true}, context[:opts])) == :ok
-  end
-
-  test "validate: providing any arguments fails validation", context do
-    assert @command.validate(["a", "b", "c"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
-  end
-
-  test "validate: setting both --openssl-format and --erlang-format to false fails validation", context do
-    assert @command.validate([], Map.merge(context[:opts], %{openssl_format: false, erlang_format: false})) ==
-      {:validation_failure, {:bad_argument, "Either OpenSSL or Erlang term format must be selected"}}
-  end
-
-  test "validate: setting both --openssl-format and --erlang-format to true fails validation", context do
-    assert @command.validate([], Map.merge(context[:opts], %{openssl_format: true, erlang_format: true})) ==
-      {:validation_failure, {:bad_argument, "Cannot use both formats together"}}
-  end
-
-  test "validate: treats empty positional arguments and default switches as a success" do
-    assert @command.validate([], %{openssl_format: true, erlang_format: false}) == :ok
-  end
-
-  test "validate: treats empty positional arguments and an Erlang term format flag as a success" do
-    assert @command.validate([], %{erlang_format: true}) == :ok
+  test "validate: supports openssl, erlang and map formats", context do
+    assert @command.validate([], Map.merge(context[:opts], %{format: "openssl"})) == :ok
+    assert @command.validate([], Map.merge(context[:opts], %{format: "erlang"})) == :ok
+    assert @command.validate([], Map.merge(context[:opts], %{format: "map"})) == :ok
   end
 
   @tag test_timeout: 3000
@@ -75,17 +68,41 @@ defmodule CipherSuitesCommandTest do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
   end
 
-  test "run: returns a list of cipher suites", context do
+  @tag format: "openssl"
+  test "run: returns a list of cipher suites in OpenSSL format", context do
     res = @command.run([], context[:opts])
+    for cipher <- res, do: assert true == is_list(cipher)
     # the list is long and its values are environment-specific,
     # so we simply assert that it is non-empty. MK.
     assert length(res) > 0
   end
 
-  @tag openssl_format: true
-  test "run: returns a list cipher suites in the OpenSSL format", context do
+  @tag format: "erlang"
+  test "run: returns a list of cipher suites in erlang format", context do
     res = @command.run([], context[:opts])
-    # see the test above
+
+    for cipher <- res, do: assert true = is_tuple(cipher)
+    # the list is long and its values are environment-specific,
+    # so we simply assert that it is non-empty. MK.
     assert length(res) > 0
   end
+
+  @tag format: "map"
+  test "run: returns a list of cipher suites in map format", context do
+    res = @command.run([], context[:opts])
+    for cipher <- res, do: assert true = is_map(cipher)
+    # the list is long and its values are environment-specific,
+    # so we simply assert that it is non-empty. MK.
+    assert length(res) > 0
+  end
+
+  test "run: returns more cipher suites when all suites requested", context do
+    all_suites_opts = Map.merge(context[:opts], %{all: true})
+    default_suites_opts = Map.merge(context[:opts], %{all: false})
+    all_suites = @command.run([], all_suites_opts)
+    default_suites = @command.run([], default_suites_opts)
+    assert length(all_suites) > length(default_suites)
+    assert length(default_suites -- all_suites) == 0
+  end
+
 end
