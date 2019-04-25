@@ -28,6 +28,9 @@
 
 -export_type([certificate/0]).
 
+%% Due to API differences between OTP 20.3.x and OTP 21+
+-dialyzer(no_missing_calls).
+
 -type certificate() :: rabbit_cert_info:certificate().
 
 -type cipher_suites_mode() :: default | all | anonymous.
@@ -69,9 +72,8 @@ cipher_suites_openssl(Mode, Version) ->
     end,
     ssl:cipher_suites(Mode, Version)).
 
-
 %% OTP-20.3 and OTP-21 have different modules containing cipher format functions
-%% This is not a hot codepath and `function_exported` should not slow things down much.
+%% This is not on the hot code path and `function_exported` should not slow things down much.
 format_cipher_erlang(Cipher) ->
     case erlang:function_exported(ssl_cipher_format, suite, 1) of
         true ->
