@@ -28,7 +28,7 @@
 
 -export_type([certificate/0]).
 
-% Due to API differences between OTP 20.3.x and OTP 21+
+% Due to API differences between OTP releases.
 -dialyzer(no_missing_calls).
 -ignore_xref([{ssl_cipher_format, erl_suite_definition, 1},
               {ssl_cipher_format, suite, 1},
