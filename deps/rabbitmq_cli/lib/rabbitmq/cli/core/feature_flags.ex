@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.FeatureFlags do
+
   #
   # API
   #
@@ -21,7 +22,7 @@ defmodule RabbitMQ.CLI.Core.FeatureFlags do
   def feature_flag_lines(feature_flags) do
     feature_flags
     |> Enum.map(fn %{name: name, state: state} ->
-      "Name: #{name}, State: #{state}"
+      "Flag: #{name}, state: #{state}"
     end)
   end
 end
