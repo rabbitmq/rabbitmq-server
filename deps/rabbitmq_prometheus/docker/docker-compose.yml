@@ -46,14 +46,14 @@ services:
       - "35692:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.24
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.25
     networks:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
       QUEUE: published-confirmed
       AUTOACK: "true"
-      RATE: 10
+      VARIABLE_RATE: "10:30,100:30"
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
       START_TIMEOUT: 30
