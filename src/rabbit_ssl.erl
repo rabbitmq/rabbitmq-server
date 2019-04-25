@@ -30,6 +30,9 @@
 
 %% Due to API differences between OTP 20.3.x and OTP 21+
 -dialyzer(no_missing_calls).
+-ignore_xref([{ssl_cipher_format, erl_suite_definition, 1},
+              {ssl_cipher_format, suite, 1},
+              {ssl_cipher_format, openssl_suite_name, 1}]).
 
 -type certificate() :: rabbit_cert_info:certificate().
 
