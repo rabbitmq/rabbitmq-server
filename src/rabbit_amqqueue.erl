@@ -1113,8 +1113,7 @@ pid_of(VHost, QueueName) ->
 -spec delete_exclusive(qpids(), pid()) -> 'ok'.
 
 delete_exclusive(QPids, ConnId) ->
-    [gen_server2:cast(QPid, {delete_exclusive, ConnId}) || QPid <- QPids],
-    ok.
+    rabbit_amqqueue_common:delete_exclusive(QPids, ConnId).
 
 -spec delete_immediately(qpids()) -> 'ok'.
 
