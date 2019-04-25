@@ -649,7 +649,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Returned to publishers / s",
+      "title": "Unroutable returned to publishers / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -829,7 +829,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Dropped / s",
+      "title": "Unroutable dropped / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2183,5 +2183,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 1
+  "version": 2
 }
