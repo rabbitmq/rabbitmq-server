@@ -51,9 +51,10 @@ services:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
-      QUEUE: published-confirmed
+      QUEUE: publisher-confirms
+      ROUTING_KEY: publisher-confirms
       AUTOACK: "true"
-      VARIABLE_RATE: "10:30,100:30"
+      VARIABLE_RATE: "12:30,25:30,50:30,100:30"
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
       START_TIMEOUT: 30
@@ -63,7 +64,7 @@ services:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
-      RATE: 20
+      VARIABLE_RATE: "2:30,4:30,10:30"
       CONSUMERS: 0
       FLAG: mandatory
       START_TIMEOUT: 30
@@ -73,7 +74,7 @@ services:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
-      RATE: 25
+      VARIABLE_RATE: "5:30,10:30,20:30"
       CONSUMERS: 0
       START_TIMEOUT: 30
   slow-consumer-persistent:
@@ -82,14 +83,16 @@ services:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq3:5672/%2f"
-      QUEUE: slow-consumer
-      QUEUE_ARGS: x-max-length=1000
+      QUEUE: slow-consumer-persistent
+      ROUTING_KEY: slow-consumer-persistent
+      QUEUE_ARGS: x-max-length=500
       FLAG: persistent
       AUTO_DELETE: "false"
-      RATE: 30
-      CONSUMER_RATE: 20
+      SIZE: 256000
+      VARIABLE_RATE: "20:10,1:40"
+      CONSUMER_RATE: 5
       AUTOACK: "false"
-      QOS: 40
+      QOS: 5
       START_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0

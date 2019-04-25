@@ -47,7 +47,7 @@
       },
       "id": 9,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -137,7 +137,7 @@
       },
       "id": 19,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -240,7 +240,7 @@
       },
       "id": 30,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -330,7 +330,7 @@
       },
       "id": 31,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -433,7 +433,7 @@
       },
       "id": 13,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -523,7 +523,7 @@
       },
       "id": 18,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -613,7 +613,7 @@
       },
       "id": 16,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -703,7 +703,7 @@
       },
       "id": 12,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -793,7 +793,7 @@
       },
       "id": 34,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -896,7 +896,7 @@
       },
       "id": 14,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -986,7 +986,7 @@
       },
       "id": 21,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1076,7 +1076,7 @@
       },
       "id": 24,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1166,7 +1166,7 @@
       },
       "id": 15,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1256,7 +1256,7 @@
       },
       "id": 20,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1346,7 +1346,7 @@
       },
       "id": 23,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1436,7 +1436,7 @@
       },
       "id": 22,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1526,7 +1526,7 @@
       },
       "id": 25,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1629,7 +1629,7 @@
       },
       "id": 7,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1666,7 +1666,7 @@
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 1073741824,
+          "value": 268435456,
           "yaxis": "left"
         },
         {
@@ -1674,7 +1674,7 @@
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 536870912,
+          "value": 134217728,
           "yaxis": "left"
         }
       ],
@@ -1735,7 +1735,7 @@
       },
       "id": 2,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1842,7 +1842,7 @@
       },
       "id": 6,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -1948,7 +1948,7 @@
       },
       "id": 8,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -2053,7 +2053,7 @@
       },
       "id": 5,
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": true,
@@ -2152,7 +2152,7 @@
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
