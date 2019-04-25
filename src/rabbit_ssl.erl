@@ -20,12 +20,71 @@
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
 -export([peer_cert_subject_items/2, peer_cert_auth_name/1]).
+-export([cipher_suites_erlang/2, cipher_suites_erlang/1,
+         cipher_suites_openssl/2, cipher_suites_openssl/1,
+         cipher_suites/1]).
 
 %%--------------------------------------------------------------------------
 
 -export_type([certificate/0]).
 
+% Due to API differences between OTP releases.
+-dialyzer(no_missing_calls).
+-ignore_xref([{ssl_cipher_format, erl_suite_definition, 1},
+              {ssl_cipher_format, suite, 1},
+              {ssl_cipher_format, openssl_suite_name, 1}]).
+
 -type certificate() :: rabbit_cert_info:certificate().
+
+-type cipher_suites_mode() :: default | all | anonymous.
+
+-spec cipher_suites(cipher_suites_mode()) -> ssl:ciphers().
+cipher_suites(Mode) ->
+    Version = get_highest_protocol_version(),
+    ssl:cipher_suites(Mode, Version).
+
+-spec cipher_suites_erlang(cipher_suites_mode()) ->
+    [ssl:old_cipher_suite()].
+cipher_suites_erlang(Mode) ->
+    Version = get_highest_protocol_version(),
+    cipher_suites_erlang(Mode, Version).
+
+-spec cipher_suites_erlang(cipher_suites_mode(),
+                           ssl:protocol_version() | tls_record:tls_version()) ->
+    [ssl:old_cipher_suite()].
+cipher_suites_erlang(Mode, Version) ->
+    [ format_cipher_erlang(C)
+      || C <- ssl:cipher_suites(Mode, Version) ].
+
+-spec cipher_suites_openssl(cipher_suites_mode()) ->
+    [ssl:old_cipher_suite()].
+cipher_suites_openssl(Mode) ->
+    Version = get_highest_protocol_version(),
+    cipher_suites_openssl(Mode, Version).
+
+-spec cipher_suites_openssl(cipher_suites_mode(),
+                           ssl:protocol_version() | tls_record:tls_version()) ->
+    [ssl:old_cipher_suite()].
+cipher_suites_openssl(Mode, Version) ->
+    lists:filtermap(fun(C) ->
+        OpenSSL = format_cipher_openssl(C),
+        case is_list(OpenSSL) of
+            true  -> {true, OpenSSL};
+            false -> false
+        end
+    end,
+    ssl:cipher_suites(Mode, Version)).
+
+
+format_cipher_erlang(Cipher) ->
+    ssl_cipher_format:erl_suite_definition(ssl_cipher_format:suite(Cipher)).
+
+format_cipher_openssl(Cipher) ->
+    ssl_cipher_format:openssl_suite_name(ssl_cipher_format:suite(Cipher)).
+
+-spec get_highest_protocol_version() -> tls_record:tls_version().
+get_highest_protocol_version() ->
+    tls_record:highest_protocol_version([]).
 
 %%--------------------------------------------------------------------------
 %% High-level functions used by reader

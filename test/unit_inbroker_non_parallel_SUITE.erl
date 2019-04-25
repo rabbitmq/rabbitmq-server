@@ -39,7 +39,8 @@ groups() ->
           file_handle_cache, %% Change FHC limit.
           head_message_timestamp_statistics, %% Expect specific statistics.
           log_management, %% Check log files.
-          log_management_during_startup, %% Check log files.
+          log_file_initialised_during_startup,
+          log_file_fails_to_initialise_during_startup,
           externally_rotated_logs_are_automatically_reopened %% Check log files.
         ]}
     ].
@@ -271,11 +272,11 @@ log_management1(_Config) ->
     ok = test_logs_working([LogFile]),
     passed.
 
-log_management_during_startup(Config) ->
+log_file_initialised_during_startup(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, log_management_during_startup1, [Config]).
+      ?MODULE, log_file_initialised_during_startup1, [Config]).
 
-log_management_during_startup1(_Config) ->
+log_file_initialised_during_startup1(_Config) ->
     [LogFile|_] = rabbit:log_locations(),
     Suffix = ".0",
 
@@ -299,57 +300,72 @@ log_management_during_startup1(_Config) ->
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
 
-    %% start application with logging to directory with no
-    %% write permissions
-    ok = rabbit:stop(),
-    NoPermission1 = "/var/empty/test.log",
-    delete_file(NoPermission1),
-    delete_file(filename:dirname(NoPermission1)),
-    ok = rabbit:stop(),
-    ok = application:set_env(rabbit, lager_default_file, NoPermission1),
+    %% clean up
+    ok = application:set_env(rabbit, lager_default_file, LogFile),
     application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
-    ok = try rabbit:start() of
+    ok = rabbit:start(),
+    passed.
+
+
+log_file_fails_to_initialise_during_startup(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, log_file_fails_to_initialise_during_startup1, [Config]).
+
+log_file_fails_to_initialise_during_startup1(_Config) ->
+    [LogFile|_] = rabbit:log_locations(),
+    Suffix = ".0",
+
+    %% start application with logging to directory with no
+    %% write permissions
+    ok = rabbit:stop(),
+
+    Run1 = fun() ->
+      NoPermission1 = "/var/empty/test.log",
+      delete_file(NoPermission1),
+      delete_file(filename:dirname(NoPermission1)),
+      ok = rabbit:stop(),
+      ok = application:set_env(rabbit, lager_default_file, NoPermission1),
+      application:unset_env(rabbit, log),
+      application:unset_env(lager, handlers),
+      application:unset_env(lager, extra_sinks),
+      rabbit:start()
+    end,
+
+    ok = try Run1() of
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_no_write_permission_dir_test})
     catch
-        _:{error, {cannot_log_to_file, _, Reason1}}
-            when Reason1 =:= enoent orelse Reason1 =:= eacces -> ok;
-        _:{error, {cannot_log_to_file, _,
-                  {cannot_create_parent_dirs, _, Reason1}}}
-            when Reason1 =:= eperm orelse
-                 Reason1 =:= eacces orelse
-                 Reason1 =:= enoent-> ok
+        _:could_not_initialise_logger -> ok
     end,
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
     NoPermission2 = "/var/empty/non-existent/test.log",
-    delete_file(NoPermission2),
-    delete_file(filename:dirname(NoPermission2)),
-    case rabbit:stop() of
-        ok                         -> ok;
-        {error, lager_not_running} -> ok
+
+    Run2 = fun() ->
+      delete_file(NoPermission2),
+      delete_file(filename:dirname(NoPermission2)),
+      case rabbit:stop() of
+          ok                         -> ok;
+          {error, lager_not_running} -> ok
+      end,
+      ok = application:set_env(rabbit, lager_default_file, NoPermission2),
+      application:unset_env(rabbit, log),
+      application:unset_env(lager, handlers),
+      application:unset_env(lager, extra_sinks),
+      rabbit:start()
     end,
-    ok = application:set_env(rabbit, lager_default_file, NoPermission2),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-    ok = try rabbit:start() of
+
+    ok = try Run2() of
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_parent_dirs_test})
     catch
-        _:{error, {cannot_log_to_file, _, Reason2}}
-            when Reason2 =:= enoent orelse Reason2 =:= eacces -> ok;
-        _:{error, {cannot_log_to_file, _,
-                   {cannot_create_parent_dirs, _, Reason2}}}
-            when Reason2 =:= eperm orelse
-                 Reason2 =:= eacces orelse
-                 Reason2 =:= enoent-> ok
+        _:could_not_initialise_logger -> ok
     end,
 
-    %% cleanup
+    %% clean up
     ok = application:set_env(rabbit, lager_default_file, LogFile),
     application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
@@ -494,7 +510,7 @@ channel_statistics1(_Config) ->
                      [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 0, 0}] = ets:lookup(
                                                                 channel_queue_metrics,
                                                                 {Ch, QRes}),
-                     [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                     [{{Ch, X}, 1, 0, 0, 0, 0}] = ets:lookup(
                                                  channel_exchange_metrics,
                                                  {Ch, X}),
                      [{{Ch, {QRes, X}}, 1, 0}] = ets:lookup(
@@ -509,7 +525,7 @@ channel_statistics1(_Config) ->
                      [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 0, 1}] = ets:lookup(
                                                                 channel_queue_metrics,
                                                                 {Ch, QRes}),
-                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                 [{{Ch, X}, 1, 0, 0, 0, 0}] = ets:lookup(
                                              channel_exchange_metrics,
                                              {Ch, X}),
                  [{{Ch, {QRes, X}}, 1, 1}] = ets:lookup(
@@ -522,7 +538,7 @@ channel_statistics1(_Config) ->
     force_metric_gc(),
     Check4 = fun() ->
                  [] = ets:lookup(channel_queue_metrics, {Ch, QRes}),
-                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                 [{{Ch, X}, 1, 0, 0, 0, 0}] = ets:lookup(
                                              channel_exchange_metrics,
                                              {Ch, X}),
                  [] = ets:lookup(channel_queue_exchange_metrics,

@@ -74,6 +74,7 @@
 -export_type([name/0, qmsg/0, absent_reason/0]).
 
 -type name() :: rabbit_types:r('queue').
+
 -type qpids() :: [pid()].
 -type qlen() :: rabbit_types:ok(non_neg_integer()).
 -type qfun(A) :: fun ((amqqueue:amqqueue()) -> A | no_return()).
@@ -1228,12 +1229,11 @@ purge(Q) when ?amqqueue_is_quorum(Q) ->
     NodeId = amqqueue:get_pid(Q),
     rabbit_quorum_queue:purge(NodeId).
 
--spec requeue(pid(),
+-spec requeue(pid() | amqqueue:ra_server_id(),
               {rabbit_fifo:consumer_tag(), [msg_id()]},
               pid(),
               quorum_states()) ->
     'ok'.
-
 requeue(QPid, {_, MsgIds}, ChPid, QuorumStates) when ?IS_CLASSIC(QPid) ->
     ok = delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}),
     QuorumStates;
