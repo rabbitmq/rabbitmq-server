@@ -975,7 +975,7 @@ boot_error(_, {error, {cannot_log_to_file, LogFile, Reason}}) ->
                             [LogFile, Reason]);
 boot_error(_, {error, {generate_config_file, Error}}) ->
     log_boot_error_and_exit(generate_config_file,
-                            "~nConfig file generation failed ~s~n",
+                            "~nConfig file generation failed:~n~s~n",
                             [Error]);
 boot_error(Class, Reason) ->
     LogLocations = log_locations(),
