@@ -209,16 +209,17 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
         RABBITMQ_SOURCE_URL="https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/$RABBITMQ_VERSION/rabbitmq-server-generic-unix-${RABBITMQ_VERSION}.tar.xz"; \
+        RABBITMQ_SOURCE_URL="https://storage.googleapis.com/rabbitmq-share/rabbitmq-server-generic-unix-${RABBITMQ_VERSION}.tar.xz"; \
 	RABBITMQ_PATH="/usr/local/src/rabbitmq-$RABBITMQ_VERSION"; \
 	\
-	wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
+	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
 	wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz" "$RABBITMQ_SOURCE_URL"; \
 	\
-	export GNUPGHOME="$(mktemp -d)"; \
-	gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$RABBITMQ_PGP_KEY_ID"; \
-	gpg --batch --verify "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_PATH.tar.xz"; \
-	gpgconf --kill all; \
-	rm -rf "$GNUPGHOME"; \
+	# export GNUPGHOME="$(mktemp -d)"; \
+	# gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$RABBITMQ_PGP_KEY_ID"; \
+	# gpg --batch --verify "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_PATH.tar.xz"; \
+	# gpgconf --kill all; \
+	# rm -rf "$GNUPGHOME"; \
 	\
 	mkdir -p "$RABBITMQ_HOME"; \
 	tar --extract --file "$RABBITMQ_PATH.tar.xz" --directory "$RABBITMQ_HOME" --strip-components 1; \
@@ -291,28 +292,21 @@ EXPOSE 15671 15672
 
 
 # rabbitmq_prometheus
-#
-# https://github.com/rabbitmq/rabbitmq-server/pull/1988
-RUN rm /plugins/rabbit_common*.ez
-COPY plugins/rabbit_common*.ez  /plugins/
-RUN rm /opt/rabbitmq/ebin/rabbit_channel.beam
-COPY tmp/rabbitmq-server-1988/rabbit_channel.beam  /opt/rabbitmq/ebin/rabbit_channel.beam
-RUN rm /opt/rabbitmq/ebin/rabbit_core_metrics_gc.beam
-COPY tmp/rabbitmq-server-1988/rabbit_core_metrics_gc.beam  /opt/rabbitmq/ebin/rabbit_core_metrics_gc.beam
+# RUN rm /plugins/rabbit_common*.ez
+# COPY plugins/rabbit_common*.ez  /plugins/
+# RUN rm /plugins/accept*.ez
+# COPY plugins/accept*.ez /plugins/
+# RUN rm /plugins/prometheus*.ez
+# COPY plugins/prometheus*.ez /plugins/
+# RUN rm /plugins/rabbitmq_management*.ez
+# COPY plugins/rabbitmq_management*.ez  /plugins/
+# RUN rm /plugins/rabbitmq_prometheus*.ez
+# COPY plugins/rabbitmq_prometheus*.ez  /plugins/
 
-RUN rm /plugins/accept*.ez
-COPY plugins/accept*.ez /plugins/
-RUN rm /plugins/prometheus*.ez
-COPY plugins/prometheus*.ez /plugins/
-RUN rm /plugins/rabbitmq_management*.ez
-COPY plugins/rabbitmq_management*.ez  /plugins/
-RUN rm /plugins/rabbitmq_prometheus*.ez
-COPY plugins/rabbitmq_prometheus*.ez  /plugins/
-
-ARG RABBITMQ_PROMETHEUS_VERSION
+# ARG RABBITMQ_PROMETHEUS_VERSION
 RUN chmod --recursive --verbose a+r /plugins/*.ez && \
     chown --recursive --verbose rabbitmq:rabbitmq /plugins && \
     rabbitmq-plugins enable --offline rabbitmq_prometheus && \
-    rabbitmq-plugins is_enabled rabbitmq_prometheus --offline && \
-    rabbitmq-plugins list | grep "rabbitmq_prometheus.*${RABBITMQ_PROMETHEUS_VERSION}"
+    rabbitmq-plugins is_enabled rabbitmq_prometheus --offline #&& \
+    # rabbitmq-plugins list | grep "rabbitmq_prometheus.*${RABBITMQ_PROMETHEUS_VERSION}"
 EXPOSE 15692

@@ -5,3 +5,4 @@ logs
 prometheus
 src
 test
+tmp

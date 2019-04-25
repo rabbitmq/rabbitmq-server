@@ -13,7 +13,7 @@ volumes:
 services:
   rabbitmq1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.622-2019.04.25
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8-rabbitmq-server-1988-2019.04.25
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -57,7 +57,7 @@ services:
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
       START_TIMEOUT: 30
-  unroutable:
+  unroutable-return:
     image: *perf-test-image
     networks:
       - "rabbitmq-prometheus"
@@ -66,6 +66,15 @@ services:
       RATE: 20
       CONSUMERS: 0
       FLAG: mandatory
+      START_TIMEOUT: 30
+  unroutable-drop:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
+      RATE: 25
+      CONSUMERS: 0
       START_TIMEOUT: 30
   slow-consumer-persistent:
     image: *perf-test-image

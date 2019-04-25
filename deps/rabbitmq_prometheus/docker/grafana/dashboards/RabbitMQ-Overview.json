@@ -603,7 +603,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of mandatory messages returned to publishers as unroutable.\n\n* [Ensuring Messages are routed](https://www.rabbitmq.com/reliability.html#producer)\n* [Unroutable Messages & Confirms](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
+      "description": "Count of mandatory messages returned to publishers as unroutable\n\n* [Ensuring Messages are routed](https://www.rabbitmq.com/reliability.html#producer)\n* [Unroutable Messages & Confirms](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "gridPos": {
         "h": 5,
@@ -740,6 +740,96 @@
       "timeRegions": [],
       "timeShift": null,
       "title": "Unconfirmed to publishers",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of unroutable non-mandatory messages",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 18
+      },
+      "id": 34,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(irate(rabbitmq_channel_exchange_drop_unroutable[1m]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Dropped / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2093,5 +2183,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 3
+  "version": 1
 }
