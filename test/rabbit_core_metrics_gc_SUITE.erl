@@ -177,6 +177,8 @@ channel_metrics(Config) ->
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_metrics">>}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_metrics">>},
                       #amqp_msg{payload = <<"hello">>}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"won't route $¢% anywhere">>},
+                      #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_metrics">>,
                                                                 no_ack=true}),
     timer:sleep(150),
