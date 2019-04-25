@@ -32,7 +32,10 @@
 -dialyzer(no_missing_calls).
 -ignore_xref([{ssl_cipher_format, erl_suite_definition, 1},
               {ssl_cipher_format, suite, 1},
-              {ssl_cipher_format, openssl_suite_name, 1}]).
+              {ssl_cipher_format, openssl_suite_name, 1},
+              {ssl_cipher, erl_suite_definition, 1},
+              {ssl_cipher, suite, 1},
+              {ssl_cipher, openssl_suite_name, 1}]).
 
 -type certificate() :: rabbit_cert_info:certificate().
 
