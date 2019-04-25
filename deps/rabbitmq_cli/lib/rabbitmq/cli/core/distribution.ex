@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   #
   # API
   #
+
   def start() do
     start(%{})
   end
@@ -103,7 +104,9 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   end
 
   defp generate_cli_node_name(node_name_type) do
-    rmq_hostname = Helpers.get_rabbit_hostname(node_name_type)
-    String.to_atom("rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}")
+    case Helpers.get_rabbit_hostname(node_name_type) do
+      {:error, _} = err -> throw(err)
+      rmq_hostname      -> String.to_atom("rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}")
+    end
   end
 end

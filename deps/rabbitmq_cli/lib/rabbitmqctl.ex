@@ -102,44 +102,52 @@ defmodule RabbitMQCtl do
       _ ->
         options = parsed_options |> merge_all_defaults |> normalise_options
 
-        case options[:help] do
-          true ->
-            {:ok, ExitCodes.exit_ok(), HelpCommand.command_usage(command, options)};
-          _ ->
-            {arguments, options} = command.merge_defaults(arguments, options)
+        try do
+          do_exec_parsed_command(unparsed_command, output_fun, arguments, command, options)
+        catch _error_type, err ->
+          format_error(err, options, command)
+        end
+    end
+  end
 
-            maybe_with_distribution(command, options, fn ->
-              # rabbitmq/rabbitmq-cli#278
-              case Helpers.normalise_node_option(options) do
-                {:error, _} = err ->
-                  format_error(err, options, command)
-                {:ok, options} ->
-                  # The code below implements a tiny decision tree that has
-                  # to do with CLI argument and environment state validation.
-                  case command.validate(arguments, options) do
+  def do_exec_parsed_command(unparsed_command, output_fun, arguments, command, options) do
+    case options[:help] do
+      true ->
+        {:ok, ExitCodes.exit_ok(), HelpCommand.command_usage(command, options)};
+      _ ->
+        {arguments, options} = command.merge_defaults(arguments, options)
+
+        maybe_with_distribution(command, options, fn ->
+          # rabbitmq/rabbitmq-cli#278
+          case Helpers.normalise_node_option(options) do
+            {:error, _} = err ->
+              format_error(err, options, command)
+            {:ok, options} ->
+              # The code below implements a tiny decision tree that has
+              # to do with CLI argument and environment state validation.
+              case command.validate(arguments, options) do
+                :ok ->
+                  # then optionally validate execution environment
+                  case CommandBehaviour.validate_execution_environment(command, arguments, options) do
                     :ok ->
-                      # then optionally validate execution environment
-                      case CommandBehaviour.validate_execution_environment(command, arguments, options) do
-                        :ok ->
-                          result = proceed_to_execution(command, arguments, options)
-                          handle_command_output(result, command, options, output_fun)
-
-                        {:validation_failure, err} ->
-                          environment_validation_error_output(err, command, unparsed_command, options)
-
-                        {:error, _} = err ->
-                          format_error(err, options, command)
-                      end
+                      result = proceed_to_execution(command, arguments, options)
+                      handle_command_output(result, command, options, output_fun)
 
                     {:validation_failure, err} ->
-                      argument_validation_error_output(err, command, unparsed_command, options)
+                      environment_validation_error_output(err, command, unparsed_command, options)
 
                     {:error, _} = err ->
                       format_error(err, options, command)
                   end
+
+                {:validation_failure, err} ->
+                  argument_validation_error_output(err, command, unparsed_command, options)
+
+                {:error, _} = err ->
+                  format_error(err, options, command)
               end
-            end)
-        end
+          end
+        end)
     end
   end
 
@@ -241,8 +249,12 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_node(%{} = opts) do
     longnames_opt = Config.get_option(:longnames, opts)
-    default_rabbit_nodename = Helpers.get_rabbit_hostname(longnames_opt)
-    Map.merge(%{node: default_rabbit_nodename}, opts)
+    try do
+      default_rabbit_nodename = Helpers.get_rabbit_hostname(longnames_opt)
+      Map.merge(%{node: default_rabbit_nodename}, opts)
+    catch _error_type, _err ->
+      opts
+    end
   end
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
@@ -370,11 +382,19 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_software(),
       Exception.format_stacktrace()}
   end
+  defp format_error({:error, {:node_name, :hostname_not_allowed}}, _, _) do
+    {:error, ExitCodes.exit_dataerr(),
+      "Unsupported node name: hostname is invalid (possibly contains unsupported characters).\nIf using FQDN node names, use the -l / --longnames argument."}
+  end
+  defp format_error({:error, {:node_name, :invalid_node_head_name}}, _, _) do
+    {:error, ExitCodes.exit_dataerr(),
+      "Unsupported node name: node name head (the part before the @) is invalid. Only alphanumerics, _ and - characters are allowed.\nIf using FQDN node names, use the -l / --longnames argument"}
+  end
   defp format_error({:error, {:node_name, err_reason} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
-    node = opts[:node]
+    node = opts[:node] || "(failed to parse or compute default value)"
     {:error, ExitCodes.exit_code_for(result),
-      "Error: operation #{op} failed due to invalid node name (node: #{node} reason: #{err_reason}).\nIf using FQDN node names, use the -l / --longnames argument"}
+      "Error: operation #{op} failed due to invalid node name (node: #{node}, reason: #{err_reason}).\nIf using FQDN node names, use the -l / --longnames argument"}
   end
 
   defp format_error({:error, {:badrpc_multi, :nodedown, [node | _]} = result}, opts, _) do
@@ -535,6 +555,15 @@ defmodule RabbitMQCtl do
   ## Runs code if distribution is successful, or not needed.
   @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()
   defp maybe_with_distribution(command, options, code) do
+    try do
+      maybe_with_distribution_without_catch(command, options, code)
+    catch
+      _error_type, error ->
+        format_error(error, options, command)
+    end
+  end
+
+  defp maybe_with_distribution_without_catch(command, options, code) do
     distribution_type = CommandBehaviour.distribution(command, options)
 
     case distribution_type do

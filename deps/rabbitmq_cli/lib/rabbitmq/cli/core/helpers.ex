@@ -26,8 +26,10 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   def normalise_node(name, node_name_type) do
-    {:ok, node_name} = NodeName.create(name, node_name_type)
-    node_name
+    case NodeName.create(name, node_name_type) do
+      {:ok, node_name} -> node_name
+      other            -> other
+    end
   end
 
   # rabbitmq/rabbitmq-cli#278

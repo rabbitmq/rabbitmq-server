@@ -42,6 +42,10 @@ defmodule NodeNameTest do
     assert want == got
   end
 
+  test "shortnames: nodename head only supports alphanumerics, underscores and hyphens in name head" do
+    {:error, {:node_name, :invalid_node_head_name}} = @subject.create("кириллица", :shortnames)
+  end
+
   test "longnames: RabbitMQ nodename is properly formed from atom" do
     {:ok, got} = @subject.create(:rabbit, :longnames)
     assert Atom.to_string(got) =~ ~r/rabbit@[\w\-]+\.\w+/
@@ -70,5 +74,9 @@ defmodule NodeNameTest do
     want = String.to_atom(name_str <> "." <> @subject.domain())
     {:ok, got} = @subject.create(name_str, :longnames)
     assert want == got
+  end
+
+  test "longnames: nodename head only supports alphanumerics, underscores and hyphens in name head" do
+    {:error, {:node_name, :invalid_node_head_name}} = @subject.create("кириллица", :longnames)
   end
 end
