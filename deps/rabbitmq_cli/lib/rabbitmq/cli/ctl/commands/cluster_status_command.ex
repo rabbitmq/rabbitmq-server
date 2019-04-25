@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
-  import RabbitMQ.CLI.Core.{Alarms, ANSI, Listeners, Platform}
+  import RabbitMQ.CLI.Core.{Alarms, ANSI, Listeners, Platform, FeatureFlags}
   import RabbitMQ.CLI.Core.Distribution, only: [per_node_timeout: 2]
   import Rabbitmq.Atom.Coerce
 
@@ -60,7 +60,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
             listeners_by_node = Enum.map(nodes, fn n -> listeners_of(n, per_node_timeout(timeout, count)) end)
             versions_by_node  = Enum.map(nodes, fn n -> versions_by_node(n, per_node_timeout(timeout, count)) end)
 
-            status ++ [{:alarms, alarms_by_node}] ++ [{:listeners, listeners_by_node}] ++ [{:versions, versions_by_node}]
+            feature_flags = case :rabbit_misc.rpc_call(node_name, :rabbit_ff_extra, :cli_info, [], timeout) do
+                              {:badrpc, {:EXIT, {:undef, _}}} -> []
+                              {:badrpc, _} = err    -> err
+                              val                   -> val
+                            end
+
+            status ++ [{:alarms, alarms_by_node}] ++ [{:listeners, listeners_by_node}] ++ [{:versions, versions_by_node}] ++ [{:feature_flags, feature_flags}]
         end
     end
   end
@@ -129,8 +135,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
                                                end)
          end
 
+    feature_flags_section = [
+      "\n#{bright("Feature flags")}\n"
+    ] ++ case Enum.count(m[:feature_flags]) do
+           0 -> ["(none)"]
+           _ -> feature_flag_lines(m[:feature_flags])
+         end
+
     lines = cluster_name_section ++ disk_nodes_section ++ ram_nodes_section ++ running_nodes_section ++
-            versions_section ++ alarms_section ++ partitions_section ++ listeners_section
+            versions_section ++ alarms_section ++ partitions_section ++ listeners_section ++ feature_flags_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -175,7 +188,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       alarms: Keyword.get(result, :alarms) |> Keyword.values |> Enum.concat |> Enum.uniq,
       partitions: Keyword.get(result, :partitions, []) |> Enum.into(%{}),
       listeners: Keyword.get(result, :listeners, []) |> Enum.into(%{}),
-      versions: Keyword.get(result, :versions, []) |> Enum.into(%{})
+      versions: Keyword.get(result, :versions, []) |> Enum.into(%{}),
+      feature_flags: Keyword.get(result, :feature_flags, []) |> Enum.map(fn ff -> Enum.into(ff, %{}) end)
     }
   end
 
