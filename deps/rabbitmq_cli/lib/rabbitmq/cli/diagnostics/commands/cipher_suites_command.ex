@@ -54,8 +54,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     :rabbit_misc.rpc_call(node_name, mod, function, args, timeout)
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
-
   def banner([], %{format: "openssl"}),  do: "Listing available cipher suites in OpenSSL format"
   def banner([], %{format: "erlang"}), do: "Listing available cipher suites in Erlang term format"
   def banner([], %{format: "map"}), do: "Listing available cipher suites in map format"
@@ -78,11 +76,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
     @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-    def format_output(item, %{format: "erlang"} = _opts) do
+    def format_output(item, %{format: "erlang"}) do
       to_string(:io_lib.format("~p", [item]))
     end
 
-    def format_output(item, %{format: "map"} = opts) do
+    def format_output(item, %{format: "map"}) do
       to_string(:io_lib.format("~p", [item]))
     end
 
