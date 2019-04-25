@@ -30,12 +30,13 @@ defmodule ErlangVersionCommandTest do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 30000,
-        details: false
+        details: false,
+        offline: false
       }}
   end
 
-  test "merge_defaults: defaults to abbreviated output" do
-    assert @command.merge_defaults([], %{}) == {[], %{details: false}}
+  test "merge_defaults: defaults to remote version and abbreviated output" do
+    assert @command.merge_defaults([], %{}) == {[], %{details: false, offline: false}}
   end
 
   test "validate: treats positional arguments as a failure" do
@@ -48,6 +49,14 @@ defmodule ErlangVersionCommandTest do
 
   test "validate: treats empty positional arguments and --details as a success" do
     assert @command.validate([], %{details: true}) == :ok
+  end
+
+  test "validate: treats empty positional arguments and --offline as a success" do
+    assert @command.validate([], %{offline: true}) == :ok
+  end
+
+  test "validate: treats empty positional arguments, --details and --offline as a success" do
+    assert @command.validate([], %{details: true, offline: true}) == :ok
   end
 
   @tag test_timeout: 3000
@@ -63,6 +72,12 @@ defmodule ErlangVersionCommandTest do
 
   test "run with --details: returns Erlang/OTP version on the target node", context do
     res = @command.run([], Map.merge(%{details: true}, context[:opts]))
+    # assert that we have a list of characters
+    assert length(res) > 0 and :io_lib.char_list(res)
+  end
+
+  test "run: when --offline is used, returns local Erlang/OTP version", context do
+    res = @command.run([], Map.merge(context[:opts], %{offline: true}))
     # assert that we have a list of characters
     assert length(res) > 0 and :io_lib.char_list(res)
   end
