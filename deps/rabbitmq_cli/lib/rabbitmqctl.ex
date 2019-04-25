@@ -386,7 +386,7 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_dataerr(),
       "Unsupported node name: hostname is invalid (possibly contains unsupported characters).\nIf using FQDN node names, use the -l / --longnames argument."}
   end
-  defp format_error({:error, {:node_name, :invalid_node_head_name}}, _, _) do
+  defp format_error({:error, {:node_name, :invalid_node_name_head}}, _, _) do
     {:error, ExitCodes.exit_dataerr(),
       "Unsupported node name: node name head (the part before the @) is invalid. Only alphanumerics, _ and - characters are allowed.\nIf using FQDN node names, use the -l / --longnames argument"}
   end

@@ -108,7 +108,7 @@ defmodule RabbitMQ.CLI.Core.NodeName do
             {:ok, String.to_atom(head <> "@" <> host_part)}
 
           false ->
-            {:error, {:node_name, :invalid_node_head_name}}
+            {:error, {:node_name, :invalid_node_name_head}}
         end
 
       {:error, :long} when attempt == 1 ->
@@ -121,7 +121,7 @@ defmodule RabbitMQ.CLI.Core.NodeName do
             {:ok, String.to_atom(head <> "@" <> hostname() <> "." <> domain())}
 
           false ->
-            {:error, {:node_name, :invalid_node_head_name}}
+            {:error, {:node_name, :invalid_node_name_head}}
         end
 
       {:error, :hostname_not_allowed} ->

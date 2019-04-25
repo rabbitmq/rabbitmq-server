@@ -43,7 +43,7 @@ defmodule NodeNameTest do
   end
 
   test "shortnames: nodename head only supports alphanumerics, underscores and hyphens in name head" do
-    {:error, {:node_name, :invalid_node_head_name}} = @subject.create("кириллица", :shortnames)
+    {:error, {:node_name, :invalid_node_name_head}} = @subject.create("кириллица", :shortnames)
   end
 
   test "longnames: RabbitMQ nodename is properly formed from atom" do
@@ -77,6 +77,6 @@ defmodule NodeNameTest do
   end
 
   test "longnames: nodename head only supports alphanumerics, underscores and hyphens in name head" do
-    {:error, {:node_name, :invalid_node_head_name}} = @subject.create("кириллица", :longnames)
+    {:error, {:node_name, :invalid_node_name_head}} = @subject.create("кириллица", :longnames)
   end
 end
