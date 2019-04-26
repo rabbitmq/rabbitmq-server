@@ -105,6 +105,7 @@ run_federated(Config) ->
               {stream, [Props]} = ?CMD:run([], Opts#{only_down => false}),
               <<"upstream">> = proplists:get_value(upstream_queue, Props),
               <<"fed.downstream">> = proplists:get_value(queue, Props),
+              <<"fed.tag">> = proplists:get_value(consumer_tag, Props),
               running = proplists:get_value(status, Props)
       end,
       [rabbit_federation_test_util:q(<<"upstream">>),
@@ -149,6 +150,7 @@ output_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
     Input = {stream,[[{queue, <<"fed.downstream">>},
+                      {consumer_tag, <<"fed.tag">>},
                       {upstream_queue, <<"upstream">>},
                       {type, queue},
                       {vhost, <<"/">>},

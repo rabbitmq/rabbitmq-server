@@ -86,6 +86,7 @@ adjust(Thing) ->
 shared_validation() ->
     [{<<"exchange">>,       fun rabbit_parameter_validation:binary/2, optional},
      {<<"queue">>,          fun rabbit_parameter_validation:binary/2, optional},
+     {<<"consumer-tag">>,   fun rabbit_parameter_validation:binary/2, optional},
      {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
      {<<"max-hops">>,       fun rabbit_parameter_validation:number/2, optional},

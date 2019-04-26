@@ -17,6 +17,7 @@
 -record(upstream, {uris,
                    exchange_name,
                    queue_name,
+                   consumer_tag,
                    prefetch_count,
                    max_hops,
                    reconnect_delay,
