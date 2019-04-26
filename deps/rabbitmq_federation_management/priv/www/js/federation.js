@@ -81,7 +81,7 @@ HELP['ha-policy'] =
 HELP['queue'] =
     'The name of the upstream queue. Default is to use the same name as the federated queue.';
 
-HELP['consumer_tag'] =
+HELP['consumer-tag'] =
     'The consumer tag to use when consuming from upstream. Optional.';
 
 function link_fed_conn(vhost, name) {
