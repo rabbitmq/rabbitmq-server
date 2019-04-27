@@ -19,6 +19,7 @@
     <th>Inbound message rate</th>
     <th>Last changed</th>
     <th>ID</th>
+    <th>Consumer tag</th>
     <th>Operations</th>
   </tr>
  </thead>
@@ -81,6 +82,7 @@
     </td>
     <td><%= link.timestamp %></td>
     <td><%= link.id %></td>
+    <td><%= link.consumer_tag %></td>
     <td>
         <form action="#/restart-link" method="delete" class="confirm">
         <input type="hidden" name="id" value="<%= link.id %>"/>

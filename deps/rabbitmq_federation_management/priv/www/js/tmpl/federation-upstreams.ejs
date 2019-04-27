@@ -21,8 +21,7 @@
     <th>Message TTL</th>
     <th>HA Policy</th>
     <th>Queue</th>
-
-
+    <th>Consumer tag</th>
   </tr>
  </thead>
  <tbody>
@@ -46,6 +45,7 @@
      <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
      <td class="r"><%= upstream.value['ha-policy'] %></td>
      <td class="r"><%= upstream.value['queue'] %></td>
+     <td class="r"><%= upstream.value['consumer-tag'] %></td>
    </tr>
 <% } %>
  </tbody>
@@ -85,7 +85,7 @@
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
-       
+
 
         <tr>
           <th>
@@ -136,7 +136,7 @@
               <span class="help" id="federation-trust-user-id"></span>
             </label>
           </th>
-          
+
           <td>
             <select name="trust-user-id">
               <option value="false">No</option>
@@ -217,6 +217,15 @@
             </label>
           </th>
           <td><input type="text" name="queue"/></td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Consumer tag:
+              <span class="help" id="consumer-tag"></span>
+            </label>
+          </th>
+          <td><input type="text" name="consumer-tag"/></td>
         </tr>
         </tr>
 
