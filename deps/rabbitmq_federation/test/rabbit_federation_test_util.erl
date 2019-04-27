@@ -27,7 +27,8 @@
 setup_federation(Config) ->
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream">>, <<"localhost">>, [
-        {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+        {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)},
+        {<<"consumer-tag">>, <<"fed.tag">>}]),
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream">>, <<"local5673">>, [

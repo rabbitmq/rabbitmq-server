@@ -311,8 +311,8 @@ visit_match({table, T}, Info) ->
 visit_match(_ ,_) ->
     false.
 
-consumer_tag(#upstream{name = Name}) ->
-    <<"federation-link-", Name/binary>>.
+consumer_tag(#upstream{consumer_tag = ConsumerTag}) ->
+    ConsumerTag.
 
 consume(Ch, Upstream, UQueue) ->
     ConsumerTag = consumer_tag(Upstream),

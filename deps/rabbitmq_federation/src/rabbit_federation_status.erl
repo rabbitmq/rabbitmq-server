@@ -122,12 +122,14 @@ identity(#entry{key       = {#resource{virtual_host = VHost,
                                        kind         = Type,
                                        name         = XorQNameBin},
                              UpstreamName, UXorQNameBin},
-                id = Id}) ->
+                id = Id,
+                upstream = #upstream{consumer_tag = ConsumerTag}}) ->
     case Type of
         exchange -> [{exchange,          XorQNameBin},
                      {upstream_exchange, UXorQNameBin}];
         queue    -> [{queue,             XorQNameBin},
-                     {upstream_queue,    UXorQNameBin}]
+                     {upstream_queue,    UXorQNameBin},
+                     {consumer_tag,      ConsumerTag}]
     end ++ [{type,      Type},
             {vhost,     VHost},
             {upstream,  UpstreamName},
