@@ -30,9 +30,12 @@
 
 % Due to API differences between OTP releases.
 -dialyzer(no_missing_calls).
--ignore_xref([{ssl_cipher_format, erl_suite_definition, 1},
+-ignore_xref([{ssl_cipher_format, suite_legacy, 1},
               {ssl_cipher_format, suite, 1},
-              {ssl_cipher_format, openssl_suite_name, 1}]).
+              {ssl_cipher_format, suite_to_str, 1},
+              {ssl_cipher_format, erl_suite_definition, 1},
+              {ssl_cipher_format, suite_map_to_openssl_str, 1},
+              {ssl_cipher_format, suite_map_to_bin, 1}]).
 
 -type certificate() :: rabbit_cert_info:certificate().
 
@@ -77,10 +80,33 @@ cipher_suites_openssl(Mode, Version) ->
 
 
 format_cipher_erlang(Cipher) ->
-    ssl_cipher_format:erl_suite_definition(ssl_cipher_format:suite(Cipher)).
+  case erlang:function_exported(ssl_cipher_format, suite_map_to_bin, 1) of
+      true ->
+          format_cipher_erlang22(Cipher);
+      false ->
+          format_cipher_erlang21(Cipher)
+  end.
+
+format_cipher_erlang22(Cipher) ->
+  ssl_cipher_format:suite_legacy(ssl_cipher_format:suite_map_to_bin(Cipher)).
+
+format_cipher_erlang21(Cipher) ->
+  ssl_cipher_format:erl_suite_definition(ssl_cipher_format:suite(Cipher)).
+
 
 format_cipher_openssl(Cipher) ->
-    ssl_cipher_format:openssl_suite_name(ssl_cipher_format:suite(Cipher)).
+    case erlang:function_exported(ssl_cipher_format, suite_map_to_bin, 1) of
+      true ->
+        format_cipher_openssl22(Cipher);
+      false ->
+        format_cipher_openssl21(Cipher)
+    end.
+
+format_cipher_openssl22(Cipher) ->
+    ssl_cipher_format:suite_map_to_openssl_str(Cipher).
+
+format_cipher_openssl21(Cipher) ->
+    ssl_cipher_format:suite_to_str(Cipher).
 
 -spec get_highest_protocol_version() -> tls_record:tls_version().
 get_highest_protocol_version() ->
