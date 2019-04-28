@@ -1,7 +1,7 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
@@ -98,7 +98,7 @@ unlock(_Data) ->
 randomized_startup_delay_range() ->
     %% Pods in a stateful set are initialized one by one,
     %% so RSD is not really necessary for this plugin.
-    %% See http://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s for details.
+    %% See https://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s for details.
     {0, 2}.
 
 %%
@@ -155,7 +155,7 @@ maybe_ready_address(Subset) ->
     maps:get(<<"addresses">>, Subset, []).
 
 %% @doc Return a list of nodes
-%%    see http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_endpoints
+%%    see https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_endpoints
 %% @end
 %%
 -spec extract_node_list(term()) -> [binary()].
