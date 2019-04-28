@@ -97,10 +97,12 @@ defmodule CipherSuitesCommandTest do
   end
 
   test "run: returns more cipher suites when all suites requested", context do
-    all_suites_opts = Map.merge(context[:opts], %{all: true})
     default_suites_opts = Map.merge(context[:opts], %{all: false})
-    all_suites = @command.run([], all_suites_opts)
     default_suites = @command.run([], default_suites_opts)
+
+    all_suites_opts = Map.merge(context[:opts], %{all: true})
+    all_suites = @command.run([], all_suites_opts)
+
     assert length(all_suites) > length(default_suites)
     assert length(default_suites -- all_suites) == 0
   end
