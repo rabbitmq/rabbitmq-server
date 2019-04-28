@@ -32,8 +32,11 @@
 -dialyzer(no_missing_calls).
 -ignore_xref([{ssl_cipher_format, suite_legacy, 1},
               {ssl_cipher_format, suite, 1},
+              {ssl_cipher, suite, 1},
               {ssl_cipher_format, suite_to_str, 1},
+              {ssl_cipher, erl_suite_definition, 1},
               {ssl_cipher_format, erl_suite_definition, 1},
+              {ssl_cipher, openssl_suite_name, 1},
               {ssl_cipher_format, suite_map_to_openssl_str, 1},
               {ssl_cipher_format, suite_map_to_bin, 1}]).
 
