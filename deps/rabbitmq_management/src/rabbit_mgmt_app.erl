@@ -19,6 +19,10 @@
 -behaviour(application).
 -export([start/2, stop/1, reset_dispatcher/1]).
 
+-ifdef(TEST).
+-export([get_listeners_config/0]).
+-endif.
+
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -53,6 +57,10 @@ reset_dispatcher(IgnoreApps) ->
 
 -spec start_configured_listener([atom()], boolean()) -> ok.
 start_configured_listener(IgnoreApps, NeedLogStartup) ->
+    [ start_listener(Listener, IgnoreApps, NeedLogStartup)
+      || Listener <- get_listeners_config() ].
+
+get_listeners_config() ->
     Listeners = case {has_configured_legacy_listener(),
           has_configured_tcp_listener(),
           has_configured_tls_listener()} of
@@ -84,8 +92,16 @@ start_configured_listener(IgnoreApps, NeedLogStartup) ->
             [get_tcp_listener(),
              get_tls_listener()]
     end,
-    [ start_listener(Listener, IgnoreApps, NeedLogStartup)
-      || Listener <- Listeners ].
+    maybe_disable_sendfile(Listeners).
+
+maybe_disable_sendfile(Listeners) ->
+    DisableSendfile = #{sendfile => false},
+    lists:map(fun(Listener) ->
+        CowboyOpts0 = maps:from_list(proplists:get_value(cowboy_opts, Listener, [])),
+
+        [{cowboy_opts, maps:to_list(maps:merge(DisableSendfile, CowboyOpts0))} | lists:keydelete(cowboy_opts, 1, Listener)]
+    end,
+    Listeners).
 
 has_configured_legacy_listener() ->
     has_configured_listener(listener).
