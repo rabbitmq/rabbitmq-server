@@ -96,7 +96,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
       comma_separated(stream, opts)
     end
 
-    def format_stream(stream, %{format: 'openssl'} = opts) do
+    def format_stream(stream, %{format: "openssl"} = opts) do
       Stream.map(
         stream,
         FormatterHelpers.without_errors_1(fn el ->
