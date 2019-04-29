@@ -446,8 +446,12 @@ init_max_bytes(MaxBytes, State) ->
     {_Dropped, State1} = maybe_drop_head(State#q{max_bytes = MaxBytes}),
     State1.
 
-init_overflow(undefined, State) ->
+%% Reset overflow to default 'drop-head' value if it's undefined.
+init_overflow(undefined, #q{overflow = 'drop-head'} = State) ->
     State;
+init_overflow(undefined, State) ->
+    {_Dropped, State1} = maybe_drop_head(State#q{overflow = 'drop-head'}),
+    State1;
 init_overflow(Overflow, State) ->
     OverflowVal = binary_to_existing_atom(Overflow, utf8),
     case OverflowVal of
