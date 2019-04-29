@@ -14,6 +14,8 @@
 -module(listener_config_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
+
 -compile(export_all).
 
 all() ->
@@ -89,10 +91,10 @@ multiple_listeners_configs(TcpConfig, SSLConfig, AddSSL) ->
     application:set_env(rabbitmq_management, TcpConfig, [{port, 999}]),
     application:set_env(rabbitmq_management, SSLConfig, [{port, 1000}] ++ SSLOpts),
 
-    ExpectedPorts = sort_sort([[{cowboy_opts,[{sendfile,false}]}, {port, 999}],
-                               [{cowboy_opts,[{sendfile,false}]}, {port, 1000}, {ssl, true}]]),
+    ExpectedPorts = [[{cowboy_opts, [{sendfile,false}]}, {port, 999}],
+                     [{cowboy_opts, [{sendfile,false}]}, {port, 1000}, {ssl, true}]],
 
-    ExpectedPorts = sort_sort(rabbit_mgmt_app:get_listeners_config()),
+    ?assertEqual(sort_sort(ExpectedPorts), sort_sort(rabbit_mgmt_app:get_listeners_config())),
 
     application:set_env(rabbitmq_management, TcpConfig,
         [{port, 999}, {cowboy_opts, [{idle_timeout, 10000}]}]),
@@ -100,20 +102,19 @@ multiple_listeners_configs(TcpConfig, SSLConfig, AddSSL) ->
         [{port, 1000}, {cowboy_opts, [{idle_timeout, 10000}]}] ++ SSLOpts),
 
     ExpectedIdleTimeouts =
-        sort_sort([[{cowboy_opts,[{sendfile,false}, {idle_timeout, 10000}]},
+        sort_sort([[{cowboy_opts, lists:usort([{sendfile,false}, {idle_timeout, 10000}])},
                      {port, 999}],
-                   [{cowboy_opts,[{sendfile,false}, {idle_timeout, 10000}]},
+                   [{cowboy_opts, lists:usort([{sendfile,false}, {idle_timeout, 10000}])},
                      {port, 1000}, {ssl, true}]]),
 
-    ExpectedIdleTimeouts = sort_sort(rabbit_mgmt_app:get_listeners_config()),
-
+    ?assertEqual(ExpectedIdleTimeouts, sort_sort(rabbit_mgmt_app:get_listeners_config())),
 
 
     application:set_env(rabbitmq_management, TcpConfig,
         [{port, 999}, {cowboy_opts, [{sendfile, false}]}]),
     application:set_env(rabbitmq_management, SSLConfig,
         [{port, 1000}, {cowboy_opts, [{sendfile, false}]}] ++ SSLOpts),
-    ExpectedPorts = sort_sort(rabbit_mgmt_app:get_listeners_config()),
+    ?assertEqual(ExpectedPorts, sort_sort(rabbit_mgmt_app:get_listeners_config())),
 
 
     application:set_env(rabbitmq_management, TcpConfig,
@@ -123,7 +124,8 @@ multiple_listeners_configs(TcpConfig, SSLConfig, AddSSL) ->
 
     ExpectedSendfiles = sort_sort([[{cowboy_opts, [{sendfile, true}]}, {port, 999}],
                                    [{cowboy_opts, [{sendfile, true}]}, {port, 1000}, {ssl, true}]]),
-    ExpectedSendfiles = sort_sort(rabbit_mgmt_app:get_listeners_config()).
+    ?assertEqual(ExpectedSendfiles, sort_sort(rabbit_mgmt_app:get_listeners_config())).
+
 
 single_listener_config(ConfigKey) -> single_listener_config(ConfigKey, false).
 
@@ -135,26 +137,27 @@ single_listener_config(ConfigKey, SSL) ->
     application:set_env(rabbitmq_management, ConfigKey, [{port, 999}]),
     ExpectedPort = lists:usort([{cowboy_opts,[{sendfile,false}]}, {port, 999}]
                                ++ SSLOpts),
-    ExpectedPort = get_single_listener_config(),
+    ?assertEqual(ExpectedPort, get_single_listener_config()),
 
     application:set_env(rabbitmq_management, ConfigKey,
         [{port, 999}, {cowboy_opts, [{idle_timeout, 10000}]}]),
 
     ExpectedIdleTimeout =
-        lists:usort([{cowboy_opts,[{sendfile,false}, {idle_timeout, 10000}]},
-                     {port, 999}] ++ SSLOpts),
-    ExpectedIdleTimeout = get_single_listener_config(),
+        lists:usort([{cowboy_opts, lists:usort([{sendfile,false}, {idle_timeout, 10000}])},
+                                   {port, 999}] ++ SSLOpts),
+    ?assertEqual(ExpectedIdleTimeout, get_single_listener_config()),
 
     application:set_env(rabbitmq_management, ConfigKey,
         [{port, 999}, {cowboy_opts, [{sendfile, false}]}]),
-    ExpectedPort = get_single_listener_config(),
+    ?assertEqual(ExpectedPort, get_single_listener_config()),
 
     application:set_env(rabbitmq_management, ConfigKey,
         [{port, 999}, {cowboy_opts, [{sendfile, true}]}]),
 
     ExpectedSendfile = lists:usort([{cowboy_opts, [{sendfile, true}]},
                                     {port, 999}] ++ SSLOpts),
-    ExpectedSendfile = get_single_listener_config().
+    ?assertEqual(ExpectedSendfile, get_single_listener_config()).
+
 
 get_single_listener_config() ->
     [Config] = rabbit_mgmt_app:get_listeners_config(),
@@ -162,4 +165,3 @@ get_single_listener_config() ->
 
 sort_sort(List) ->
     lists:usort(lists:map(fun(El) -> lists:usort(El) end, List)).
-

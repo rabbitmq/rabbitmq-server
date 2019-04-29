@@ -95,20 +95,11 @@ get_listeners_config() ->
     maybe_disable_sendfile(Listeners).
 
 maybe_disable_sendfile(Listeners) ->
+    DisableSendfile = #{sendfile => false},
     lists:map(fun(Listener) ->
-        CowboyOpts = case proplists:get_value(cowboy_opts, Listener, []) of
-            %% Disable sendfile by default
-            []   -> [{sendfile, false}];
-            Opts ->
-                case proplists:get_value(sendfile, Opts, undefined) of
-                    %% Disable sendfile if not configured
-                    undefined -> [{sendfile, false} | Opts];
-                    %% Do not change explicitly set sendfile
-                    true      -> Opts;
-                    false     -> Opts
-                end
-        end,
-        [{cowboy_opts, CowboyOpts} | lists:keydelete(cowboy_opts, 1, Listener)]
+        CowboyOpts0 = maps:from_list(proplists:get_value(cowboy_opts, Listener, [])),
+
+        [{cowboy_opts, maps:to_list(maps:merge(DisableSendfile, CowboyOpts0))} | lists:keydelete(cowboy_opts, 1, Listener)]
     end,
     Listeners).
 
