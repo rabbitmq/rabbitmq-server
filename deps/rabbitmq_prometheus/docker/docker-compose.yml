@@ -46,7 +46,7 @@ services:
       - "35692:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.25
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.29
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -57,7 +57,7 @@ services:
       VARIABLE_RATE: "12:30,25:30,50:30,100:30"
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
-      START_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: 30
   unroutable-return:
     image: *perf-test-image
     networks:
@@ -65,9 +65,10 @@ services:
     environment:
       URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
       VARIABLE_RATE: "2:30,4:30,10:30"
+      VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
       FLAG: mandatory
-      START_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: 30
   unroutable-drop:
     image: *perf-test-image
     networks:
@@ -75,8 +76,9 @@ services:
     environment:
       URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
       VARIABLE_RATE: "5:30,10:30,20:30"
+      VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
-      START_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: 30
   slow-consumer-persistent:
     image: *perf-test-image
     networks:
@@ -93,7 +95,7 @@ services:
       CONSUMER_RATE: 5
       AUTOACK: "false"
       QOS: 5
-      START_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0
     networks:
