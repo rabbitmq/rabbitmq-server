@@ -18,6 +18,16 @@ alias RabbitMQ.CLI.Formatters.FormatterHelpers
 defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
+  require Record
+  import Record
+
+  defrecord :table , extract(:table,
+    from_lib: "stdout_formatter/include/stdout_formatter.hrl")
+  defrecord :cell, extract(:cell,
+    from_lib: "stdout_formatter/include/stdout_formatter.hrl")
+  defrecord :paragraph, extract(:paragraph,
+    from_lib: "stdout_formatter/include/stdout_formatter.hrl")
+
   def format_stream(stream, options) do
     # Flatten for list_consumers
     entries_with_keys = Stream.flat_map(stream,
@@ -35,47 +45,44 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
     # table.
     case entries_with_keys do
       [first_entry | _] ->
-        col_headers = [Stream.map(first_entry,
+        col_headers = Stream.map(first_entry,
           fn({key, _}) ->
-            {to_string(key), :bright_white}
-          end)
-          |> Enum.to_list()]
-        rows = Stream.map(entries_with_keys,
-          fn(element) ->
-            ret = Stream.map(element,
-              fn({_, value}) ->
-                # FIXME: Handle all value types.
-                {format_value(value), :default}
-              end)
-              |> Enum.to_list()
-            [ret]
+            cell(content: key, props: %{:title => true})
           end)
           |> Enum.to_list()
-        lines = :rabbit_pretty_stdout.format_table(
-          [col_headers | rows],
-          :true,
-          :true)
-        Stream.map(lines,
-          fn(line) -> to_string line end)
+        rows = Stream.map(entries_with_keys,
+          fn(element) ->
+            Stream.map(element,
+              fn({_, value}) ->
+                cell(content: value, props: %{})
+              end)
+              |> Enum.to_list()
+          end)
+          |> Enum.to_list()
+        ret = :stdout_formatter.to_string(
+          table(
+            rows: [col_headers | rows],
+            props: %{:cell_padding => {0, 1}}))
+        [to_string ret]
       [] ->
         entries_with_keys
     end
   end
 
   def format_output(output, options) do
-    string = to_string(:rabbit_misc.format("~p", [output]))
-    lines = Stream.map(String.split(string, "\n"),
-      fn(element) ->
-        [{element, :default}]
-      end)
-      |> Enum.to_list()
-    :rabbit_pretty_stdout.format_table(
-      [
-        [[{"Output", :bright_white}]],
-        lines
-      ],
-      :true,
-      :true)
+    format = case is_binary(output) do
+      true  -> "~s"
+      false -> "~p"
+    end
+    ret = :stdout_formatter.to_string(
+      table(
+        rows: [
+          [cell(content: "Output", props: %{:title => true})],
+          [cell(
+            content: paragraph(content: output,
+            props: %{:format => format}))]],
+        props: %{:cell_padding => {0, 1}}))
+    to_string ret
   end
 
   def format_value(value) do
