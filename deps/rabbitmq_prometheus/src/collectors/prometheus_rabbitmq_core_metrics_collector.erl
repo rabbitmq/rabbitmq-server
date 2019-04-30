@@ -17,8 +17,7 @@
 -export([register/0,
          deregister_cleanup/1,
          collect_mf/2,
-         collect_metrics/2,
-         metric_prefix/0]).
+         collect_metrics/2]).
 
 -import(prometheus_model_helpers, [create_mf/4,
                                    create_mf/5,
@@ -32,7 +31,6 @@
 -behaviour(prometheus_collector).
 
 -define(METRIC_NAME_PREFIX, "rabbitmq_").
--define(NODE_LABEL, {node, node()}).
 
 -define(METRICS,
         [
@@ -206,7 +204,7 @@ mf_totals(Callback, Name, Type, Help, Size) ->
             ?METRIC_NAME(Name),
             Help,
             catch_boolean(Type),
-            {[?NODE_LABEL], Size}
+            Size
         )
     ).
 
@@ -214,7 +212,7 @@ collect_metrics(_, {Type, Fun, Items}) ->
     [metric(Type, labels(Item), Fun(Item)) || Item <- Items].
 
 labels(Item) ->
-    [?NODE_LABEL | label(element(1, Item))].
+    label(element(1, Item)).
 
 label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
     [{vhost, VHost}, {exchange, Name}];
@@ -231,10 +229,6 @@ label(P) when is_pid(P) ->
     [{channel, P}];
 label(A) when is_atom(A) ->
     [].
-
-% used in http Common Test Suite
-metric_prefix() ->
-    ?METRIC_NAME_PREFIX.
 
 metric(counter, Labels, Value) ->
     emit_counter_metric_if_defined(Labels, Value);

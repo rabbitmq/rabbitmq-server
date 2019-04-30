@@ -1,7 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-# BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.622
-BASED_ON_RABBITMQ_VERSION := 3.8-rabbitmq-server-1988
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.637
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
@@ -51,7 +50,7 @@ docker_image_build:
 	@docker build --pull \
 	  --build-arg PGP_KEYSERVER=pgpkeys.eu \
 	  --build-arg RABBITMQ_VERSION=$(BASED_ON_RABBITMQ_VERSION) \
-	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(PROJECT_VERSION) \
+	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(RABBITMQ_VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest .
 .PHONY: dib

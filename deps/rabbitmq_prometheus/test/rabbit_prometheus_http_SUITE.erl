@@ -39,7 +39,7 @@ groups() ->
      {default_config, [], all_tests()},
      {config_path, [], all_tests()},
      {config_port, [], all_tests()},
-     {with_metrics, [], [metrics_test, metrics_node_label_test]}
+     {with_metrics, [], [metrics_test, metrics_global_labels_test]}
     ].
 
 all_tests() ->
@@ -64,14 +64,19 @@ init_per_group(config_port, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_port, Config1, [{prometheus_port, 15674}]);
 init_per_group(with_metrics, Config0) ->
-    Config1 = rabbit_ct_helpers:merge_app_env(Config0,
-                                              [{rabbit, [{collect_statistics, coarse},
-                                                         {collect_statistics_interval, 100}]}]),
-    Config2 = init_per_group(with_metrics, Config1, []),
+    Config1 = rabbit_ct_helpers:merge_app_env(
+        Config0,
+        [{rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]}]
+    ),
+    Config2 = rabbit_ct_helpers:merge_app_env(
+        Config1,
+        {prometheus, [{global_labels, [{node, node()}, {cluster, "rabbitmq_prometheus_test"}]}]}
+    ),
+    Config3 = init_per_group(with_metrics, Config2, []),
 
-    A = rabbit_ct_broker_helpers:get_node_config(Config2, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config2, A),
-    
+    A = rabbit_ct_broker_helpers:get_node_config(Config3, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config3, A),
+
     Q = <<"prometheus_test_queue">>,
     amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = Q}, #amqp_msg{payload = <<"msg">>}),
@@ -79,7 +84,7 @@ init_per_group(with_metrics, Config0) ->
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
     timer:sleep(10000),
 
-    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}].
+    Config3 ++ [{channel_pid, Ch}, {queue_name, Q}].
 
 init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:log_environment(),
@@ -136,9 +141,9 @@ content_type_test(Config) ->
 encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "deflate"}], 200),
     ?assertMatch("identity", proplists:get_value("content-encoding", Headers)),
-    ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])).    
+    ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])).
 
-gzip_encoding_test(Config) ->    
+gzip_encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "gzip"}], 200),
     ?assertMatch("gzip", proplists:get_value("content-encoding", Headers)),
     %% If the body is not gzip, zlib:gunzip will crash
@@ -155,20 +160,24 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_queue_exchange_publish_total", [{capture, none}])).
 
-metrics_node_label_test(Config) ->
+metrics_global_labels_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
     Lines = string:split(Body, "\n", all),
     [
-        case string:str(Line, "node=") of
-            0 -> ct:fail("node label missing from metric '~s'", [Line]);
-            _ -> ok
+        begin
+            case string:str(Line, "node=") of
+                0 -> ct:fail("node label missing from metric '~s'", [Line]);
+                _ -> ok
+            end,
+            case string:str(Line, "cluster=") of
+                0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
+                _ -> ok
+            end
         end
         ||
         Line <- Lines,
-        lists:prefix(
-            prometheus_rabbitmq_core_metrics_collector:metric_prefix(),
-            Line
-        )
+        lists:prefix("#", Line) == false,
+        Line /= ""
     ].
 
 http_get(Config, ReqHeaders, CodeExp) ->

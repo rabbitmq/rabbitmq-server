@@ -30,6 +30,7 @@ start(_Type, _StartArgs) ->
     %% TCP listener uses prometheus.tcp.*.
     %% TLS listener uses prometheus.ssl.*
     start_configured_listener(),
+    add_global_labels(),
     supervisor:start_link({local,?MODULE},?MODULE,[]).
 
 stop(_State) ->
@@ -55,6 +56,17 @@ start_configured_listener() ->
                          get_tls_listener()]
                 end,
     [ start_listener(Listener) || Listener <- Listeners ].
+
+-spec add_global_labels() -> ok.
+add_global_labels() ->
+    application:set_env(
+        prometheus,
+        global_labels,
+        [
+            {node, node()},
+            {cluster, rabbit_nodes:cluster_name()}
+        ]
+    ).
 
 has_configured_tcp_listener() ->
     has_configured_listener(tcp_config).
@@ -93,7 +105,7 @@ register_context(ContextName, Listener0) ->
       rabbit_prometheus_dispatcher:build_dispatcher(),
       "RabbitMQ Prometheus").
 
-unregister_all_contexts() ->    
+unregister_all_contexts() ->
     rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
     rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
 
