@@ -23,6 +23,8 @@
 
 -module(rabbit_ff_extra).
 
+-include_lib("stdout_formatter/include/stdout_formatter.hrl").
+
 -export([cli_info/0,
          info/1,
          info/2,
@@ -40,7 +42,7 @@
 %% A list of properties for a single feature flag, formatted for the
 %% RabbitMQ CLI.
 
--type info_options() :: #{color => boolean(),
+-type info_options() :: #{colors => boolean(),
                           lines => boolean(),
                           verbose => non_neg_integer()}.
 %% Options accepted by {@link info/1} and {@link info/2}.
@@ -91,17 +93,15 @@ cli_info(FeatureFlags) ->
 %% @param Options Options to tune what is displayed and how.
 
 info(Options) ->
-    UseColors = use_colors(Options),
     %% Two tables: one for stable feature flags, one for experimental ones.
     StableFF = rabbit_feature_flags:list(all, stable),
     case maps:size(StableFF) of
         0 ->
             ok;
         _ ->
-            io:format(
-              "~n~s## Stable feature flags:~s~n",
-              [rabbit_pretty_stdout:ascii_color(bright_white, UseColors),
-               rabbit_pretty_stdout:ascii_color(default, UseColors)]),
+            stdout_formatter:display(
+              #paragraph{content = "\n## Stable feature flags:",
+                         props = #{bold => true}}),
             info(StableFF, Options)
     end,
     ExpFF = rabbit_feature_flags:list(all, experimental),
@@ -109,10 +109,9 @@ info(Options) ->
         0 ->
             ok;
         _ ->
-            io:format(
-              "~n~s## Experimental feature flags:~s~n",
-              [rabbit_pretty_stdout:ascii_color(bright_white, UseColors),
-               rabbit_pretty_stdout:ascii_color(default, UseColors)]),
+            stdout_formatter:display(
+              #paragraph{content = "\n## Experimental feature flags:",
+                         props = #{bold => true}}),
             info(ExpFF, Options)
     end,
     case maps:size(StableFF) + maps:size(ExpFF) of
@@ -132,103 +131,120 @@ info(FeatureFlags, Options) ->
     Verbose = maps:get(verbose, Options, 0),
     UseColors = use_colors(Options),
     UseLines = use_lines(Options),
+    Title = case UseColors of
+                true  -> #{title => true};
+                false -> #{}
+            end,
+    Bold = case UseColors of
+               true  -> #{bold => true};
+               false -> #{}
+           end,
+    {Green, Yellow, Red} = case UseColors of
+                               true ->
+                                   {#{fg => green},
+                                    #{fg => yellow},
+                                    #{bold => true,
+                                      bg => red}};
+                               false ->
+                                   {#{}, #{}, #{}}
+                           end,
+    Border = case UseLines of
+                 true  -> #{border_drawing => ansi};
+                 false -> #{border_drawing => ascii}
+             end,
     %% Table columns:
     %%     | Name | State | Provided by | Description
     %%
     %% where:
     %%     State = Enabled | Disabled | Unavailable (if a node doesn't
     %%     support it).
-    TableHeader = [
-                   [{"Name", bright_white},
-                    {"State", bright_white},
-                    {"Provided by", bright_white},
-                    {"Description", bright_white}]
-                  ],
+    TableHeader = #row{cells = ["Name",
+                                "State",
+                                "Provided",
+                                "Description"],
+                       props = Title},
     Nodes = lists:sort([node() | rabbit_feature_flags:remote_nodes()]),
-    Rows = lists:foldr(
-             fun(FeatureName, Acc) ->
+    Rows = lists:map(
+             fun(FeatureName) ->
                      FeatureProps = maps:get(FeatureName, FeatureFlags),
                      State0 = rabbit_feature_flags:get_state(FeatureName),
-                     {State, StateColor} = case State0 of
-                                               enabled ->
-                                                   {"Enabled", green};
-                                               disabled ->
-                                                   {"Disabled", yellow};
-                                               unavailable ->
-                                                   {"Unavailable", red_bg}
-                                           end,
+                     {State, Color} = case State0 of
+                                          enabled ->
+                                              {"Enabled", Green};
+                                          disabled ->
+                                              {"Disabled", Yellow};
+                                          unavailable ->
+                                              {"Unavailable", Red}
+                                      end,
                      App = maps:get(provided_by, FeatureProps),
                      Desc = maps:get(desc, FeatureProps, ""),
-                     MainLine = [{atom_to_list(FeatureName), bright_white},
-                                 {State, StateColor},
-                                 {atom_to_list(App), default},
-                                 {Desc, default}],
                      VFun = fun(Node) ->
                                     Supported =
                                     rabbit_feature_flags:does_node_support(
                                       Node, [FeatureName], 60000),
                                     {Label, LabelColor} =
                                     case Supported of
-                                        true  -> {"supported", default};
-                                        false -> {"unsupported", red_bg}
+                                        true  -> {"supported", #{}};
+                                        false -> {"unsupported", Red}
                                     end,
-                                    Uncolored = rabbit_misc:format(
-                                                  "  ~s: ~s", [Node, Label]),
-                                    Colored = rabbit_misc:format(
-                                                "  ~s: ~s~s~s",
-                                                [Node,
-                                                 rabbit_pretty_stdout:
-                                                 ascii_color(LabelColor,
-                                                             UseColors),
-                                                 Label,
-                                                 rabbit_pretty_stdout:
-                                                 ascii_color(default,
-                                                             UseColors)]),
-                                    [empty,
-                                     empty,
-                                     empty,
-                                     {Uncolored, Colored}]
+                                    #paragraph{content =
+                                               [rabbit_misc:format("  ~s: ",
+                                                                   [Node]),
+                                                #paragraph{content = Label,
+                                                           props = LabelColor}]}
                             end,
-                     if
-                         Verbose > 0 ->
-                             [[MainLine,
-                               empty,
-                               [empty,
-                                empty,
-                                empty,
-                                {"Per-node support level:", default}]
-                               | lists:map(VFun, Nodes)] | Acc];
-                         true ->
-                             [[MainLine] | Acc]
-                     end
-             end, [], lists:sort(maps:keys(FeatureFlags))),
+                     ExtraLines = if
+                                      Verbose > 0 ->
+                                          NodesList = lists:join(
+                                                        "\n",
+                                                        lists:map(
+                                                          VFun, Nodes)),
+                                          ["\n\n",
+                                           "Per-node support level:\n"
+                                           | NodesList];
+                                      true ->
+                                          []
+                                  end,
+                     [#paragraph{content = FeatureName,
+                                 props = Bold},
+                      #paragraph{content = State,
+                                 props = Color},
+                      #paragraph{content = App},
+                      #paragraph{content = [Desc | ExtraLines]}]
+             end, lists:sort(maps:keys(FeatureFlags))),
     io:format("~n", []),
-    rabbit_pretty_stdout:display_table([TableHeader | Rows],
-                                       UseColors,
-                                       UseLines).
+    stdout_formatter:display(#table{rows = [TableHeader | Rows],
+                                    props = Border#{cell_padding => {0, 1}}}).
 
 use_colors(Options) ->
-    maps:get(color, Options, rabbit_pretty_stdout:isatty()).
+    maps:get(colors, Options, true).
 
 use_lines(Options) ->
-    maps:get(lines, Options, rabbit_pretty_stdout:isatty()).
+    maps:get(lines, Options, true).
 
 state_legend(Options) ->
     UseColors = use_colors(Options),
-    io:format(
-      "~n"
-      "Possible states:~n"
-      "      ~sEnabled~s: The feature flag is enabled on all nodes~n"
-      "     ~sDisabled~s: The feature flag is disabled on all nodes~n"
-      "  ~sUnavailable~s: The feature flag cannot be enabled because one or "
-      "more nodes do not support it~n"
-      "~n",
-      [rabbit_pretty_stdout:ascii_color(green, UseColors),
-       rabbit_pretty_stdout:ascii_color(default, UseColors),
-       rabbit_pretty_stdout:ascii_color(yellow, UseColors),
-       rabbit_pretty_stdout:ascii_color(default, UseColors),
-       rabbit_pretty_stdout:ascii_color(red_bg, UseColors),
-       rabbit_pretty_stdout:ascii_color(default, UseColors)]).
+    {Green, Yellow, Red} = case UseColors of
+                               true ->
+                                   {#{fg => green},
+                                    #{fg => yellow},
+                                    #{bold => true,
+                                      bg => red}};
+                               false ->
+                                   {#{}, #{}, #{}}
+                           end,
+    Enabled = #paragraph{content = "Enabled", props = Green},
+    Disabled = #paragraph{content = "Disabled", props = Yellow},
+    Unavailable = #paragraph{content = "Unavailable", props = Red},
+    stdout_formatter:display(
+      #paragraph{
+         content =
+         ["\n",
+          "Possible states:\n",
+          "      ", Enabled, ": The feature flag is enabled on all nodes\n",
+          "     ", Disabled, ": The feature flag is disabled on all nodes\n",
+          "  ", Unavailable, ": The feature flag cannot be enabled because"
+          " one or more nodes do not support it\n"]}).
 
 -spec format_error(any()) -> string().
 %% @doc
