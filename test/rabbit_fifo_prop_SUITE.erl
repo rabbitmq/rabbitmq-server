@@ -51,6 +51,7 @@ all_tests() ->
      single_active_03,
      single_active_ordering,
      single_active_ordering_01,
+     single_active_ordering_03,
      in_memory_limit
      % single_active_ordering_02
     ].
@@ -488,7 +489,7 @@ single_active(_Config) ->
       end, [], Size).
 
 single_active_ordering(_Config) ->
-    Size = 2000,
+    Size = 4000,
     Fun = {-1, fun ({Prev, _}) -> {Prev + 1, Prev + 1} end},
     run_proper(
       fun () ->
@@ -545,6 +546,42 @@ single_active_ordering_02(_Config) ->
     Conf = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
+
+single_active_ordering_03(_Config) ->
+    C1Pid = test_util:fake_pid(node()),
+    C1 = {<<1>>, C1Pid},
+    C2Pid = test_util:fake_pid(rabbit@fake_node2),
+    C2 = {<<2>>, C2Pid},
+    E = test_util:fake_pid(rabbit@fake_node2),
+    Commands = [
+                make_enqueue(E, 1, 0),
+                make_enqueue(E, 2, 1),
+                make_enqueue(E, 3, 2),
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_checkout(C2, {auto,1,simple_prefetch}),
+                make_settle(C1, [0]),
+                make_checkout(C1, cancel),
+                {down, C1Pid, noconnection}
+                ],
+    Conf0 = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
+    Conf = Conf0#{release_cursor_interval => 100},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    try run_log(test_init(Conf), Entries) of
+        {State, Effects} ->
+            ct:pal("Effects: ~p~n", [Effects]),
+            ct:pal("State: ~p~n", [State]),
+            %% assert C1 has no messages
+            ?assertNotMatch(#{C1 := _}, State#rabbit_fifo.consumers),
+            true;
+        _ ->
+            true
+    catch
+        Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+            ct:pal("Err: ~p~n", [Err]),
+            false
+    end.
 
 in_memory_limit(_Config) ->
     Size = 2000,
@@ -630,7 +667,9 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
                         map_size(Up) =< 1
                 end,
     try run_log(test_init(Conf), Entries, Invariant) of
-        {_State, Effects} when ValidateOrder ->
+        {State, Effects} when ValidateOrder ->
+            ct:pal("Effects: ~p~n", [Effects]),
+            ct:pal("State: ~p~n", [State]),
             %% validate message ordering
             lists:foldl(fun ({send_msg, Pid, {delivery, Tag, Msgs}, ra_event},
                              Acc) ->
@@ -718,19 +757,19 @@ log_gen_ordered(Size) ->
              fakenode@fake2
             ],
     ?LET(EPids, vector(1, pid_gen(Nodes)),
-         ?LET(CPids, vector(5, pid_gen(Nodes)),
+         ?LET(CPids, vector(8, pid_gen(Nodes)),
               resize(Size,
                      list(
                        frequency(
                          [{20, enqueue_gen(oneof(EPids), 10, 0)},
                           {40, {input_event,
-                                frequency([{10, settle},
-                                           {2, return},
+                                frequency([{15, settle},
+                                           {1, return},
                                            {1, discard},
                                            {1, requeue}])}},
-                          {2, checkout_gen(oneof(CPids))},
-                          {1, checkout_cancel_gen(oneof(CPids))},
-                          {1, down_gen(oneof(EPids ++ CPids))},
+                          {7, checkout_gen(oneof(CPids))},
+                          {2, checkout_cancel_gen(oneof(CPids))},
+                          {2, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)}
                          ]))))).
 
