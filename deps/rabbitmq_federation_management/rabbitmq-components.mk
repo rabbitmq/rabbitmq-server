@@ -118,6 +118,7 @@ dep_prometheus = hex 4.2.2
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.4.0
+dep_stdout_formatter = hex 0.2.2
 dep_sysmon_handler = hex 1.1.0
 
 RABBITMQ_COMPONENTS = amqp_client \
