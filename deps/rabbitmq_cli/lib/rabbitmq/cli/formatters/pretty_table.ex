@@ -41,8 +41,7 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
       end)
       |> Enum.to_list()
 
-    # Use rabbit_pretty_stdout module from rabbitmq-common to format the
-    # table.
+    # Use stdout_formatter library to format the table.
     case entries_with_keys do
       [first_entry | _] ->
         col_headers = Stream.map(first_entry,
