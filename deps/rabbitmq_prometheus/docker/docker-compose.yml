@@ -18,6 +18,7 @@ services:
       - "rabbitmq-prometheus"
     ports:
       - "5672:5672"
+      - "15670:25672"
       - "15672:15672"
       - "15692:15692"
     hostname: rabbitmq1
@@ -35,6 +36,7 @@ services:
     hostname: rabbitmq2
     ports:
       - "6672:5672"
+      - "25670:25672"
       - "25672:15672"
       - "25692:15692"
   rabbitmq3:
@@ -42,6 +44,7 @@ services:
     hostname: rabbitmq3
     ports:
       - "7672:5672"
+      - "35670:25672"
       - "35672:15672"
       - "35692:15692"
   publisher-confirms:
