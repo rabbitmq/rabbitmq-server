@@ -129,26 +129,26 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 consumer_timeout(Config) ->
-    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     subscribe(Ch, QName, false),
+    erlang:monitor(process, Conn),
+    erlang:monitor(process, Ch),
     receive
-        {#'basic.deliver'{delivery_tag = _,
-                          redelivered  = false}, _} ->
-            %% do nothing with the delivery should trigger timeout
-            receive
-                #'basic.cancel'{ } ->
-                    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-                    ok
-            after 20000 ->
-                      flush(1),
-                      exit(cancel_never_happened)
-            end
-    after 5000 ->
-              exit(deliver_timeout)
+        {'DOWN', _, process, Ch, _} -> ok
+    after 30000 ->
+              flush(1),
+              exit(channel_exit_expected)
+    end,
+    receive
+        {'DOWN', _, process, Conn, _} ->
+              flush(1),
+              exit(unexpected_connection_exit)
+    after 2000 ->
+              ok
     end,
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
