@@ -90,11 +90,11 @@ services:
       QUEUE_ARGS: x-max-length=500
       FLAG: persistent
       AUTO_DELETE: "false"
-      SIZE: 256000
-      VARIABLE_RATE: "20:10,0:35"
-      CONSUMER_RATE: 5
+      SIZE: 128000
+      VARIABLE_RATE: "20:25,0:20"
+      CONSUMER_RATE: 10
+      QOS: 10
       AUTOACK: "false"
-      QOS: 5
       SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0

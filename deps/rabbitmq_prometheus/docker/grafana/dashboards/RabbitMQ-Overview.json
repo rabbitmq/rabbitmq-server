@@ -19,19 +19,6 @@
   "links": [],
   "panels": [
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 36,
-      "panels": [],
-      "title": "GLOBAL COUNTS",
-      "type": "row"
-    },
-    {
       "cacheTimeout": null,
       "colorBackground": true,
       "colorValue": false,
@@ -53,7 +40,7 @@
         "h": 3,
         "w": 3,
         "x": 0,
-        "y": 1
+        "y": 0
       },
       "id": 37,
       "interval": null,
@@ -138,7 +125,7 @@
         "h": 3,
         "w": 3,
         "x": 3,
-        "y": 1
+        "y": 0
       },
       "id": 38,
       "interval": null,
@@ -223,7 +210,7 @@
         "h": 3,
         "w": 3,
         "x": 6,
-        "y": 1
+        "y": 0
       },
       "id": 40,
       "interval": null,
@@ -308,7 +295,7 @@
         "h": 3,
         "w": 3,
         "x": 9,
-        "y": 1
+        "y": 0
       },
       "id": 41,
       "interval": null,
@@ -393,7 +380,7 @@
         "h": 3,
         "w": 3,
         "x": 12,
-        "y": 1
+        "y": 0
       },
       "id": 39,
       "interval": null,
@@ -433,8 +420,9 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_virtual_hosts))",
+          "expr": "count(rabbitmq_vhosts)",
           "format": "time_series",
+          "hide": false,
           "instant": false,
           "intervalFactor": 1,
           "legendFormat": "",
@@ -478,7 +466,7 @@
         "h": 3,
         "w": 3,
         "x": 15,
-        "y": 1
+        "y": 0
       },
       "id": 42,
       "interval": null,
@@ -563,7 +551,7 @@
         "h": 3,
         "w": 3,
         "x": 18,
-        "y": 1
+        "y": 0
       },
       "id": 43,
       "interval": null,
@@ -648,7 +636,7 @@
         "h": 3,
         "w": 3,
         "x": 21,
-        "y": 1
+        "y": 0
       },
       "id": 44,
       "interval": null,
@@ -717,7 +705,1116 @@
         "h": 1,
         "w": 24,
         "x": 0,
+        "y": 3
+      },
+      "id": 46,
+      "panels": [],
+      "title": "CONNECTIONS",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
         "y": 4
+      },
+      "id": 47,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(rabbitmq_connections)) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1000,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1500,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "id": 48,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_connection_created_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Opened / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Count of connections closed",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "id": 49,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_connection_closed_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Closed / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 51,
+      "panels": [],
+      "title": "CHANNELS",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 54,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(rabbitmq_channels)) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1000,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1500,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
+      "id": 55,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_channel_created_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Opened / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "id": 56,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_channel_closed_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Closed / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 53,
+      "panels": [],
+      "title": "QUEUES",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 57,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(round(rabbitmq_queues)) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1000,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 1500,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Total",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 16
+      },
+      "id": 58,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_queue_declared_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Declared / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 16
+      },
+      "id": 60,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_queue_created_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Created / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 59,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ceil(rate(rabbitmq_queue_deleted_total[15s]))) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Deleted / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
       },
       "id": 27,
       "panels": [],
@@ -736,7 +1833,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 22
       },
       "id": 9,
       "legend": {
@@ -826,7 +1923,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 22
       },
       "id": 19,
       "legend": {
@@ -910,7 +2007,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 27
       },
       "id": 33,
       "panels": [],
@@ -929,7 +2026,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 11
+        "y": 28
       },
       "id": 30,
       "legend": {
@@ -957,7 +2054,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_queue_disk_writes_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_queue_disk_writes_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1019,7 +2116,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 11
+        "y": 28
       },
       "id": 31,
       "legend": {
@@ -1047,7 +2144,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_queue_disk_reads_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_queue_disk_reads_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1103,7 +2200,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 33
       },
       "id": 11,
       "panels": [],
@@ -1122,7 +2219,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 17
+        "y": 34
       },
       "id": 13,
       "legend": {
@@ -1150,7 +2247,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_exchange_publish[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_exchange_publish[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1212,7 +2309,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 17
+        "y": 34
       },
       "id": 18,
       "legend": {
@@ -1240,7 +2337,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_exchange_confirm[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_exchange_confirm[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1302,7 +2399,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 17
+        "y": 34
       },
       "id": 16,
       "legend": {
@@ -1330,7 +2427,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_exchange_return_unroutable[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_exchange_return_unroutable[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1392,7 +2489,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 22
+        "y": 39
       },
       "id": 12,
       "legend": {
@@ -1420,7 +2517,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channel_messages_unconfirmed)) by(node)",
+          "expr": "sum(ceil(rabbitmq_channel_messages_unconfirmed)) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1482,7 +2579,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 22
+        "y": 39
       },
       "id": 34,
       "legend": {
@@ -1510,7 +2607,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_exchange_drop_unroutable[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_exchange_drop_unroutable[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1566,7 +2663,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 44
       },
       "id": 29,
       "panels": [],
@@ -1585,7 +2682,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 28
+        "y": 45
       },
       "id": 14,
       "legend": {
@@ -1613,7 +2710,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[1m]) + irate(rabbitmq_channel_queue_deliver_no_ack_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[15s]) + irate(rabbitmq_channel_queue_deliver_no_ack_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1675,7 +2772,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 28
+        "y": 45
       },
       "id": 21,
       "legend": {
@@ -1703,7 +2800,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_no_ack_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_no_ack_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1765,7 +2862,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 28
+        "y": 45
       },
       "id": 24,
       "legend": {
@@ -1793,7 +2890,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_get_no_ack_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_get_no_ack_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1855,7 +2952,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 33
+        "y": 50
       },
       "id": 15,
       "legend": {
@@ -1883,7 +2980,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_redeliver_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_redeliver_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1945,7 +3042,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 33
+        "y": 50
       },
       "id": 20,
       "legend": {
@@ -1973,7 +3070,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_deliver_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2035,7 +3132,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 33
+        "y": 50
       },
       "id": 23,
       "legend": {
@@ -2063,7 +3160,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_get_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_get_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2125,7 +3222,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 38
+        "y": 55
       },
       "id": 22,
       "legend": {
@@ -2153,7 +3250,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_ack_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_ack_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2215,7 +3312,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 38
+        "y": 55
       },
       "id": 25,
       "legend": {
@@ -2243,7 +3340,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(irate(rabbitmq_channel_queue_get_empty_total[1m]))) by(node)",
+          "expr": "sum(round(irate(rabbitmq_channel_queue_get_empty_total[15s]))) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2299,7 +3396,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 60
       },
       "id": 4,
       "panels": [],
@@ -2318,7 +3415,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 61
       },
       "id": 7,
       "legend": {
@@ -2424,7 +3521,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 44
+        "y": 61
       },
       "id": 2,
       "legend": {
@@ -2531,7 +3628,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 44
+        "y": 61
       },
       "id": 6,
       "legend": {
@@ -2637,7 +3734,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 49
+        "y": 66
       },
       "id": 8,
       "legend": {
@@ -2742,7 +3839,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 49
+        "y": 66
       },
       "id": 5,
       "legend": {
@@ -2845,7 +3942,7 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -2876,5 +3973,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 5
+  "version": 7
 }
