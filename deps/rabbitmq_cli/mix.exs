@@ -88,7 +88,7 @@ defmodule RabbitMQCtl.MixfileBase do
     elixir_deps = [
       {:json, "~> 1.2.0"},
       {:csv, "~> 2.0.0"},
-      {:stdout_formatter, "~> 0.2.2"},
+      {:stdout_formatter, "~> 0.2.3"},
 
       {:amqp, "~> 1.2.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
