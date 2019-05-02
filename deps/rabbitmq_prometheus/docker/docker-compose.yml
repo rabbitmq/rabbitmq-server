@@ -13,7 +13,7 @@ volumes:
 services:
   rabbitmq1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.637-2019.05.01
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.637-2019.05.02
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -94,7 +94,7 @@ services:
       FLAG: persistent
       AUTO_DELETE: "false"
       SIZE: 128000
-      VARIABLE_RATE: "20:25,0:20"
+      VARIABLE_RATE: "20:20,0:25"
       CONSUMER_RATE: 10
       QOS: 10
       AUTOACK: "false"
