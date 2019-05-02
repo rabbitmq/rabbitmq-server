@@ -51,6 +51,7 @@ groups() ->
       {cluster_size_3, [], [
           declare_args,
           declare_policy,
+          declare_invalid_policy,
           declare_policy_nodes,
           declare_policy_all,
           declare_policy_exactly,
@@ -128,6 +129,19 @@ declare_policy(Config) ->
     QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q).
+
+declare_invalid_policy(Config) ->
+    %% Tests that queue masters location returns 'ok', otherwise the validation of
+    %% any other parameter might be skipped and invalid policy accepted.
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"exactly">>},
+              %% this field is expected to be an integer
+              {<<"ha-params">>, <<"2">>}],
+    {error_string, _} = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, rabbit_policy, set,
+                          [<<"/">>, ?POLICY, <<".*">>, Policy, 0, <<"queues">>, <<"acting-user">>]).
 
 declare_policy_nodes(Config) ->
     setup_test_environment(Config),
