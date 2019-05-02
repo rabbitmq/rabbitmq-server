@@ -30,11 +30,11 @@
          end_per_testcase/2,
 
          registry/1,
-         enable_quorum_queue_in_a_healthy_situation/1,
+         enable_feature_flag_in_a_healthy_situation/1,
          enable_unsupported_feature_flag_in_a_healthy_situation/1,
-         enable_quorum_queue_when_ff_file_is_unwritable/1,
-         enable_quorum_queue_with_a_network_partition/1,
-         mark_quorum_queue_as_enabled_with_a_network_partition/1,
+         enable_feature_flag_when_ff_file_is_unwritable/1,
+         enable_feature_flag_with_a_network_partition/1,
+         mark_feature_flag_as_enabled_with_a_network_partition/1,
 
          clustering_ok_with_ff_disabled_everywhere/1,
          clustering_ok_with_ff_enabled_on_some_nodes/1,
@@ -79,17 +79,17 @@ groups() ->
       ]},
      {enabling_on_single_node, [],
       [
-       enable_quorum_queue_in_a_healthy_situation,
+       enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       enable_quorum_queue_when_ff_file_is_unwritable
+       enable_feature_flag_when_ff_file_is_unwritable
       ]},
      {enabling_in_cluster, [],
       [
-       enable_quorum_queue_in_a_healthy_situation,
+       enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       enable_quorum_queue_when_ff_file_is_unwritable,
-       enable_quorum_queue_with_a_network_partition,
-       mark_quorum_queue_as_enabled_with_a_network_partition
+       enable_feature_flag_when_ff_file_is_unwritable,
+       enable_feature_flag_with_a_network_partition,
+       mark_feature_flag_as_enabled_with_a_network_partition
       ]},
      {clustering, [],
       [
@@ -131,43 +131,19 @@ init_per_group(enabling_in_cluster, Config) ->
       [{rmq_nodes_count, 5},
        {rmq_nodes_clustered, false}]);
 init_per_group(clustering, Config) ->
-    DepsDir = ?config(erlang_mk_depsdir, Config),
-    PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
-    Args = ["dist",
-            "SKIP_DEPS=1",
-            {"DEPS_DIR=~s", [DepsDir]}],
-    case rabbit_ct_helpers:make(Config, PluginSrcDir, Args) of
-        {ok, _} ->
-            PluginsDir1 = filename:join(?config(current_srcdir, Config),
-                                        "plugins"),
-            PluginsDir2 = filename:join(PluginSrcDir, "plugins"),
-            PluginsDir = PluginsDir1 ++ ":" ++ PluginsDir2,
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{rmq_nodes_count, 2},
-               {rmq_nodes_clustered, false},
-               {rmq_plugins_dir, PluginsDir},
-               {start_rmq_with_plugins_disabled, true}]);
-        {error, _} ->
-            {skip, "Failed to compile the `my_plugin` test plugin"}
-    end;
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 2},
+                 {rmq_nodes_clustered, false},
+                 {start_rmq_with_plugins_disabled, true}]),
+    build_my_plugin(Config1);
 init_per_group(activating_plugin, Config) ->
-    DepsDir = ?config(erlang_mk_depsdir, Config),
-    PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
-    Args = ["test-dist",
-            {"DEPS_DIR=~s", [DepsDir]}],
-    case rabbit_ct_helpers:make(Config, PluginSrcDir, Args) of
-        {ok, _} ->
-            PluginsDir = filename:join(PluginSrcDir, "plugins"),
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{rmq_nodes_count, 2},
-               {rmq_nodes_clustered, true},
-               {rmq_plugins_dir, PluginsDir},
-               {start_rmq_with_plugins_disabled, true}]);
-        {error, _} ->
-            {skip, "Failed to compile the `my_plugin` test plugin"}
-    end;
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 2},
+                 {rmq_nodes_clustered, true},
+                 {start_rmq_with_plugins_disabled, true}]),
+    build_my_plugin(Config1);
 init_per_group(_, Config) ->
     Config.
 
@@ -220,15 +196,15 @@ init_per_testcase(Testcase, Config) ->
                 {skip, _} ->
                     Config3;
                 _ ->
-                    QQSupported =
-                    rabbit_ct_broker_helpers:is_feature_flag_supported(
-                      Config3, quorum_queue),
-                    case QQSupported of
+                    case is_feature_flag_subsystem_available(Config3) of
                         true ->
+                            %% We can declare a new feature flag at
+                            %% runtime. All of them are supported but
+                            %% still disabled.
+                            declare_arbitrary_feature_flag(Config3),
                             Config3;
                         false ->
-                            end_per_testcase(Testcase, Config3),
-                            {skip, "Quorum queues are unsupported"}
+                            {skip, "Feature flags subsystem unavailable"}
                     end
             end;
         [{name, enabling_in_cluster} | _] ->
@@ -255,15 +231,15 @@ init_per_testcase(Testcase, Config) ->
                 {skip, _} ->
                     Config3;
                 _ ->
-                    QQSupported =
-                    rabbit_ct_broker_helpers:is_feature_flag_supported(
-                      Config3, quorum_queue),
-                    case QQSupported of
+                    case is_feature_flag_subsystem_available(Config3) of
                         true ->
+                            %% We can declare a new feature flag at
+                            %% runtime. All of them are supported but
+                            %% still disabled.
+                            declare_arbitrary_feature_flag(Config3),
                             Config3;
                         false ->
-                            end_per_testcase(Testcase, Config3),
-                            {skip, "Quorum queues are unsupported"}
+                            {skip, "Feature flags subsystem unavailable"}
                     end
             end
     end.
@@ -315,7 +291,7 @@ registry(_Config) ->
     %% supported but still disabled.
     NewFeatureFlags = #{ff_c =>
                         #{desc => "Feature flag C",
-                          provided_by => feature_flags_SUITE,
+                          provided_by => ?MODULE,
                           stability => stable}},
     rabbit_feature_flags:initialize_registry(NewFeatureFlags),
     ?assertMatch([ff_a, ff_b, ff_c],
@@ -403,8 +379,8 @@ registry(_Config) ->
     ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
     ?assertNot(rabbit_ff_registry:is_enabled(ff_d)).
 
-enable_quorum_queue_in_a_healthy_situation(Config) ->
-    FeatureName = quorum_queue,
+enable_feature_flag_in_a_healthy_situation(Config) ->
+    FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
     Node = ClusterSize - 1,
     True = lists:duplicate(ClusterSize, true),
@@ -456,7 +432,15 @@ enable_unsupported_feature_flag_in_a_healthy_situation(Config) ->
        False,
        is_feature_flag_enabled(Config, FeatureName)).
 
-enable_quorum_queue_when_ff_file_is_unwritable(Config) ->
+enable_feature_flag_when_ff_file_is_unwritable(Config) ->
+    QQSupported = rabbit_ct_broker_helpers:is_feature_flag_supported(
+                    Config, quorum_queue),
+    case QQSupported of
+        true  -> do_enable_feature_flag_when_ff_file_is_unwritable(Config);
+        false -> {skip, "Quorum queues are unsupported"}
+    end.
+
+do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     FeatureName = quorum_queue,
     ClusterSize = ?config(rmq_nodes_count, Config),
     Node = ClusterSize - 1,
@@ -506,8 +490,8 @@ enable_quorum_queue_when_ff_file_is_unwritable(Config) ->
        lists:duplicate(ClusterSize, {ok, [[FeatureName]]}),
        [file:consult(File) || File <- feature_flags_files(Config)]).
 
-enable_quorum_queue_with_a_network_partition(Config) ->
-    FeatureName = quorum_queue,
+enable_feature_flag_with_a_network_partition(Config) ->
+    FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
     [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(
                         Config, nodename),
@@ -533,7 +517,7 @@ enable_quorum_queue_with_a_network_partition(Config) ->
     timer:sleep(1000),
 
     %% Enabling the feature flag should fail in the specific case of
-    %% `quorum_queue`, if the network is broken.
+    %% `ff_from_testsuite`, if the network is broken.
     ?assertEqual(
        {error, unsupported},
        enable_feature_flag_on(Config, B, FeatureName)),
@@ -548,6 +532,7 @@ enable_quorum_queue_with_a_network_partition(Config) ->
      || N <- [A, C, D]],
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
      || N <- [A, C, D]],
+    declare_arbitrary_feature_flag(Config),
 
     %% Enabling the feature flag works.
     ?assertEqual(
@@ -557,8 +542,8 @@ enable_quorum_queue_with_a_network_partition(Config) ->
        True,
        is_feature_flag_enabled(Config, FeatureName)).
 
-mark_quorum_queue_as_enabled_with_a_network_partition(Config) ->
-    FeatureName = quorum_queue,
+mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
+    FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
     [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(
                         Config, nodename),
@@ -627,7 +612,7 @@ clustering_ok_with_ff_disabled_everywhere(Config) ->
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true  -> ?assertEqual([false, false],
-                              is_feature_flag_enabled(Config, quorum_queue));
+                              is_feature_flag_enabled(Config, ff_from_testsuite));
         false -> ok
     end,
 
@@ -636,7 +621,7 @@ clustering_ok_with_ff_disabled_everywhere(Config) ->
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true  -> ?assertEqual([false, false],
-                              is_feature_flag_enabled(Config, quorum_queue));
+                              is_feature_flag_enabled(Config, ff_from_testsuite));
         false -> ok
     end,
     ok.
@@ -653,7 +638,7 @@ clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true  -> ?assertEqual([true, false],
-                              is_feature_flag_enabled(Config, quorum_queue));
+                              is_feature_flag_enabled(Config, ff_from_testsuite));
         false -> ok
     end,
 
@@ -662,7 +647,7 @@ clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, quorum_queue));
+                              is_feature_flag_enabled(Config, ff_from_testsuite));
         false -> ok
     end,
     ok.
@@ -677,7 +662,7 @@ clustering_ok_with_ff_enabled_everywhere(Config) ->
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, quorum_queue));
+                              is_feature_flag_enabled(Config, ff_from_testsuite));
         false -> ok
     end,
 
@@ -686,7 +671,7 @@ clustering_ok_with_ff_enabled_everywhere(Config) ->
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, quorum_queue));
+                              is_feature_flag_enabled(Config, ff_from_testsuite));
         false -> ok
     end,
     ok.
@@ -890,6 +875,28 @@ activating_plugin_with_new_ff_enabled(Config) ->
 %% Internal helpers.
 %% -------------------------------------------------------------------
 
+build_my_plugin(Config) ->
+    PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
+    PluginsDir1 = filename:join(?config(current_srcdir, Config), "plugins"),
+    PluginsDir2 = filename:join(PluginSrcDir, "plugins"),
+    PluginsDir = PluginsDir1 ++ ":" ++ PluginsDir2,
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_plugins_dir, PluginsDir}]),
+    case filelib:wildcard("plugins/my_plugin-*", PluginSrcDir) of
+        [] ->
+            DepsDir = ?config(erlang_mk_depsdir, Config),
+            Args = ["test-dist",
+                    {"DEPS_DIR=~s", [DepsDir]}],
+            case rabbit_ct_helpers:make(Config1, PluginSrcDir, Args) of
+                {ok, _} ->
+                    Config1;
+                {error, _} ->
+                    {skip, "Failed to compile the `my_plugin` test plugin"}
+            end;
+        _ ->
+            Config1
+    end.
+
 enable_feature_flag_on(Config, Node, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(
       Config, Node, rabbit_feature_flags, enable, [FeatureName]).
@@ -924,6 +931,18 @@ log_feature_flags_of_all_nodes(Config) ->
     rabbit_ct_broker_helpers:rpc_all(
       Config, rabbit_feature_flags, info, [#{color => false,
                                              lines => false}]).
+
+declare_arbitrary_feature_flag(Config) ->
+    NewFeatureFlags = #{ff_from_testsuite =>
+                        #{desc => "My feature flag",
+                          provided_by => ?MODULE,
+                          stability => stable}},
+    rabbit_ct_broker_helpers:rpc_all(
+      Config,
+      rabbit_feature_flags,
+      initialize_registry,
+      [NewFeatureFlags]),
+    ok.
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
 unblock(Pairs) -> [allow(X, Y) || {X, Y} <- Pairs].
