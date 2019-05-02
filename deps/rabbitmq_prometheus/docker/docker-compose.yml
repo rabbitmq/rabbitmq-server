@@ -95,7 +95,7 @@ services:
       AUTO_DELETE: "false"
       SIZE: 128000
       VARIABLE_RATE: "20:20,0:25"
-      CONSUMER_RATE: 10
+      CONSUMER_LATENCY: 100000
       QOS: 10
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: 30

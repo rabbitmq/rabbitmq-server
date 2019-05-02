@@ -746,7 +746,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -781,7 +794,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Total",
+      "title": "Total connections",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -853,7 +866,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -889,7 +915,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Opened / s",
+      "title": "Opened connections / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -933,7 +959,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of connections closed",
+      "description": "",
       "fill": 10,
       "gridPos": {
         "h": 5,
@@ -961,7 +987,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -996,7 +1035,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Closed / s",
+      "title": "Closed connections / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1081,7 +1120,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1116,7 +1168,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Total",
+      "title": "Total channels",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1188,7 +1240,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1223,7 +1288,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Opened / s",
+      "title": "Opened channels / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1295,7 +1360,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1330,7 +1408,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Closed / s",
+      "title": "Closed channels / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1415,7 +1493,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1450,7 +1541,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Total",
+      "title": "Total queues",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1522,7 +1613,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1557,7 +1661,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Declared / s",
+      "title": "Declared queues / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1629,7 +1733,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1664,7 +1781,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Created / s",
+      "title": "Created queues / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1736,7 +1853,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1771,7 +1901,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Deleted / s",
+      "title": "Deleted queues / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1856,7 +1986,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1874,7 +2017,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Ready",
+      "title": "Messages ready",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1946,7 +2089,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -1964,7 +2120,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Unacknowledged by consumers",
+      "title": "Messages unacknowledged by consumers",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2049,7 +2205,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2068,7 +2237,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Written to disk / s",
+      "title": "Messages written to disk / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2140,7 +2309,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2158,7 +2340,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Read from disk / s",
+      "title": "Messages read from disk / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2243,7 +2425,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2261,7 +2456,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Published / s",
+      "title": "Messages published / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2333,7 +2528,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2351,7 +2559,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Confirmed to publishers / s",
+      "title": "Messages confirmed to publishers / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2423,7 +2631,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2441,7 +2662,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Unroutable returned to publishers / s",
+      "title": "Unroutable messages returned to publishers / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2513,7 +2734,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2531,7 +2765,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Unconfirmed to publishers",
+      "title": "Messages unconfirmed to publishers",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2603,7 +2837,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2621,7 +2868,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Unroutable dropped / s",
+      "title": "Unroutable messages dropped / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2706,7 +2953,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2724,7 +2984,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Delivered / s",
+      "title": "Messages delivered / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2796,7 +3056,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2814,7 +3087,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Delivered auto ack / s",
+      "title": "Messages delivered auto ack / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2886,7 +3159,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2976,7 +3262,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -2994,7 +3293,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Redelivered / s",
+      "title": "Messages redelivered / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -3066,7 +3365,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -3084,7 +3396,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Delivered with ack / s",
+      "title": "Messages delivered with ack / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -3156,7 +3468,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -3246,7 +3571,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -3336,7 +3674,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -3438,7 +3789,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -3545,7 +3909,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -3651,7 +4028,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -3757,7 +4147,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -3862,7 +4265,20 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "rabbit@rabbitmq1",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "rabbit@rabbitmq2",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "rabbit@rabbitmq3",
+          "color": "#6DD0E0"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -3936,7 +4352,7 @@
       }
     }
   ],
-  "refresh": "10s",
+  "refresh": "5s",
   "schemaVersion": 18,
   "style": "dark",
   "tags": [],
@@ -3944,7 +4360,7 @@
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -3975,5 +4391,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 8
+  "version": 12
 }
