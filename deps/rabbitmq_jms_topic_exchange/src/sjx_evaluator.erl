@@ -57,8 +57,8 @@ evaluate( { Op, Exp },                     Headers ) -> do_una_op(Op, evaluate(E
 
 evaluate( {'and', Exp1, Exp2 },            Headers ) -> and3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
 evaluate( {'or', Exp1, Exp2 },             Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
-evaluate( {'like', LHS, Patt },            Headers ) -> isLike(val_of(LHS, Headers), Patt);
-evaluate( {'not_like', LHS, Patt },        Headers ) -> not3(isLike(val_of(LHS, Headers), Patt));
+evaluate( {'like', LHS, Patt, Esc },       Headers ) -> isLike(val_of(LHS, Headers), {Patt, Esc});
+evaluate( {'not_like', LHS, Patt, Esc },   Headers ) -> not3(isLike(val_of(LHS, Headers), {Patt, Esc}));
 evaluate( { Op, Exp, {range, From, To} },  Headers ) -> evaluate({ Op, Exp, From, To }, Headers);
 evaluate( {'between', Exp, From, To},           Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
 evaluate( {'not_between', Exp, From, To},       Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
