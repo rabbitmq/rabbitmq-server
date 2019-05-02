@@ -132,12 +132,12 @@ declare_policy(Config) ->
 
 declare_invalid_policy(Config) ->
     %% Tests that queue masters location returns 'ok', otherwise the validation of
-    %% any other parameter might be skipped - and policy accepted which will crash
-    %% in application
+    %% any other parameter might be skipped and invalid policy accepted.
     setup_test_environment(Config),
     unset_location_config(Config),
     Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
               {<<"ha-mode">>, <<"exactly">>},
+              %% this field is expected to be an integer
               {<<"ha-params">>, <<"2">>}],
     {error_string, _} = rabbit_ct_broker_helpers:rpc(
                           Config, 0, rabbit_policy, set,
