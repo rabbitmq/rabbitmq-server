@@ -102,7 +102,8 @@
            {4, channel_created_total, counter, "Channels created."},
            {5, channel_closed_total, counter, "Channels closed."},
            {6, queue_declared_total, counter, "Queues declared."},
-           {7, queue_deleted_total, counter, "Queues deleted."}
+           {7, queue_created_total, counter, "Queues created."},
+           {8, queue_deleted_total, counter, "Queues deleted."}
           ]},
          {node_node_metrics,
           [{2, node_node_send_bytes_total, counter, "Count of bytes sent to node.", send_bytes},
