@@ -49,7 +49,7 @@ services:
       - "35692:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.04.29
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.05.02
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -95,7 +95,7 @@ services:
       AUTO_DELETE: "false"
       SIZE: 128000
       VARIABLE_RATE: "20:20,0:25"
-      CONSUMER_LATENCY: 100000
+      CONSUMER_RATE: 10
       QOS: 10
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: 30
