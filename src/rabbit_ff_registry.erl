@@ -166,7 +166,7 @@ is_registry_written_to_disk() ->
 always_return_true() ->
     %% This function is here to trick Dialyzer. We want some functions
     %% in this initial on-disk registry to always return `true` or
-    %% `false`. However the generated regsitry will return actual
+    %% `false`. However the generated registry will return actual
     %% booleans. The `-spec()` correctly advertises a return type of
     %% `boolean()`. But in the meantime, Dialyzer only knows about this
     %% copy which, without the trick below, would always return either
@@ -179,7 +179,7 @@ always_return_true() ->
     %% That's why this function makes a call which we know the result,
     %% but not Dialyzer, to "create" that hard-coded `true` return
     %% value.
-    rand:uniform(1) > 0.
+    erlang:get({?MODULE, always_undefined}) =:= undefined.
 
 always_return_false() ->
     not always_return_true().
