@@ -54,6 +54,7 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                                        virtual_host = VHost,
                                        adapter_info = AdapterInfo}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
+    monitor(process, Ch),
     {ok, #state{backing_connection = Conn,
                 backing_channel    = Ch,
                 reader_pid         = ReaderPid,
@@ -137,6 +138,27 @@ handle_info({'EXIT', WriterPid, Reason = {writer, send_failed, _Error}},
     {stop, normal, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
+handle_info({'DOWN', _MRef, process, Ch, Reason},
+            #state{reader_pid = ReaderPid,
+                   writer_pid = Sock,
+                   backing_channel = Ch} = State) ->
+    Error =
+    case Reason of
+        {shutdown, {server_initiated_close, Code, Msg}} ->
+            #'v1_0.error'{condition = rabbit_amqp1_0_channel:convert_code(Code),
+                          description = {utf8, Msg}};
+        _ ->
+            #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                          description = {utf8,
+                                         list_to_binary(
+                                           lists:flatten(
+                                             io_lib:format("~w", [Reason])))}}
+    end,
+    End = #'v1_0.end'{ error = Error },
+    rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                       [ReaderPid, Reason]),
+    ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
+    {stop, normal, State};
 handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
     %% TODO do we care any more since we're using direct client?
     {noreply, State}. % TODO rabbit_channel uses queue_blocked?
