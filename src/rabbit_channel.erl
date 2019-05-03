@@ -2719,10 +2719,10 @@ evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
         {value, {_DTag, ConsumerTag, Time, {_QPid, _Msg}}}
           when is_integer(Timeout)
                andalso Time < Now - Timeout ->
-            rabbit_log_channel:info("Consumer ~s on Channel ~w has timed out "
-                                    "waiting on ack",
+            rabbit_log_channel:info("Consumer ~s on channel ~w has timed out "
+                                    "waiting on consumer acknowledgement. Timeout used: ~p ms",
                                     [rabbit_data_coercion:to_binary(ConsumerTag),
-                                     Channel]),
+                                     Channel, Timeout]),
             Ex = rabbit_misc:amqp_error(precondition_failed,
                                         "consumer ack timed out on channel ~w",
                                         [Channel], none),
