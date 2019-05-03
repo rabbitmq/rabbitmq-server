@@ -34,7 +34,7 @@
 validate_policy(KeyList) ->
     case proplists:lookup(<<"queue-master-locator">> , KeyList) of
         {_, Strategy} -> case validate_strategy(Strategy) of
-                             {error, _} = Er -> Er;
+                             {error, _, _} = Er -> Er;
                              _ -> ok
                          end;
         _             -> {error, "queue-master-locator undefined"}
