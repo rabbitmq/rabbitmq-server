@@ -120,6 +120,7 @@
 
 %% RabbitMQ internal use only.
 -export([initialize_registry/0,
+         initialize_registry/1,
          mark_as_enabled_locally/2,
          remote_nodes/0,
          running_remote_nodes/0,
@@ -128,8 +129,7 @@
          do_sync_feature_flags_with_node/1]).
 
 -ifdef(TEST).
--export([initialize_registry/1,
-         initialize_registry/3,
+-export([initialize_registry/3,
          query_supported_feature_flags/0,
          mark_as_enabled_remotely/2,
          mark_as_enabled_remotely/4]).
