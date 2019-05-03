@@ -315,7 +315,6 @@ log_file_fails_to_initialise_during_startup(Config) ->
 
 log_file_fails_to_initialise_during_startup1(_Config) ->
     [LogFile|_] = rabbit:log_locations(),
-    Suffix = ".0",
 
     %% start application with logging to directory with no
     %% write permissions
