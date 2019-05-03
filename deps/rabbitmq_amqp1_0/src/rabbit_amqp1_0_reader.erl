@@ -635,7 +635,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     end.
 
 auth_mechanisms(Sock) ->
-    {ok, Configured} = application:get_env(auth_mechanisms),
+    {ok, Configured} = application:get_env(rabbit, auth_mechanisms),
     [Name || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
              Module:should_offer(Sock), lists:member(Name, Configured)].
 
@@ -706,8 +706,8 @@ send_to_new_1_0_session(Channel, Frame, State) ->
 vhost({utf8, <<"vhost:", VHost/binary>>}) ->
     VHost;
 vhost(_) ->
-    {ok, DefaultVHost} = application:get_env(default_vhost),
-    DefaultVHost.
+    application:get_env(rabbitmq_amqp1_0, default_vhost,
+                        application:get_env(rabbit, default_vhost, <<"/">>)).
 
 %% End 1-0
 
