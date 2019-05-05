@@ -2086,7 +2086,7 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
             gen_server2:cast(Server, {delete_file, File, FileSize}),
             {ok, safe_file_delete_fun(File, Dir, FileHandlesEts)};
         [#file_summary{readers = Readers}] when Readers > 0 ->
-            rabbit_log:error("Asked to delete file ~p, but it has readers. Deferring.",
+            rabbit_log:debug("Asked to delete file ~p but it has active readers. Deferring.",
                              [File]),
             {defer, [File]}
     end.
