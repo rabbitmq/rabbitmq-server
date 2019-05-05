@@ -1986,7 +1986,7 @@ combine_files(Source, Destination,
             {ok, do_combine_files(SourceSummary, DestinationSummary,
                                   Source, Destination, State)};
         _ ->
-            rabbit_log:error("Asked to combine files ~p and ~p, but they have readers. Deferring.",
+            rabbit_log:debug("Asked to combine files ~p and ~p but they have active readers. Deferring.",
                              [Source, Destination]),
             DeferredFiles = [FileSummary#file_summary.file
                              || FileSummary <- [SourceSummary, DestinationSummary],
