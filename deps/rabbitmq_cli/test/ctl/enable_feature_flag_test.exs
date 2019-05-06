@@ -19,10 +19,21 @@ defmodule EnableFeatureFlagCommandTest do
   import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand
-  @feature_flag :quorum_queue
+  @feature_flag :ff_from_enable_ff_testsuite
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
+
+    # Define an arbitrary feature flag for the test.
+    node = get_rabbit_hostname()
+    new_feature_flags = %{
+      @feature_flag =>
+      %{desc: "My feature flag",
+        provided_by: :EnableFeatureFlagCommandTest,
+        stability: :stable}}
+    :ok = :rabbit_misc.rpc_call(
+      node, :rabbit_feature_flags, :initialize_registry, [new_feature_flags])
+
     {
       :ok,
       opts: %{node: get_rabbit_hostname()},
@@ -32,7 +43,7 @@ defmodule EnableFeatureFlagCommandTest do
 
   test "validate: wrong number of arguments results in arg count errors" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["quorum_queue", "whoops"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["ff_from_enable_ff_testsuite", "whoops"], %{}) == {:validation_failure, :too_many_args}
   end
 
   test "validate: passing an empty string for feature_flag name is an arg error", context do
