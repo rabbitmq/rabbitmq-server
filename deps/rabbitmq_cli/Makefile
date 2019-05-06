@@ -106,6 +106,8 @@ rel:: $(ESCRIPTS)
 tests:: $(ESCRIPTS)
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
 
+.PHONY: test
+
 test:: $(ESCRIPTS)
 ifdef TEST_FILE
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
