@@ -236,7 +236,7 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
                     {State1#?MODULE{consumers = Consumers},
                      %% returning a multi response with two client actions
                      %% for the channel to execute
-                     {multi, [Response, {send_drained, [{CTag, Drained}]}]},
+                     {multi, [Response, {send_drained, {CTag, Drained}}]},
                      Effects}
             end;
         _ when Waiting0 /= [] ->
