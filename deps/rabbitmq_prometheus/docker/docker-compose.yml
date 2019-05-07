@@ -129,9 +129,12 @@ services:
     image: *perf-test-image
     networks:
       - "rabbitmq-prometheus"
+    entrypoint: []
+    command: /bin/bash -c "while true; do bin/runjava com.rabbitmq.perf.PerfTest; sleep 10; done"
     environment:
+      TIME: 60
       URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
-      VARIABLE_RATE: "1:10,0:60"
+      VARIABLE_RATE: "1:10,0:20"
       QUEUE: nack
       QUEUE_ARGS: x-max-length=100
       ROUTING_KEY: nack
