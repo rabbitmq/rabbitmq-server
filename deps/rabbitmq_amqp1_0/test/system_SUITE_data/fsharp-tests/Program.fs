@@ -373,6 +373,38 @@ module Test =
         | :? Amqp.AmqpException ->
             ()
 
+    let accessFailureSend uri =
+        try
+            let u = Uri uri
+            let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
+            use ac = connect uri
+            let dest = "/amq/queue/test"
+            ac.Session.add_Closed (
+                new ClosedCallback (fun _ err -> printfn "session err %A" err.Condition
+                ))
+            let sender = new SenderLink(ac.Session, "test-sender", dest)
+            sender.Send(new Message "hi", TimeSpan.FromSeconds 15.)
+
+
+            failwith "expected exception not received"
+        with
+        | :? Amqp.AmqpException as ex ->
+            printfn "Exception %A" ex
+            ()
+
+    let accessFailure uri =
+        try
+            let u = Uri uri
+            let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
+            use ac = connect uri
+            let dest = "/amq/queue/test"
+            let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
+            receiver.Close()
+            failwith "expected exception not received"
+        with
+        | :? Amqp.AmqpException as ex ->
+            printfn "Exception %A" ex
+            ()
 
 let (|AsLower|) (s: string) =
     match s with
@@ -384,6 +416,12 @@ let main argv =
     match List.ofArray argv with
     | [AsLower "auth_failure"; uri] ->
         authFailure uri
+        0
+    | [AsLower "access_failure"; uri] ->
+        accessFailure uri
+        0
+    | [AsLower "access_failure_send"; uri] ->
+        accessFailureSend uri
         0
     | [AsLower "roundtrip"; uri] ->
         roundtrip uri

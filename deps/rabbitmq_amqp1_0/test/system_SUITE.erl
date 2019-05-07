@@ -43,7 +43,9 @@ groups() ->
           redelivery,
           routing,
           invalid_routes,
-          auth_failure
+          auth_failure,
+          access_failure,
+          access_failure_send
         ]},
       {java, [], [
           roundtrip
@@ -191,6 +193,26 @@ invalid_routes(Config) ->
 
 auth_failure(Config) ->
     run(Config, [ {dotnet, "auth_failure"} ]).
+
+access_failure(Config) ->
+    User = <<"access_failure">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
+    rabbit_ct_broker_helpers:set_permissions(Config, User, <<"/">>,
+                                             <<".*">>, %% configure
+                                             <<"^banana.*">>, %% write
+                                             <<"^banana.*">>  %% read
+                                            ),
+    run(Config, [ {dotnet, "access_failure"} ]).
+
+access_failure_send(Config) ->
+    User = <<"access_failure_send">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
+    rabbit_ct_broker_helpers:set_permissions(Config, User, <<"/">>,
+                                             <<".*">>, %% configure
+                                             <<"^banana.*">>, %% write
+                                             <<"^banana.*">>  %% read
+                                            ),
+    run(Config, [ {dotnet, "access_failure_send"} ]).
 
 run(Config, Flavors) ->
     ClientLibrary = ?config(amqp10_client_library, Config),
