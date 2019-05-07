@@ -20,7 +20,7 @@
 -include("rabbit_amqp1_0.hrl").
 
 -export([call/2, call/3, cast/2, cast/3, cast_flow/3, subscribe/3]).
--export([convert_error/1]).
+-export([convert_code/1, convert_error/1]).
 
 -import(rabbit_amqp1_0_util, [protocol_error/3]).
 

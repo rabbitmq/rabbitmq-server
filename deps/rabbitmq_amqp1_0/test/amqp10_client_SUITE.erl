@@ -130,7 +130,7 @@ roundtrip_quorum_queue_with_drain(Config) ->
                                                         Address),
 
     % grant credit and drain
-    ok = amqp10_client:flow_link_credit(Receiver, 5, never, true),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, true),
 
     % wait for a delivery
     receive
