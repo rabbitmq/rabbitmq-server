@@ -2643,6 +2643,10 @@
         {
           "alias": "rabbit@rabbitmq3",
           "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
         }
       ],
       "spaceLength": 10,
@@ -2658,7 +2662,16 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -2849,6 +2862,10 @@
         {
           "alias": "rabbit@rabbitmq3",
           "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
         }
       ],
       "spaceLength": 10,
@@ -2864,7 +2881,16 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -3302,7 +3328,24 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 2,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -4431,5 +4474,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 20
+  "version": 21
 }
