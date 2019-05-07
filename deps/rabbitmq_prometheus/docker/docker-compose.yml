@@ -13,7 +13,7 @@ volumes:
 services:
   rabbitmq1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.637-2019.05.02
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.646-2019.05.07
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -49,7 +49,7 @@ services:
       - "35692:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.05.02
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.05.07
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -98,6 +98,32 @@ services:
       CONSUMER_RATE: 10
       QOS: 10
       AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: 30
+  basic-get:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
+      QUEUE: basic-get
+      ROUTING_KEY: basic-get
+      VARIABLE_RATE: "1:1,0:30"
+      POLLING: "true"
+      POLLING_INTERVAL: 5000
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: 30
+  basic-get-auto:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
+      QUEUE: basic-get
+      ROUTING_KEY: basic-get
+      PRODUCERS: 0
+      POLLING: "true"
+      POLLING_INTERVAL: 5000
+      AUTOACK: "true"
       SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0

@@ -165,7 +165,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channels))",
+          "expr": "sum(rabbitmq_channels)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -250,7 +250,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_queues))",
+          "expr": "sum(rabbitmq_queues)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -335,7 +335,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channel_consumers))",
+          "expr": "sum(rabbitmq_channel_consumers)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -420,7 +420,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(rabbitmq_vhosts)",
+          "expr": "sum(rabbitmq_vhosts)",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -506,7 +506,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_nodes))",
+          "expr": "sum(rabbitmq_nodes)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -591,7 +591,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_partitions))",
+          "expr": "sum(rabbitmq_partitions)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -676,7 +676,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_alarms))",
+          "expr": "sum(rabbitmq_alarms)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -765,7 +765,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_connections)) by(node)",
+          "expr": "sum(rabbitmq_connections) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1139,7 +1139,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channels)) by(node)",
+          "expr": "sum(rabbitmq_channels) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1512,7 +1512,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_queues)) by(node)",
+          "expr": "sum(rabbitmq_queues) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2005,7 +2005,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_queue_messages_ready)) by (node)",
+          "expr": "sum(rabbitmq_queue_messages_ready) by (node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2108,7 +2108,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channel_messages_unacknowledged)) by(node)",
+          "expr": "sum(rabbitmq_channel_messages_unacknowledged) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2224,7 +2224,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_queue_disk_writes_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_disk_writes_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -2328,7 +2328,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_queue_disk_reads_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_disk_reads_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2444,7 +2444,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_exchange_publish[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_exchange_publish[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2547,7 +2547,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_exchange_confirm[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_exchange_confirm[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2650,7 +2650,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_exchange_return_unroutable[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_exchange_return_unroutable[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2753,7 +2753,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rabbitmq_channel_messages_unconfirmed)) by(node)",
+          "expr": "sum(rabbitmq_channel_messages_unconfirmed) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2856,7 +2856,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_exchange_drop_unroutable[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_exchange_drop_unroutable[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2972,7 +2972,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_deliver_total[$__interval]) + rate(rabbitmq_channel_queue_deliver_no_ack_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_deliver_total[$__interval]) + rate(rabbitmq_channel_queue_deliver_no_ack_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3075,7 +3075,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_deliver_no_ack_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_deliver_no_ack_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3171,6 +3171,10 @@
         {
           "alias": "rabbit@rabbitmq3",
           "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
         }
       ],
       "spaceLength": 10,
@@ -3178,7 +3182,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_get_no_ack_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_get_no_ack_total[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3186,7 +3190,16 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -3281,7 +3294,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_redeliver_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_redeliver_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3384,7 +3397,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_deliver_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_deliver_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3480,6 +3493,10 @@
         {
           "alias": "rabbit@rabbitmq3",
           "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
         }
       ],
       "spaceLength": 10,
@@ -3487,7 +3504,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_get_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_get_total[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3495,7 +3512,16 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -3590,7 +3616,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_ack_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_ack_total[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3659,6 +3685,7 @@
         "alignAsTable": true,
         "avg": false,
         "current": true,
+        "hideEmpty": false,
         "max": true,
         "min": true,
         "rightSide": false,
@@ -3686,6 +3713,10 @@
         {
           "alias": "rabbit@rabbitmq3",
           "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
         }
       ],
       "spaceLength": 10,
@@ -3693,7 +3724,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(round(rate(rabbitmq_channel_queue_get_empty_total[$__interval]))) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_queue_get_empty_total[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3701,7 +3732,16 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -4360,7 +4400,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-10m",
     "to": "now"
   },
   "timepicker": {
@@ -4391,5 +4431,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 12
+  "version": 20
 }
