@@ -125,6 +125,21 @@ services:
       POLLING_INTERVAL: 5000
       AUTOACK: "true"
       SERVERS_STARTUP_TIMEOUT: 30
+  nack:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      VARIABLE_RATE: "1:10,0:60"
+      QUEUE: nack
+      QUEUE_ARGS: x-max-length=100
+      ROUTING_KEY: nack
+      AUTOACK: "false"
+      NACK: "true"
+      QOS: 5
+      CONSUMER_LATENCY: 500000
+      SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0
     networks:
