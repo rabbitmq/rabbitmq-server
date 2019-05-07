@@ -138,7 +138,7 @@ credit_with_drained_test(_) ->
                                                        delivery_count = 5}}},
                  State),
     ?assertEqual({multi, [{send_credit_reply, 0},
-                          {send_drained, [{?FUNCTION_NAME, 5}]}]},
+                          {send_drained, {?FUNCTION_NAME, 5}}]},
                            Result),
     ok.
 
@@ -153,7 +153,7 @@ credit_and_drain_test(_) ->
 
     ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, CheckEffs),
     {State4, {multi, [{send_credit_reply, 0},
-                      {send_drained, [{?FUNCTION_NAME, 2}]}]},
+                      {send_drained, {?FUNCTION_NAME, 2}}]},
     Effects} = apply(meta(4), rabbit_fifo:make_credit(Cid, 4, 0, true), State3),
     ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
                                                        delivery_count = 4}}},
