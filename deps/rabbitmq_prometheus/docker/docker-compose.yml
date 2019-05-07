@@ -141,7 +141,7 @@ services:
       AUTOACK: "false"
       NACK: "true"
       QOS: 5
-      CONSUMER_LATENCY: 500000
+      CONSUMER_LATENCY: 3000000
       SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0

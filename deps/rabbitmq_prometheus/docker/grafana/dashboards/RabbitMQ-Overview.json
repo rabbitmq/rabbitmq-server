@@ -3334,7 +3334,7 @@
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 2,
+          "value": 20,
           "yaxis": "left"
         },
         {
@@ -3342,7 +3342,7 @@
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 10,
+          "value": 100,
           "yaxis": "left"
         }
       ],
@@ -4474,5 +4474,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 21
+  "version": 22
 }
