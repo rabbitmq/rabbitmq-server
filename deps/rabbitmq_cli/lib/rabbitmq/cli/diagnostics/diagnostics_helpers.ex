@@ -15,7 +15,8 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   def check_port_connectivity(port, node_name, timeout) do
-    hostname = Regex.replace(~r/^(.+)@/, to_string(node_name), "") |> to_charlist
+    regex = Regex.recompile!(~r/^(.+)@/)
+    hostname = Regex.replace(regex, to_string(node_name), "") |> to_charlist
 
     try do
       case :gen_tcp.connect(hostname, port, [], timeout) do

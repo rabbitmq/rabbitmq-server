@@ -179,7 +179,8 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     # This simplistic way of distinguishing IPv6 addresses,
     # networks address ranges, etc actually works better
     # for the kind of values we can get here than :inet functions. MK.
-    case value =~ ~r/:/ do
+    regex = Regex.recompile!(~r/:/)
+    case value =~ regex do
       true -> "[#{value}]"
       false -> value
     end
