@@ -288,8 +288,8 @@ short            | long          | description
     end
   end
 
-  defp strip_rabbitmq_prefix(value) do
-    Regex.replace(~r/^rabbitmq_/, value, "")
+  defp strip_rabbitmq_prefix(value, regex) do
+    Regex.replace(regex, value, "")
   end
 
   defp format_known_plugin_name_fragments(value) do
@@ -308,9 +308,11 @@ short            | long          | description
   end
 
   defp plugin_section(plugin) do
+    regex = Regex.recompile!(~r/^rabbitmq_/)
+
     to_string(plugin)
     # drop rabbitmq_
-    |> strip_rabbitmq_prefix()
+    |> strip_rabbitmq_prefix(regex)
     |> String.split("_")
     |> format_known_plugin_name_fragments()
   end
