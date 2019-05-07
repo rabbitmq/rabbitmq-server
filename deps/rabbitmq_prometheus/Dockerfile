@@ -24,12 +24,9 @@ ENV OPENSSL_SOURCE_SHA256="5c557b023230413dfb0756f3137a13e6d726838ccd1430888ad15
 # https://www.openssl.org/community/omc.html
 ENV OPENSSL_PGP_KEY_ID="0x8657ABB260F056B1E5190839D9C4D26D0E604491"
 
-# Use the latest stable Erlang/OTP release (https://github.com/erlang/otp/tags)
-ENV OTP_VERSION 21.3.7
-# TODO add PGP checking when the feature will be added to Erlang/OTP's build system
-# http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
-# https://github.com/docker-library/rabbitmq/blob/master/3.8-rc/ubuntu/Dockerfile#L31
-ENV OTP_SOURCE_SHA256="c14aebda6afae82809325c18d51a66e618b3f237b856080a7d8f4b5bb089e758"
+# Use the latest stable Erlang/OTP release - gmake find_latest_otp - https://github.com/erlang/otp/tags
+ENV OTP_VERSION 21.3.8
+ENV OTP_SOURCE_SHA256="e20df59eac5ec0f3d47cb775eb7cfb20438df24d93ba859959a18fe07abf3e6e"
 
 # Install dependencies required to build Erlang/OTP from source
 # http://erlang.org/doc/installation_guide/INSTALL.html

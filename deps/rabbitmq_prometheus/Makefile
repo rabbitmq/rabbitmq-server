@@ -1,6 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.637
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.646
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
@@ -87,3 +87,25 @@ endef
 .PHONY: ctop
 ctop:
 	@$(CTOP_CONTAINER)
+
+JQ := /usr/local/bin/jq
+$(JQ):
+	@brew install jq
+
+OTP_CURRENT_STABLE_MAJOR := 21
+define LATEST_STABLE_OTP_VERSION
+curl --silent --fail https://api.github.com/repos/erlang/otp/git/refs/tags | \
+  $(JQ) -r '.[].ref | sub("refs/tags/OTP.{1}";"") | match("^$(OTP_CURRENT_STABLE_MAJOR)[0-9.]+$$") | .string' | \
+  tail -n 1
+endef
+define LATEST_STABLE_OTP_SHA256
+c14aebda6afae82809325c18d51a66e618b3f237b856080a7d8f4b5bb089e758
+endef
+.PHONY: find_latest_otp
+find_latest_otp: $(JQ)
+	@printf "Version: " && \
+	export VERSION="$$($(LATEST_STABLE_OTP_VERSION))" && \
+	echo "$$VERSION" && \
+	printf "Checksum: " && \
+	wget --continue --quiet --output-document="/tmp/OTP-$$VERSION.tar.gz" "https://github.com/erlang/otp/archive/OTP-$$VERSION.tar.gz" && \
+	shasum -a 256 "/tmp/OTP-$$VERSION.tar.gz"
