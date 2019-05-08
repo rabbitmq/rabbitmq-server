@@ -392,6 +392,8 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
                              Acc#{max_frame_size => list_to_integer(V)};
                         ("hostname", V, Acc) ->
                              Acc#{hostname => list_to_binary(V)};
+                        ("container_id", V, Acc) ->
+                             Acc#{container_id => list_to_binary(V)};
                         ("transfer_limit_margin", V, Acc) ->
                              Acc#{transfer_limit_margin => list_to_integer(V)};
                         (_, _, Acc) -> Acc
@@ -477,12 +479,14 @@ parse_uri_test_() ->
      ?_assertEqual({ok, #{address => "my_proxy",
                           port => 9876,
                           hostname => <<"my_host">>,
+                          container_id => <<"my_container">>,
                           idle_time_out => 60000,
                           max_frame_size => 512,
                           tls_opts => {secure_port, []},
                           sasl => {plain, <<"fred">>, <<"passw">>}}},
-                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
-                             "hostname=my_host&max_frame_size=512&idle_time_out=60000")),
+                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&"
+                             "hostname=my_host&container_id=my_container&"
+                             "max_frame_size=512&idle_time_out=60000")),
      %% ensure URI encoded usernames and passwords are decodeded
      ?_assertEqual({ok, #{address => "my_proxy",
                           port => 9876,
