@@ -99,22 +99,18 @@ connect_dest(State = #{name := Name,
                                     AttachFun),
     %% wait for link credit here as if there are messages waiting we may try
     %% to forward before we've received credit
-    receive
-        {amqp10_event, {link, LinkRef, credited}} ->
-            ok
-    after ?LINK_CREDIT_TIMEOUT ->
-              exit(link_credit_timeout)
-    end,
     State#{dest => Dst#{current => #{conn => Conn,
                                      session => Sess,
+                                     link_state => attached,
+                                     pending => [],
                                      link => LinkRef,
                                      uri => Uri}}}.
 
 connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
     {ok, Config} = amqp10_client:parse_uri(Uri),
     {ok, Conn} = amqp10_client:open_connection(Config),
-    link(Conn),
     {ok, Sess} = amqp10_client:begin_session(Conn),
+    link(Conn),
     LinkName = begin
                    LinkName0 = gen_unique_name(Name, Postfix),
                    rabbit_data_coercion:to_binary(LinkName0)
@@ -250,6 +246,16 @@ handle_dest({amqp10_event, {session, Sess, {ended, Why}}},
 handle_dest({amqp10_event, {link, Link, {detached, Why}}},
             #{dest := #{current := #{link := Link}}}) ->
     {stop, {outbound_link_detached, Why}};
+handle_dest({amqp10_event, {link, Link, credited}},
+            State0 = #{dest := #{current := #{link := Link},
+                                 pending := Pend} = Dst}) ->
+
+    %% we have credit so can begin to forward
+    State = State0#{dest => Dst#{link_state => credited,
+                                 pending => []}},
+    lists:foldl(fun ({A, B, C}, S) ->
+                        forward(A, B, C, S)
+                end, State, lists:reverse(Pend));
 handle_dest({amqp10_event, {link, Link, _Evt}},
             State= #{dest := #{current := #{link := Link}}}) ->
     State;
@@ -301,6 +307,12 @@ nack(Tag, true, State = #{source := #{current := #{session := Session},
 forward(_Tag, _Props, _Payload,
         #{source := #{remaining_unacked := 0}} = State) ->
     State;
+forward(Tag, Props, Payload,
+        #{dest := #{current := #{link_state := attached},
+                    pending := Pend0} = Dst} = State) ->
+    %% simply cache the forward oo
+    Pend = [{Tag, Props, Payload} | Pend0],
+    State#{dest => Dst#{pending => {Pend}}};
 forward(Tag, Props, Payload,
         #{dest := #{current := #{link := Link},
                     unacked := Unacked} = Dst,
