@@ -404,7 +404,10 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
         amqps ->
             TlsOpts = parse_tls_opts(Query),
             Ret0#{tls_opts => {secure_port, TlsOpts}}
-    end.
+    end;
+parse_result({_Scheme, _UserInfo, _Host, _Port, _Path, _Query0}) ->
+    throw(path_segment_not_supported).
+
 
 parse_usertoken(U) ->
     [User, Pass] = string:tokens(U, ":"),
@@ -531,7 +534,9 @@ parse_uri_test_() ->
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
                   "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana&")),
      ?_assertEqual({error, plain_sasl_missing_userinfo},
-                   parse_uri("amqp://my_host:9876?sasl=plain"))
+                   parse_uri("amqp://my_host:9876?sasl=plain")),
+     ?_assertEqual({error, path_segment_not_supported},
+                   parse_uri("amqp://my_host/my_path_segment:9876"))
     ].
 
 -endif.
