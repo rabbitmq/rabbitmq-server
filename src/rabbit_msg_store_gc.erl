@@ -116,15 +116,13 @@ attempt_action(Action, Files,
                State = #state { pending_no_readers = Pending,
                                 on_action          = Thunks,
                                 msg_store_state    = MsgStoreState }) ->
-    case [File || File <- Files,
-                  rabbit_msg_store:has_readers(File, MsgStoreState)] of
-        []         -> State #state {
-                        on_action = lists:filter(
-                                      fun (Thunk) -> not Thunk() end,
-                                      [do_action(Action, Files, MsgStoreState) |
-                                       Thunks]) };
-        [File | _] -> Pending1 = maps:put(File, {Action, Files}, Pending),
-                      State #state { pending_no_readers = Pending1 }
+    case do_action(Action, Files, MsgStoreState) of
+        {ok, OkThunk} ->
+            State#state{on_action = lists:filter(fun (Thunk) -> not Thunk() end,
+                                                 [OkThunk | Thunks])};
+        {defer, [File | _]} ->
+            Pending1 = maps:put(File, {Action, Files}, Pending),
+            State #state { pending_no_readers = Pending1 }
     end.
 
 do_action(combine, [Source, Destination], MsgStoreState) ->
