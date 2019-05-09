@@ -2068,6 +2068,8 @@ do_combine_files(SourceSummary, DestinationSummary,
               {#file_summary.file_size,        TotalValidData}]),
 
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
+    rabbit_log:debug("Combined segment files number ~p (source) and ~p (destination), reclaimed ~p bytes",
+                     [Source, Destination, Reclaimed]),
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
     safe_file_delete_fun(Source, Dir, FileHandlesEts).
 
