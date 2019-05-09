@@ -38,7 +38,7 @@
     close_connection_and_channel/2,
     close_channels_and_connection/2,
 
-    publish/3, consume/3, fetch/3
+    publish/3, consume/3, consume_without_acknowledging/3, fetch/3
   ]).
 
 %% -------------------------------------------------------------------
@@ -288,6 +288,24 @@ consume(Ch, QName, Count) ->
                                                  durable = true}),
     amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     ok.
+
+consume_without_acknowledging(Ch, QName, Count) ->
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName, no_ack = false},
+                           self()),
+    CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C end,
+    accumulate_without_acknowledging(Ch, CTag, Count, []).
+
+accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) when Remaining =:= 0 ->
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    lists:reverse(Acc);
+accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) ->
+    receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, _MSg} ->
+           accumulate_without_acknowledging(Ch, CTag, Remaining - 1, [DTag | Acc])
+    after 5000 ->
+           amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+           exit(timeout)
+    end.
+
 
 fetch(Ch, QName, Count) ->
     [{#'basic.get_ok'{}, _} =
