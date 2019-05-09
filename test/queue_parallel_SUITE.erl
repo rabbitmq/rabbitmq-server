@@ -60,8 +60,10 @@ groups() ->
     [
      {parallel_tests, [],
       [
-       {classic_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds]},
-       {mirrored_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds]},
+       {classic_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
+                                                trigger_message_store_compaction]},
+       {mirrored_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
+                                                 trigger_message_store_compaction]},
        {quorum_queue, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]}
@@ -324,6 +326,27 @@ subscribe_and_multiple_ack(Config) ->
                                                multiple     = true}),
             wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]])
     end,
+    rabbit_ct_client_helpers:close_channel(Ch),
+    ok.
+
+trigger_message_store_compaction(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+
+    N = 12000,
+    [publish(Ch, QName, [binary:copy(<<"a">>, 5000)]) || _ <- lists:seq(1, N)],
+    wait_for_messages(Config, [[QName, <<"12000">>, <<"12000">>, <<"0">>]]),
+
+    AllDTags = rabbit_ct_client_helpers:consume_without_acknowledging(Ch, QName, N),
+    ToAck = lists:filter(fun (I) -> I > 500 andalso I < 11200 end, AllDTags),
+
+    [amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
+                                        multiple     = false}) || Tag <- ToAck],
+
+    %% give compaction a moment to start in and finish
+    timer:sleep(5000),
+    amqp_channel:cast(Ch, #'queue.purge'{queue = QName}),
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
 
