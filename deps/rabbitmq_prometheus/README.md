@@ -34,8 +34,8 @@ Sample `/etc/rabbitmq/rabbitmq.config`:
 
 ```erlang
 [
- {rabbitmq_exporter, [
-   {path, "/mymetrics"},
+ {rabbitmq_prometheus, [
+   {path, "/metrics"},
    {tcp_config, [{port, 15692}]}
  ]}
 ].
