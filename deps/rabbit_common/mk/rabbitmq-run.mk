@@ -336,8 +336,8 @@ start-brokers start-cluster:
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
 		  RABBITMQ_SERVER_START_ARGS=" \
 		  -rabbit loopback_users [] \
-		  -ra data_dir "$(RABBITMQ_QUORUM_DIR)"
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
+		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
 			ERL_LIBS="$(DIST_ERL_LIBS)" \
