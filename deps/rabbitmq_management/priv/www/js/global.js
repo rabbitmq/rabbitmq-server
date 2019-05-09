@@ -198,7 +198,7 @@ var HELP = {
       'Only users within the internal RabbitMQ database are shown here. Other users (e.g. those authenticated over LDAP) will not appear.',
 
     'export-definitions':
-    'The definitions consist of users, virtual hosts, permissions, parameters, exchanges, queues and bindings. They do not include the contents of queues or the cluster name. Exclusive queues will not be exported.',
+    'The definitions consist of users, virtual hosts, permissions, parameters, exchanges, queues, policies and bindings. They do not include the contents of queues. Exclusive queues will not be exported.',
 
     'export-definitions-vhost':
     'The definitions exported for a single virtual host consist of exchanges, queues, bindings and policies.',
