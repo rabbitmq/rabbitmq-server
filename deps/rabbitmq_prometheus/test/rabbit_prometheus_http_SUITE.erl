@@ -151,14 +151,27 @@ gzip_encoding_test(Config) ->
 
 metrics_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
-    %% Let's check that the body looks like a valid response
+    %% Checking that the body looks like a valid response
     ct:pal(Body),
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_queue_get_total", [{capture, none}])),
+    %% Checking that we have the first metric from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_queue_exchange_publish_total", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_published", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_erlang_process_reductions", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_fetched_ack", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_connection_open", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_connection_bytes_in", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_connection_packets_in", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_accepted", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open_limit", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_peer_node_bytes_in", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_io_read", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers", [{capture, none}])),
+    %% Checking the first TOTALS metric
+    ?assertEqual(match, re:run(Body, "rabbitmq_connections", [{capture, none}])).
 
 metrics_global_labels_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),

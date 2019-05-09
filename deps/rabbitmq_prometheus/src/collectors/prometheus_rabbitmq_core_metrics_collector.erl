@@ -32,126 +32,150 @@
 
 -define(METRIC_NAME_PREFIX, "rabbitmq_").
 
--define(METRICS,
-        [
-         {connection_coarse_metrics,
-          [{2, connection_recv_octects_total, counter, "Count of octects received on the connection."},
-           {3, connection_send_octects_total, counter, "Count of octects sent on the connection."},
-           {4, connection_reductions_total, counter, "Count of reductions that take place on the queue process."}
-          ]},
-         {queue_coarse_metrics,
-          [{2, queue_messages_ready, gauge, "Number of messages ready to be delivered to clients."},
-           {3, queue_messages_unacknowledge, gauge, "Number of messages delivered to clients but not yet acknowledged."},
-           {4, queue_messages, gauge, "Sum of ready and unacknowledged messages (queue depth)."},
-           {5, queue_reductions_total, counter, "Count of reductions that take place on the queue process."}
-          ]},
-         {channel_exchange_metrics,
-          [{2, channel_exchange_publish, gauge, "Count of messages published."},
-           {3, channel_exchange_confirm, gauge, "Count of messages confirmed."},
-           {4, channel_exchange_return_unroutable, gauge, "Count of messages returned to publisher as unroutable."},
-           {5, channel_exchange_drop_unroutable, gauge, "Count of unroutable non-mandatory messages."}
-          ]},
-         {channel_process_metrics,
-          [{2, channel_process_reductions_total, counter, "Count of reductions that take place on the channel process."}
-          ]},
-         {queue_metrics,
-          [{2, queue_disk_reads_total, counter, "Total number of times messages have been read from disk by this queue.", disk_reads},
-           {2, queue_disk_writes_total, counter, "Total number of times messages have been written to disk by this queue.", disk_writes}
-          ]},
-         {node_persister_metrics,
-          [{2, node_io_read_total, counter, "Read operations since node start.", io_read_count},
-           {2, node_io_read_bytes, counter, "Bytes read since node start.", io_read_bytes},
-           {2, node_io_read_microseconds, counter, "Total time of read operations.", io_read_time},
-           {2, node_io_write_total, counter, "Write operations since node start.", io_write_count},
-           {2, node_io_write_bytes, counter, "Bytes written since node start.", io_write_bytes},
-           {2, node_io_write_microseconds, counter, "Total time of write operations.", io_write_time},
-           {2, node_io_sync_total, counter, "Sync operations since node start.", io_sync_count},
-           {2, node_io_sync_microseconds, counter, "Total time of sync operations.", io_sync_time},
-           {2, node_io_seek_total, counter, "Seek operations since node start.", io_seek_count},
-           {2, node_io_seek_microseconds, counter, "Total time of seek operations.", io_seek_time},
-           {2, node_io_reopen_total, counter, "Times files have been reopened by the file handle cache.", io_reopen_count},
-           {2, node_mnesia_ram_tx_total, counter, "Mnesia transactions in RAM since node start.",
-            mnesia_ram_tx_count},
-           {2, node_mnesia_disk_tx_total, counter, "Mnesia transactions in disk since node start.",
-            mnesia_disk_tx_count},
-           {2, node_msg_store_read_total, counter, "Read operations in the message store since node start.",
-            msg_store_read_count},
-           {2, node_msg_store_write_total, counter, "Write operations in the message store since node start.",
-            msg_store_write_count},
-           {2, queue_index_journal_write_total, counter, "Write operations in the queue index journal since node start.", queue_index_journal_write_count},
-           {2, queue_index_write_total, counter, "Queue index write operations since node start.", index_write_count},
-           {2, queue_index_read_total, counter, "Queue index read operations since node start.", index_read_count},
-           {2, queue_io_file_handle_open_attempt_total, counter, "File descriptor open attempts.",
-            io_file_handle_open_attempt_count},
-           {2, queue_io_file_handle_open_attempt_microseconds, counter, "Total time of file descriptor open attempts.",
-            io_file_handle_open_attempt_time}
-          ]},
-         {node_coarse_metrics,
-          [{2, node_fd_used, gauge, "File descriptors used.", fd_used},
-           {2, node_sockets_used, gauge, "Sockets used.", sockets_used},
-           {2, node_mem_used, gauge, "Memory used in bytes.", mem_used},
-           {2, node_disk_free, gauge, "Disk free in bytes.", disk_free},
-           {2, node_proc_used, gauge, "Erlang processes used.", proc_used},
-           {2, node_gc_total, counter, "GC runs.", gc_num},
-           {2, node_gc_bytes_reclaimed_total, counter, "Bytes reclaimed by GC.", gc_bytes_reclaimed},
-           {2, node_context_switches_total, counter, "Context switches since node start.", context_switches}
-          ]},
-         {connection_churn_metrics,
-          [{2, connection_created_total, counter, "Connections created."},
-           {3, connection_closed_total, counter, "Connections closed."},
-           {4, channel_created_total, counter, "Channels created."},
-           {5, channel_closed_total, counter, "Channels closed."},
-           {6, queue_declared_total, counter, "Queues declared."},
-           {7, queue_created_total, counter, "Queues created."},
-           {8, queue_deleted_total, counter, "Queues deleted."}
-          ]},
-         {node_node_metrics,
-          [{2, node_node_send_bytes_total, counter, "Count of bytes sent to node.", send_bytes},
-           {2, node_node_recv_bytes_total, counter, "Count of bytes received from node.", recv_bytes}
-          ]},
-         {channel_queue_metrics,
-          [{2, channel_queue_get_total, counter, "Count of messages delivered in acknowledgement mode in response to basic.get."},
-           {3, channel_queue_get_no_ack_total, counter, "Count of messages delivered in no-acknowledgement mode in response to basic.get."},
-           {4, channel_queue_deliver_total, counter, "Count of messages delivered in acknowledgement mode to consumers."},
-           {5, channel_queue_deliver_no_ack_total, counter, "Count of messages delivered in no-acknowledgement mode to consumers."},
-           {6, channel_queue_redeliver_total, counter, "Count of subset of delivered messages which had the redelivered flag set."},
-           {7, channel_queue_ack_total, counter, "Count of messages acknowledged."},
-           {8, channel_queue_get_empty_total, counter, "Count of basic.get operations on empty queues."}
-          ]},
-         {channel_metrics,
-          [{2, channel_consumers, gauge, "Consumers count.", consumer_count},
-           {2, channel_messages_unacknowledged, gauge, "Count of messages unacknowledged.", messages_unacknowledged},
-           {2, channel_messages_unconfirmed, gauge, "Count of messages unconfirmed.", messages_unconfirmed},
-           {2, channel_messages_uncommited, gauge, "Count of messages uncommited.", messages_uncommited},
-           {2, channel_messages_prefetch, gauge, "Limit to the number of unacknowledged messages on every connection on a channel.", prefetch_count},
-           {2, channel_messages_global_prefetch, gauge, "Global limit to the number of unacknowledged messages shared between all connections on a channel.", global_prefetch_count}
-          ]},
-         {connection_metrics,
-          [{2, connection_recv_total, counter, "Count of bytes received on the connection.", recv_count},
-           {2, connection_send_total, counter, "Count of bytes send on the connection.", send_count}
-          ]},
-         {node_metrics,
-          [{2, node_fd_total, gauge, "File descriptors available.", fd_total},
-           {2, node_sockets_total, gauge, "Sockets available.", sockets_total},
-           {2, node_mem_limit, gauge, "Memory usage high watermark.", mem_limit},
-           {2, node_disk_free_limit, gauge, "Free disk space low watermark.", disk_free_limit},
-           {2, node_proc_total, gauge, "Erlang processes limit.", proc_total},
-           {2, node_uptime_milliseconds, counter, "Time in milliseconds since node start.", uptime},
-           {2, node_run_queue, gauge, "Runtime run queue.", run_queue},
-           {2, node_processors, gauge, "Logical processors.", processors},
-           {2, node_net_ticktime_seconds, gauge, "Periodic tick interval between all pairs of nodes to maintain the connections and to detect disconnections.", net_ticktime}
-          ]},
-         {channel_queue_exchange_metrics,
-          [{2, channel_queue_exchange_publish_total, counter, "Count of messages published."}
-          ]}
-        ]).
+% The source of these metrics are in the rabbit_core_metrics module
+% The relevant files are:
+% * rabbit_common/src/rabbit_core_metrics.erl
+% * rabbit_common/include/rabbit_core_metrics.hrl
+-define(METRICS, [
+    {channel_metrics, [
+        {2, channel_consumers, gauge, "Consumers on a channel", consumer_count},
+        {2, channel_messages_unacked, gauge, "Delivered but not yet acknowledged messages", messages_unacknowledged},
+        {2, channel_messages_unconfirmed, gauge, "Published but not yet confirmed messages", messages_unconfirmed},
+        {2, channel_messages_uncommitted, gauge, "Messages received in a transaction but not yet committed", messages_uncommitted},
+        {2, channel_acks_uncommitted, gauge, "Message acknowledgements in a transaction not yet committed", acks_uncommitted},
+        {2, consumer_prefetch, gauge, "Limit of unacknowledged messages for each consumer", prefetch_count},
+        {2, channel_prefetch, gauge, "Total limit of unacknowledged messages for all consumers on a channel", global_prefetch_count}
+    ]},
+
+    {channel_exchange_metrics, [
+        {2, channel_messages_published, gauge, "Messages published into an exchange on a channel"},
+        {3, channel_messages_confirmed, gauge, "Messages published into an exchange and confirmed on the channel"},
+        {4, channel_messages_unroutable_returned, gauge, "Messages published as mandatory into an exchange and returned to the publisher as unroutable"},
+        {5, channel_messages_unroutable_dropped, gauge, "Messages published as non-mandatory into an exchange and dropped as unroutable"}
+    ]},
+
+    {channel_process_metrics, [
+        {2, erlang_process_reductions, counter, "Erlang process reductions"}
+    ]},
+
+    {channel_queue_metrics, [
+        {2, channel_messages_fetched_ack, counter, "Messages fetched with basic.get in manual acknowledgement mode"},
+        {3, channel_messages_fetched, counter, "Messages fetched with basic.get in automatic acknowledgement mode"},
+        {4, channel_messages_delivered_ack, counter, "Messages delivered to consumers in manual acknowledgement mode"},
+        {5, channel_messages_delivered, counter, "Messages delivered to consumers in automatic acknowledgement mode"},
+        {6, channel_messages_redelivered, counter, "Messages redelivered to consumers"},
+        {7, channel_messages_acked, counter, "Messages acknowledged by consumers"},
+        {8, channel_get_empty, counter, "Number of times basic.get operations fetched no message"}
+    ]},
+
+    {connection_churn_metrics, [
+        {2, connection_open, counter, "Connections opened"},
+        {3, connection_close, counter, "Connections closed or terminated"},
+        {4, channel_open, counter, "Channels opened"},
+        {5, channel_close, counter, "Channels closed"},
+        {6, queue_declare, counter, "Queues declared"},
+        {7, queue_create, counter, "Queues created"},
+        {8, queue_delete, counter, "Queues deleted"}
+    ]},
+
+    {connection_coarse_metrics, [
+        {2, connection_bytes_in, counter, "Bytes received on a connection"},
+        {3, connection_bytes_out, counter, "Bytes sent on a connection"},
+        {4, erlang_process_reductions, counter, "Erlang process reductions"}
+    ]},
+
+    {connection_metrics, [
+        {2, connection_packets_in, counter, "Packets received on a connection", recv_cnt},
+        {2, connection_packets_out, counter, "Packets sent on a connection", send_cnt},
+        {2, connection_packets_pending, counter, "Packets waiting to be sent on a connection", send_pend},
+        {2, connection_channels, gauge, "Channels on a connection", channels}
+    ]},
+
+    {channel_queue_exchange_metrics, [
+        {2, queue_messages_accepted, counter, "Messages successfully accepted by queues"}
+    ]},
+
+    {node_coarse_metrics, [
+        {2, file_descriptors_open, gauge, "Open file descriptors", fd_used},
+        {2, tcp_sockets_open, gauge, "Open TCP sockets", sockets_used},
+        {2, memory_used_bytes, gauge, "Memory used in bytes", mem_used},
+        {2, disk_space_available_bytes, gauge, "Disk space available in bytes", disk_free},
+        {2, erlang_processes_used, gauge, "Erlang processes used", proc_used},
+        {2, erlang_gc_runs, counter, "Number of Erlang garbage collector runs", gc_num},
+        {2, erlang_gc_bytes_reclaimed, counter, "Bytes of memory reclaimed by Erlang garbage collector", gc_bytes_reclaimed},
+        {2, erlang_scheduler_context_switches, counter, "Erlang scheduler context switches", context_switches}
+    ]},
+
+    {node_metrics, [
+        {2, file_descriptors_open_limit, gauge, "Open file descriptors limit", fd_total},
+        {2, tcp_sockets_open_limit, gauge, "Open TCP sockets limit", sockets_total},
+        {2, memory_used_limit_bytes, gauge, "Memory high watermark in bytes", mem_limit},
+        {2, disk_space_available_limit_bytes, gauge, "Free disk space low watermark in bytes", disk_free_limit},
+        {2, erlang_processes_limit, gauge, "Erlang processes limit", proc_total},
+        {2, uptime_milliseconds, gauge, "Node uptime in milliseconds", uptime},
+        {2, erlang_scheduler_run_queue, gauge, "Erlang scheduler run queue", run_queue},
+        {2, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval in seconds", net_ticktime}
+    ]},
+
+    {node_node_metrics, [
+        {2, peer_node_bytes_in, counter, "Bytes received from peer node", recv_bytes},
+        {2, peer_node_bytes_out, counter, "Bytes sent to peer node", send_bytes}
+    ]},
+
+    {node_persister_metrics, [
+        {2, io_read, counter, "I/O read operations", io_read_count},
+        {2, io_read_bytes, gauge, "I/O bytes read", io_read_bytes},
+        {2, io_read_time_microseconds, gauge, "I/O read total time in microseconds", io_read_time},
+        {2, io_write, counter, "I/O write operations", io_write_count},
+        {2, io_write_bytes, gauge, "I/O bytes written", io_write_bytes},
+        {2, io_write_time_microseconds, gauge, "I/O write total time in microseconds", io_write_time},
+        {2, io_sync, counter, "I/O sync operations", io_sync_count},
+        {2, io_sync_time_microseconds, gauge, "I/O sync total time in microseconds", io_sync_time},
+        {2, io_seek, counter, "I/O seek operations", io_seek_count},
+        {2, io_seek_time_microseconds, gauge, "I/O seek total time in microseconds", io_seek_time},
+        {2, io_open_attempt, counter, "File open attempts", io_file_handle_open_attempt_count},
+        {2, io_open_attempt_time_microseconds, gauge, "File open attempts total time in microseconds", io_file_handle_open_attempt_time},
+        {2, io_reopen, counter, "Number of times files have been reopened", io_reopen_count},
+        {2, schema_db_ram_tx, counter, "Schema DB memory transactions", mnesia_ram_tx_count},
+        {2, schema_db_disk_tx, counter, "Schema DB disk transactions", mnesia_disk_tx_count},
+        {2, msg_store_read, counter, "Message store read operations", msg_store_read_count},
+        {2, msg_store_write, counter, "Message store write operations", msg_store_write_count},
+        {2, queue_index_read, counter, "Queue Index read operations", queue_index_read_count},
+        {2, queue_index_write, counter, "Queue Index write operations", queue_index_write_count},
+        {2, queue_index_journal_write, counter, "Queue Index Journal write operations", queue_index_journal_write_count}
+    ]},
+
+    {queue_coarse_metrics, [
+        {2, queue_messages_ready, gauge, "Messages ready to be delivered to consumers"},
+        {3, queue_messages_unacked, gauge, "Messages delivered to consumers but not yet acknowledged"},
+        {4, queue_messages, gauge, "Sum of ready and unacknowledged messages - total queue depth"},
+        {5, erlang_process_reductions, counter, "Erlang process reductions"}
+    ]},
+
+    {queue_metrics, [
+        {2, queue_consumers, gauge, "Consumers on a queue", queue_consumers},
+        {2, erlang_process_memory_bytes, gauge, "Memory in bytes used by the Erlang queue process", queue_memory},
+        {2, queue_messages_bytes, gauge, "Size in bytes of ready and unacknowledged messages", queue_messages_bytes},
+        {2, queue_messages_ram, gauge, "Ready and unacknowledged messages stored in memory", queue_messages_ram},
+        {2, queue_messages_ready_ram, gauge, "Ready messages stored in memory", queue_messages_ready_ram},
+        {2, queue_messages_ready_bytes, gauge, "Size in bytes of ready messages", queue_messages_bytes_ready},
+        {2, queue_messages_unacked_ram, gauge, "Unacknowledged messages stored in memory", queue_messages_unacknowledged_ram},
+        {2, queue_messages_unacked_bytes, gauge, "Size in bytes of all unacknowledged messages", queue_messages_bytes_unacknowledged},
+        {2, queue_messages_persistent, gauge, "Persistent messages", queue_messages_persistent},
+        {2, queue_messages_persistent_bytes, gauge, "Size in bytes of persistent messages", queue_messages_bytes_persistent},
+        {2, queue_messages_paged_out, gauge, "Messages paged out to disk", queue_messages_paged_out},
+        {2, queue_messages_paged_out_bytes, gauge, "Size in bytes of messages paged out to disk", queue_messages_bytes_paged_out},
+        {2, queue_disk_reads, gauge, "Number of times queue read messages from disk", disk_reads},
+        {2, queue_disk_writes, gauge, "Number of times queue wrote messages to disk", disk_writes}
+    ]}
+]).
 
 -define(TOTALS, [
-                 {connection_created, connections, gauge, "RabbitMQ Connections count."},
-                 {channel_created, channels, gauge, "RabbitMQ Channels count."},
-                 {consumer_created, consumers, gauge, "RabbitMQ Consumers count."},
-                 {queue_metrics, queues, gauge, "RabbitMQ Queues count."}
-                ]).
+    {connection_created, connections, gauge, "Total number of connections"},
+    {channel_created, channels, gauge, "Total number of channels"},
+    {consumer_created, consumers, gauge, "Total number of consumers"},
+    {queue_metrics, queues, gauge, "Total number of queues"}
+]).
 
 %%====================================================================
 %% Collector API
