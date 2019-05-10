@@ -135,9 +135,10 @@ endef
 
 LOCAL_DEPS = sasl mnesia os_mon inets compiler public_key crypto ssl syntax_tools
 BUILD_DEPS = rabbitmq_cli syslog
-DEPS = ranch lager rabbit_common ra sysmon_handler stdout_formatter
+DEPS = ranch lager rabbit_common ra sysmon_handler stdout_formatter observer_cli
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
+dep_observer_cli = hex observer_cli 1.4.3
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
 
 define usage_xml_to_erl
