@@ -1,6 +1,9 @@
 PROJECT = rabbitmq_cli
 
+dep_observer_cli = git https://github.com/michaelklishin/observer_cli recon-2.4.0
+
 BUILD_DEPS = rabbit_common
+DEPS = observer_cli
 TEST_DEPS = amqp_client rabbit
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
