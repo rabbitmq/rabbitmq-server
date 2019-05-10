@@ -29,7 +29,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, interval: interval}) do
-    :observer_cli.start(node_name, [{:interval, interval * 1000}])
+    case :observer_cli.start(node_name, [{:interval, interval * 1000}]) do
+      {:error, _} = err ->
+        err
+
+      {:error, _, _} = err ->
+        err
+
+      _other ->
+        {:ok, "Disconnected from #{node_name}."}
+    end
   end
 
   def help_section(), do: :observability_and_health_checks
