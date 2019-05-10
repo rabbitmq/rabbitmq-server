@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 
+ExUnit.configure(exclude: [disabled: true])
 ExUnit.start()
 
 defmodule TestHelper do
