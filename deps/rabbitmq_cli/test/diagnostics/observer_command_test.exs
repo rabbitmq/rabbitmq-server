@@ -46,10 +46,7 @@ defmodule ObserverCommandTest do
     assert @command.validate([], %{}) == :ok
   end
 
-  # Depends on zhongwencool/observer_cli#54
-  #
   @tag test_timeout: 3000
-  @tag disabled: true
   test "run: targeting an unreachable node throws a badrpc", context do
     assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, interval: 5}))
   end
