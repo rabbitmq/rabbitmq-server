@@ -35,6 +35,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
       {:error, _} = err    -> err
       {:error, _, _} = err -> err
       :ok   -> {:ok, "Disconnected from #{node_name}."}
+      :quit -> {:ok, "Disconnected from #{node_name}."}
       other -> other
     end
   end
