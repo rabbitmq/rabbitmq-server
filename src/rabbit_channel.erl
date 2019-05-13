@@ -707,7 +707,7 @@ handle_cast({mandatory_received, _MsgSeqNo}, State) ->
 
 handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     %% It does not matter which queue rejected the message,
-    %% if any queue rejected it - it should not be confirmed.
+    %% if any queue did, it should not be confirmed.
     {MaybeRejected, UC1} = unconfirmed_messages:reject_msg(MsgSeqNo, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
     case MaybeRejected of
@@ -774,7 +774,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     {ConfirmMXs, RejectMXs, UC1} =
                         unconfirmed_messages:forget_ref(Name, State2#ch.unconfirmed),
                     %% Deleted queue is a special case.
-                    %% Do not nack rejected messages.
+                    %% Do not nack the "rejected" messages.
                     State3 = record_confirms(ConfirmMXs ++ RejectMXs,
                                              State2#ch{unconfirmed = UC1}),
                     erase_queue_stats(QName),
@@ -784,7 +784,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
             end;
         _ ->
             %% the assumption here is that the queue state has been cleaned up and
-            %% this is a residual ra notification
+            %% this is a residual Ra notification
             noreply_coalesce(State0)
     end;
 
@@ -1843,7 +1843,7 @@ handle_publishing_queue_down(QPid, Reason,
                     {ConfirmMXs, RejectMXs, UC1} =
                         unconfirmed_messages:forget_ref(QPid, UC),
                     %% Deleted queue is a special case.
-                    %% Do not nack rejected messages.
+                    %% Do not nack the "rejected" messages.
                     record_confirms(ConfirmMXs ++ RejectMXs,
                                     State#ch{unconfirmed = UC1});
                 {false, _} ->
