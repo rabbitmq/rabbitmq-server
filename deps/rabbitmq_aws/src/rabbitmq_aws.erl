@@ -417,11 +417,13 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.
 %% @end
-perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options) ->
-  Response = httpc:request(Method, {URI, Headers}, Options, []),
+perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
+  Options1 = ensure_timeout(Options0),
+  Response = httpc:request(Method, {URI, Headers}, Options1, []),
   {format_response(Response), State};
-perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options) ->
-  Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options, []),
+perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
+  Options1 = ensure_timeout(Options0),
+  Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options1, []),
   {format_response(Response), State}.
 
 
@@ -432,6 +434,23 @@ perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Optio
 %% @end
 perform_request_creds_error(State) ->
   {{error, {credentials, State#state.error}}, State}.
+
+
+%% @doc Ensure that the timeout option is set and greater than 0 and less
+%%      than about 1/2 of the default gen_server:call timeout. This gives
+%%      enough time for a long connect and request phase to succeed.
+%% @end
+-spec ensure_timeout(Options :: http_options()) -> http_options().
+ensure_timeout(Options) ->
+    case proplists:get_value(timeout, Options) of
+        undefined ->
+            Options ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
+        Value when is_integer(Value) andalso Value >= 0 andalso Value =< ?DEFAULT_HTTP_TIMEOUT ->
+            Options;
+        _ ->
+            Options1 = proplists:delete(timeout, Options),
+            Options1 ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}]
+    end.
 
 
 -spec sign_headers(State :: state(), Service :: string(), Method :: method(),
