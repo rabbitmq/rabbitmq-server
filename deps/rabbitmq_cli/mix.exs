@@ -89,10 +89,11 @@ defmodule RabbitMQCtl.MixfileBase do
       {:json, "~> 1.2.0"},
       {:csv, "~> 2.0.0"},
       {:stdout_formatter, "~> 0.2.3"},
+      {:observer_cli, "~> 1.4.4"},
 
       {:amqp, "~> 1.2.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
-      {:temp, "~> 0.4", only: :test},
+      {:temp, "~> 0.4", only: :test}
     ]
 
     rabbitmq_deps = case System.get_env("DEPS_DIR") do
@@ -100,7 +101,7 @@ defmodule RabbitMQCtl.MixfileBase do
         # rabbitmq_cli is built as a standalone Elixir application.
         [
           {:rabbit_common, "~> 3.7.0"},
-          {:amqp_client, "~> 3.7.0", only: :test},
+          {:amqp_client, "~> 3.7.0", only: :test}
         ]
       deps_dir ->
         # rabbitmq_cli is built as part of RabbitMQ.
