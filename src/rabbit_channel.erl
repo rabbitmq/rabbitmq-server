@@ -2230,7 +2230,7 @@ process_routing_confirm(true, QRefs, QNames, MsgSeqNo, XName, State) ->
 confirm(MsgSeqNos, QRef, State = #ch{queue_names = QNames, unconfirmed = UC}) ->
     %% NOTE: if queue name does not exist here it's likely that the ref also
     %% does not exist in unconfirmed messages.
-    %% ignore value does not change anything.
+    %% Neither does the 'ignore' atom, so it's a reasonable fallback.
     QName = maps:get(QRef, QNames, ignore),
     {MXs, UC1} =
         unconfirmed_messages:confirm_multiple_msg_ref(MsgSeqNos, QName, QRef, UC),
