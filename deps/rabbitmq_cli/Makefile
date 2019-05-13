@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_cli
 
-dep_observer_cli = hex observer_cli 1.4.4
+dep_observer_cli = git https://github.com/zhongwencool/observer_cli 1.4.4
 
 BUILD_DEPS = rabbit_common
 DEPS = observer_cli
