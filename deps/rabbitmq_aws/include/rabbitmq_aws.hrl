@@ -8,8 +8,6 @@
 %% @end
 %% ====================================================================
 
--include_lib("ssl/src/ssl_api.hrl").
-
 -define(MIME_AWS_JSON, "application/x-amz-json-1.0").
 -define(SCHEME, https).
 
@@ -37,7 +35,7 @@
 -type expiration() :: calendar:datetime() | undefined.
 -type security_token() :: nonempty_string() | undefined.
 -type region() :: nonempty_string() | undefined.
-
+-type path() :: ssl:path().
 
 -type sc_ok() :: {ok, access_key(), secret_access_key(), expiration(), security_token()}.
 -type sc_error() :: {error, Reason :: atom()}.
@@ -82,7 +80,7 @@
 -type headers() :: [header()].
 -type body() :: string() | binary().
 
--type ssl_options() :: [ssl_option()].
+-type ssl_options() :: [ssl:ssl_option()].
 
 -type http_option() :: {timeout, timeout()} |
                        {connect_timeout, timeout()} |

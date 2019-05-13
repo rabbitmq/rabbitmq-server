@@ -78,6 +78,7 @@ dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $
 dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_etcd      = git_rmq rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_k8s       = git_rmq rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_prometheus               = git_rmq rabbitmq-prometheus $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_random_exchange          = git_rmq rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
@@ -108,13 +109,17 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
+dep_accept = hex 0.3.5
 dep_cowboy = hex 2.6.1
 dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.9.0
-dep_lager = hex 3.6.5
+dep_lager = hex 3.6.10
+dep_prometheus = git https://github.com/deadtrickster/prometheus.erl v4.3.0
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
-dep_recon = hex 2.3.6
+dep_recon = hex 2.4.0
+dep_observer_cli = git https://github.com/zhongwencool/observer_cli 1.4.4
+dep_stdout_formatter = hex 0.2.2
 dep_sysmon_handler = hex 1.1.0
 
 RABBITMQ_COMPONENTS = amqp_client \
@@ -158,6 +163,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_peer_discovery_consul \
 		      rabbitmq_peer_discovery_etcd \
 		      rabbitmq_peer_discovery_k8s \
+		      rabbitmq_prometheus \
 		      rabbitmq_random_exchange \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
@@ -226,7 +232,7 @@ export base_rmq_ref
 # If cloning from this computed location fails, we fallback to RabbitMQ
 # upstream which is GitHub.
 
-# Maccro to transform eg. "rabbit_common" to "rabbitmq-common".
+# Macro to transform eg. "rabbit_common" to "rabbitmq-common".
 rmq_cmp_repo_name = $(word 2,$(dep_$(1)))
 
 # Upstream URL for the current project.
