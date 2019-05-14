@@ -41,7 +41,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{<<"application/json">>, accept_json},
+   {[{{<<"application">>, <<"json">>, '*'}, accept_json},
      {{<<"multipart">>, <<"form-data">>, '*'}, accept_multipart}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
