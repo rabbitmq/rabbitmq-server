@@ -90,11 +90,11 @@ defmodule RestartVhostCommandTest do
         case :lists.keyfind(:msg_store_persistent, 1, :supervisor.which_children(sup)) do
         {_, pid, _, _} ->
           Process.exit(pid, :foo)
-          :timer.sleep(250)
+          :timer.sleep(5000)
           force_vhost_failure(node_name, vhost);
         false ->
           Process.exit(sup, :foo)
-          :timer.sleep(250)
+          :timer.sleep(5000)
           force_vhost_failure(node_name, vhost)
         end;
       {:error, {:vhost_supervisor_not_running, _}} ->

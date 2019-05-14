@@ -13,8 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
+four_hours = 240 * 60 * 1000
+ExUnit.configure(
+  exclude: [disabled: true],
+  module_load_timeout: four_hours,
+  timeout: four_hours)
 
-ExUnit.configure(exclude: [disabled: true])
 ExUnit.start()
 
 defmodule TestHelper do
