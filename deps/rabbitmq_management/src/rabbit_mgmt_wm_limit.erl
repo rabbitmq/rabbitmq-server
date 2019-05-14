@@ -34,7 +34,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{<<"application/json">>, accept_content}], ReqData, Context}.
+   {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
     {[<<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.

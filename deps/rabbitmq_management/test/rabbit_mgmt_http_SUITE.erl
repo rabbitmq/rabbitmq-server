@@ -34,6 +34,7 @@
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
                                 assert_permanent_redirect/3,
+                                uri_base_from/2, format_for_upload/1,
                                 amqp_port/1]).
 
 -import(rabbit_misc, [pget/2]).
@@ -103,6 +104,7 @@ all_tests() -> [
     definitions_password_test,
     definitions_remove_things_test,
     definitions_server_named_queue_test,
+    definitions_with_charset_test,
     aliveness_test,
     healthchecks_test,
     arguments_test,
@@ -1719,6 +1721,16 @@ definitions_server_named_queue_test(Config) ->
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
     http_get(Config, Path, ?OK),
     http_delete(Config, Path, {group, '2xx'}),
+    passed.
+
+definitions_with_charset_test(Config) ->
+    Path = "/definitions",
+    Body0 = http_get(Config, Path, ?OK),
+    Headers = [auth_header("guest", "guest")],
+    Url = uri_base_from(Config, 0) ++ Path,
+    Body1 = format_for_upload(Body0),
+    Request = {Url, Headers, "application/json; charset=utf-8", Body1},
+    {ok, {{_, ?NO_CONTENT, _}, _, []}} = httpc:request(post, Request, ?HTTPC_OPTS, []),
     passed.
 
 aliveness_test(Config) ->
