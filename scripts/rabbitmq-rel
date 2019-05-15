@@ -1,0 +1,58 @@
+#!/usr/bin/env escript
+%% vim:ft=erlang:sw=2:et:
+
+main(["show-rel"]) ->
+  Rel = get_rel(),
+  io:format("~p.~n", [Rel]);
+main(["gen-boot"]) ->
+  generate_rel(),
+  generate_boot().
+
+get_rel() ->
+  ok = application:load(rabbit),
+  Apps0 = get_apps(rabbit),
+  Apps1 = lists:sort(
+            fun
+              (_, rabbitmq_prelaunch) -> false;
+              (rabbitmq_prelaunch, _) -> true;
+              (_, mnesia)             -> true;
+              (mnesia, _)             -> false;
+              (A, B)                  -> A =< B
+            end, Apps0),
+  Apps = [{App, get_vsn(App)} || App <- Apps1],
+
+  ERTSVersion = erlang:system_info(version),
+  RabbitVersion = get_vsn(rabbit),
+
+  {release,
+   {"RabbitMQ", RabbitVersion},
+   {erts, ERTSVersion},
+   Apps}.
+
+get_apps(App) ->
+  ok = load_app(App),
+  {ok, DirectDeps} = application:get_key(App, applications),
+  lists:umerge(
+    [lists:usort(get_apps(Dep)) || Dep <- DirectDeps] ++
+    [lists:usort([kernel, stdlib, sasl, App, mnesia])]).
+
+load_app(App) ->
+  case application:load(App) of
+    ok                             -> ok;
+    {error, {already_loaded, App}} -> ok
+  end.
+
+generate_rel() ->
+  Rel = get_rel(),
+  io:format("~p.~n", [Rel]),
+  Output = io_lib:format("~p.~n", [Rel]),
+  ok = file:write_file("rabbit.rel", Output).
+
+generate_boot() ->
+  Options = [local, {path, code:get_path()}],
+  ok = systools:make_script("rabbit", Options).
+
+get_vsn(App) ->
+  load_app(App),
+  {ok, Vsn} = application:get_key(App, vsn),
+  Vsn.
