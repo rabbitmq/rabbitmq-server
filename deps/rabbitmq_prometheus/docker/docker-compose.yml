@@ -26,6 +26,7 @@ services:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
     volumes:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - ./rabbitmq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
@@ -93,7 +94,7 @@ services:
       QUEUE_ARGS: x-max-length=500
       FLAG: persistent
       AUTO_DELETE: "false"
-      SIZE: 128000
+      SIZE: 51200
       VARIABLE_RATE: "20:20,0:25"
       CONSUMER_RATE: 10
       QOS: 10
