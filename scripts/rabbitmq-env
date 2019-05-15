@@ -91,20 +91,6 @@ rmq_realpath() {
     fi
 }
 
-path_contains_existing_directory() {
-    local path="${1:?}"
-    local dir
-    local rc
-    local IFS="
-    "
-    for dir in $(echo "$path" | tr ':' '\n'); do
-        if [ -d "$dir" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
 ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 
@@ -118,7 +104,10 @@ saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
 ## Get configuration variables from the configure environment file
 [ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
-[ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
+if [ -f "${RABBITMQ_CONF_ENV_FILE}" ]; then
+	CONF_ENV_FILE_PHASE=rabbitmq-env
+	. ${RABBITMQ_CONF_ENV_FILE} || true
+fi
 
 [ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
 [ -n "$ERL_EPMD_ADDRESS" ] && export ERL_EPMD_ADDRESS
@@ -142,124 +131,16 @@ DEFAULT_MAX_NUMBER_OF_ATOMS=5000000
 ## Common server defaults
 SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
 
-[ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
-if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
-    RABBITMQ_NAME_TYPE=-name
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -f`
-    [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME}
-else
-    RABBITMQ_NAME_TYPE=-sname
-    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
-    [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME%%.*}
-fi
-
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
-rmq_normalize_path() {
-    local path=$1
-
-    # Remove redundant slashes and strip a trailing slash for a
-    # PATH-like vars - ':' is the delimiter
-    echo "$path" | sed -e 's#/\{2,\}#/#g' -e 's#/$##' -e 's#/:#:#g'
-}
-
-rmq_normalize_path_var() {
-    local var warning
-
-    local prefix="WARNING:"
-
-    for var in "$@"; do
-        local path=$(eval "echo \"\$$var\"")
-        case "$path" in
-        */)
-            warning=1
-            echo "$prefix Removing trailing slash from $var" 1>&2
-            ;;
-        esac
-
-        eval "$var=$(rmq_normalize_path "$path")"
-
-        if [ "x$warning" = "x1" ]; then
-            prefix="        "
-        fi
-    done
-}
-
-rmq_check_if_shared_with_mnesia() {
-    local var warning
-
-    local mnesia_dir=$(rmq_realpath "${RABBITMQ_MNESIA_DIR}")
-    local prefix="WARNING:"
-
-    for var in "$@"; do
-        local dir=$(eval "echo \"\$$var\"")
-
-        case $(rmq_realpath "$dir") in
-        ${mnesia_dir})
-            warning=1
-            echo "$prefix $var is equal to RABBITMQ_MNESIA_DIR" 1>&2
-            ;;
-        ${mnesia_dir}/*)
-            warning=1
-            echo "$prefix $var is located inside RABBITMQ_MNESIA_DIR" 1>&2
-            ;;
-        esac
-
-        if [ "x$warning" = "x1" ]; then
-            prefix="        "
-        fi
-    done
-
-    if [ "x$warning" = "x1" ]; then
-        echo "$prefix => Auto-clustering will not work ('cluster_nodes' in rabbitmq.config)" 1>&2
-    fi
-}
-
-DEFAULT_NODE_IP_ADDRESS=auto
-DEFAULT_NODE_PORT=5672
-
-[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
-[ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
-
-[ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_IP_ADDRESS=${DEFAULT_NODE_IP_ADDRESS}
-[ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${DEFAULT_NODE_PORT}
-
-[ "x" = "x$RABBITMQ_DIST_PORT" ] && RABBITMQ_DIST_PORT=${DIST_PORT}
-[ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${DEFAULT_NODE_PORT} + 20000))
-[ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${RABBITMQ_NODE_PORT} + 20000))
-
-[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=${CTL_DIST_PORT_MIN}
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=${CTL_DIST_PORT_MAX}
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$((${RABBITMQ_DIST_PORT} + 10000))
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$((${RABBITMQ_DIST_PORT} + 10010))
-
-[ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
+# FIXME
 [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
-[ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
-[ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
-[ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
 [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
 [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=${SERVER_CODE_PATH}
-[ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
-[ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
-[ "x" = "x$RABBITMQ_QUORUM_DIR" ] && RABBITMQ_QUORUM_DIR=${RABBITMQ_MNESIA_DIR}/quorum
-[ "x" = "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR=${GENERATED_CONFIG_DIR}
-[ "x" = "x$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE=${ADVANCED_CONFIG_FILE}
-[ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=${SCHEMA_DIR}
 [ "x" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT="true"
 [ "xtrue" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
-
-rmq_normalize_path_var \
-    RABBITMQ_CONFIG_FILE \
-    RABBITMQ_LOG_BASE \
-    RABBITMQ_MNESIA_BASE \
-    RABBITMQ_MNESIA_DIR \
-    RABBITMQ_QUORUM_DIR
-
-[ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="$PID_FILE"
 
 if [ -n "$saved_RABBITMQ_PID_FILE" ] && \
     [ "$saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]
@@ -271,155 +152,19 @@ then
     RABBITMQ_PID_FILE="$saved_RABBITMQ_PID_FILE"
 fi
 
-# Note: at this point, no RABBITMQ_PID_FILE is set so we use the mnesia dir value
-[ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="${RABBITMQ_MNESIA_DIR}.pid"
-
-rmq_normalize_path_var RABBITMQ_PID_FILE
-
 [ "x" = "x$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE=${BOOT_MODULE}
-
-[ "x" != "x$RABBITMQ_FEATURE_FLAGS_FILE" ] && RABBITMQ_FEATURE_FLAGS_FILE_source=environment
-[ "x" = "x$RABBITMQ_FEATURE_FLAGS_FILE" ] && RABBITMQ_FEATURE_FLAGS_FILE=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-feature_flags
-rmq_normalize_path_var RABBITMQ_FEATURE_FLAGS_FILE
-
-[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
-[ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
-rmq_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR
-
-[ "x" != "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
-[ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
-rmq_normalize_path_var RABBITMQ_ENABLED_PLUGINS_FILE
-
-[ "x" != "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR_source=environment
-[ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
-rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
-
-## Log rotation
-[ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
-[ "x" != "x$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source=environment
-[ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
-[ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
-[ "x" = "x$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
-
-rmq_normalize_path_var RABBITMQ_LOGS
-
-rmq_normalize_path_var RABBITMQ_UPGRADE_LOG
-
-# Check if files and directories non-related to Mnesia are configured
-# to be in $RABBITMQ_MNESIA_DIR. If this is the case, issue a warning
-# because it will prevent auto-clustering from working (the node will be
-# considered non-virgin).
-
-rmq_check_if_shared_with_mnesia \
-    RABBITMQ_CONFIG_FILE \
-    RABBITMQ_LOG_BASE \
-    RABBITMQ_PID_FILE \
-    RABBITMQ_FEATURE_FLAGS_FILE \
-    RABBITMQ_PLUGINS_EXPAND_DIR \
-    RABBITMQ_ENABLED_PLUGINS_FILE \
-    RABBITMQ_PLUGINS_DIR \
-    RABBITMQ_LOGS \
-    RABBITMQ_UPGRADE_LOG
 
 ##--- End of overridden <var_name> variables
 
-## Development-specific environment.
-if [ "${RABBITMQ_DEV_ENV}" ]; then
-    if [ "$RABBITMQ_FEATURE_FLAGS_FILE_source" != 'environment' -o \
-         "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
-         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
-        # We need to query the running node for the plugins directory
-        # and the "enabled plugins" file.
-        for arg in "$@"; do
-          case "$arg" in
-            -n)
-              next_is_node=1
-              ;;
-            *)
-              if test "$next_is_node"; then
-                # If the executed script is being passed a remote node
-                # name, use it here to query the remote node.
-                node_arg="-n $arg"
-                break
-              fi
-              ;;
-          esac
-        done
-        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl $node_arg eval \
-            '{ok, F} = application:get_env(rabbit, feature_flags_file),
-             {ok, P} = application:get_env(rabbit, plugins_dir),
-             {ok, E} = application:get_env(rabbit, enabled_plugins_file),
-             B = os:getenv("RABBITMQ_MNESIA_BASE"),
-             M = os:getenv("RABBITMQ_MNESIA_DIR"),
-             io:format(
-               "feature_flags_file=\"~s\"~n"
-               "plugins_dir=\"~s\"~n"
-               "enabled_plugins_file=\"~s\"~n"
-               "mnesia_base=\"~s\"~n"
-               "mnesia_dir=\"~s\"~n", [F, P, E, B, M]).' \
-            2>/dev/null | grep -E '^(feature_flags_file|plugins_dir|enabled_plugins_file|mnesia_base|mnesia_dir)=') || :)
-
-        if [ "${feature_flags_file}" -a \
-             "$RABBITMQ_FEATURE_FLAGS_FILE_source" != 'environment' ]; then
-            RABBITMQ_FEATURE_FLAGS_FILE="${feature_flags_file}"
-        fi
-        if [ "${plugins_dir}" -a \
-             "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
-            RABBITMQ_PLUGINS_DIR="${plugins_dir}"
-        fi
-        if [ "${enabled_plugins_file}" -a \
-             "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
-            RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
-        fi
-        if [ "${mnesia_base}" -a \
-             "$RABBITMQ_MNESIA_BASE_source" != 'environment' ]; then
-            RABBITMQ_MNESIA_BASE="${mnesia_base}"
-        fi
-        if [ "${mnesia_dir}" -a \
-             "$RABBITMQ_MNESIA_DIR_source" != 'environment' ]; then
-            RABBITMQ_MNESIA_DIR="${mnesia_dir}"
-        fi
-        if [ "${mnesia_dir}" -a \
-             "$RABBITMQ_QUORUM_DIR_source" != 'environment' ]; then
-            RABBITMQ_QUORUM_DIR="${mnesia_dir}/quorum"
-        fi
-    fi
-
-    if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
-        # RabbitMQ was started with "make run-broker" from its own
-        # source tree. Take rabbit_common from the plugins directory.
-        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+_rmq_env_set_erl_libs()
+{
+    if [ -n "$ERL_LIBS" ]
+    then
+        export ERL_LIBS="$RABBITMQ_HOME/plugins:$ERL_LIBS"
     else
-        # RabbitMQ runs from a testsuite or a plugin. The .ez files are
-        # not available under RabbitMQ source tree. We need to look at
-        # $DEPS_DIR and default locations.
-
-        if [ "${DEPS_DIR}" -a -d "${DEPS_DIR}/rabbit_common/ebin" ]; then
-            # $DEPS_DIR is set, and it contains rabbitmq-common, use
-            # this.
-            DEPS_DIR_norm="${DEPS_DIR}"
-        elif [ -f "${RABBITMQ_SCRIPTS_DIR}/../../../erlang.mk" -a \
-               -d "${RABBITMQ_SCRIPTS_DIR}/../../rabbit_common/ebin" ]; then
-            # Look at default locations: "deps" subdirectory inside a
-            # plugin or the Umbrella.
-            DEPS_DIR_norm="${RABBITMQ_SCRIPTS_DIR}/../.."
-        fi
-        DEPS_DIR_norm=$(rmq_realpath "${DEPS_DIR_norm}")
-
-        ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
+        export ERL_LIBS="$RABBITMQ_HOME/plugins"
     fi
-else
-    if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
-        # RabbitMQ was started from its install directory. Take
-        # rabbit_common from the plugins directory.
-        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
-    fi
-fi
-
-ERL_LIBS=${ERL_LIBS%:}
-if [ "$ERL_LIBS" ]; then
-    export ERL_LIBS
-fi
+}
 
 run_escript()
 {
@@ -428,17 +173,15 @@ run_escript()
     escript="${1:?escript must be defined}"
     shift
 
+    _rmq_env_set_erl_libs
+
     # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
     # word-split
     # shellcheck disable=SC2086
-    exec "${ERL_DIR}erl" +B \
+    exec erl +B \
         -boot "$CLEAN_BOOT_FILE" \
         -noinput -noshell -hidden -smp enable \
         $RABBITMQ_CTL_ERL_ARGS \
-        -kernel inet_dist_listen_min "$RABBITMQ_CTL_DIST_PORT_MIN" \
-        -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
-        -sasl errlog_type error \
-        -mnesia dir "\"$RABBITMQ_MNESIA_DIR\"" \
         -run escript start \
         -escript main "$escript_main" \
         -extra "$escript" "$@"

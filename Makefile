@@ -133,11 +133,19 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl mnesia os_mon inets compiler public_key crypto ssl syntax_tools xmerl
+# With Erlang.mk default behavior, the value of `$(APPS_DIR)` is always
+# relative to the top-level executed Makefile. In our case, it could be
+# a plugin for instance. However, the rabbitmq_prelaunch application is
+# in this repository, not the plugin's. That's why we need to override
+# this value here.
+APPS_DIR := $(CURDIR)/apps
+
+LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 BUILD_DEPS = rabbitmq_cli syslog
-DEPS = ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli
+DEPS = cuttlefish ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
+dep_cuttlefish = hex 2.2.0
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
 
 define usage_xml_to_erl
@@ -163,6 +171,9 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
+
+# See above why we mess with `$(APPS_DIR)`.
+unexport APPS_DIR
 
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats
@@ -240,20 +251,6 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
-.PHONY: copy-escripts clean-extra-sources clean-escripts
-
-CLI_ESCRIPTS_DIR = escript
-
-copy-escripts:
-	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
-		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
-		DESTDIR=
-
-clean:: clean-escripts
-
-clean-escripts:
-	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
-
 # --------------------------------------------------------------------
 # Documentation.
 # --------------------------------------------------------------------
@@ -297,5 +294,3 @@ distclean:: distclean-manpages
 
 distclean-manpages::
 	$(gen_verbose) rm -f $(WEB_MANPAGES)
-
-app-build: copy-escripts

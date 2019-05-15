@@ -44,8 +44,6 @@ groups() ->
             ]},
           content_framing,
           content_transcoding,
-          decrypt_config,
-          listing_plugins_from_multiple_directories,
           rabbitmqctl_encode,
           pmerge,
           plmerge,
@@ -72,7 +70,9 @@ groups() ->
           decrypt_start_app,
           decrypt_start_app_file,
           decrypt_start_app_undefined,
-          decrypt_start_app_wrong_passphrase
+          decrypt_start_app_wrong_passphrase,
+          decrypt_config,
+          listing_plugins_from_multiple_directories
         ]}
     ].
 
@@ -81,20 +81,13 @@ end_per_group(_, Config) -> Config.
 
 init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined ->
-    application:load(rabbit),
-    application:set_env(rabbit, feature_flags_file, ""),
+                                   TC =:= decrypt_start_app_undefined;
+                                   TC =:= decrypt_start_app_wrong_passphrase ->
+    application:set_env(rabbit, feature_flags_file, "", [{persistent, true}]),
     Config;
 init_per_testcase(_Testcase, Config) ->
     Config.
 
-end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
-                                   TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined ->
-    application:unload(rabbit),
-    application:unload(rabbit_shovel_test);
-end_per_testcase(decrypt_config, _Config) ->
-    application:unload(rabbit);
 end_per_testcase(_TC, _Config) ->
     ok.
 
@@ -177,7 +170,7 @@ decrypt_config(_Config) ->
     ok.
 
 do_decrypt_config(Algo = {C, H, I, P}) ->
-    application:load(rabbit),
+    ok = application:load(rabbit),
     RabbitConfig = application:get_all_env(rabbit),
     %% Encrypt a few values in configuration.
     %% Common cases.
@@ -205,10 +198,10 @@ do_decrypt_config(Algo = {C, H, I, P}) ->
     TCPOpts2 = lists:keyreplace(linger, 1, TCPOpts1, {linger, {encrypted, EncLinger}}),
     application:set_env(rabbit, tcp_listen_options, TCPOpts2),
     %% Decrypt configuration.
-    rabbit:decrypt_config([rabbit], Algo),
+    rabbit_prelaunch_conf:decrypt_config([rabbit], Algo),
     %% Check that configuration was decrypted properly.
     RabbitConfig = application:get_all_env(rabbit),
-    application:unload(rabbit),
+    ok = application:unload(rabbit),
     ok.
 
 encrypt_value(Key, {C, H, I, P}) ->
@@ -229,7 +222,7 @@ do_decrypt_start_app(Config, Passphrase) ->
         {hash, sha512},
         {iterations, 1000},
         {passphrase, Passphrase}
-    ]),
+    ], [{persistent, true}]),
     %% Add the path to our test application.
     code:add_path(?config(data_dir, Config) ++ "/lib/rabbit_shovel_test/ebin"),
     %% Attempt to start our test application.
@@ -256,7 +249,7 @@ decrypt_start_app_undefined(Config) ->
         {hash, sha512},
         {iterations, 1000}
         %% No passphrase option!
-    ]),
+    ], [{persistent, true}]),
     %% Add the path to our test application.
     code:add_path(?config(data_dir, Config) ++ "/lib/rabbit_shovel_test/ebin"),
     %% Attempt to start our test application.
@@ -265,7 +258,7 @@ decrypt_start_app_undefined(Config) ->
     try
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
-        exit:{bad_configuration, config_entry_decoder} -> ok;
+        throw:{bad_config_entry_decoder, missing_passphrase} -> ok;
         _:Exception -> exit({unexpected_exception, Exception})
     end.
 
@@ -276,7 +269,7 @@ decrypt_start_app_wrong_passphrase(Config) ->
         {hash, sha512},
         {iterations, 1000},
         {passphrase, "wrong passphrase"}
-    ]),
+    ], [{persistent, true}]),
     %% Add the path to our test application.
     code:add_path(?config(data_dir, Config) ++ "/lib/rabbit_shovel_test/ebin"),
     %% Attempt to start our test application.
@@ -285,7 +278,7 @@ decrypt_start_app_wrong_passphrase(Config) ->
     try
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
-        exit:{decryption_error,_,_} -> ok;
+        throw:{config_decryption_error, _, _} -> ok;
         _:Exception -> exit({unexpected_exception, Exception})
     end.
 
@@ -961,6 +954,10 @@ listing_plugins_from_multiple_directories(Config) ->
               end,
     Path = FirstDir ++ PathSep ++ SecondDir,
     Got = lists:sort([{Name, Vsn} || #plugin{name = Name, version = Vsn} <- rabbit_plugins:list(Path)]),
+    %% `rabbit` was loaded automatically by `rabbit_plugins:list/1`.
+    %% We want to unload it now so it does not interfere with other
+    %% testcases.
+    application:unload(rabbit),
     Expected = [{plugin_both, "2"}, {plugin_first_dir, "3"}, {plugin_second_dir, "4"}],
     case Got of
         Expected ->

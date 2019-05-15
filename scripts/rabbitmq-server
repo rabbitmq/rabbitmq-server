@@ -1,4 +1,5 @@
 #!/bin/sh
+# vim:sw=4:et:
 ##  The contents of this file are subject to the Mozilla Public License
 ##  Version 1.1 (the "License"); you may not use this file except in
 ##  compliance with the License. You may obtain a copy of the License
@@ -19,246 +20,17 @@ set -e
 
 # Get default settings with user overrides for (RABBITMQ_)<var_name>
 # Non-empty defaults should be set in rabbitmq-env
-. `dirname $0`/rabbitmq-env
-
-RABBITMQ_START_RABBIT=
-[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
-[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s $RABBITMQ_BOOT_MODULE boot "
-
-case "$(uname -s)" in
-  CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
-           # will not be able to make sense of it anyway
-           ;;
-  *)       # When -detached is passed, we don't write the pid, since it'd be the
-           # wrong one
-           detached=""
-           for opt in "$@"; do
-               if [ "$opt" = "-detached" ]; then
-                   detached="true"
-               fi
-           done
-           if [ $detached ]; then
-               echo "Warning: PID file not written; -detached was passed." 1>&2
-           else
-               RABBITMQ_PID_DIR="$(dirname ${RABBITMQ_PID_FILE})"
-               EX_CANTCREAT=73 # Standard exit code from sysexits(2)
-               if ! mkdir -p "$RABBITMQ_PID_DIR"; then
-                   # Better diagnostics - 'mkdir -p' reports only the first directory in chain that
-                   # it fails to create
-                   echo "Failed to create directory: $RABBITMQ_PID_DIR"
-                   exit $EX_CANTCREAT
-               fi
-               if ! echo $$ > ${RABBITMQ_PID_FILE}; then
-                   # Better diagnostics - otherwise the only report in logs is about failed 'echo'
-                   # command, but without any other details: neither what script has failed nor what
-                   # file output was redirected to.
-                   echo "Failed to write pid file: ${RABBITMQ_PID_FILE}"
-                   exit $EX_CANTCREAT
-               fi
-           fi
-esac
-
-RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
+SCRIPTS_DIR=$(dirname "$0")
+. "$SCRIPTS_DIR/rabbitmq-env"
 
 [ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
 
-get_noex() {
-    if [ "x" = "x${1}" ]; then
-        echo ""
-    else
-        local BASENAME=$(basename $1)
-        local DIRNAME=$(dirname $1)
-        if [ "x." = "x${DIRNAME}" ]; then
-            echo "${BASENAME%.*}"
-        else
-            echo "${DIRNAME}/${BASENAME%.*}"
-        fi
-    fi
-}
-
-# Check that advanced config file has the .config extension
-# Add .config extension if it's empty
-
-RABBITMQ_ADVANCED_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_ADVANCED_CONFIG_FILE})
-if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
-     -o "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-    RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config"
-fi
-
-
-RABBITMQ_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_FILE})
-# Extension is not specified.
-# Determine config type from file
-
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.config" ]; then
-        if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
-            # Both files exist. Print a warning.
-            _rmq_env_pwarn 'Both old (.config) and new (.conf) format config files exist.' \
-                "Using the old format config file: ${RABBITMQ_CONFIG_FILE_NOEX}.config" \
-                'Please update your config files to the new format and remove the old file.'
-        fi
-        RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.config"
-    elif [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
-        RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.conf"
-    else
-        if [ -f ${RABBITMQ_ADVANCED_CONFIG_FILE} ]; then
-            _rmq_env_pwarn "Using RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-        fi
-        # No config file exist. Use advanced config for -config arg.
-        RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
-        RABBITMQ_CONFIG_FILE=""
-    fi
-fi
-
-# Set the -config argument.
-# The -config argument should not have extension.
-# the file should exist
-# the file should be a valid erlang term file
-
-# Config file extension is .config
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_CONFIG_FILE}"
-# Config file extension is .conf
-elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
-elif [ "x" != "x${RABBITMQ_CONFIG_FILE}" \
-       -a  "${RABBITMQ_CONFIG_FILE_NOEX}" != "${RABBITMQ_CONFIG_FILE}" ]; then
-    # Config file has an extension, but it's neither .conf or .config
-    _rmq_env_perr "Wrong extension for RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}" \
-        'The extension should be either .conf or .config'
-    exit 64 # EX_USAGE
-fi
-
-RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
-
-if [ "${RABBITMQ_CONFIG_ARG_FILE_NOEX}.config" != "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
-    if [ "${RABBITMQ_CONFIG_ARG_FILE}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-        _rmq_env_perr "Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}" \
-            'The extension should be .config'
-        exit 64 # EX_USAGE
-    else
-        # We should never got here, but still there should be some explanation
-        _rmq_env_perr "Wrong extension for ${RABBITMQ_CONFIG_ARG_FILE}"
-            'The extension should be .config'
-        exit 64 # EX_USAGE
-    fi
-fi
-
-# Set -config if the file exists
-if [ -f "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_ARG_FILE_NOEX}"
-fi
-
-# Set -conf and other generated config parameters
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
-        mkdir -p "${RABBITMQ_SCHEMA_DIR}"
-    fi
-
-    if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
-        mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
-    fi
-
-    cp -f "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
-
-    RABBITMQ_GENERATED_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
-                                   -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
-                                   -conf_script_dir `dirname $0` \
-                                   -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}
-                                   -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-fi
-
-set +e
-
-# `net_kernel:start/1` will fail in `longnames` mode when erlang is
-# unable to determine FQDN of a node (with a dot in it). But `erl`
-# itself has some magic that still allow it to start when you
-# explicitly specify host (a.la `erl -name test@localhost`).
-#
-# It's not possible to communicate with this node, unless it's a
-# connection initiator. But as prelaunch IS an initiator, it doesn't
-# matter what we actually put here. But `localhost` sounds good
-# enough.
-RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
-
-# NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
-# success of our startup sequence to systemd.
-NOTIFY_SOCKET= \
-RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
-ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
-RABBITMQ_CONFIG_ARG_FILE=$RABBITMQ_CONFIG_ARG_FILE \
-RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
-    ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
-    -boot "${CLEAN_BOOT_FILE}" \
-    -noinput \
-    -hidden \
-    -s rabbit_prelaunch \
-    ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
-    ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
-    -conf_advanced "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
-    -rabbit feature_flags_file "\"$RABBITMQ_FEATURE_FLAGS_FILE\"" \
-    -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
-    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
-    -extra "${RABBITMQ_NODENAME}"
-
-PRELAUNCH_RESULT=$?
-if [ ${PRELAUNCH_RESULT} = 2 ] ; then
-    # dist port is mentioned in config, so do not set it
-    true
-elif [ ${PRELAUNCH_RESULT} = 0 ] ; then
-    # dist port is not mentioned in the config file, we can set it
-    RABBITMQ_DIST_ARG="-kernel inet_dist_listen_min ${RABBITMQ_DIST_PORT} -kernel inet_dist_listen_max ${RABBITMQ_DIST_PORT}"
-else
-    exit ${PRELAUNCH_RESULT}
-fi
-
-# The default allocation strategy RabbitMQ is using was introduced
-# in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
-# this configuration. We therefore need to ensure that erl accepts
-# these values before we can use them.
-#
-# The defaults are meant to reduce RabbitMQ's memory usage and help
-# it reclaim memory at the cost of a slight decrease in performance
-# (due to an increase in memory operations). These defaults can be
-# overridden using the RABBITMQ_SERVER_ERL_ARGS variable.
 RABBITMQ_DEFAULT_ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
-
-${ERL_DIR}erl ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
-    -boot "${CLEAN_BOOT_FILE}" \
-    -noinput -eval 'halt(0)' 2>/dev/null
-
-if [ $? != 0 ] ; then
-    RABBITMQ_DEFAULT_ALLOC_ARGS=
-fi
-
-set -e
-
-RABBITMQ_LISTEN_ARG=
-[ "x" != "x$RABBITMQ_NODE_PORT" ] && [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_LISTEN_ARG="-rabbit tcp_listeners [{\""${RABBITMQ_NODE_IP_ADDRESS}"\","${RABBITMQ_NODE_PORT}"}]"
-
-# If $RABBITMQ_LOGS is '-', send all log messages to stdout. This is
-# particularly useful for Docker images.
-
-if [ "$RABBITMQ_LOGS" = '-' ]; then
-    SASL_ERROR_LOGGER=tty
-    RABBIT_LAGER_HANDLER=tty
-    RABBITMQ_LAGER_HANDLER_UPGRADE=tty
-else
-    SASL_ERROR_LOGGER=false
-    RABBIT_LAGER_HANDLER='"'${RABBITMQ_LOGS}'"'
-    RABBITMQ_LAGER_HANDLER_UPGRADE='"'${RABBITMQ_UPGRADE_LOG}'"'
-fi
 
 # Bump ETS table limit to 50000
 if [ "x" = "x$ERL_MAX_ETS_TABLES" ]; then
     ERL_MAX_ETS_TABLES=50000
 fi
-
-# we need to turn off path expansion because some of the vars, notably
-# RABBITMQ_SERVER_ERL_ARGS, contain terms that look like globs and
-# there is no other way of preventing their expansion.
-set -f
 
 # Lazy initialization of threed pool size - if it wasn't set
 # explicitly. This parameter is only needed when server is starting,
@@ -267,70 +39,16 @@ set -f
 ensure_thread_pool_size() {
     if [ -z "${RABBITMQ_IO_THREAD_POOL_SIZE}" ]; then
         RABBITMQ_IO_THREAD_POOL_SIZE=$(
-            ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
-                      -boot "${CLEAN_BOOT_FILE}" \
-                      -noinput \
-                      -s rabbit_misc report_default_thread_pool_size
+            erl \
+                -noinput \
+                -boot "${CLEAN_BOOT_FILE}" \
+                -s rabbit_misc report_default_thread_pool_size
         )
-    fi
-}
-
-start_rabbitmq_server() {
-    # The arguments to -pa are in this order because they are *pre*-pended
-    # to the code path. Since we want RABBITMQ_SERVER_CODE_PATH to precede
-    # RABBITMQ_EBIN_ROOT, it must come as the second argument here.
-    # https://github.com/rabbitmq/rabbitmq-server/issues/1777
-    ensure_thread_pool_size
-    check_start_params &&
-    RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
-    ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
-    ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
-    exec ${ERL_DIR}erl \
-        -pa "$RABBITMQ_EBIN_ROOT" "$RABBITMQ_SERVER_CODE_PATH" \
-        ${RABBITMQ_START_RABBIT} \
-        ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
-        -boot "${SASL_BOOT_FILE}" \
-        ${RABBITMQ_CONFIG_ARG} \
-        ${RABBITMQ_GENERATED_CONFIG_ARG} \
-        +W w \
-        +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
-        ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
-        ${RABBITMQ_SERVER_ERL_ARGS} \
-        +K true \
-        -kernel inet_default_connect_options "[{nodelay,true}]" \
-        ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
-        ${RABBITMQ_LISTEN_ARG} \
-        -sasl errlog_type error \
-        -sasl sasl_error_logger "$SASL_ERROR_LOGGER" \
-        -rabbit lager_log_root "\"$RABBITMQ_LOG_BASE\"" \
-        -rabbit lager_default_file "$RABBIT_LAGER_HANDLER" \
-        -rabbit lager_upgrade_file "$RABBITMQ_LAGER_HANDLER_UPGRADE" \
-        -rabbit feature_flags_file "\"$RABBITMQ_FEATURE_FLAGS_FILE\"" \
-        -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
-        -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
-        -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
-        -os_mon start_cpu_sup false \
-        -os_mon start_disksup false \
-        -os_mon start_memsup false \
-        -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
-        -ra data_dir "\"${RABBITMQ_QUORUM_DIR}\"" \
-        ${RABBITMQ_SERVER_START_ARGS} \
-        ${RABBITMQ_DIST_ARG} \
-        "$@"
-}
-
-stop_rabbitmq_server() {
-    RABBITMQCTL="$(dirname "$0")/rabbitmqctl"
-
-    if ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} status >/dev/null 2>&1; then
-        ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} stop
     fi
 }
 
 check_start_params() {
     check_not_empty RABBITMQ_BOOT_MODULE
-    check_not_empty RABBITMQ_NAME_TYPE
-    check_not_empty RABBITMQ_NODENAME
     check_not_empty SASL_BOOT_FILE
     check_not_empty RABBITMQ_IO_THREAD_POOL_SIZE
 }
@@ -343,6 +61,61 @@ check_not_empty() {
         echo "Error: ENV variable should be defined: $1.
        Please check rabbitmq-env, rabbitmq-defaults, and ${RABBITMQ_CONF_ENV_FILE} script files"
         exit 78
+    fi
+}
+
+start_rabbitmq_server() {
+    set -e
+
+    _rmq_env_set_erl_libs
+    ensure_thread_pool_size
+
+    RABBITMQ_START_RABBIT=
+    [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
+    if test -z "$RABBITMQ_NODE_ONLY"; then
+        if test "$USE_RABBIT_BOOT_SCRIPT"; then
+            # TODO: This is experimental and undocumented at this point.
+            # It is here just to do simple checks while playing with how
+            # RabbitMQ is started.
+            "$SCRIPTS_DIR/rabbitmq-rel" gen-boot
+            SASL_BOOT_FILE=rabbit
+            test -f "$SASL_BOOT_FILE.boot"
+            RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -init_debug"
+        else
+            RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s $RABBITMQ_BOOT_MODULE boot"
+        fi
+    fi
+
+    # We need to turn off path expansion because some of the vars,
+    # notably RABBITMQ_SERVER_ERL_ARGS, contain terms that look like
+    # globs and there is no other way of preventing their expansion.
+    set -f
+
+    export ERL_MAX_ETS_TABLES \
+        SYS_PREFIX
+
+    check_start_params
+
+    exec erl \
+        -pa "$RABBITMQ_SERVER_CODE_PATH" \
+        ${RABBITMQ_START_RABBIT} \
+        -boot "${SASL_BOOT_FILE}" \
+        +W w \
+        +K true \
+        +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
+        ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
+        ${RABBITMQ_SERVER_ERL_ARGS} \
+        ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
+        ${RABBITMQ_SERVER_START_ARGS} \
+        -lager crash_log false \
+        -lager handlers '[]' \
+        "$@"
+}
+
+stop_rabbitmq_server() {
+    if test "$rabbitmq_server_pid"; then
+        kill -TERM "$rabbitmq_server_pid"
+        wait "$rabbitmq_server_pid" || true
     fi
 }
 
@@ -381,7 +154,7 @@ else
     trap "stop_rabbitmq_server; exit 130" INT
 
     start_rabbitmq_server "$@" &
-    rabbitmq_server_pid=$!
+    export rabbitmq_server_pid=$!
 
     # Block until RabbitMQ exits or a signal is caught.
     # Waits for last command (which is start_rabbitmq_server)
@@ -399,5 +172,5 @@ else
     # force that statement to succeed and the signal handler to properly
     # execute. Because the statement below has an exit code of 0, the
     # signal handler has to restate the expected exit code.
-    wait $rabbitmq_server_pid || true
+    wait "$rabbitmq_server_pid" || true
 fi
