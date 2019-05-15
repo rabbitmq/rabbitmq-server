@@ -19,7 +19,7 @@ defmodule RabbitMQCtl.MixfileBase do
   def project do
     [
       app: :rabbitmqctl,
-      version: "3.7.8",
+      version: "3.7.0-dev",
       elixir: ">= 1.6.6 and < 1.9.0",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
