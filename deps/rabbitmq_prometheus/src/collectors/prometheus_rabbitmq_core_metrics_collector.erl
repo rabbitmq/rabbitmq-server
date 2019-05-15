@@ -59,8 +59,8 @@
     ]},
 
     {channel_queue_metrics, [
-        {2, channel_messages_fetched_ack, counter, "Messages fetched with basic.get in manual acknowledgement mode"},
-        {3, channel_messages_fetched, counter, "Messages fetched with basic.get in automatic acknowledgement mode"},
+        {2, channel_get_ack, counter, "Messages fetched with basic.get in manual acknowledgement mode"},
+        {3, channel_get, counter, "Messages fetched with basic.get in automatic acknowledgement mode"},
         {4, channel_messages_delivered_ack, counter, "Messages delivered to consumers in manual acknowledgement mode"},
         {5, channel_messages_delivered, counter, "Messages delivered to consumers in automatic acknowledgement mode"},
         {6, channel_messages_redelivered, counter, "Messages redelivered to consumers"},
@@ -92,7 +92,7 @@
     ]},
 
     {channel_queue_exchange_metrics, [
-        {2, queue_messages_accepted, counter, "Messages successfully accepted by queues"}
+        {2, queue_messages_published, counter, "Messages published to queues"}
     ]},
 
     {node_coarse_metrics, [
