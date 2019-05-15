@@ -1154,7 +1154,7 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-10m",
     "to": "now"
   },
   "timepicker": {
@@ -1185,5 +1185,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 13
+  "version": 15
 }
