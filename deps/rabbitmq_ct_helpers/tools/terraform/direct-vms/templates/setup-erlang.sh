@@ -34,12 +34,12 @@ readonly erlang_cookie='${erlang_cookie}'
 readonly debian_codename="$${distribution#debian-*}"
 
 case "$erlang_version" in
-  22.0)
+  23.*)
     if test -z "$erlang_git_ref"; then
       erlang_git_ref='master'
     fi
     ;;
-  21.*|20.*|19.3)
+  22.*|21.*|20.*|19.3)
     readonly erlang_package_version="1:$erlang_version-1"
     ;;
   R16B03)
@@ -113,7 +113,7 @@ EOF
 
 apt_install_erlang() {
   apt-get -qq install -y --no-install-recommends \
-    erlang-base-hipe erlang-nox erlang-dev erlang-src erlang-common-test
+    erlang-base erlang-nox erlang-dev erlang-src erlang-common-test
 }
 
 apt_install_elixir() {
@@ -210,7 +210,7 @@ install_kiex() {
 
 kiex_install_elixir() {
   case "$erlang_version" in
-    22.0)
+    22.*|23.*)
       url="https://github.com/elixir-lang/elixir/releases/download/v$elixir_version/Precompiled.zip"
       wget -q -O/tmp/elixir.zip "$url"
 
