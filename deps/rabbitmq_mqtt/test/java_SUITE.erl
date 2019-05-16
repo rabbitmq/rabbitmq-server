@@ -58,7 +58,9 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
-        {rmq_certspwd, "bunnychow"}
+        {rmq_certspwd, "bunnychow"},
+        {rmq_nodes_clustered, true},
+        {rmq_nodes_count, 2}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       [ fun merge_app_env/1 ] ++
@@ -105,11 +107,13 @@ end_per_testcase(Testcase, Config) ->
 java(Config) ->
     CertsDir = rabbit_ct_helpers:get_config(Config, rmq_certsdir),
     MqttPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    MqttPort2 = rabbit_ct_broker_helpers:get_node_config(Config, 1, tcp_port_mqtt),
     MqttSslPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls),
     AmqpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     os:putenv("SSL_CERTS_DIR", CertsDir),
     os:putenv("MQTT_SSL_PORT", erlang:integer_to_list(MqttSslPort)),
     os:putenv("MQTT_PORT", erlang:integer_to_list(MqttPort)),
+    os:putenv("MQTT_PORT_2", erlang:integer_to_list(MqttPort2)),
     os:putenv("AMQP_PORT", erlang:integer_to_list(AmqpPort)),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
     MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests"]),

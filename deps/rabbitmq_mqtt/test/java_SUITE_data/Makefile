@@ -5,6 +5,7 @@ MVN_FLAGS += -Ddeps.dir="$(abspath $(DEPS_DIR))" \
 			 -Dcerts.dir=$(SSL_CERTS_DIR) \
 			 -Dmqtt.ssl.port=$(MQTT_SSL_PORT) \
 			 -Dmqtt.port=$(MQTT_PORT) \
+			 -Dmqtt.port.2=$(MQTT_PORT_2) \
 			 -Damqp.port=$(AMQP_PORT)
 
 .PHONY: deps tests clean distclean

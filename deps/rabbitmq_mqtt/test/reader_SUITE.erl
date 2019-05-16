@@ -138,7 +138,7 @@ stats(Config) ->
     emqttc:unsubscribe(C, [<<"TopicA">>]),
     timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     %% Retrieve the connection Pid
-    [{_, {Reader, _}}] = rpc(Config, rabbit_mqtt_collector, list, []),
+    [{_, Reader}] = rpc(Config, rabbit_mqtt_collector, list, []),
     [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),

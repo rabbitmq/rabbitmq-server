@@ -111,6 +111,14 @@ handle_cast(duplicate_id,
                  [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
     {stop, {shutdown, duplicate_id}, State};
 
+handle_cast(decommission_node,
+            State = #state{ proc_state = PState,
+                            conn_name  = ConnName }) ->
+    rabbit_log_connection:warning("MQTT disconnecting client id ~p (~p) as node is about"
+                                  " to be decommissioned~n",
+                 [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
+    {stop, {shutdown, decommission_node}, State};
+
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 

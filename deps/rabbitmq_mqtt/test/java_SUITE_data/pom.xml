@@ -57,6 +57,7 @@
               <certs.dir>${certs.dir}</certs.dir>
               <mqtt.ssl.port>${mqtt.ssl.port}</mqtt.ssl.port>
               <mqtt.port>${mqtt.port}</mqtt.port>
+              <mqtt.port.2>${mqtt.port.2}</mqtt.port.2>
               <amqp.port>${amqp.port}</amqp.port>
 
               <test-keystore.ca>${test-keystore.ca}</test-keystore.ca>
