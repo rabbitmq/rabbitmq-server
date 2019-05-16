@@ -71,7 +71,7 @@ run([Node], #{node := NodeName,
             Result
     end.
 
-banner(_, _) -> <<"Decomissioning MQTT node used for client id tracking ...">>.
+banner(_, _) -> <<"Decommissions a node that serves MQTT clients ...">>.
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
