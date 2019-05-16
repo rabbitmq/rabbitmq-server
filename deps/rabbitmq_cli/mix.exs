@@ -89,7 +89,7 @@ defmodule RabbitMQCtl.MixfileBase do
       {:json, "~> 1.2.0"},
       {:csv, "~> 2.0.0"},
       {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, "~> 1.4.5"},
+      {:observer_cli, git: "https://github.com/michaelklishin/observer_cli", branch: "recon-2.5.0"},
 
       {:amqp, "~> 1.2.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
