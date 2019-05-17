@@ -104,15 +104,21 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
 
 terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
                                                  type = dynamic}) ->
-    error_logger:info_msg("terminating dynamic worker ~p~n", [{VHost, Name}]),
+    error_logger:info_msg("Shovel '~s' in virtual host '~s' is stopping (it was configured to autodelete and transfer is completed)~n", [Name, VHost]),
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
     put(shovel_worker_autodelete, true),
     _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
-terminate(Reason, State) ->
-    error_logger:info_msg("terminating static worker with ~p ~n", [Reason]),
+terminate(Reason, State = #state{name = Name}) ->
+    error_logger:info_msg("Shovel '~s' is stopping, reason: ~p~n", [Name, Reason]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, Reason}),
+    close_connections(State),
+    ok;
+terminate(Reason, State = #state{name = {VHost, Name}}) ->
+    error_logger:info_msg("Shovel '~s' in virtual host '~s' is stopping, reason: ~p~n", [Name, VHost, Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, Reason}),
     close_connections(State),
