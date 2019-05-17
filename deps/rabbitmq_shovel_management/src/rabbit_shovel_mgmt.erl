@@ -20,7 +20,7 @@
 
 -export([dispatcher/0, web_ui/0]).
 -export([init/2, to_json/2, resource_exists/2, content_types_provided/2,
-         is_authorized/2]).
+         is_authorized/2, allowed_methods/2, delete_resource/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -28,7 +28,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 dispatcher() -> [{"/shovels",        ?MODULE, []},
-                 {"/shovels/:vhost", ?MODULE, []}].
+                 {"/shovels/:vhost", ?MODULE, []},
+                 {"/shovels/vhost/:vhost/:name/restart", ?MODULE, []}].
+
 web_ui()     -> [{javascript, <<"shovel.js">>}].
 
 %%--------------------------------------------------------------------
@@ -39,10 +41,20 @@ init(Req, _Opts) ->
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
+allowed_methods(ReqData, Context) ->
+    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
+
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
          not_found -> false;
-         _         -> true
+         VHost     -> case rabbit_mgmt_util:id(name, ReqData) of
+                          none -> true;
+                          %% Restarting a shovel
+                          Name -> case rabbit_shovel_status:lookup({VHost, Name}) of
+                                      not_found -> false;
+                                      _ -> true
+                                  end
+                      end
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
@@ -51,6 +63,19 @@ to_json(ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+
+delete_resource(ReqData, Context) ->
+    VHost = rabbit_mgmt_util:id(vhost, ReqData),
+    Reply =
+        case rabbit_mgmt_util:id(name, ReqData) of
+            none ->
+                false;
+            Name ->
+                ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
+                {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
+                true
+        end,
+    {Reply, ReqData, Context}.
 
 %%--------------------------------------------------------------------
 
