@@ -111,6 +111,12 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
     _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
+terminate(Reason, State = #state{name = Name}) ->
+    error_logger:info_msg("Shovel '~s' is stopping, reason: ~p~n", [Name, Reason]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, Reason}),
+    close_connections(State),
+    ok;
 terminate(Reason, State = #state{name = {VHost, Name}}) ->
     error_logger:info_msg("Shovel '~s' in virtual host '~s' is stopping, reason: ~p~n", [Name, VHost, Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
