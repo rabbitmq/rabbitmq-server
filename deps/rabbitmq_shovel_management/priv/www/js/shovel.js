@@ -84,6 +84,11 @@ dispatcher_add(function(sammy) {
                 go_to('#/dynamic-shovels');
             return false;
         });
+    sammy.del("#/restart-link", function(){
+        if(sync_delete(this, '/shovels/vhost/:vhost/:name/restart')){
+            update();
+        }
+    });
 });
 
 
