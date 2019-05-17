@@ -259,7 +259,7 @@ consume(Chan, Queue, NoAck) ->
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Chan, #'basic.consume'{queue = Queue,
                                                       no_ack = NoAck,
-                                                      exclusive = true},
+                                                      exclusive = false},
                                self()),
     receive
         #'basic.consume_ok'{consumer_tag = CTag} -> ok

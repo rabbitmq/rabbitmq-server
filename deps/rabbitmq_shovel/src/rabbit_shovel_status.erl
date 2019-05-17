@@ -19,7 +19,7 @@
 
 -export([start_link/0]).
 
--export([report/3, remove/1, status/0]).
+-export([report/3, remove/1, status/0, lookup/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -42,6 +42,9 @@ remove(Name) ->
 status() ->
     gen_server:call(?SERVER, status, infinity).
 
+lookup(Name) ->
+    gen_server:call(?SERVER, {lookup, Name}, infinity).
+
 init([]) ->
     ?ETS_NAME = ets:new(?ETS_NAME,
                         [named_table, {keypos, #entry.name}, private]),
@@ -51,7 +54,17 @@ handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [{Entry#entry.name, Entry#entry.type, Entry#entry.info,
               Entry#entry.timestamp}
-             || Entry <- Entries], State}.
+             || Entry <- Entries], State};
+
+handle_call({lookup, Name}, _From, State) ->
+    Link = case ets:lookup(?ETS_NAME, Name) of
+               [Entry] -> [{name, Name},
+                           {type, Entry#entry.type},
+                           {info, Entry#entry.info},
+                           {timestamp, Entry#entry.timestamp}];
+               [] -> not_found
+           end,
+    {reply, Link, State}.
 
 handle_cast({report, Name, Type, Info, Timestamp}, State) ->
     true = ets:insert(?ETS_NAME, #entry{name = Name, type = Type, info = Info,
