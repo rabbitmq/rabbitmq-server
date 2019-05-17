@@ -84,12 +84,22 @@ defmodule RabbitMQCtl.MixfileBase do
   #   {:mydep, git: "https://github.com/elixir-lang/mydep.git", tag: "0.1.0"}
   #
   # Type "mix help deps" for more examples and options
+  #
+  # CAUTION: Dependencies which are shipped with RabbitMQ *MUST* com
+  # from Hex.pm! Therefore it's ok to fetch dependencies from Git if
+  # they are test dependencies or it is temporary while testing a patch.
+  # But that's about it. If in doubt, use Hex.pm!
+  #
+  # The reason is that we have some Makefile code to put dependencies
+  # from Hex.pm in RabbitMQ source archive (the source archive must be
+  # self-contained and RabbitMQ must be buildable offline). However, we
+  # don't have the equivalent for other methods.
   defp deps() do
     elixir_deps = [
       {:json, "~> 1.2.0"},
       {:csv, "~> 2.0.0"},
       {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, git: "https://github.com/zhongwencool/observer_cli", tag: "1.5.0"},
+      {:observer_cli, "~> 1.5.0"},
 
       {:amqp, "~> 1.2.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
