@@ -224,7 +224,7 @@ services:
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
       - ./grafana/dashboards:/dashboards
-    environment:
+    # environment:
       # https://grafana.com/plugins/flant-statusmap-panel
       # https://grafana.com/plugins/grafana-polystat-panel
       # https://grafana.com/plugins/jdbranham-diagram-panel
