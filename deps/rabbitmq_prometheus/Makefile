@@ -1,6 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.659
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.664
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
@@ -92,7 +92,7 @@ JQ := /usr/local/bin/jq
 $(JQ):
 	@brew install jq
 
-OTP_CURRENT_STABLE_MAJOR := 21
+OTP_CURRENT_STABLE_MAJOR := 22
 define LATEST_STABLE_OTP_VERSION
 curl --silent --fail https://api.github.com/repos/erlang/otp/git/refs/tags | \
   $(JQ) -r '.[].ref | sub("refs/tags/OTP.{1}";"") | match("^$(OTP_CURRENT_STABLE_MAJOR)[0-9.]+$$") | .string' | \
