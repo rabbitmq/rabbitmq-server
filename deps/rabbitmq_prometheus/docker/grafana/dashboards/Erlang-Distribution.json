@@ -35,8 +35,8 @@
         "thresholdMarkers": true
       },
       "gridPos": {
-        "h": 3,
-        "w": 5,
+        "h": 4,
+        "w": 8,
         "x": 0,
         "y": 0
       },
@@ -69,25 +69,189 @@
         }
       ],
       "sparkline": {
-        "fillColor": "rgba(31, 118, 189, 0.18)",
+        "fillColor": "rgba(255, 255, 255, 0)",
         "full": false,
-        "lineColor": "rgb(31, 120, 193)",
-        "show": false
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
       },
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state{state=\"up\"}) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
           "refId": "A"
         }
       ],
-      "thresholds": "1,2",
+      "thresholds": "2,6",
       "timeFrom": null,
       "timeShift": null,
-      "title": "Number of distribution links",
+      "title": "All distribution links",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#299c46",
+        "rgba(237, 129, 40, 0.89)",
+        "#d44a3a"
+      ],
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 26,
+      "interval": "",
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "count(erlang_vm_dist_node_state{state=\"pending\"} == 1) OR vector(0)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "1,6",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Pending distribution links",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#d44a3a",
+        "rgba(237, 129, 40, 0.89)",
+        "#299c46"
+      ],
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 27,
+      "interval": "",
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "count(erlang_vm_dist_node_state{state=\"up\"} == 1) OR vector(0)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "2,6",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Up distribution links",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -110,7 +274,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 4
       },
       "id": 19,
       "legend": {
@@ -140,7 +304,7 @@
           "expr": "erlang_vm_dist_node_state",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "",
+          "legendFormat": "{{node}} -> {{peer}} : {{state}}",
           "refId": "A"
         }
       ],
@@ -191,7 +355,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 9
       },
       "id": 9,
       "panels": [],
@@ -209,7 +373,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 10
       },
       "id": 3,
       "legend": {
@@ -295,7 +459,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 10
       },
       "id": 2,
       "legend": {
@@ -383,7 +547,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 15
       },
       "id": 4,
       "legend": {
@@ -469,7 +633,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 15
       },
       "id": 5,
       "legend": {
@@ -555,7 +719,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 20
       },
       "id": 6,
       "legend": {
@@ -636,7 +800,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 25
       },
       "id": 11,
       "panels": [],
@@ -654,7 +818,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 26
       },
       "id": 12,
       "legend": {
@@ -740,7 +904,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 26
       },
       "id": 7,
       "legend": {
@@ -835,7 +999,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 31
       },
       "id": 14,
       "panels": [],
@@ -853,7 +1017,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 32
       },
       "id": 18,
       "legend": {
@@ -939,7 +1103,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 32
       },
       "id": 16,
       "legend": {
@@ -1039,7 +1203,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 37
       },
       "id": 15,
       "legend": {
@@ -1125,7 +1289,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 37
       },
       "id": 17,
       "legend": {
@@ -1206,7 +1370,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 42
       },
       "id": 21,
       "panels": [],
@@ -1219,7 +1383,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 43
       },
       "id": 23,
       "panels": [],
@@ -1235,7 +1399,7 @@
     "list": []
   },
   "time": {
-    "from": "now-10m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -1266,5 +1430,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 1
+  "version": 3
 }

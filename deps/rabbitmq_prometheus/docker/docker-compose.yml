@@ -21,6 +21,11 @@ services:
       - "15670:25672"
       - "15672:15672"
       - "15692:15692"
+    # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
+    # https://en.wikipedia.org/wiki/Tcpkill
+    # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
+    cap_add:
+      - ALL
     hostname: rabbitmq1
     environment:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
@@ -89,7 +94,7 @@ services:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq3:5672/%2f"
-      QUEUE: slow-consumer-persistent
+      QUEUE: ha3-slow-consumer-persistent
       ROUTING_KEY: slow-consumer-persistent
       QUEUE_ARGS: x-max-length=500
       FLAG: persistent
@@ -144,6 +149,59 @@ services:
       QOS: 5
       CONSUMER_LATENCY: 3000000
       SERVERS_STARTUP_TIMEOUT: 30
+  # max1: &max
+  #   image: pivotalrabbitmq/perf-test:dev-2019.05.07
+  #   networks:
+  #     - "rabbitmq-prometheus"
+  #   environment:
+  #     URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+  #     QUEUE_PATTERN: "ha3-max1-%d"
+  #     QUEUE_PATTERN_FROM: 1
+  #     QUEUE_PATTERN_TO: 10
+  #     PRODUCERS: 10
+  #     CONSUMERS: 10
+  #     ROUTING_KEY: max1
+  #     SIZE: 512000
+  #     QOS: 100
+  #     AUTOACK: "false"
+  #     SERVERS_STARTUP_TIMEOUT: 30
+  # prometheus:
+  #   image: prom/prometheus:v2.9.0
+  #   networks:
+  #     - "rabbitmq-prometheus"
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - rabbitmq-prometheus_prometheus:/prometheus
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  # max2:
+  #   << : *max
+  #   environment:
+  #     URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
+  #     QUEUE_PATTERN: "ha3-max2-%d"
+  #     QUEUE_PATTERN_FROM: 1
+  #     QUEUE_PATTERN_TO: 10
+  #     PRODUCERS: 10
+  #     CONSUMERS: 10
+  #     ROUTING_KEY: max2
+  #     SIZE: 512000
+  #     QOS: 100
+  #     AUTOACK: "false"
+  #     SERVERS_STARTUP_TIMEOUT: 30
+  # max3:
+  #   << : *max
+  #   environment:
+  #     URI: "amqp://guest:guest@rabbitmq3:5672/%2f"
+  #     QUEUE_PATTERN: "ha3-max3-%d"
+  #     QUEUE_PATTERN_FROM: 1
+  #     QUEUE_PATTERN_TO: 10
+  #     PRODUCERS: 10
+  #     CONSUMERS: 10
+  #     ROUTING_KEY: max3
+  #     SIZE: 512000
+  #     QOS: 100
+  #     AUTOACK: "false"
+  #     SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
     image: prom/prometheus:v2.9.0
     networks:
@@ -165,3 +223,12 @@ services:
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
       - ./grafana/dashboards:/dashboards
+    environment:
+      # https://grafana.com/plugins/flant-statusmap-panel
+      # https://grafana.com/plugins/grafana-polystat-panel
+      # https://grafana.com/plugins/jdbranham-diagram-panel
+      # https://grafana.com/plugins/michaeldmoore-multistat-panel
+      # https://grafana.com/plugins/natel-discrete-panel
+      # https://grafana.com/plugins/vonage-status-panel
+      # https://grafana.com/plugins/yesoreyeram-boomtable-panel
+      GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,natel-discrete-panel,vonage-status-panel,yesoreyeram-boomtable-panel"
