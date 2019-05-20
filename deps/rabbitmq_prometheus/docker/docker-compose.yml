@@ -232,4 +232,5 @@ services:
       # https://grafana.com/plugins/natel-discrete-panel
       # https://grafana.com/plugins/vonage-status-panel
       # https://grafana.com/plugins/yesoreyeram-boomtable-panel
-      GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,natel-discrete-panel,vonage-status-panel,yesoreyeram-boomtable-panel"
+      # Even if the plugins are stored on a volume, updating them can be slow - disabling this for now
+      # GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,natel-discrete-panel,vonage-status-panel,yesoreyeram-boomtable-panel"
