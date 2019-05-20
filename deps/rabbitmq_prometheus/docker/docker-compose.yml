@@ -55,7 +55,7 @@ services:
       - "35692:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.05.07
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.05.20
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -150,7 +150,7 @@ services:
       CONSUMER_LATENCY: 3000000
       SERVERS_STARTUP_TIMEOUT: 30
   # max1: &max
-  #   image: pivotalrabbitmq/perf-test:dev-2019.05.07
+  #   image: pivotalrabbitmq/perf-test:dev-2019.05.20
   #   networks:
   #     - "rabbitmq-prometheus"
   #   environment:
@@ -203,7 +203,8 @@ services:
   #     AUTOACK: "false"
   #     SERVERS_STARTUP_TIMEOUT: 30
   prometheus:
-    image: prom/prometheus:v2.9.0
+    # https://hub.docker.com/r/prom/prometheus/tags
+    image: prom/prometheus:v2.9.2
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -212,8 +213,8 @@ services:
       - rabbitmq-prometheus_prometheus:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
   grafana:
-    # https://hub.docker.com/r/grafana/grafana/
-    image: grafana/grafana:6.1.3
+    # https://hub.docker.com/r/grafana/grafana/tags
+    image: grafana/grafana:6.1.6
     ports:
       - "3000:3000"
     networks:
