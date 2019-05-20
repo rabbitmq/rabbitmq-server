@@ -15,9 +15,90 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 2,
   "links": [],
   "panels": [
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#d44a3a",
+        "rgba(237, 129, 40, 0.89)",
+        "#299c46"
+      ],
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "id": 25,
+      "interval": "",
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(31, 118, 189, 0.18)",
+        "full": false,
+        "lineColor": "rgb(31, 120, 193)",
+        "show": false
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "count(erlang_vm_dist_node_state) OR vector(0)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "1,2",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Number of distribution links",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
     {
       "aliasColors": {},
       "bars": false,
@@ -29,7 +110,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 3
       },
       "id": 19,
       "legend": {
@@ -110,7 +191,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 8
       },
       "id": 9,
       "panels": [],
@@ -128,7 +209,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 9
       },
       "id": 3,
       "legend": {
@@ -214,7 +295,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 9
       },
       "id": 2,
       "legend": {
@@ -302,7 +383,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 11
+        "y": 14
       },
       "id": 4,
       "legend": {
@@ -388,7 +469,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 11
+        "y": 14
       },
       "id": 5,
       "legend": {
@@ -474,7 +555,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 19
       },
       "id": 6,
       "legend": {
@@ -555,7 +636,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 24
       },
       "id": 11,
       "panels": [],
@@ -573,7 +654,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 22
+        "y": 25
       },
       "id": 12,
       "legend": {
@@ -659,7 +740,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 22
+        "y": 25
       },
       "id": 7,
       "legend": {
@@ -754,7 +835,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 30
       },
       "id": 14,
       "panels": [],
@@ -772,7 +853,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 31
       },
       "id": 18,
       "legend": {
@@ -858,7 +939,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 31
       },
       "id": 16,
       "legend": {
@@ -958,7 +1039,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 33
+        "y": 36
       },
       "id": 15,
       "legend": {
@@ -1044,7 +1125,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 36
       },
       "id": 17,
       "legend": {
@@ -1125,7 +1206,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 41
       },
       "id": 21,
       "panels": [],
@@ -1138,7 +1219,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 42
       },
       "id": 23,
       "panels": [],
@@ -1185,5 +1266,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 15
+  "version": 1
 }
