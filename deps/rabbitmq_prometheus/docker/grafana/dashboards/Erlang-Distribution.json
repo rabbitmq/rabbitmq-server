@@ -295,7 +295,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -394,7 +431,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -482,7 +556,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -568,7 +679,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -654,7 +802,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -740,7 +925,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -839,7 +1061,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -1038,7 +1297,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -1224,7 +1520,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -1310,7 +1643,44 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/1/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/2/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/3/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/4/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/5/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/6/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/7/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/8/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/9/",
+          "color": "#70DBED"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -1399,7 +1769,7 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-10m",
     "to": "now"
   },
   "timepicker": {
@@ -1430,5 +1800,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 3
+  "version": 5
 }
