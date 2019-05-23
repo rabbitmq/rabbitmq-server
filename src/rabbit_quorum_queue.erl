@@ -644,7 +644,6 @@ cluster_state(Name) ->
     end.
 
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
-
 status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
@@ -653,18 +652,51 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {_, Leader} = amqqueue:get_pid(Q),
             Nodes = amqqueue:get_quorum_nodes(Q),
-            Info = [{leader, Leader}, {members, Nodes}],
-            case ets:lookup(ra_state, RName) of
-                [{_, State}] ->
-                    [{local_state, State} | Info];
-                [] ->
-                    Info
-            end;
+            [begin
+                 case get_sys_status({RName, N}) of
+                     {ok, Sys} ->
+                         {_, M} = lists:keyfind(ra_server_state, 1, Sys),
+                         {_, RaftState} = lists:keyfind(raft_state, 1, Sys),
+                         #{commit_index := Commit,
+                           machine_version := MacVer,
+                           current_term := Term,
+                           log := #{last_index := Last,
+                                    snapshot_index := SnapIdx}} = M,
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, RaftState},
+                          {<<"Log Index">>, Last},
+                          {<<"Commit Index">>, Commit},
+                          {<<"Snapshot Index">>, SnapIdx},
+                          {<<"Term">>, Term},
+                          {<<"Machine Version">>, MacVer}
+                         ];
+                     {error, Err} ->
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, Err},
+                          {<<"Log Index">>, <<>>},
+                          {<<"Commit Index">>, <<>>},
+                          {<<"Snapshot Index">>, <<>>},
+                          {<<"Term">>, <<>>},
+                          {<<"Machine Version">>, <<>>}
+                         ]
+                 end
+             end || N <- Nodes];
         {error, not_found} = E ->
             E
     end.
+
+get_sys_status(Proc) ->
+    try lists:nth(5, element(4, sys:get_status(Proc))) of
+        Sys -> {ok, Sys}
+    catch
+        _:Err when is_tuple(Err) ->
+            {error, element(1, Err)};
+        _:_ ->
+            {error, other}
+
+    end.
+
 
 add_member(VHost, Name, Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
