@@ -12,6 +12,8 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+alias RabbitMQ.CLI.Formatters.FormatterHelpers
+
 
 defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
@@ -30,7 +32,7 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
     # Flatten for list_consumers
     entries_with_keys = Stream.flat_map(stream,
       fn([first | _] = element) ->
-        case Keyword.keyword?(first) or is_map(first) do
+        case FormatterHelpers.proplist?(first) or is_map(first) do
           true  -> element;
           false -> [element]
         end

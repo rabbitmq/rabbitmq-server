@@ -38,6 +38,11 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
     end
   end
 
+  def proplist?([{key, _value} | rest]), do: proplist?(rest)
+  def proplist?([]), do: true
+  def proplist?(_other), do: false
+
+
   defmacro is_u8(x) do
     quote do
       unquote(x) >= 0 and unquote(x) <= 255

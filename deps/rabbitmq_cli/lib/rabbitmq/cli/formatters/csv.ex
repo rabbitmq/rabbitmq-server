@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
       stream,
       fn
         [first | _] = element ->
-          case Keyword.keyword?(first) or is_map(first) do
+          case FormatterHelpers.proplist?(first) or is_map(first) do
             true -> element
             false -> [element]
           end
@@ -73,7 +73,7 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
   end
 
   defp keys(list) when is_list(list) do
-    case Keyword.keyword?(list) do
+    case FormatterHelpers.proplist?(list) do
       true -> Keyword.keys(list)
       false -> nil
     end
@@ -92,7 +92,7 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
   end
 
   defp values(list) when is_list(list) do
-    case Keyword.keyword?(list) do
+    case FormatterHelpers.proplist?(list) do
       true -> Keyword.values(list)
       false -> list
     end

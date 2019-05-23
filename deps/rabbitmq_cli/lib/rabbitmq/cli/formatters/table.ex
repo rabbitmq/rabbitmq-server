@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
       stream,
       fn
         [first | _] = element ->
-          case Keyword.keyword?(first) or is_map(first) do
+          case FormatterHelpers.proplist?(first) or is_map(first) do
             true -> element
             false -> [element]
           end
@@ -81,7 +81,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     escaped = escaped?(options)
     pad_to_header = pad_to_header?(options)
 
-    case Keyword.keyword?(output) do
+    case FormatterHelpers.proplist?(output) do
       true -> format_line(output, escaped, pad_to_header)
       false -> format_inspect(output)
     end
@@ -130,7 +130,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
           Map.keys(map)
 
         keyword when is_list(keyword) ->
-          case Keyword.keyword?(keyword) do
+          case FormatterHelpers.proplist?(keyword) do
             true -> Keyword.keys(keyword)
             false -> []
           end
