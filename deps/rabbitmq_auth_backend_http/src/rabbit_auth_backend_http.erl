@@ -41,7 +41,7 @@ description() ->
 user_login_authentication(Username, AuthProps) ->
     case http_req(p(user_path), q([{username, Username}|AuthProps])) of
         {error, _} = E  -> E;
-        deny            -> {refused, "Denied by HTTP plugin", []};
+        "deny"          -> {refused, "Denied by HTTP plugin", []};
         "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
                                       T <- string:tokens(Rest, " ")],
                            {ok, #auth_user{username = Username,
