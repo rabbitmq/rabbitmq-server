@@ -761,7 +761,9 @@ check_dlxrk_arg({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 check_overflow({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"drop-head">>, <<"reject-publish">>]) of
+    case lists:member(Val, [<<"drop-head">>,
+                            <<"reject-publish">>,
+                            <<"reject-publish-dlx">>]) of
         true  -> ok;
         false -> {error, invalid_overflow}
     end;

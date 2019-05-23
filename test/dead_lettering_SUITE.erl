@@ -60,13 +60,15 @@ groups() ->
      {dead_letter_tests, [],
       [
        {classic_queue, [parallel], DeadLetterTests ++ [dead_letter_ttl,
+                                                       dead_letter_max_length_reject_publish_dlx,
                                                        dead_letter_routing_key_cycle_ttl,
                                                        dead_letter_headers_reason_expired,
                                                        dead_letter_headers_reason_expired_per_message]},
        {mirrored_queue, [parallel], DeadLetterTests ++ [dead_letter_ttl,
-                                                       dead_letter_routing_key_cycle_ttl,
-                                                       dead_letter_headers_reason_expired,
-                                                       dead_letter_headers_reason_expired_per_message]},
+                                                        dead_letter_max_length_reject_publish_dlx,
+                                                        dead_letter_routing_key_cycle_ttl,
+                                                        dead_letter_headers_reason_expired,
+                                                        dead_letter_headers_reason_expired_per_message]},
        {quorum_queue, [parallel], DeadLetterTests}
       ]}
     ].
@@ -379,6 +381,31 @@ dead_letter_max_length_drop_head(Config) ->
     %% Consume the dropped ones from the dead letter queue
     wait_for_messages(Config, [[DLXQName, <<"2">>, <<"2">>, <<"0">>]]),
     _ = consume(Ch, DLXQName, [P1, P2]),
+    consume_empty(Ch, DLXQName).
+
+%% Another strategy: reject-publish-dlx
+dead_letter_max_length_reject_publish_dlx(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName,
+                               [{<<"x-max-length">>, long, 1},
+                                {<<"x-overflow">>, longstr, <<"reject-publish-dlx">>}]),
+
+    P1 = <<"msg1">>,
+    P2 = <<"msg2">>,
+    P3 = <<"msg3">>,
+
+    %% Publish 3 messages
+    publish(Ch, QName, [P1, P2, P3]),
+    %% Consume the first one from the queue (max-length = 1)
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, QName, [P1]),
+    consume_empty(Ch, QName),
+    %% Consume the dropped ones from the dead letter queue
+    wait_for_messages(Config, [[DLXQName, <<"2">>, <<"2">>, <<"0">>]]),
+    _ = consume(Ch, DLXQName, [P2, P3]),
     consume_empty(Ch, DLXQName).
 
 %% Dead letter exchange does not have to be declared when the queue is declared, but it should

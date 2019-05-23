@@ -82,7 +82,7 @@
             %% max length in bytes, if configured
             max_bytes,
             %% an action to perform if queue is to be over a limit,
-            %% can be either drop-head (default) or reject-publish
+            %% can be either drop-head (default), reject-publish or reject-publish-dlx
             overflow,
             %% when policies change, this version helps queue
             %% determine what previously scheduled/set up state to ignore,
@@ -704,10 +704,23 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                          Delivered,
                          State = #q{overflow            = Overflow,
                                     backing_queue       = BQ,
-                                    backing_queue_state = BQS}) ->
+                                    backing_queue_state = BQS,
+                                    dlx                 = DLX,
+                                    dlx_routing_key     = RK}) ->
     send_mandatory(Delivery), %% must do this before confirms
     case {will_overflow(Delivery, State), Overflow} of
         {true, 'reject-publish'} ->
+            %% Drop publish and nack to publisher
+            send_reject_publish(Delivery, Delivered, State);
+        {true, 'reject-publish-dlx'} ->
+            %% Publish to DLX
+            with_dlx(
+              DLX,
+              fun (X) ->
+                      QName = qname(State),
+                      rabbit_dead_letter:publish(Message, maxlen, X, RK, QName)
+              end,
+              fun () -> ok end),
             %% Drop publish and nack to publisher
             send_reject_publish(Delivery, Delivered, State);
         _ ->
@@ -765,6 +778,8 @@ maybe_drop_head(State = #q{max_length = undefined,
                            max_bytes  = undefined}) ->
     {false, State};
 maybe_drop_head(State = #q{overflow = 'reject-publish'}) ->
+    {false, State};
+maybe_drop_head(State = #q{overflow = 'reject-publish-dlx'}) ->
     {false, State};
 maybe_drop_head(State = #q{overflow = 'drop-head'}) ->
     maybe_drop_head(false, State).
