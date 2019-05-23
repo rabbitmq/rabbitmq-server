@@ -12,6 +12,7 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
+alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.DefaultOutput do
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
@@ -78,9 +79,9 @@ defmodule RabbitMQ.CLI.DefaultOutput do
       Enumerable.Map ->
         {:ok, output}
 
-      ## Do not streamify keyword lists
+      ## Do not streamify proplists
       Enumerable.List ->
-        case Keyword.keyword?(output) do
+        case FormatterHelpers.proplist?(output) do
           true -> {:ok, output}
           false -> {:stream, output}
         end

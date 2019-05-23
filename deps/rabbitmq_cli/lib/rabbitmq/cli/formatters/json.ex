@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _opts) do
-    {:ok, json} = JSON.encode(output)
+    {:ok, json} = JSON.encode(keys_to_atoms(output))
     json
   end
 
@@ -34,8 +34,8 @@ defmodule RabbitMQ.CLI.Formatters.Json do
         stream,
         fn
           [first | _] = element ->
-            case Keyword.keyword?(first) or is_map(first) do
-              true -> element
+            case FormatterHelpers.proplist?(first) or is_map(first) do
+              true  -> element
               false -> [element]
             end
 
@@ -57,6 +57,14 @@ defmodule RabbitMQ.CLI.Formatters.Json do
       )
 
     Stream.concat([["["], elements, ["]"]])
+  end
+
+  def keys_to_atoms(enum) do
+    Enum.map(enum,
+             fn({k, v}) when is_binary(k) or is_list(k) ->
+                 {String.to_atom(k), v}
+               (other) -> other
+             end)
   end
 
   def format_element(val, separator, options) do
