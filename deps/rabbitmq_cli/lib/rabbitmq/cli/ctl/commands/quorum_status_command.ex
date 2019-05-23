@@ -34,7 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+  def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage() do
     "quorum_status [-p <vhost>] <queuename>"
