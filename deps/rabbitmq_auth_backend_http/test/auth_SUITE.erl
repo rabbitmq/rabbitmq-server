@@ -29,8 +29,8 @@
 	 {vhost_path, "http://localhost:" ++ integer_to_list(?AUTH_PORT) ++ "/auth/vhost"},
      {resource_path, "http://localhost:" ++ integer_to_list(?AUTH_PORT) ++ "/auth/resource"},
 	 {topic_path, "http://localhost:" ++ integer_to_list(?AUTH_PORT) ++ "/auth/topic"}]).
--define(ALLOWED_USER, #{username => <<"Ala">>, 
-                        password => <<"Kocur">>,   
+-define(ALLOWED_USER, #{username => <<"Ala">>,
+                        password => <<"Kocur">>,
                         tags => [policymaker, monitoring]}).
 -define(DENIED_USER, #{username => <<"Alice">>, password => <<"Cat">>}).
 
@@ -42,7 +42,7 @@ init_per_suite(Config) ->
     start_http_auth_server(?AUTH_PORT, ?USER_PATH, #{Username => {Password, Tags}}),
     [{allowed_user, ?ALLOWED_USER}, {denied_user, ?DENIED_USER} | Config].
 
-end_per_suite(_Config) -> 
+end_per_suite(_Config) ->
     stop_http_auth_server().
 
 grants_access_to_user(Config) ->
@@ -52,7 +52,7 @@ grants_access_to_user(Config) ->
 
 denies_access_to_user(Config) ->
     #{username := U, password := P} = ?config(denied_user, Config),
-    ?assertMatch({refused,"Denied by HTTP plugin",[]},
+    ?assertMatch({refused, "Denied by the backing HTTP service", []},
                   rabbit_auth_backend_http:user_login_authentication(U, [{password, P}])).
 
 %%% HELPERS
