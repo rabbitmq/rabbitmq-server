@@ -158,8 +158,9 @@ mixed_dead_alive_queues_reject(Config) ->
                       #amqp_msg{payload = <<"HI">>}),
 
     receive
-        {'basic.ack',_,_} -> ok
-    after 10000 ->
+        {'basic.ack',_,_} -> ok;
+        {'basic.nack',_,_,_} -> error(expecting_ack_got_nack)
+    after 50000 ->
         error(timeout_waiting_for_initial_ack)
     end,
 
@@ -172,7 +173,7 @@ mixed_dead_alive_queues_reject(Config) ->
     receive
         {'basic.nack',_,_,_} -> ok;
         {'basic.ack',_,_} -> error(expecting_nack_got_ack)
-    after 10000 ->
+    after 50000 ->
         error(timeout_waiting_for_ack)
     end.
 
