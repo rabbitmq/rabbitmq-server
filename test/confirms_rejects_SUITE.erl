@@ -161,7 +161,7 @@ mixed_dead_alive_queues_reject(Config) ->
         {'basic.ack',_,_} -> ok;
         {'basic.nack',_,_,_} -> error(expecting_ack_got_nack)
     after 50000 ->
-        error(timeout_waiting_for_initial_ack)
+        error({timeout_waiting_for_initial_ack, process_info(self(), messages)})
     end,
 
     kill_the_queue(QueueNameDead, Config),
@@ -174,7 +174,7 @@ mixed_dead_alive_queues_reject(Config) ->
         {'basic.nack',_,_,_} -> ok;
         {'basic.ack',_,_} -> error(expecting_nack_got_ack)
     after 50000 ->
-        error(timeout_waiting_for_ack)
+        error({timeout_waiting_for_nack, process_info(self(), messages)})
     end.
 
 confirms_rejects_conflict(Config) ->
@@ -365,7 +365,14 @@ kill_the_queue(QueueName) ->
         Pid = amqqueue:get_pid(Q),
         exit(Pid, kill)
      end
-     || _ <- lists:seq(1, 11)].
+     || _ <- lists:seq(1, 11)],
+    {ok, Q} = rabbit_amqqueue:lookup({resource, <<"/">>, queue, QueueName}),
+    Pid = amqqueue:get_pid(Q),
+    case is_process_alive(Pid) of
+        %% Try to kill it again
+        true  -> kill_the_queue(QueueName);
+        false -> ok
+    end.
 
 
 
