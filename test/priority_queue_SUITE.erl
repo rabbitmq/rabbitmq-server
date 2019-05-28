@@ -33,7 +33,8 @@ groups() ->
      {cluster_size_2, [], [
                            ackfold,
                            drop,
-                           reject,
+                           {overflow_reject_publish, [], [reject]},
+                           {overflow_reject_publish_dlx, [], [reject]},
                            dropwhile_fetchwhile,
                            info_head_message_timestamp,
                            matching,
@@ -87,8 +88,20 @@ init_per_group(cluster_size_3, Config) ->
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_client_helpers:setup_steps());
+init_per_group(overflow_reject_publish, Config) ->
+    rabbit_ct_helpers:set_config(Config, [
+        {overflow, <<"reject-publish">>}
+      ]);
+init_per_group(overflow_reject_publish_dlx, Config) ->
+    rabbit_ct_helpers:set_config(Config, [
+        {overflow, <<"reject-publish-dlx">>}
+      ]).
 
+end_per_group(overflow_reject_publish, _Config) ->
+    ok;
+end_per_group(overflow_reject_publish_dlx, _Config) ->
+    ok;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
@@ -334,9 +347,10 @@ drop(Config) ->
 
 reject(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    Q = <<"reject-queue">>,
+    XOverflow = ?config(overflow, Config),
+    Q = <<"reject-queue-", XOverflow/binary>>,
     declare(Ch, Q, [{<<"x-max-length">>, long, 4},
-                    {<<"x-overflow">>, longstr, <<"reject-publish">>}
+                    {<<"x-overflow">>, longstr, XOverflow}
                     | arguments(3)]),
     publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
     %% First 4 messages are published, all others are discarded.
