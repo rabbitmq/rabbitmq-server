@@ -97,7 +97,9 @@
             %% running | flow | idle
             status,
             %% true | false
-            single_active_consumer_on
+            single_active_consumer_on,
+            %% enqueue | ack
+            confirm_on
            }).
 
 %%----------------------------------------------------------------------------
@@ -167,7 +169,8 @@ init_state(Q) ->
                status                    = running,
                args_policy_version       = 0,
                overflow                  = 'drop-head',
-               single_active_consumer_on = SingleActiveConsumerOn},
+               single_active_consumer_on = SingleActiveConsumerOn,
+               confirm_on                = enqueue},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 init_it(Recover, From, State = #q{q = Q})
@@ -429,7 +432,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
          {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
+         {<<"confirm-on">>,              fun res_arg/2, fun init_confirm_on/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(args_policy_lookup(Name, Resolve, Q), StateN)
@@ -497,6 +501,21 @@ init_queue_mode(Mode, State = #q {backing_queue = BQ,
     BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
     State#q{backing_queue_state = BQS1}.
 
+init_confirm_on(<<"ack">>, State = #q{confirm_on = enqueue}) ->
+    State#q{confirm_on = ack};
+init_confirm_on(<<"enqueue">>, State = #q{confirm_on = ack,
+                                          msg_id_to_channel = MTC}) ->
+    %% TODO: only confirm enqueued messages.
+    confirm_all_messages(MTC),
+    State#q{msg_id_to_channel = gb_trees:new(),
+            confirm_on = enqueue};
+init_confirm_on(_, State) ->
+    State.
+
+confirm_all_messages(MTC) ->
+    MsgIds = gb_trees:keys(MTC),
+    confirm_messages(MsgIds, MTC).
+
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {reply, Reply, ensure_stats_timer(ensure_rate_timer(NewState1)), Timeout}.
@@ -507,10 +526,14 @@ noreply(NewState) ->
 
 next_state(State = #q{backing_queue       = BQ,
                       backing_queue_state = BQS,
-                      msg_id_to_channel   = MTC}) ->
+                      msg_id_to_channel   = MTC,
+                      confirm_on          = ConfirmOn}) ->
     assert_invariant(State),
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    MTC1 = confirm_messages(MsgIds, MTC),
+    MTC1 = case ConfirmOn of
+        enqueue -> confirm_messages(MsgIds, MTC);
+        ack -> MTC
+    end,
     State1 = State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1},
     case BQ:needs_timeout(BQS1) of
         false -> {stop_sync_timer(State1),   hibernate     };
@@ -616,17 +639,27 @@ send_or_record_confirm(#delivery{confirm    = false}, State) ->
 send_or_record_confirm(#delivery{confirm    = true,
                                  sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
+                                 message    = #basic_message{id = MsgId}},
+                       State = #q{confirm_on = ack,
+                                  msg_id_to_channel = MTC}) ->
+    MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
+    {eventually, State#q{msg_id_to_channel = MTC1}};
+send_or_record_confirm(#delivery{confirm    = true,
+                                 sender     = SenderPid,
+                                 msg_seq_no = MsgSeqNo,
                                  message    = #basic_message {
                                    is_persistent = true,
                                    id            = MsgId}},
                        State = #q{q                 = Q,
+                                  confirm_on        = enqueue,
                                   msg_id_to_channel = MTC})
   when ?amqqueue_is_durable(Q) ->
     MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
     {eventually, State#q{msg_id_to_channel = MTC1}};
 send_or_record_confirm(#delivery{confirm    = true,
                                  sender     = SenderPid,
-                                 msg_seq_no = MsgSeqNo}, State) ->
+                                 msg_seq_no = MsgSeqNo},
+                       State = #q{confirm_on = enqueue}) ->
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
@@ -646,6 +679,7 @@ discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
                   flow    = Flow,
                   message = #basic_message{id = MsgId}}, BQ, BQS, MTC) ->
+    %% TODO: why does discard confirm a message?
     MTC1 = case Confirm of
                true  -> confirm_messages([MsgId], MTC);
                false -> MTC
@@ -739,6 +773,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
         {undelivered, State2 = #q{ttl = 0, dlx = undefined,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}} ->
+            %% TODO: reject if confirm_on = ack
             {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC),
             State2#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1};
         {undelivered, State2 = #q{backing_queue_state = BQS}} ->
@@ -786,15 +821,23 @@ maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
     end.
 
 send_reject_publish(#delivery{confirm = true,
-                                sender = SenderPid,
-                                msg_seq_no = MsgSeqNo} = Delivery,
-                      _Delivered,
-                      State = #q{ backing_queue = BQ,
-                                  backing_queue_state = BQS,
-                                  msg_id_to_channel   = MTC}) ->
-    {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC),
+                              flow = Flow,
+                              sender = SenderPid,
+                              msg_seq_no = MsgSeqNo,
+                              message = #basic_message{id = MsgId}},
+                    _Delivered,
+                    State = #q{backing_queue = BQ,
+                               backing_queue_state = BQS,
+                               msg_id_to_channel   = MTC}) ->
     gen_server2:cast(SenderPid, {reject_publish, MsgSeqNo, self()}),
-    State#q{ backing_queue_state = BQS1, msg_id_to_channel = MTC1 };
+
+    MTC1 = case gb_trees:is_defined(MsgId, MTC) of
+        true  -> gb_trees:delete(MsgId, MTC);
+        false -> MTC
+    end,
+    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
+
+    State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1};
 send_reject_publish(#delivery{confirm = false},
                       _Delivered, State) ->
     State.
@@ -834,11 +877,22 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
     {Result, maybe_send_drained(Result =:= empty, State1)}.
 
 ack(AckTags, ChPid, State) ->
+    rabbit_log_queue:error("Ack tags ~p~n", [AckTags]),
     subtract_acks(ChPid, AckTags, State,
                   fun (State1 = #q{backing_queue       = BQ,
-                                   backing_queue_state = BQS}) ->
-                          {_Guids, BQS1} = BQ:ack(AckTags, BQS),
-                          State1#q{backing_queue_state = BQS1}
+                                   backing_queue_state = BQS,
+                                   confirm_on          = ConfirmOn,
+                                   msg_id_to_channel   = MTC}) ->
+                        {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
+                        rabbit_log_queue:error("Ack tags ~p message ids ~p~n", [AckTags, MsgIds]),
+                        case ConfirmOn of
+                            ack ->
+                                MTC1 = confirm_messages(MsgIds, MTC),
+                                State1#q{backing_queue_state = BQS1,
+                                         msg_id_to_channel = MTC1};
+                            enqueue ->
+                                State1#q{backing_queue_state = BQS1}
+                        end
                   end).
 
 requeue(AckTags, ChPid, State) ->
@@ -1022,15 +1076,25 @@ dead_letter_maxlen_msg(X, State = #q{backing_queue = BQ}) ->
 
 dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
                                             backing_queue_state = BQS,
-                                            backing_queue       = BQ}) ->
+                                            backing_queue       = BQ,
+                                            confirm_on          = ConfirmOn,
+                                            msg_id_to_channel   = MTC}) ->
     QName = qname(State),
     {Res, Acks1, BQS1} =
         Fun(fun (Msg, AckTag, Acks) ->
                     rabbit_dead_letter:publish(Msg, Reason, X, RK, QName),
                     [AckTag | Acks]
             end, [], BQS),
-    {_Guids, BQS2} = BQ:ack(Acks1, BQS1),
-    {Res, State#q{backing_queue_state = BQS2}}.
+    %% TODO: should the message be rejected if it's dead-lettered
+    {MsgIds, BQS2} = BQ:ack(Acks1, BQS1),
+    case ConfirmOn of
+        ack ->
+            MTC1 = confirm_messages(MsgIds, MTC),
+            {Res, State#q{backing_queue_state = BQS2,
+                          msg_id_to_channel = MTC1}};
+        enqueue ->
+            {Res, State#q{backing_queue_state = BQS2}}
+    end.
 
 stop(State) -> stop(noreply, State).
 
@@ -1267,7 +1331,7 @@ handle_call({notify_down, ChPid}, _From, State) ->
     end;
 
 handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
-            State = #q{q = Q}) ->
+            State = #q{q = Q, confirm_on = ConfirmOn, msg_id_to_channel = MTC}) ->
     QName = amqqueue:get_name(Q),
     AckRequired = not NoAck,
     State1 = ensure_expiry_timer(State),
@@ -1276,13 +1340,23 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
             reply(empty, State2);
         {{Message, IsDelivered, AckTag},
          #q{backing_queue = BQ, backing_queue_state = BQS} = State2} ->
-            case AckRequired of
-                true  -> ok = rabbit_queue_consumers:record_ack(
-                                ChPid, LimiterPid, AckTag);
-                false -> ok
+            State3 = case AckRequired of
+                true  ->
+                    ok = rabbit_queue_consumers:record_ack(
+                                ChPid, LimiterPid, AckTag),
+                    State2;
+                false ->
+                    case ConfirmOn of
+                        ack ->
+                            MsgId = Message#basic_message.id,
+                            MTC1 = confirm_messages([MsgId], MTC),
+                            State2#q{msg_id_to_channel = MTC1};
+                        enqueue ->
+                            State2
+                    end
             end,
             Msg = {QName, self(), AckTag, IsDelivered, Message},
-            reply({ok, BQ:len(BQS), Msg}, State2)
+            reply({ok, BQ:len(BQS), Msg}, State3)
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
