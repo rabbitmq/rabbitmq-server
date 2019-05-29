@@ -1,6 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.664
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.671
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
@@ -109,3 +109,36 @@ find_latest_otp: $(JQ)
 	printf "Checksum: " && \
 	wget --continue --quiet --output-document="/tmp/OTP-$$VERSION.tar.gz" "https://github.com/erlang/otp/archive/OTP-$$VERSION.tar.gz" && \
 	shasum -a 256 "/tmp/OTP-$$VERSION.tar.gz"
+.PHONY: flo
+flo: find_latest_otp
+
+define DOCKER_COMPOSE_UP
+cd docker && \
+docker-compose --file docker-compose-$@.yml up --detach && \
+docker-compose --file docker-compose-$@.yml logs --follow
+endef
+.PHONY: overview distribution
+overview distribution:
+	@$(DOCKER_COMPOSE_UP)
+.PHONY: o d
+o: overview
+d: distribution
+
+DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
+.PHONY: $(DOCKER_COMPOSE_FILES)
+$(DOCKER_COMPOSE_FILES):
+	@(cd docker && docker-compose --file $(@F) down ; true)
+.PHONY: down
+down: $(DOCKER_COMPOSE_FILES)
+
+DASHBOARDS_FROM_PATH := $(HOME)/Downloads
+DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
+.PHONY: update_dashboards
+update_dashboards:
+	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Overview-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Overview.json ; \
+	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
+	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
+	true
+
+.PHONY: ud
+ud: update_dashboards

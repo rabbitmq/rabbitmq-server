@@ -13,7 +13,7 @@ volumes:
 services:
   rabbitmq1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.664-2019.05.20
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.671-2019.05.29
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -30,8 +30,8 @@ services:
     environment:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
     volumes:
-      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
-      - ./rabbitmq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json
+      - ./rabbitmq-overview.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
@@ -55,7 +55,7 @@ services:
       - "35692:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.05.20
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -66,7 +66,7 @@ services:
       VARIABLE_RATE: "12:30,25:30,50:30,100:30"
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
-      SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: &startup_timeout 60
   unroutable-return:
     image: *perf-test-image
     networks:
@@ -77,7 +77,7 @@ services:
       VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
       FLAG: mandatory
-      SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   unroutable-drop:
     image: *perf-test-image
     networks:
@@ -87,7 +87,7 @@ services:
       VARIABLE_RATE: "5:30,10:30,20:30"
       VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
-      SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   slow-consumer-persistent:
     image: *perf-test-image
     networks:
@@ -104,7 +104,7 @@ services:
       CONSUMER_RATE: 10
       QOS: 10
       AUTOACK: "false"
-      SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   basic-get:
     image: *perf-test-image
     networks:
@@ -117,7 +117,7 @@ services:
       POLLING: "true"
       POLLING_INTERVAL: 5000
       AUTOACK: "false"
-      SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   basic-get-auto:
     image: *perf-test-image
     networks:
@@ -130,7 +130,7 @@ services:
       POLLING: "true"
       POLLING_INTERVAL: 5000
       AUTOACK: "true"
-      SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   nack:
     image: *perf-test-image
     networks:
@@ -148,60 +148,7 @@ services:
       NACK: "true"
       QOS: 5
       CONSUMER_LATENCY: 3000000
-      SERVERS_STARTUP_TIMEOUT: 30
-  # max1: &max
-  #   image: pivotalrabbitmq/perf-test:dev-2019.05.20
-  #   networks:
-  #     - "rabbitmq-prometheus"
-  #   environment:
-  #     URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
-  #     QUEUE_PATTERN: "ha3-max1-%d"
-  #     QUEUE_PATTERN_FROM: 1
-  #     QUEUE_PATTERN_TO: 10
-  #     PRODUCERS: 10
-  #     CONSUMERS: 10
-  #     ROUTING_KEY: max1
-  #     SIZE: 512000
-  #     QOS: 100
-  #     AUTOACK: "false"
-  #     SERVERS_STARTUP_TIMEOUT: 30
-  # prometheus:
-  #   image: prom/prometheus:v2.9.0
-  #   networks:
-  #     - "rabbitmq-prometheus"
-  #   ports:
-  #     - "9090:9090"
-  #   volumes:
-  #     - rabbitmq-prometheus_prometheus:/prometheus
-  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
-  # max2:
-  #   << : *max
-  #   environment:
-  #     URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
-  #     QUEUE_PATTERN: "ha3-max2-%d"
-  #     QUEUE_PATTERN_FROM: 1
-  #     QUEUE_PATTERN_TO: 10
-  #     PRODUCERS: 10
-  #     CONSUMERS: 10
-  #     ROUTING_KEY: max2
-  #     SIZE: 512000
-  #     QOS: 100
-  #     AUTOACK: "false"
-  #     SERVERS_STARTUP_TIMEOUT: 30
-  # max3:
-  #   << : *max
-  #   environment:
-  #     URI: "amqp://guest:guest@rabbitmq3:5672/%2f"
-  #     QUEUE_PATTERN: "ha3-max3-%d"
-  #     QUEUE_PATTERN_FROM: 1
-  #     QUEUE_PATTERN_TO: 10
-  #     PRODUCERS: 10
-  #     CONSUMERS: 10
-  #     ROUTING_KEY: max3
-  #     SIZE: 512000
-  #     QOS: 100
-  #     AUTOACK: "false"
-  #     SERVERS_STARTUP_TIMEOUT: 30
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
     image: prom/prometheus:v2.9.2
@@ -227,10 +174,10 @@ services:
     # environment:
       # https://grafana.com/plugins/flant-statusmap-panel
       # https://grafana.com/plugins/grafana-polystat-panel
+      # https://grafana.com/plugins/grafana-piechart-panel
       # https://grafana.com/plugins/jdbranham-diagram-panel
       # https://grafana.com/plugins/michaeldmoore-multistat-panel
-      # https://grafana.com/plugins/natel-discrete-panel
       # https://grafana.com/plugins/vonage-status-panel
       # https://grafana.com/plugins/yesoreyeram-boomtable-panel
       # Even if the plugins are stored on a volume, updating them can be slow - disabling this for now
-      # GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,natel-discrete-panel,vonage-status-panel,yesoreyeram-boomtable-panel"
+      # GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,vonage-status-panel,yesoreyeram-boomtable-panel"

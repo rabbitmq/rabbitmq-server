@@ -117,10 +117,12 @@
         {2, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval in seconds", net_ticktime}
     ]},
 
-    {node_node_metrics, [
-        {2, peer_node_bytes_in, counter, "Bytes received from peer node", recv_bytes},
-        {2, peer_node_bytes_out, counter, "Bytes sent to peer node", send_bytes}
-    ]},
+    % These metrics are captured in Erlang Distribution collector, built-into prometheus.erl
+    % https://github.com/deadtrickster/prometheus.erl/pull/92
+    % {node_node_metrics, [
+    %     {2, peer_node_bytes_in, counter, "Bytes received from peer node", recv_bytes},
+    %     {2, peer_node_bytes_out, counter, "Bytes sent to peer node", send_bytes}
+    % ]},
 
     {node_persister_metrics, [
         {2, io_read, counter, "I/O read operations", io_read_count},

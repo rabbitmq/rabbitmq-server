@@ -166,7 +166,6 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_published", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open_limit", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_peer_node_bytes_in", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_io_read", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers", [{capture, none}])),

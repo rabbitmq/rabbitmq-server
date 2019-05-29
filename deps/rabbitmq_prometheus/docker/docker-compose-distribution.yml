@@ -1,0 +1,108 @@
+# https://docs.docker.com/compose/compose-file/
+version: "3.6"
+
+# https://docs.docker.com/compose/compose-file/#networks
+networks:
+  rabbitmq-prometheus:
+
+# https://docs.docker.com/compose/compose-file/#volumes
+volumes:
+  rabbitmq-prometheus_prometheus:
+  rabbitmq-prometheus_grafana:
+
+services:
+  rabbitmq1: &rabbitmq
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.671-2019.05.29
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "5672:5672"
+      - "15670:25672"
+      - "15672:15672"
+      - "15692:15692"
+    # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
+    # https://en.wikipedia.org/wiki/Tcpkill
+    # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
+    cap_add:
+      - ALL
+    hostname: rabbitmq1
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
+    volumes:
+      - ./rabbitmq-distribution.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
+      - ./rabbitmq-ssl_dist.config:/etc/rabbitmq/ssl_dist.config:ro
+      - ./rabbitmq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+      - ./rabbitmq-ssl:/etc/rabbitmq/ssl:ro
+    # we want to simulate hitting thresholds
+    ulimits:
+      nofile:
+        soft: "1024"
+        hard: "2048"
+  rabbitmq2:
+    << : *rabbitmq
+    hostname: rabbitmq2
+    ports:
+      - "6672:5672"
+      - "25670:25672"
+      - "25672:15672"
+      - "25692:15692"
+  rabbitmq3:
+    << : *rabbitmq
+    hostname: rabbitmq3
+    ports:
+      - "7672:5672"
+      - "35670:25672"
+      - "35672:15672"
+      - "35692:15692"
+  stress_distribution:
+    # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      QUEUE_PATTERN: "ha3-max1-%d"
+      QUEUE_PATTERN_FROM: 1
+      QUEUE_PATTERN_TO: 10
+      PRODUCERS: 10
+      CONSUMERS: 10
+      ROUTING_KEY: max1
+      SIZE: 512000
+      QOS: 100
+      AUTOACK: "false"
+      VARIABLE_RATE: "1:30,10:30,20:30"
+      SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
+  prometheus:
+    # https://hub.docker.com/r/prom/prometheus/tags
+    image: prom/prometheus:v2.9.2
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - rabbitmq-prometheus_prometheus:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  grafana:
+    # https://hub.docker.com/r/grafana/grafana/tags
+    image: grafana/grafana:6.1.6
+    ports:
+      - "3000:3000"
+    networks:
+      - "rabbitmq-prometheus"
+    volumes:
+      - rabbitmq-prometheus_grafana:/var/lib/grafana
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
+      - ./grafana/dashboards:/dashboards
+    # environment:
+      # https://grafana.com/plugins/flant-statusmap-panel
+      # https://grafana.com/plugins/grafana-polystat-panel
+      # https://grafana.com/plugins/grafana-piechart-panel
+      # https://grafana.com/plugins/jdbranham-diagram-panel
+      # https://grafana.com/plugins/michaeldmoore-multistat-panel
+      # https://grafana.com/plugins/vonage-status-panel
+      # https://grafana.com/plugins/yesoreyeram-boomtable-panel
+      # Even if the plugins are stored on a volume, updating them can be slow - disabling this for now
+      # GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,vonage-status-panel,yesoreyeram-boomtable-panel"

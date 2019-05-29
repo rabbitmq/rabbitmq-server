@@ -12,9 +12,11 @@
       }
     ]
   },
+  "description": "Erlang cluster metrics",
   "editable": true,
   "gnetId": null,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
+  "iteration": 1559148231459,
   "links": [],
   "panels": [
     {
@@ -22,9 +24,9 @@
       "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#d44a3a",
-        "rgba(237, 129, 40, 0.89)",
-        "#299c46"
+        "#C4162A",
+        "#8F3BB8",
+        "#37872D"
       ],
       "format": "none",
       "gauge": {
@@ -33,12 +35,6 @@
         "show": false,
         "thresholdLabels": false,
         "thresholdMarkers": true
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 0,
-        "y": 0
       },
       "id": 25,
       "interval": "",
@@ -77,7 +73,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{state=\"up\"}) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -104,9 +100,9 @@
       "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#299c46",
-        "rgba(237, 129, 40, 0.89)",
-        "#d44a3a"
+        "#C4162A",
+        "#8F3BB8",
+        "#37872D"
       ],
       "format": "none",
       "gauge": {
@@ -117,91 +113,9 @@
         "thresholdMarkers": true
       },
       "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "id": 26,
-      "interval": "",
-      "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
-      "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "postfix": "",
-      "postfixFontSize": "50%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(255, 255, 255, 0)",
-        "full": false,
-        "lineColor": "rgb(255, 255, 255)",
-        "show": true
-      },
-      "tableColumn": "",
-      "targets": [
-        {
-          "expr": "count(erlang_vm_dist_node_state{state=\"pending\"} == 1) OR vector(0)",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 1,
-          "refId": "A"
-        }
-      ],
-      "thresholds": "1,6",
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Pending distribution links",
-      "type": "singlestat",
-      "valueFontSize": "80%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
-    },
-    {
-      "cacheTimeout": null,
-      "colorBackground": true,
-      "colorValue": false,
-      "colors": [
-        "#d44a3a",
-        "rgba(237, 129, 40, 0.89)",
-        "#299c46"
-      ],
-      "format": "none",
-      "gauge": {
-        "maxValue": 100,
-        "minValue": 0,
-        "show": false,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
+        "h": 3,
+        "w": 6,
+        "x": 6,
         "y": 0
       },
       "id": 27,
@@ -241,7 +155,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{state=\"up\"} == 1) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state == 3) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -264,127 +178,258 @@
       "valueName": "current"
     },
     {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "description": "The current state of the distribution link. Is everything working?\n\nWe want to measure the amount of time that we spend in different states. Up is green & pending (establishing) is orange. up_pending means that the connection might have a problem - we need to look into this further.\n\nCount the number of all up node_state. If it's less than the sum of all connections, mark it as degraded. If it's less than half, mark it as critical.",
-      "fill": 0,
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#37872D",
+        "#8F3BB8",
+        "#C4162A"
+      ],
+      "description": "We believe that this means \"reconnecting\" - maybe there's two connections at the same time when that happens? - need to confirm.\n\n@gerhard + @essen",
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 28,
+      "interval": "",
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "count(erlang_vm_dist_node_state == 2) OR vector(0)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "1,6",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Up pending distribution links",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#37872D",
+        "#8F3BB8",
+        "#C4162A"
+      ],
+      "description": "We believe that this means \"connecting\", need to confirm.\n\n@gerhard + @essen",
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 26,
+      "interval": "",
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "count(erlang_vm_dist_node_state == 1) OR vector(0)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "1,6",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Pending distribution links",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGreens",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "min": null,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#FA6400",
+            "tooltip": "pending",
+            "value": "1"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "up_pending",
+            "value": "2"
+          },
+          {
+            "color": "#37872D",
+            "tooltip": "up",
+            "value": "3"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
       "gridPos": {
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 3
       },
+      "highlightCards": true,
       "id": 19,
       "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": true,
-        "show": false,
-        "total": false,
-        "values": true
+        "show": true
       },
-      "lines": true,
-      "linewidth": 1,
       "links": [],
-      "nullPointMode": "null",
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/1/",
-          "color": "#7EB26D"
-        },
-        {
-          "alias": "/2/",
-          "color": "#EAB839"
-        },
-        {
-          "alias": "/3/",
-          "color": "#6DD0E0"
-        },
-        {
-          "alias": "/4/",
-          "color": "#508642"
-        },
-        {
-          "alias": "/5/",
-          "color": "#CCA300"
-        },
-        {
-          "alias": "/6/",
-          "color": "#447EBC"
-        },
-        {
-          "alias": "/7/",
-          "color": "#B7DBAB"
-        },
-        {
-          "alias": "/8/",
-          "color": "#F4D598"
-        },
-        {
-          "alias": "/9/",
-          "color": "#70DBED"
-        }
-      ],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
+      "nullPointMode": "as empty",
       "targets": [
         {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
           "expr": "erlang_vm_dist_node_state",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}} : {{state}}",
-          "refId": "A"
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
         }
       ],
-      "thresholds": [],
       "timeFrom": null,
-      "timeRegions": [],
       "timeShift": null,
-      "title": "Distribution link state",
+      "title": "State of distribution links",
       "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
+        "show": true
       },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
         "show": true,
-        "values": []
+        "showCrosshair": true,
+        "showWeekends": true
       },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
     },
     {
       "collapsed": false,
@@ -392,11 +437,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 8
       },
       "id": 9,
       "panels": [],
-      "title": "TCP sockets",
+      "title": "TCP socket",
       "type": "row"
     },
     {
@@ -404,13 +449,13 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "Maybe remove rabbitmq_peer_node_bytes_in from rabbitq_core_collector",
+      "description": "",
       "fill": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 10
+        "y": 9
       },
       "id": 3,
       "legend": {
@@ -433,39 +478,39 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -474,7 +519,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_oct_bytes[$__interval])",
+          "expr": "rate(erlang_vm_dist_send_bytes[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -501,6 +546,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "Bps",
           "label": null,
           "logBase": 1,
@@ -527,13 +573,13 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "Maybe remove rabbitmq_peer_node_bytes_in from rabbitq_core_collector",
+      "description": "",
       "fill": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 10
+        "y": 9
       },
       "id": 2,
       "legend": {
@@ -558,39 +604,39 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -599,7 +645,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_oct_bytes[$__interval])",
+          "expr": "rate(erlang_vm_dist_recv_bytes[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -626,6 +672,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "Bps",
           "label": null,
           "logBase": 1,
@@ -658,7 +705,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 14
       },
       "id": 4,
       "legend": {
@@ -681,39 +728,39 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -749,6 +796,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -781,7 +829,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 14
       },
       "id": 5,
       "legend": {
@@ -804,39 +852,39 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -872,6 +920,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -904,7 +953,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 19
       },
       "id": 6,
       "legend": {
@@ -927,39 +976,39 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -995,6 +1044,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "bytes",
           "label": null,
           "logBase": 1,
@@ -1022,7 +1072,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 24
       },
       "id": 11,
       "panels": [],
@@ -1040,7 +1090,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 25
       },
       "id": 12,
       "legend": {
@@ -1063,39 +1113,39 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -1131,6 +1181,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "bytes",
           "label": null,
           "logBase": 1,
@@ -1163,7 +1214,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 25
       },
       "id": 7,
       "legend": {
@@ -1231,6 +1282,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "bytes",
           "label": null,
           "logBase": 1,
@@ -1258,235 +1310,20 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 30
       },
       "id": 14,
       "panels": [],
-      "title": "Distribution process",
+      "repeat": "erlang_vm_dist_proc_type",
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
+      "title": "$erlang_vm_dist_proc_type process",
       "type": "row"
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "description": "The current state of the distribution process.\n\nWe want to measure the amount of time that we spend in different states. Waiting is the best, followed by running & runnable. If it's in a runnable state for too long, it's bad. Same for garbage collecting. Suspended and exiting should never happen.",
-      "fill": 0,
-      "gridPos": {
-        "h": 5,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 18,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": true,
-        "show": false,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/1/",
-          "color": "#7EB26D"
-        },
-        {
-          "alias": "/2/",
-          "color": "#EAB839"
-        },
-        {
-          "alias": "/3/",
-          "color": "#6DD0E0"
-        },
-        {
-          "alias": "/4/",
-          "color": "#508642"
-        },
-        {
-          "alias": "/5/",
-          "color": "#CCA300"
-        },
-        {
-          "alias": "/6/",
-          "color": "#447EBC"
-        },
-        {
-          "alias": "/7/",
-          "color": "#B7DBAB"
-        },
-        {
-          "alias": "/8/",
-          "color": "#F4D598"
-        },
-        {
-          "alias": "/9/",
-          "color": "#70DBED"
-        }
-      ],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "erlang_vm_dist_proc_status",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Distribution process state",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "description": "The number of messages currently in the message queue of the process",
-      "fill": 0,
-      "gridPos": {
-        "h": 5,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 16,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": true,
-        "show": false,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/rabbit/",
-          "color": "#C4162A"
-        }
-      ],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "erlang_vm_dist_proc_message_queue_len",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 0,
-          "yaxis": "left"
-        }
-      ],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Messages in the distribution process queue",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
     },
     {
       "aliasColors": {},
@@ -1497,9 +1334,9 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 37
+        "y": 31
       },
       "id": 15,
       "legend": {
@@ -1520,41 +1357,48 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -1563,7 +1407,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1574,7 +1418,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory used by the distribution process",
+      "title": "Memory used by the process",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1590,6 +1434,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "bytes",
           "label": null,
           "logBase": 1,
@@ -1620,9 +1465,9 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 12,
-        "x": 12,
-        "y": 37
+        "w": 8,
+        "x": 8,
+        "y": 31
       },
       "id": 17,
       "legend": {
@@ -1643,41 +1488,48 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
       "seriesOverrides": [
         {
-          "alias": "/1/",
+          "alias": "/rabbit@.+1 /",
           "color": "#7EB26D"
         },
         {
-          "alias": "/2/",
+          "alias": "/rabbit@.+2 /",
           "color": "#EAB839"
         },
         {
-          "alias": "/3/",
+          "alias": "/rabbit@.+3 /",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/4/",
+          "alias": "/rabbit@.+4 /",
           "color": "#508642"
         },
         {
-          "alias": "/5/",
+          "alias": "/rabbit@.+5 /",
           "color": "#CCA300"
         },
         {
-          "alias": "/6/",
+          "alias": "/rabbit@.+6 /",
           "color": "#447EBC"
         },
         {
-          "alias": "/7/",
+          "alias": "/rabbit@.+7 /",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/8/",
+          "alias": "/rabbit@.+8 /",
           "color": "#F4D598"
         },
         {
-          "alias": "/9/",
+          "alias": "/rabbit@.+9 /",
           "color": "#70DBED"
         }
       ],
@@ -1686,7 +1538,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions[$__interval])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1697,7 +1549,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Distribution process reductions",
+      "title": "Process reductions",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1713,6 +1565,7 @@
       },
       "yaxes": [
         {
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1735,17 +1588,222 @@
       }
     },
     {
-      "collapsed": false,
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of messages currently in the message queue of the process",
+      "fill": 0,
       "gridPos": {
-        "h": 1,
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 31
+      },
+      "id": 16,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Messages in the process queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGnYlRd",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#C4162A",
+            "tooltip": "exiting",
+            "value": "1"
+          },
+          {
+            "color": "#FA6400",
+            "tooltip": "suspended",
+            "value": "2"
+          },
+          {
+            "color": "#8F3BB8",
+            "tooltip": "runnable",
+            "value": "3"
+          },
+          {
+            "color": "#1F60C4",
+            "tooltip": "garbage_collecting",
+            "value": "4"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "running",
+            "value": "5"
+          },
+          {
+            "color": "#37872D",
+            "tooltip": "waiting",
+            "value": "6"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 36
       },
-      "id": 21,
-      "panels": [],
-      "title": "TLS connection process",
-      "type": "row"
+      "highlightCards": true,
+      "id": 18,
+      "legend": {
+        "show": true
+      },
+      "links": [],
+      "nullPointMode": "as empty",
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Process state",
+      "tooltip": {
+        "show": true
+      },
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
+        "show": true,
+        "showCrosshair": true,
+        "showWeekends": true
+      },
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
     },
     {
       "collapsed": false,
@@ -1753,20 +1811,1068 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 41
       },
-      "id": 23,
+      "id": 29,
       "panels": [],
-      "title": "TLS sender process",
+      "repeat": null,
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 14,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "title": "$erlang_vm_dist_proc_type process",
       "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The size in bytes of process memory. This includes call stack, heap, and internal structures.",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 42
+      },
+      "id": 30,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 15,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit@.+1 /",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/rabbit@.+2 /",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/rabbit@.+3 /",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit@.+4 /",
+          "color": "#508642"
+        },
+        {
+          "alias": "/rabbit@.+5 /",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/rabbit@.+6 /",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/rabbit@.+7 /",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/rabbit@.+8 /",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/rabbit@.+9 /",
+          "color": "#70DBED"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Memory used by the process",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "bytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of reductions executed by the process",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 42
+      },
+      "id": 31,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 17,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit@.+1 /",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/rabbit@.+2 /",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/rabbit@.+3 /",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit@.+4 /",
+          "color": "#508642"
+        },
+        {
+          "alias": "/rabbit@.+5 /",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/rabbit@.+6 /",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/rabbit@.+7 /",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/rabbit@.+8 /",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/rabbit@.+9 /",
+          "color": "#70DBED"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[$__interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Process reductions",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of messages currently in the message queue of the process",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 42
+      },
+      "id": 32,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 16,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Messages in the process queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGnYlRd",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#C4162A",
+            "tooltip": "exiting",
+            "value": "1"
+          },
+          {
+            "color": "#FA6400",
+            "tooltip": "suspended",
+            "value": "2"
+          },
+          {
+            "color": "#8F3BB8",
+            "tooltip": "runnable",
+            "value": "3"
+          },
+          {
+            "color": "#1F60C4",
+            "tooltip": "garbage_collecting",
+            "value": "4"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "running",
+            "value": "5"
+          },
+          {
+            "color": "#37872D",
+            "tooltip": "waiting",
+            "value": "6"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "highlightCards": true,
+      "id": 33,
+      "legend": {
+        "show": true
+      },
+      "links": [],
+      "nullPointMode": "as empty",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 18,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Process state",
+      "tooltip": {
+        "show": true
+      },
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
+        "show": true,
+        "showCrosshair": true,
+        "showWeekends": true
+      },
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "id": 34,
+      "panels": [],
+      "repeat": null,
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 14,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "title": "$erlang_vm_dist_proc_type process",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The size in bytes of process memory. This includes call stack, heap, and internal structures.",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 53
+      },
+      "id": 35,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 15,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit@.+1 /",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/rabbit@.+2 /",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/rabbit@.+3 /",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit@.+4 /",
+          "color": "#508642"
+        },
+        {
+          "alias": "/rabbit@.+5 /",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/rabbit@.+6 /",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/rabbit@.+7 /",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/rabbit@.+8 /",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/rabbit@.+9 /",
+          "color": "#70DBED"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Memory used by the process",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "bytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of reductions executed by the process",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 53
+      },
+      "id": 36,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 17,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit@.+1 /",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/rabbit@.+2 /",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/rabbit@.+3 /",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit@.+4 /",
+          "color": "#508642"
+        },
+        {
+          "alias": "/rabbit@.+5 /",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/rabbit@.+6 /",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/rabbit@.+7 /",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/rabbit@.+8 /",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/rabbit@.+9 /",
+          "color": "#70DBED"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[$__interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Process reductions",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of messages currently in the message queue of the process",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 53
+      },
+      "id": 37,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 16,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Messages in the process queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGnYlRd",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#C4162A",
+            "tooltip": "exiting",
+            "value": "1"
+          },
+          {
+            "color": "#FA6400",
+            "tooltip": "suspended",
+            "value": "2"
+          },
+          {
+            "color": "#8F3BB8",
+            "tooltip": "runnable",
+            "value": "3"
+          },
+          {
+            "color": "#1F60C4",
+            "tooltip": "garbage_collecting",
+            "value": "4"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "running",
+            "value": "5"
+          },
+          {
+            "color": "#37872D",
+            "tooltip": "waiting",
+            "value": "6"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "highlightCards": true,
+      "id": 38,
+      "legend": {
+        "show": true
+      },
+      "links": [],
+      "nullPointMode": "as empty",
+      "repeatIteration": 1559148231459,
+      "repeatPanelId": 18,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Process state",
+      "tooltip": {
+        "show": true
+      },
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
+        "show": true,
+        "showCrosshair": true,
+        "showWeekends": true
+      },
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
     }
   ],
   "refresh": "5s",
   "schemaVersion": 18,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "erlang",
+    "prometheus",
+    "prometheus.erl"
+  ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(erlang_vm_dist_proc_status,type)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Process type",
+        "multi": true,
+        "name": "erlang_vm_dist_proc_type",
+        "options": [],
+        "query": "label_values(erlang_vm_dist_proc_status,type)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
   },
   "time": {
     "from": "now-10m",
@@ -1776,14 +2882,11 @@
     "refresh_intervals": [
       "5s",
       "10s",
+      "15s",
       "30s",
       "1m",
       "5m",
-      "15m",
-      "30m",
-      "1h",
-      "2h",
-      "1d"
+      "10m"
     ],
     "time_options": [
       "5m",
@@ -1800,5 +2903,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 5
+  "version": 11
 }
