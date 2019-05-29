@@ -1971,7 +1971,7 @@ cleanup_after_file_deletion(File,
 %%----------------------------------------------------------------------------
 
 -spec combine_files(non_neg_integer(), non_neg_integer(), gc_state()) ->
-                              {ok, deletion_thunk()} | {defer, non_neg_integer()}.
+                              {ok, deletion_thunk()} | {defer, [non_neg_integer()]}.
 
 combine_files(Source, Destination,
               State = #gc_state { file_summary_ets = FileSummaryEts }) ->
@@ -2073,7 +2073,7 @@ do_combine_files(SourceSummary, DestinationSummary,
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
     safe_file_delete_fun(Source, Dir, FileHandlesEts).
 
--spec delete_file(non_neg_integer(), gc_state()) -> {ok, deletion_thunk()} | {defer, non_neg_integer()}.
+-spec delete_file(non_neg_integer(), gc_state()) -> {ok, deletion_thunk()} | {defer, [non_neg_integer()]}.
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       file_handles_ets = FileHandlesEts,

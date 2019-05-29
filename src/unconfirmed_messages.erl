@@ -238,7 +238,7 @@ remove_multiple_from_reverse(Refs, MsgIds, Reverse0) ->
         Reverse0,
         Refs).
 
--spec remove_msg_ref(confirm | no_confirm, msg_id(), queue_name(), queue_ref(), ?MODULE()) ->
+-spec remove_msg_ref(confirm | no_confirm, msg_id(), queue_name() | 'ignore', queue_ref(), ?MODULE()) ->
     {{confirmed | rejected, {msg_id(), exchange_name()}} | not_confirmed,
      ?MODULE()}.
 remove_msg_ref(Confirm, MsgId, QueueName, QueueRef,
