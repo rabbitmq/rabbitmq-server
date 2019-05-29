@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckVirtualHosts do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckVirtualHostsCommand do
   @moduledoc """
   Exits with a non-zero code if the target node reports any vhost down.
 
@@ -43,13 +43,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckVirtualHosts do
   end
 
   def output([], %{node: node_name}) do
-    {:ok, "Node #{node_name} reported all vhosts running"}
+    {:ok, "Node #{node_name} reported all vhosts as running"}
   end
 
+  def output(vhosts, %{formatter: "json"} = _opts) when is_list(vhosts) do
+    {:error, :check_failed, %{"result" => "error", "down_vhosts" => vhosts}}
+  end
   def output(vhosts, %{silent: true} = _opts) when is_list(vhosts) do
     {:error, :check_failed}
   end
-
   def output(vhosts, %{node: node_name}) when is_list(vhosts) do
     lines = Enum.join(vhosts, line_separator())
     {:error, "Some virtual hosts are down:\n#{lines}"}
