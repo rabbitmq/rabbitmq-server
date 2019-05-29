@@ -194,7 +194,7 @@ validate_params_user(#amqp_params_direct{virtual_host = VHost},
                      User = #user{username = Username}) ->
     case rabbit_vhost:exists(VHost) andalso
         (catch rabbit_access_control:check_vhost_access(
-                 User, VHost, undefined)) of
+                 User, VHost, undefined, #{})) of
         ok -> ok;
         _  -> {error, "user \"~s\" may not connect to vhost \"~s\"",
                   [Username, VHost]}
