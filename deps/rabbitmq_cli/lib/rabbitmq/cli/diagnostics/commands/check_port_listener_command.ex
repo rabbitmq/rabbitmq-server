@@ -67,14 +67,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortListenerCommand do
   def output({false, port, listeners}, %{formatter: "json"}) do
     ports = Enum.map(listeners, fn %{port: p} -> p end)
 
-    {:error,
+    {:error, :check_failed,
      %{"result" => "error", "missing" => port, "ports" => ports, "listeners" => listeners}}
   end
 
   def output({false, port, listeners}, %{node: node_name}) do
     ports = Enum.map(listeners, fn %{port: p} -> p end) |> Enum.sort() |> Enum.join(", ")
 
-    {:error,
+    {:error,  :check_failed,
      "No listener for port #{port} is active on node #{node_name}. " <>
        "Found listeners that use the following ports: #{ports}"}
   end
