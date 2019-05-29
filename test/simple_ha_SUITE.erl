@@ -30,6 +30,11 @@ all() ->
     ].
 
 groups() ->
+    RejectTests = [
+      rejects_survive_stop,
+      rejects_survive_sigkill,
+      rejects_survive_policy
+    ],
     [
       {cluster_size_2, [], [
           rapid_redeclare,
@@ -45,9 +50,8 @@ groups() ->
           confirms_survive_stop,
           confirms_survive_sigkill,
           confirms_survive_policy,
-          rejects_survive_stop,
-          rejects_survive_sigkill,
-          rejects_survive_policy
+          {overflow_reject_publish, [], RejectTests},
+          {overflow_reject_publish_dlx, [], RejectTests}
         ]}
     ].
 
@@ -69,6 +73,14 @@ init_per_group(cluster_size_2, Config) ->
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         {rmq_nodes_count, 3}
+      ]);
+init_per_group(overflow_reject_publish, Config) ->
+    rabbit_ct_helpers:set_config(Config, [
+        {overflow, <<"reject-publish">>}
+      ]);
+init_per_group(overflow_reject_publish_dlx, Config) ->
+    rabbit_ct_helpers:set_config(Config, [
+        {overflow, <<"reject-publish-dlx">>}
       ]).
 
 end_per_group(_, Config) ->
@@ -227,12 +239,13 @@ rejects_survive(Config, DeathFun) ->
     Node2Channel = rabbit_ct_client_helpers:open_channel(Config, B),
 
     %% declare the queue on the master, mirrored to the two slaves
-    Queue = <<"test_rejects">>,
+    XOverflow = ?config(overflow, Config),
+    Queue = <<"test_rejects", "_", XOverflow/binary>>,
     amqp_channel:call(Node1Channel,#'queue.declare'{queue       = Queue,
                                                     auto_delete = false,
                                                     durable     = true,
                                                     arguments = [{<<"x-max-length">>, long, 1},
-                                                                 {<<"x-overflow">>, longstr, <<"reject-publish">>}]}),
+                                                                 {<<"x-overflow">>, longstr, XOverflow}]}),
     Payload = <<"there can be only one">>,
     amqp_channel:call(Node1Channel,
                       #'basic.publish'{routing_key = Queue},
