@@ -184,7 +184,7 @@ defmodule RabbitMQCtl do
   def handle_command_output(output, command, options, output_fun) do
     case output do
       {:error, _, _} = err ->
-        err
+        format_error(err, options, command)
 
       {:error, _} = err ->
         format_error(err, options, command)
@@ -497,6 +497,19 @@ defmodule RabbitMQCtl do
 
   # Special case health checks. This makes it easier to change
   # output of all health checks at once.
+  defp format_error({:error, :check_failed}, %{formatter: "json"}, _) do
+    {:error, ExitCodes.exit_unavailable(), nil}
+  end
+  defp format_error({:error, :check_failed}, _, _) do
+    {:error, ExitCodes.exit_unavailable(), nil}
+  end
+  defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) when is_map(err) do
+    {:ok, res} = JSON.encode(err)
+    {:error, ExitCodes.exit_unavailable(), res}
+  end
+  defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) do
+    {:error, ExitCodes.exit_unavailable(), err}
+  end
   defp format_error({:error, :check_failed}, _, _) do
     {:error, ExitCodes.exit_unavailable(), nil}
   end

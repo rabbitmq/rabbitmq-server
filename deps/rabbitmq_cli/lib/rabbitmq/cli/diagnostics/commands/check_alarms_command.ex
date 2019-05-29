@@ -63,7 +63,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
     local = local_alarms(alarms, node_name)
     global = clusterwide_alarms(alarms, node_name)
 
-    {:error,
+    {:error, :check_failed,
      %{
        "result" => "error",
        "local" => alarm_lines(local, node_name),
@@ -79,7 +79,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   def output(alarms, %{node: node_name}) when is_list(alarms) do
     lines = alarm_lines(alarms, node_name)
 
-    {:error, Enum.join(lines, line_separator())}
+    {:error, :check_failed, Enum.join(lines, line_separator())}
   end
 
   use RabbitMQ.CLI.DefaultOutput
