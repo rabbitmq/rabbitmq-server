@@ -66,6 +66,6 @@ defmodule CheckPortListenerCommandTest do
   end
 
   test "output: when a listener for the port is not active, returns an error", context do
-    assert match?({:error, _}, @command.output({false, 15672, []}, context[:opts]))
+    assert match?({:error, _, _}, @command.output({false, 15672, []}, context[:opts]))
   end
 end
