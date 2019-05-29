@@ -318,7 +318,9 @@ node_starts_with_dead_vhosts(Config) ->
     false = rabbit_ct_broker_helpers:rpc(Config, 1,
                 rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
     true = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]).
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+    [VHost1] = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, check, []).
 
 node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
     VHost1 = <<"vhost1">>,
@@ -331,6 +333,8 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
                 rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
     true = rabbit_ct_broker_helpers:rpc(Config, 1,
                 rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, check, []),
 
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
     {ok, Chan} = amqp_connection:open_channel(Conn),
@@ -373,7 +377,9 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
     false = rabbit_ct_broker_helpers:rpc(Config, 1,
                 rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
     true = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]).
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+    [VHost1] = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, check, []). 
 
 vhost_creation_idempotency(Config) ->
     VHost = <<"idempotency-test">>,

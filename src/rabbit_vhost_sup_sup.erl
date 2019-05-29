@@ -30,6 +30,7 @@
          save_vhost_process/2]).
 -export([delete_on_all_nodes/1, start_on_all_nodes/1]).
 -export([is_vhost_alive/1]).
+-export([check/0]).
 
 %% Internal
 -export([stop_and_delete_vhost/1]).
@@ -261,3 +262,20 @@ vhost_restart_strategy() ->
         transient -> transient;
         permanent -> permanent
     end.
+
+check() ->
+    VHosts = rabbit_vhost:list(),
+    lists:filter(
+      fun(V) ->
+              case rabbit_vhost_sup_sup:get_vhost_sup(V) of
+                  {ok, Sup} ->
+                      MsgStores = [Pid || {Name, Pid, _, _} <- supervisor:which_children(Sup),
+                                         lists:member(Name, [msg_store_persistent,
+                                                             msg_store_transient])],
+                      not is_vhost_alive(V) orelse (not lists:all(fun(P) ->
+                                                                          erlang:is_process_alive(P)
+                                                                  end, MsgStores));
+                  {error, _} ->
+                      true
+              end
+      end, VHosts).
