@@ -100,7 +100,7 @@ defmodule CheckAlarmsCommandTest do
             {{:resource_limit, :memory, :rabbit@warp10}, []}
           ]
         ] do
-        assert match?({:error, _}, @command.output(input, context[:opts]))
+        assert match?({:error, _, _}, @command.output(input, context[:opts]))
     end
   end
 
