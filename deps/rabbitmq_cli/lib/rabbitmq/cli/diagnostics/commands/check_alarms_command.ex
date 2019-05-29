@@ -65,7 +65,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
 
     {:error,
      %{
-       "result" => "ok",
+       "result" => "error",
        "local" => alarm_lines(local, node_name),
        "global" => alarm_lines(global, node_name),
        "message" => "Node #{node_name} reported alarms"
