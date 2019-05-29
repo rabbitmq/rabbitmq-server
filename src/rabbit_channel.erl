@@ -970,8 +970,9 @@ return_queue_declare_ok(#resource{name = ActualName},
                                           message_count  = MessageCount,
                                           consumer_count = ConsumerCount}).
 
-check_resource_access(User, Resource, Perm) ->
-    V = {Resource, Perm},
+check_resource_access(User, Resource, Perm, Context) ->
+    V = {Resource, Context, Perm},
+    
     Cache = case get(permission_cache) of
                 undefined -> [];
                 Other     -> Other
@@ -979,7 +980,7 @@ check_resource_access(User, Resource, Perm) ->
     case lists:member(V, Cache) of
         true  -> ok;
         false -> ok = rabbit_access_control:check_resource_access(
-                        User, Resource, Perm),
+                        User, Resource, Perm, Context),
                  CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
                  put(permission_cache, [V | CacheTail])
     end.
@@ -988,14 +989,14 @@ clear_permission_cache() -> erase(permission_cache),
                             erase(topic_permission_cache),
                             ok.
 
-check_configure_permitted(Resource, User) ->
-    check_resource_access(User, Resource, configure).
+check_configure_permitted(Resource, User, Context) ->
+    check_resource_access(User, Resource, configure, Context).
 
-check_write_permitted(Resource, User) ->
-    check_resource_access(User, Resource, write).
+check_write_permitted(Resource, User, Context) ->
+    check_resource_access(User, Resource, write, Context).
 
-check_read_permitted(Resource, User) ->
-    check_resource_access(User, Resource, read).
+check_read_permitted(Resource, User, Context) ->
+    check_resource_access(User, Resource, read, Context).
 
 check_write_permitted_on_topic(Resource, User, ConnPid, RoutingKey, ChSrc) ->
     check_topic_authorisation(Resource, User, ConnPid, RoutingKey, ChSrc, write).
@@ -1081,16 +1082,19 @@ get_amqp_params(ConnPid, true, Timeout) ->
     rabbit_amqp_connection:amqp_params(ConnPid, Timeout).
 
 build_topic_variable_map(AmqpParams, VHost, Username) ->
-    VariableFromAmqpParams = extract_topic_variable_map_from_amqp_params(AmqpParams),
+    VariableFromAmqpParams = extract_variable_map_from_amqp_params(AmqpParams),
     maps:merge(VariableFromAmqpParams, #{<<"vhost">> => VHost, <<"username">> => Username}).
+
+extract_authz_context(ConnPid, ChSrc) ->
+    extract_variable_map_from_amqp_params(get_amqp_params(ConnPid, ChSrc)).
 
 %% use tuple representation of amqp_params to avoid coupling.
 %% get variable map only from amqp_params_direct, not amqp_params_network.
 %% amqp_params_direct are usually used from plugins (e.g. MQTT, STOMP)
-extract_topic_variable_map_from_amqp_params([{amqp_params, {amqp_params_direct, _, _, _, _,
+extract_variable_map_from_amqp_params([{amqp_params, {amqp_params_direct, _, _, _, _,
                                              {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}]) ->
     proplists:get_value(variable_map, AdditionalInfo, #{});
-extract_topic_variable_map_from_amqp_params(_) ->
+extract_variable_map_from_amqp_params(_) ->
     #{}.
 
 check_msg_size(Content, MaxMessageSize) ->
@@ -1297,7 +1301,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    }) ->
     check_msg_size(Content, MaxMessageSize),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
-    check_write_permitted(ExchangeName, User),
+    check_write_permitted(ExchangeName, User, extract_authz_context(ConnPid, ChSrc)),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     check_internal_exchange(Exchange),
     check_write_permitted_on_topic(Exchange, User, ConnPid, RoutingKey, ChSrc),
@@ -1352,13 +1356,14 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
               _, State = #ch{cfg = #conf{writer_pid = WriterPid,
                                          conn_pid = ConnPid,
                                          user = User,
-                                         virtual_host = VHostPath
+                                         virtual_host = VHostPath,
+                                         source = ChSrc
                                         },
                              limiter = Limiter,
                              next_tag   = DeliveryTag,
                              queue_states = QueueStates0}) ->
     QueueName = qbin_to_resource(QueueNameBin, VHostPath),
-    check_read_permitted(QueueName, User),
+    check_read_permitted(QueueName, User, extract_authz_context(ConnPid, ChSrc)),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
            %% Use the delivery tag as consumer tag for quorum queues
@@ -1437,13 +1442,15 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                arguments    = Args},
               _, State = #ch{cfg = #conf{consumer_prefetch = ConsumerPrefetch,
                                          user = User,
-                                         virtual_host = VHostPath},
+                                         virtual_host = VHostPath,
+                                         conn_pid = ConnPid,
+                                         source = ChSrc},
                              consumer_mapping  = ConsumerMapping
                             }) ->
     case maps:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = qbin_to_resource(QueueNameBin, VHostPath),
-            check_read_permitted(QueueName, User),
+            check_read_permitted(QueueName, User, extract_authz_context(ConnPid, ChSrc)),
             ActualConsumerTag =
                 case ConsumerTag of
                     <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
@@ -1915,10 +1922,11 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
     ExchangeNameBin = strip_cr_lf(SourceNameBin0),
     DestinationNameBin = strip_cr_lf(DestinationNameBin0),
     DestinationName = name_to_resource(DestinationType, DestinationNameBin, VHostPath),
-    check_write_permitted(DestinationName, User),
+    AuthContext = extract_authz_context(ConnPid, ChSrc),
+    check_write_permitted(DestinationName, User, AuthContext),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
-    check_read_permitted(ExchangeName, User),
+    check_read_permitted(ExchangeName, User, AuthContext),
     case rabbit_exchange:lookup(ExchangeName) of
         {error, not_found} ->
             ok;
@@ -2486,7 +2494,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                         Other -> check_name('queue', Other)
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
-    check_configure_permitted(QueueName, User),
+    check_configure_permitted(QueueName, User, extract_authz_context(ConnPid, ChSrc)),
     rabbit_core_metrics:queue_declared(QueueName),
     case rabbit_amqqueue:with(
            QueueName,
@@ -2508,8 +2516,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                       "invalid type '~s' for arg '~s' in ~s",
                       [Type, DlxKey, rabbit_misc:rs(QueueName)]);
                DLX ->
-                   check_read_permitted(QueueName, User),
-                   check_write_permitted(DLX, User),
+                   AuthContext = extract_authz_context(ConnPid, ChSrc),
+                   check_read_permitted(QueueName, User, AuthContext),
+                   check_write_permitted(DLX, User, AuthContext),
                    ok
             end,
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
@@ -2561,12 +2570,12 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
 handle_method(#'queue.delete'{queue     = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty  = IfEmpty},
-              ConnPid, _ChSrc, _CollectorPid, VHostPath,
+              ConnPid, ChSrc, _CollectorPid, VHostPath,
               User = #user{username = Username}) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = qbin_to_resource(StrippedQueueNameBin, VHostPath),
 
-    check_configure_permitted(QueueName, User),
+    check_configure_permitted(QueueName, User, extract_authz_context(ConnPid, ChSrc)),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) ->
@@ -2590,13 +2599,13 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
     end;
 handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
                                  if_unused = IfUnused},
-              _ConnPid, _ChSrc, _CollectorPid, VHostPath,
+              ConnPid, ChSrc, _CollectorPid, VHostPath,
               User = #user{username = Username}) ->
     StrippedExchangeNameBin = strip_cr_lf(ExchangeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, StrippedExchangeNameBin),
     check_not_default_exchange(ExchangeName),
     check_exchange_deletion(ExchangeName),
-    check_configure_permitted(ExchangeName, User),
+    check_configure_permitted(ExchangeName, User, extract_authz_context(ConnPid, ChSrc)),
     case rabbit_exchange:delete(ExchangeName, IfUnused, Username) of
         {error, not_found} ->
             ok;
@@ -2606,9 +2615,9 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
             ok
     end;
 handle_method(#'queue.purge'{queue = QueueNameBin},
-              ConnPid, _ChSrc, _CollectorPid, VHostPath, User) ->
+              ConnPid, ChSrc, _CollectorPid, VHostPath, User) ->
     QueueName = qbin_to_resource(QueueNameBin, VHostPath),
-    check_read_permitted(QueueName, User),
+    check_read_permitted(QueueName, User, extract_authz_context(ConnPid, ChSrc)),
     rabbit_amqqueue:with_exclusive_access_or_die(
       QueueName, ConnPid,
       fun (Q) -> rabbit_amqqueue:purge(Q) end);
@@ -2619,12 +2628,12 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   auto_delete = AutoDelete,
                                   internal    = Internal,
                                   arguments   = Args},
-              _ConnPid, _ChSrc, _CollectorPid, VHostPath,
+              ConnPid, ChSrc, _CollectorPid, VHostPath,
               #user{username = Username} = User) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
-    check_configure_permitted(ExchangeName, User),
+    check_configure_permitted(ExchangeName, User, extract_authz_context(ConnPid, ChSrc)),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
@@ -2636,8 +2645,9 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                         precondition_failed(
                           "invalid type '~s' for arg '~s' in ~s",
                           [Type, AeKey, rabbit_misc:rs(ExchangeName)]);
-                    AName     -> check_read_permitted(ExchangeName, User),
-                                 check_write_permitted(AName, User),
+                    AName     -> AuthContext = extract_authz_context(ConnPid, ChSrc),
+                                 check_read_permitted(ExchangeName, User, AuthContext),
+                                 check_write_permitted(AName, User, AuthContext),
                                  ok
                 end,
                 rabbit_exchange:declare(ExchangeName,

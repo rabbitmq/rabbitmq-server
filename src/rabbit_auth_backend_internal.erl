@@ -21,7 +21,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
 -export([add_user/3, delete_user/2, lookup_user/1,
          change_password/3, clear_password/2,
@@ -123,7 +123,8 @@ check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
 
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
-                      Permission) ->
+                      Permission, 
+                      _AuthContext) ->
     case mnesia:dirty_read({rabbit_user_permission,
                             #user_vhost{username     = Username,
                                         virtual_host = VHostPath}}) of

@@ -1229,7 +1229,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                            throttle         = Throttle}) ->
 
     ok = is_over_connection_limit(VHost, User),
-    ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}),
+    ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
     ok = is_vhost_alive(VHost, User),
     NewConnection = Connection#connection{vhost = VHost},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
