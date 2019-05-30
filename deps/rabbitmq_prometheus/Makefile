@@ -112,18 +112,19 @@ find_latest_otp: $(JQ)
 .PHONY: flo
 flo: find_latest_otp
 
+DOCKER_COMPOSE_ACTION ?= up --detach && docker-compose --file $(@F) logs --follow
 DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
 .PHONY: $(DOCKER_COMPOSE_FILES)
 $(DOCKER_COMPOSE_FILES):
 	@cd docker && \
-	docker-compose --file $(@F) $(ACTION) ; \
+	docker-compose --file $(@F) $(DOCKER_COMPOSE_ACTION) ; \
 	true
 .PHONY: down
-down: ACTION = down
+down: DOCKER_COMPOSE_ACTION = down
 down: $(DOCKER_COMPOSE_FILES)
 
 .PHONY: up
-up: ACTION = up --detach
+up: DOCKER_COMPOSE_ACTION = up --detach
 up: $(DOCKER_COMPOSE_FILES)
 
 DASHBOARDS_FROM_PATH := $(HOME)/Downloads
