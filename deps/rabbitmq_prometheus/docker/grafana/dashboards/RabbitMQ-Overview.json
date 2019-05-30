@@ -16,6 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
+  "iteration": 1559219272638,
   "links": [],
   "panels": [
     {
@@ -23,9 +24,9 @@
       "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#37872D",
-        "#8F3BB8",
-        "#C4162A"
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
       ],
       "description": "",
       "format": "none",
@@ -59,6 +60,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -80,7 +82,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queues)",
+          "expr": "sum(rabbitmq_queues{cluster=\"$cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -88,7 +90,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "20,40",
+      "thresholds": "0,10",
       "timeFrom": null,
       "timeShift": null,
       "title": "Queues",
@@ -108,9 +110,9 @@
       "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#37872D",
-        "#8F3BB8",
-        "#C4162A"
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
       ],
       "description": "",
       "format": "none",
@@ -144,6 +146,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -165,7 +168,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channel_consumers)",
+          "expr": "sum(rabbitmq_channel_consumers{cluster=\"$cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -173,7 +176,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "20,40",
+      "thresholds": "0,10",
       "timeFrom": null,
       "timeShift": null,
       "title": "Consumers",
@@ -193,9 +196,9 @@
       "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#37872D",
-        "#8F3BB8",
-        "#C4162A"
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
       ],
       "description": "",
       "format": "none",
@@ -229,6 +232,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -250,7 +254,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_connections)",
+          "expr": "sum(rabbitmq_connections{cluster=\"$cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -258,7 +262,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "20,40",
+      "thresholds": "0,10",
       "timeFrom": null,
       "timeShift": null,
       "title": "Connections",
@@ -278,9 +282,9 @@
       "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#37872D",
-        "#8F3BB8",
-        "#C4162A"
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
       ],
       "description": "",
       "format": "none",
@@ -314,6 +318,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -335,7 +340,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channels)",
+          "expr": "sum(rabbitmq_channels{cluster=\"$cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -343,7 +348,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "20,40",
+      "thresholds": "0,10",
       "timeFrom": null,
       "timeShift": null,
       "title": "Channels",
@@ -360,12 +365,12 @@
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
+      "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#37872D",
-        "#8F3BB8",
-        "#C4162A"
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
       ],
       "description": "",
       "format": "none",
@@ -399,6 +404,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -420,7 +426,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published[$__interval]))",
+          "expr": "sum(rate(rabbitmq_channel_messages_published{cluster=\"$cluster\"}[$__interval]))",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -428,7 +434,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "",
+      "thresholds": "-1,50",
       "timeFrom": null,
       "timeShift": null,
       "title": "Incoming messages / s",
@@ -445,12 +451,12 @@
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
+      "colorBackground": true,
       "colorValue": false,
       "colors": [
-        "#37872D",
-        "#8F3BB8",
-        "#C4162A"
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
       ],
       "description": "",
       "format": "none",
@@ -484,6 +490,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -505,7 +512,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(\n  rate(rabbitmq_channel_messages_redelivered[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered_ack[$__interval]) +\n  rate(rabbitmq_channel_get[$__interval]) +\n  rate(rabbitmq_channel_get_ack[$__interval])\n)",
+          "expr": "sum(\n  rate(rabbitmq_channel_messages_redelivered{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered_ack{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_get{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_get_ack{cluster=\"$cluster\"}[$__interval])\n)",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -514,7 +521,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "",
+      "thresholds": "-1,50",
       "timeFrom": null,
       "timeShift": null,
       "title": "Outgoing messages / s",
@@ -531,11 +538,11 @@
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
+      "colorBackground": true,
       "colorValue": false,
       "colors": [
         "#37872D",
-        "#8F3BB8",
+        "#1F60C4",
         "#C4162A"
       ],
       "description": "",
@@ -570,6 +577,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -591,7 +599,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready)",
+          "expr": "sum(rabbitmq_queue_messages_ready{cluster=\"$cluster\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -600,7 +608,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "",
+      "thresholds": "10000,100000",
       "timeFrom": null,
       "timeShift": null,
       "title": "Ready messages",
@@ -617,11 +625,11 @@
     },
     {
       "cacheTimeout": null,
-      "colorBackground": false,
+      "colorBackground": true,
       "colorValue": false,
       "colors": [
         "#37872D",
-        "#8F3BB8",
+        "#1F60C4",
         "#C4162A"
       ],
       "description": "",
@@ -656,6 +664,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "pluginVersion": "6.1.3",
       "postfix": "",
       "postfixFontSize": "50%",
@@ -677,7 +686,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked)",
+          "expr": "sum(rabbitmq_queue_messages_unacked{cluster=\"$cluster\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -686,7 +695,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "",
+      "thresholds": "100,500",
       "timeFrom": null,
       "timeShift": null,
       "title": "Unacknowledged messages",
@@ -720,11 +729,11 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Memory Resident Set Size used by the Erlang VM, as measured by the OS kernel.\n\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)",
+      "description": "Available memory before the memory alarm gets triggered\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
-        "h": 4,
-        "w": 12,
+        "h": 8,
+        "w": 6,
         "x": 0,
         "y": 4
       },
@@ -743,45 +752,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -790,7 +800,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_memory_used_bytes",
+          "expr": "rabbitmq_memory_used_limit_bytes{cluster=\"$cluster\"} - rabbitmq_memory_used_bytes{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -800,26 +810,26 @@
       ],
       "thresholds": [
         {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 268435456,
-          "yaxis": "left"
-        },
-        {
           "colorMode": "warning",
           "fill": true,
           "line": true,
-          "op": "gt",
-          "value": 134217728,
+          "op": "lt",
+          "value": 1073741824,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "lt",
+          "value": 0,
           "yaxis": "left"
         }
       ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory used",
+      "title": "Memory available",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -835,7 +845,151 @@
       },
       "yaxes": [
         {
-          "decimals": null,
+          "decimals": 0,
+          "format": "bytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "fill": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 4
+      },
+      "id": 8,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@.*1.*/",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/^rabbit@.*2.*/",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/^rabbit@.*3.*/",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/^rabbit@.*4.*/",
+          "color": "#508642"
+        },
+        {
+          "alias": "/^rabbit@.*5.*/",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/^rabbit@.*6.*/",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/^rabbit@.*7.*/",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/^rabbit@.*8.*/",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/^rabbit@.*9.*/",
+          "color": "#70DBED"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rabbitmq_disk_space_available_bytes{cluster=\"$cluster\"}",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "lt",
+          "value": 1073741824,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "lt",
+          "value": 5368709120,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Disk space available",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
           "format": "bytes",
           "label": null,
           "logBase": 1,
@@ -863,7 +1017,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "File descriptor count and limit, as reported by the operating system. The count includes network sockets and file handles.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "description": "Available file descriptors, used by network sockets and file handles.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
       "fill": 0,
       "gridPos": {
         "h": 4,
@@ -887,45 +1041,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -934,7 +1089,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_file_descriptors_open",
+          "expr": "rabbitmq_file_descriptors_open_limit{cluster=\"$cluster\"} - rabbitmq_file_descriptors_open{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -947,23 +1102,23 @@
           "colorMode": "critical",
           "fill": true,
           "line": true,
-          "op": "gt",
-          "value": 750,
+          "op": "lt",
+          "value": 500,
           "yaxis": "left"
         },
         {
           "colorMode": "warning",
           "fill": true,
           "line": true,
-          "op": "gt",
-          "value": 375,
+          "op": "lt",
+          "value": 1000,
           "yaxis": "left"
         }
       ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Open file descriptors",
+      "title": "File descriptors available",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -979,7 +1134,7 @@
       },
       "yaxes": [
         {
-          "decimals": null,
+          "decimals": 0,
           "format": "short",
           "label": "",
           "logBase": 1,
@@ -1030,45 +1185,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -1077,7 +1233,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_erlang_processes_used",
+          "expr": "rabbitmq_erlang_processes_limit{cluster=\"$cluster\"} - rabbitmq_erlang_processes_used{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1090,23 +1246,23 @@
           "colorMode": "critical",
           "fill": true,
           "line": true,
-          "op": "gt",
-          "value": 1000000,
+          "op": "lt",
+          "value": 100000,
           "yaxis": "left"
         },
         {
           "colorMode": "warning",
           "fill": true,
           "line": true,
-          "op": "gt",
-          "value": 500000,
+          "op": "lt",
+          "value": 300000,
           "yaxis": "left"
         }
       ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Erlang processes used",
+      "title": "Erlang processes available",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1122,7 +1278,7 @@
       },
       "yaxes": [
         {
-          "decimals": null,
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1150,149 +1306,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Free Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)",
-      "fill": 0,
-      "gridPos": {
-        "h": 4,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 8,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": true,
-        "show": false,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
-        },
-        {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
-        },
-        {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
-        },
-        {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
-        },
-        {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
-        },
-        {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
-        },
-        {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
-        },
-        {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
-        },
-        {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
-        }
-      ],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "rabbitmq_disk_space_available_bytes",
-          "format": "time_series",
-          "instant": false,
-          "intervalFactor": 1,
-          "legendFormat": "{{node}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "lt",
-          "value": 1073741824,
-          "yaxis": "left"
-        },
-        {
-          "colorMode": "warning",
-          "fill": true,
-          "line": true,
-          "op": "lt",
-          "value": 2147483648,
-          "yaxis": "left"
-        }
-      ],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Disk space available",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "bytes",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "cacheTimeout": null,
-      "dashLength": 10,
-      "dashes": false,
-      "description": "The network sockets count and limit managed by RabbitMQ.\n\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "description": "* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
       "fill": 0,
       "gridPos": {
         "h": 4,
@@ -1315,45 +1329,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -1362,7 +1377,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_tcp_sockets_open",
+          "expr": "rabbitmq_tcp_sockets_open_limit{cluster=\"$cluster\"} - rabbitmq_tcp_sockets_open{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1375,7 +1390,7 @@
           "colorMode": "critical",
           "fill": true,
           "line": true,
-          "op": "gt",
+          "op": "lt",
           "value": 500,
           "yaxis": "left"
         },
@@ -1383,15 +1398,15 @@
           "colorMode": "warning",
           "fill": true,
           "line": true,
-          "op": "gt",
-          "value": 250,
+          "op": "lt",
+          "value": 1000,
           "yaxis": "left"
         }
       ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Open TCP sockets",
+      "title": "TCP sockets available",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1407,7 +1422,7 @@
       },
       "yaxes": [
         {
-          "decimals": null,
+          "decimals": 0,
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1472,45 +1487,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -1519,7 +1535,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready) by (node)",
+          "expr": "sum(rabbitmq_queue_messages_ready{cluster=\"$cluster\"}) by (node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1599,45 +1615,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -1646,7 +1663,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked) by(node)",
+          "expr": "sum(rabbitmq_queue_messages_unacked{cluster=\"$cluster\"}) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1739,45 +1756,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -1786,7 +1804,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_published{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1866,45 +1884,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -1913,7 +1932,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_confirmed[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_confirmed{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -1993,6 +2012,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -2008,7 +2028,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_unroutable_returned[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_unroutable_returned{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2097,45 +2117,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -2144,7 +2165,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_messages_published[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_messages_published{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2224,45 +2245,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -2271,7 +2293,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_unconfirmed[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_unconfirmed{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2351,6 +2373,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -2366,7 +2389,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_unroutable_dropped[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_unroutable_dropped{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2468,45 +2491,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -2515,7 +2539,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered[$__interval]) + rate(rabbitmq_channel_messages_delivered_ack[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_delivered{cluster=\"$cluster\"}[$__interval]) + rate(rabbitmq_channel_messages_delivered_ack{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2595,45 +2619,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -2642,7 +2667,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_delivered{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2722,6 +2747,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -2737,7 +2763,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_get{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2826,45 +2852,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -2873,7 +2900,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_redelivered[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_redelivered{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2970,45 +2997,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -3017,7 +3045,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered_ack[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_delivered_ack{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3097,6 +3125,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -3112,7 +3141,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_ack[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_get_ack{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3201,45 +3230,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -3248,7 +3278,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_acked[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_acked{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3329,6 +3359,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -3344,7 +3375,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_empty[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_get_empty{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3446,45 +3477,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -3493,7 +3525,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_queues",
+          "expr": "rabbitmq_queues{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3501,24 +3533,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": [
-        {
-          "colorMode": "warning",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 1000,
-          "yaxis": "left"
-        },
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 1500,
-          "yaxis": "left"
-        }
-      ],
+      "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -3590,45 +3605,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -3637,7 +3653,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_declare[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_declare{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3734,45 +3750,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -3781,7 +3798,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_create[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_create{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3878,45 +3895,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -3925,7 +3943,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_delete[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_delete{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4035,45 +4053,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -4082,7 +4101,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_channels",
+          "expr": "rabbitmq_channels{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4090,24 +4109,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": [
-        {
-          "colorMode": "warning",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 1000,
-          "yaxis": "left"
-        },
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 1500,
-          "yaxis": "left"
-        }
-      ],
+      "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -4179,45 +4181,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -4226,7 +4229,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_open[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_open{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4323,45 +4326,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -4370,7 +4374,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_close[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_close{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4480,45 +4484,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -4527,7 +4532,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_connections",
+          "expr": "rabbitmq_connections{cluster=\"$cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4535,24 +4540,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": [
-        {
-          "colorMode": "warning",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 1000,
-          "yaxis": "left"
-        },
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 1500,
-          "yaxis": "left"
-        }
-      ],
+      "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
@@ -4624,45 +4612,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -4671,7 +4660,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_connection_open[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_connection_open{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -4769,45 +4758,46 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
+          "alias": "/^rabbit@.*1.*/",
           "color": "#7EB26D"
         },
         {
-          "alias": "/rabbit@.+2 /",
+          "alias": "/^rabbit@.*2.*/",
           "color": "#EAB839"
         },
         {
-          "alias": "/rabbit@.+3 /",
+          "alias": "/^rabbit@.*3.*/",
           "color": "#6DD0E0"
         },
         {
-          "alias": "/rabbit@.+4 /",
+          "alias": "/^rabbit@.*4.*/",
           "color": "#508642"
         },
         {
-          "alias": "/rabbit@.+5 /",
+          "alias": "/^rabbit@.*5.*/",
           "color": "#CCA300"
         },
         {
-          "alias": "/rabbit@.+6 /",
+          "alias": "/^rabbit@.*6.*/",
           "color": "#447EBC"
         },
         {
-          "alias": "/rabbit@.+7 /",
+          "alias": "/^rabbit@.*7.*/",
           "color": "#B7DBAB"
         },
         {
-          "alias": "/rabbit@.+8 /",
+          "alias": "/^rabbit@.*8.*/",
           "color": "#F4D598"
         },
         {
-          "alias": "/rabbit@.+9 /",
+          "alias": "/^rabbit@.*9.*/",
           "color": "#70DBED"
         }
       ],
@@ -4816,7 +4806,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_connection_close[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_connection_close{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4893,7 +4883,34 @@
     "rabbitmq"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": "rabbitmq-overview",
+          "value": "rabbitmq-overview"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
   },
   "time": {
     "from": "now-10m",
@@ -4924,5 +4941,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 4
+  "version": 5
 }
