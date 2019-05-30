@@ -54,7 +54,7 @@ services:
       - "35672:15672"
       - "35692:15692"
   publisher-confirms:
-    # https://hub.docker.com/r/pivotalrabbitmq/perf-test/
+    # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
@@ -151,7 +151,7 @@ services:
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
-    image: prom/prometheus:v2.9.2
+    image: prom/prometheus:v2.10.0
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -161,7 +161,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:6.1.6
+    image: grafana/grafana:6.2.1
     ports:
       - "3000:3000"
     networks:
