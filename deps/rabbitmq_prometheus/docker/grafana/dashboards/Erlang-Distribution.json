@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1559148231459,
+  "iteration": 1559221091994,
   "links": [],
   "panels": [
     {
@@ -25,7 +25,7 @@
       "colorValue": false,
       "colors": [
         "#C4162A",
-        "#8F3BB8",
+        "#1F60C4",
         "#37872D"
       ],
       "format": "none",
@@ -53,6 +53,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -73,7 +74,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\", cluster=\"$cluster\"}) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -101,7 +102,7 @@
       "colorValue": false,
       "colors": [
         "#C4162A",
-        "#8F3BB8",
+        "#1F60C4",
         "#37872D"
       ],
       "format": "none",
@@ -135,6 +136,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -155,7 +157,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state == 3) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 3) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -183,7 +185,7 @@
       "colorValue": false,
       "colors": [
         "#37872D",
-        "#8F3BB8",
+        "#1F60C4",
         "#C4162A"
       ],
       "description": "We believe that this means \"reconnecting\" - maybe there's two connections at the same time when that happens? - need to confirm.\n\n@gerhard + @essen",
@@ -218,6 +220,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -238,7 +241,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state == 2) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 2) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -266,7 +269,7 @@
       "colorValue": false,
       "colors": [
         "#37872D",
-        "#8F3BB8",
+        "#1F60C4",
         "#C4162A"
       ],
       "description": "We believe that this means \"connecting\", need to confirm.\n\n@gerhard + @essen",
@@ -301,6 +304,7 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
+      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -321,7 +325,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state == 1) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 1) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -394,6 +398,7 @@
       },
       "links": [],
       "nullPointMode": "as empty",
+      "options": {},
       "targets": [
         {
           "aggregation": "Last",
@@ -401,7 +406,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_node_state",
+          "expr": "erlang_vm_dist_node_state{cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -472,6 +477,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -519,7 +525,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[$__interval])",
+          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -598,6 +604,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -645,7 +652,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes[$__interval])",
+          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -722,6 +729,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -769,7 +777,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_cnt[$__interval])",
+          "expr": "rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -846,6 +854,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -893,7 +902,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_cnt[$__interval])",
+          "expr": "rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -970,6 +979,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1017,7 +1027,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_recv_dvi_bytes",
+          "expr": "erlang_vm_dist_recv_dvi_bytes{cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -1107,6 +1117,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1154,7 +1165,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_memory_bytes",
+          "expr": "erlang_vm_dist_port_memory_bytes{cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1231,6 +1242,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1246,7 +1258,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_queue_size_bytes",
+          "expr": "erlang_vm_dist_port_queue_size_bytes{cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1353,6 +1365,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1407,7 +1420,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1484,6 +1497,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1538,7 +1552,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1615,6 +1629,7 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1637,7 +1652,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1761,6 +1776,7 @@
       },
       "links": [],
       "nullPointMode": "as empty",
+      "options": {},
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
           "selected": false,
@@ -1775,7 +1791,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1816,7 +1832,7 @@
       "id": 29,
       "panels": [],
       "repeat": null,
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 14,
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
@@ -1856,11 +1872,12 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 15,
       "repeatedByRow": true,
       "scopedVars": {
@@ -1913,7 +1930,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1990,11 +2007,12 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 17,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2047,7 +2065,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2124,11 +2142,12 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 16,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2149,7 +2168,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2273,7 +2292,8 @@
       },
       "links": [],
       "nullPointMode": "as empty",
-      "repeatIteration": 1559148231459,
+      "options": {},
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 18,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2290,7 +2310,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2331,7 +2351,7 @@
       "id": 34,
       "panels": [],
       "repeat": null,
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 14,
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
@@ -2371,11 +2391,12 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 15,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2428,7 +2449,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2505,11 +2526,12 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 17,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2562,7 +2584,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2639,11 +2661,12 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
+      "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559148231459,
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 16,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2664,7 +2687,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2788,7 +2811,8 @@
       },
       "links": [],
       "nullPointMode": "as empty",
-      "repeatIteration": 1559148231459,
+      "options": {},
+      "repeatIteration": 1559221091994,
       "repeatPanelId": 18,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2805,7 +2829,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"}",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2850,7 +2874,31 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "text": "rabbitmq-distribution",
+          "value": "rabbitmq-distribution"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
           "text": "All",
           "value": "$__all"
         },
@@ -2904,5 +2952,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 11
+  "version": 5
 }
