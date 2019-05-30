@@ -17,10 +17,9 @@ services:
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "5672:5672"
-      - "15670:25672"
-      - "15672:15672"
-      - "15692:15692"
+      - "5673:5672"
+      - "15673:15672"
+      - "15693:15692"
     # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
     # https://en.wikipedia.org/wiki/Tcpkill
     # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
@@ -28,31 +27,29 @@ services:
       - ALL
     hostname: rabbitmq1
     environment:
-      RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-overview
     volumes:
       - ./rabbitmq-overview.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./rabbitmq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+      - ./rabbitmq-overview-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
-        soft: "1024"
-        hard: "2048"
+        soft: "2000"
+        hard: "2000"
   rabbitmq2:
     << : *rabbitmq
     hostname: rabbitmq2
     ports:
-      - "6672:5672"
-      - "25670:25672"
-      - "25672:15672"
-      - "25692:15692"
+      - "5674:5672"
+      - "15674:15672"
+      - "15694:15692"
   rabbitmq3:
     << : *rabbitmq
     hostname: rabbitmq3
     ports:
-      - "7672:5672"
-      - "35670:25672"
-      - "35672:15672"
-      - "35692:15692"
+      - "5675:5672"
+      - "15675:15672"
+      - "15695:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu

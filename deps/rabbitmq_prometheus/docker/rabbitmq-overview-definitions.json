@@ -1,6 +1,6 @@
 {
   "global_parameters": [
-    {"name": "cluster_name", "value": "rabbitmq_prometheus"}
+    {"name": "cluster_name", "value": "rabbitmq-overview"}
   ],
   "permissions": [
     {

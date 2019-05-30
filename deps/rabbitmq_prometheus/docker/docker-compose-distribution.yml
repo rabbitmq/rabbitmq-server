@@ -11,58 +11,55 @@ volumes:
   rabbitmq-prometheus_grafana:
 
 services:
-  rabbitmq1: &rabbitmq
+  rabbitmq-inet-tls1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
     image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.671-2019.05.29
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "5672:5672"
-      - "15670:25672"
-      - "15672:15672"
-      - "15692:15692"
+      - "5676:5672"
+      - "15676:15672"
+      - "15696:15692"
     # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
     # https://en.wikipedia.org/wiki/Tcpkill
     # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
     cap_add:
       - ALL
-    hostname: rabbitmq1
+    hostname: rabbitmq-inet-tls1
     environment:
-      RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-distribution
     volumes:
       - ./rabbitmq-distribution.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./rabbitmq-ssl_dist.config:/etc/rabbitmq/ssl_dist.config:ro
-      - ./rabbitmq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+      - ./rabbitmq-distribution-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
       - ./rabbitmq-ssl:/etc/rabbitmq/ssl:ro
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
-        soft: "1024"
-        hard: "2048"
-  rabbitmq2:
+        soft: "2000"
+        hard: "2000"
+  rabbitmq-inet-tls2:
     << : *rabbitmq
-    hostname: rabbitmq2
+    hostname: rabbitmq-inet-tls2
     ports:
-      - "6672:5672"
-      - "25670:25672"
-      - "25672:15672"
-      - "25692:15692"
-  rabbitmq3:
+      - "5677:5672"
+      - "15677:15672"
+      - "15697:15692"
+  rabbitmq-inet-tls3:
     << : *rabbitmq
-    hostname: rabbitmq3
+    hostname: rabbitmq-inet-tls3
     ports:
-      - "7672:5672"
-      - "35670:25672"
-      - "35672:15672"
-      - "35692:15692"
+      - "5678:5672"
+      - "15678:15672"
+      - "15698:15692"
   stress_distribution:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      URI: "amqp://guest:guest@rabbitmq-inet-tls1:5672/%2f"
       QUEUE_PATTERN: "ha3-max1-%d"
       QUEUE_PATTERN_FROM: 1
       QUEUE_PATTERN_TO: 10

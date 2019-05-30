@@ -36,3 +36,6 @@ scrape_configs:
           - 'rabbitmq1:15692'
           - 'rabbitmq2:15692'
           - 'rabbitmq3:15692'
+          - 'rabbitmq-inet-tls1:15692'
+          - 'rabbitmq-inet-tls2:15692'
+          - 'rabbitmq-inet-tls3:15692'
