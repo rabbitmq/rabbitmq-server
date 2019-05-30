@@ -171,13 +171,12 @@ services:
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
       - ./grafana/dashboards:/dashboards
-    # environment:
+    environment:
       # https://grafana.com/plugins/flant-statusmap-panel
-      # https://grafana.com/plugins/grafana-polystat-panel
       # https://grafana.com/plugins/grafana-piechart-panel
+      # https://grafana.com/plugins/grafana-polystat-panel
       # https://grafana.com/plugins/jdbranham-diagram-panel
       # https://grafana.com/plugins/michaeldmoore-multistat-panel
       # https://grafana.com/plugins/vonage-status-panel
       # https://grafana.com/plugins/yesoreyeram-boomtable-panel
-      # Even if the plugins are stored on a volume, updating them can be slow - disabling this for now
-      # GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel,grafana-polystat-panel,jdbranham-diagram-panel,michaeldmoore-multistat-panel,vonage-status-panel,yesoreyeram-boomtable-panel"
+      GF_INSTALL_PLUGINS: "flant-statusmap-panel"
