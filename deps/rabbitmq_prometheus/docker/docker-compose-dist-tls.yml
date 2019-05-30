@@ -11,7 +11,7 @@ volumes:
   rabbitmq-prometheus_grafana:
 
 services:
-  rabbitmq-inet-tls1: &rabbitmq
+  rabbitmq-dist-tls1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
     image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.671-2019.05.29
     networks:
@@ -25,30 +25,30 @@ services:
     # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
     cap_add:
       - ALL
-    hostname: rabbitmq-inet-tls1
+    hostname: rabbitmq-dist-tls1
     environment:
-      RABBITMQ_ERLANG_COOKIE: rabbitmq-distribution
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-dist-tls
     volumes:
-      - ./rabbitmq-distribution.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-dist-tls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./rabbitmq-ssl_dist.config:/etc/rabbitmq/ssl_dist.config:ro
-      - ./rabbitmq-distribution-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+      - ./rabbitmq-dist-tls-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
       - ./rabbitmq-ssl:/etc/rabbitmq/ssl:ro
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
         soft: "2000"
         hard: "2000"
-  rabbitmq-inet-tls2:
+  rabbitmq-dist-tls2:
     << : *rabbitmq
-    hostname: rabbitmq-inet-tls2
+    hostname: rabbitmq-dist-tls2
     ports:
       - "5677:5672"
       - "15677:15672"
       - "15697:15692"
-  rabbitmq-inet-tls3:
+  rabbitmq-dist-tls3:
     << : *rabbitmq
-    hostname: rabbitmq-inet-tls3
+    hostname: rabbitmq-dist-tls3
     ports:
       - "5678:5672"
       - "15678:15672"
@@ -59,7 +59,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq-inet-tls1:5672/%2f"
+      URI: "amqp://guest:guest@rabbitmq-dist-tls1:5672/%2f"
       QUEUE_PATTERN: "ha3-max1-%d"
       QUEUE_PATTERN_FROM: 1
       QUEUE_PATTERN_TO: 10

@@ -1,6 +1,6 @@
 {
   "global_parameters": [
-    {"name": "cluster_name", "value": "rabbitmq-distribution"}
+    {"name": "cluster_name", "value": "rabbitmq-dist-tls"}
   ],
   "permissions": [
     {
@@ -14,7 +14,7 @@
   "policies": [
     {
       "apply-to": "queues",
-      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-inet-tls1","rabbit@rabbitmq-inet-tls2"]},
+      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-dist-tls1","rabbit@rabbitmq-dist-tls2"]},
       "name": "ha1.2",
       "pattern": "ha1.2*",
       "priority": 0,
@@ -22,7 +22,7 @@
     },
     {
       "apply-to": "queues",
-      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-inet-tls1","rabbit@rabbitmq-inet-tls3"]},
+      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-dist-tls1","rabbit@rabbitmq-dist-tls3"]},
       "name": "ha1.3",
       "pattern": "ha1.3*",
       "priority": 0,
