@@ -134,3 +134,8 @@ update_dashboards:
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
 	true
+
+.PHONY: clean_docker
+clean_docker:
+	@docker system prune -f && \
+	docker volume prune -f
