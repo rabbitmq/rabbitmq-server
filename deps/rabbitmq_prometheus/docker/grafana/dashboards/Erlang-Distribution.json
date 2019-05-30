@@ -2841,8 +2841,9 @@
   "style": "dark",
   "tags": [
     "erlang",
+    "pivotal",
     "prometheus",
-    "prometheus.erl"
+    "rabbitmq"
   ],
   "templating": {
     "list": [

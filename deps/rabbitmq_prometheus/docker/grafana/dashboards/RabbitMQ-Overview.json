@@ -4888,9 +4888,9 @@
   "schemaVersion": 18,
   "style": "dark",
   "tags": [
-    "rabbitmq",
+    "pivotal",
     "prometheus",
-    "prometheus.erl"
+    "rabbitmq"
   ],
   "templating": {
     "list": []
