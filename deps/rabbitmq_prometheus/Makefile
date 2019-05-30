@@ -112,24 +112,19 @@ find_latest_otp: $(JQ)
 .PHONY: flo
 flo: find_latest_otp
 
-define DOCKER_COMPOSE_UP
-cd docker && \
-docker-compose --file docker-compose-$@.yml up --detach && \
-docker-compose --file docker-compose-$@.yml logs --follow
-endef
-.PHONY: overview distribution
-overview distribution:
-	@$(DOCKER_COMPOSE_UP)
-.PHONY: o d
-o: overview
-d: distribution
-
 DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
 .PHONY: $(DOCKER_COMPOSE_FILES)
 $(DOCKER_COMPOSE_FILES):
-	@(cd docker && docker-compose --file $(@F) down ; true)
+	@cd docker && \
+	docker-compose --file $(@F) $(ACTION) ; \
+	true
 .PHONY: down
+down: ACTION = down
 down: $(DOCKER_COMPOSE_FILES)
+
+.PHONY: up
+up: ACTION = up --detach
+up: $(DOCKER_COMPOSE_FILES)
 
 DASHBOARDS_FROM_PATH := $(HOME)/Downloads
 DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
@@ -139,6 +134,3 @@ update_dashboards:
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
 	true
-
-.PHONY: ud
-ud: update_dashboards
