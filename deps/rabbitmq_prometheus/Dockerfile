@@ -25,8 +25,8 @@ ENV OPENSSL_SOURCE_SHA256="5c557b023230413dfb0756f3137a13e6d726838ccd1430888ad15
 ENV OPENSSL_PGP_KEY_ID="0x8657ABB260F056B1E5190839D9C4D26D0E604491"
 
 # Use the latest stable Erlang/OTP release - gmake find_latest_otp - https://github.com/erlang/otp/tags
-ENV OTP_VERSION 22.0.1
-ENV OTP_SOURCE_SHA256="694f133abfca3c7fb8376b223ea484413bcd16b82354f178fba798f37335f163"
+ENV OTP_VERSION 22.0.2
+ENV OTP_SOURCE_SHA256="7a9869f5da85349ef21bd9fbc8feafe1a1f563504a65924ddb542deeb37af7cd"
 
 # Install dependencies required to build Erlang/OTP from source
 # http://erlang.org/doc/installation_guide/INSTALL.html
