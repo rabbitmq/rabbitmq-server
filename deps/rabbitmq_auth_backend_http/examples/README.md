@@ -73,6 +73,7 @@ auth_http.http_method   = post
 auth_http.user_path     = http://localhost:8080/auth/user
 auth_http.vhost_path    = http://localhost:8080/auth/vhost
 auth_http.resource_path = http://localhost:8080/auth/resource
+auth_http.topic_path    = http://localhost:8080/auth/topic
 ```
 
 ## Spring Boot Kotlin Example
