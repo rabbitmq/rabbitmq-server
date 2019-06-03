@@ -18,9 +18,9 @@
 
 -include_lib("ra/include/ra.hrl").
 
--export([
-         init/1,
-         apply/3]).
+-export([init/1,
+         apply/3,
+         state_enter/2]).
 
 -record(state, {client_ids = #{}}).
 
@@ -102,8 +102,18 @@ apply(_Meta, Unknown, State) ->
     error_logger:error_msg("Unknown command ~p~n", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
+state_enter(leader, State) ->
+    %% re-request monitors for all known pids, this would clean up
+    %% records for all connections are no longer around, e.g. right after node restart
+    [{monitor, process, Pid} || Pid <- all_pids(State)];
+state_enter(_, _) ->
+    [].
+
 %% ==========================
 
 -spec snapshot_effects(map(), state()) -> ra_machine:effects().
 snapshot_effects(#{index := RaftIdx}, State) ->
     [{release_cursor, RaftIdx, State}].
+
+all_pids(#state{client_ids = Ids}) ->
+    maps:values(Ids).
