@@ -32,7 +32,7 @@
          description/0,
          help_section/0]).
 
-scopes() -> [ctl, diagnostics].
+scopes() -> [ctl].
 switches() -> [].
 aliases() -> [].
 
@@ -63,15 +63,15 @@ run([Node], #{node := NodeName,
         {badrpc, _} = Error ->
             Error;
         nodedown ->
-            list_to_binary(io_lib:format("Node ~s is down but has been successfully removed"
-                                         " from the cluster", [Node]));
+            {ok, list_to_binary(io_lib:format("Node ~s is down but has been successfully removed"
+                                         " from the cluster", [Node]))};
         Result ->
             %% 'ok' or 'timeout'
             %% TODO: Ra will timeout if the node is not a cluster member - should this be fixed??
             Result
     end.
 
-banner(_, _) -> <<"Decommissions a node that serves MQTT clients ...">>.
+banner([Node], _) -> list_to_binary(io:format("Removing node ~s from the list of MQTT nodes...", [Node])).
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
