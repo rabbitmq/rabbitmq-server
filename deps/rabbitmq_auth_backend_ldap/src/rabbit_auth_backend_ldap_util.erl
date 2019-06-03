@@ -30,7 +30,8 @@ to_repl(V) when is_binary(V) -> to_repl(binary_to_list(V));
 to_repl([])                  -> [];
 to_repl([$\\ | T])           -> [$\\, $\\ | to_repl(T)];
 to_repl([$&  | T])           -> [$\\, $&  | to_repl(T)];
-to_repl([H   | T])           -> [H        | to_repl(T)].
+to_repl([H   | T])           -> [H        | to_repl(T)];
+to_repl(_)                   -> []. % fancy variables like peer IP are just ignored
 
 get_active_directory_args([ADDomain, ADUser]) ->
     [{ad_domain, ADDomain}, {ad_user, ADUser}];
