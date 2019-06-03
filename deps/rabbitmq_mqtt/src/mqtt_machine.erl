@@ -86,7 +86,7 @@ apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
     Effects = lists:foldl(fun (ClientId, Acc) ->
                           Pid = maps:get(ClientId, Ids),
                           [
-                            {demoonitor, process, Pid},
+                            {demonitor, process, Pid},
                             {mod_call, gen_server2, cast, [Pid, decommission_node]},
                             {mod_call, rabbit_log, debug,
                               ["MQTT will remove client ID '~s' from known "
