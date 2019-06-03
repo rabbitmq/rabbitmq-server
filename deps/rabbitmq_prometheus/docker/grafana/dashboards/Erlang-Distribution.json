@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1559221091994,
+  "iteration": 1559579178552,
   "links": [],
   "panels": [
     {
@@ -105,6 +105,7 @@
         "#1F60C4",
         "#37872D"
       ],
+      "description": "When a connection between a node and peer is established, the distribution link is considered to be `up`",
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -167,7 +168,7 @@
       "thresholds": "2,6",
       "timeFrom": null,
       "timeShift": null,
-      "title": "Up distribution links",
+      "title": "Established distribution links",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -188,7 +189,7 @@
         "#1F60C4",
         "#C4162A"
       ],
-      "description": "We believe that this means \"reconnecting\" - maybe there's two connections at the same time when that happens? - need to confirm.\n\n@gerhard + @essen",
+      "description": "When a new connection is exchanging information between the node and the peer the distribution link is considered to be `pending`",
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -201,90 +202,6 @@
         "h": 3,
         "w": 6,
         "x": 12,
-        "y": 0
-      },
-      "id": 28,
-      "interval": "",
-      "links": [],
-      "mappingType": 1,
-      "mappingTypes": [
-        {
-          "name": "value to text",
-          "value": 1
-        },
-        {
-          "name": "range to text",
-          "value": 2
-        }
-      ],
-      "maxDataPoints": 100,
-      "nullPointMode": "connected",
-      "nullText": null,
-      "options": {},
-      "postfix": "",
-      "postfixFontSize": "50%",
-      "prefix": "",
-      "prefixFontSize": "50%",
-      "rangeMaps": [
-        {
-          "from": "null",
-          "text": "N/A",
-          "to": "null"
-        }
-      ],
-      "sparkline": {
-        "fillColor": "rgba(255, 255, 255, 0)",
-        "full": false,
-        "lineColor": "rgb(255, 255, 255)",
-        "show": true
-      },
-      "tableColumn": "",
-      "targets": [
-        {
-          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 2) OR vector(0)",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 1,
-          "refId": "A"
-        }
-      ],
-      "thresholds": "1,6",
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Up pending distribution links",
-      "type": "singlestat",
-      "valueFontSize": "80%",
-      "valueMaps": [
-        {
-          "op": "=",
-          "text": "N/A",
-          "value": "null"
-        }
-      ],
-      "valueName": "current"
-    },
-    {
-      "cacheTimeout": null,
-      "colorBackground": true,
-      "colorValue": false,
-      "colors": [
-        "#37872D",
-        "#1F60C4",
-        "#C4162A"
-      ],
-      "description": "We believe that this means \"connecting\", need to confirm.\n\n@gerhard + @essen",
-      "format": "none",
-      "gauge": {
-        "maxValue": 100,
-        "minValue": 0,
-        "show": false,
-        "thresholdLabels": false,
-        "thresholdMarkers": true
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 6,
-        "x": 18,
         "y": 0
       },
       "id": 26,
@@ -335,7 +252,7 @@
       "thresholds": "1,6",
       "timeFrom": null,
       "timeShift": null,
-      "title": "Pending distribution links",
+      "title": "Connecting distribution links",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -346,6 +263,103 @@
         }
       ],
       "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#37872D",
+        "#1F60C4",
+        "#C4162A"
+      ],
+      "description": "When a new connection is established and there is an existing connection between the node and the peer, this connection needs to wait for the initial connection to go down before it can become active. The distribution link is considered `up_pending`",
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 28,
+      "interval": "",
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 2) OR vector(0)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "1,6",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Waiting distribution links",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "id": 74,
+      "panels": [],
+      "title": "distribution links",
+      "type": "row"
     },
     {
       "cards": {
@@ -364,19 +378,19 @@
         "mode": "discrete",
         "thresholds": [
           {
+            "color": "#37872D",
+            "tooltip": "established",
+            "value": "3"
+          },
+          {
             "color": "#FA6400",
-            "tooltip": "pending",
+            "tooltip": "connecting",
             "value": "1"
           },
           {
-            "color": "#96D98D",
-            "tooltip": "up_pending",
+            "color": "#FFCB7D",
+            "tooltip": "waiting",
             "value": "2"
-          },
-          {
-            "color": "#37872D",
-            "tooltip": "up",
-            "value": "3"
           }
         ]
       },
@@ -387,14 +401,14 @@
       "description": "",
       "gridPos": {
         "h": 5,
-        "w": 24,
+        "w": 18,
         "x": 0,
-        "y": 3
+        "y": 4
       },
       "highlightCards": true,
       "id": 19,
       "legend": {
-        "show": true
+        "show": false
       },
       "links": [],
       "nullPointMode": "as empty",
@@ -437,16 +451,118 @@
       "yAxisSort": "metrics"
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of messages currently in the output queue of the distribution link\n\nAny values above 0 hint to an overloaded distribution\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)",
+      "fill": 1,
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "id": 62,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(erlang_vm_dist_sned_pend_cnt{cluster=\"$cluster\"}[$__interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Messages in the distribution links queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 9
       },
       "id": 9,
       "panels": [],
-      "title": "TCP socket",
+      "title": "inet socket",
       "type": "row"
     },
     {
@@ -460,7 +576,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 10
       },
       "id": 3,
       "legend": {
@@ -536,7 +652,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Data sent to peer node",
+      "title": "Data sent to peer node / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -585,7 +701,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 10
       },
       "id": 2,
       "legend": {
@@ -663,7 +779,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Data received from peer node",
+      "title": "Data received from peer node / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -706,13 +822,13 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "Number of inet packets sent to the distribution link port.\n\nIf too few messages are sent and data sits in the port driver buffer, increasing the `inet_dist_connect_options` as well as `inet_dist_listen_options` buffer values will result in more stable throughput.",
       "fill": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 15
       },
       "id": 4,
       "legend": {
@@ -788,7 +904,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Packets sent to peer node",
+      "title": "Distribution messages sent to peer node / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -831,13 +947,13 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "Number of inet packets received from the distribution link port.\n\nIf too many messages are received, increasing the `inet_dist_connect_options` as well as `inet_dist_listen_options` buffer values will result in more stable throughput.",
       "fill": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 15
       },
       "id": 5,
       "legend": {
@@ -913,7 +1029,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Packets received from peer node",
+      "title": "Distribution messages received from peer node / s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -956,15 +1072,15 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "Corresponds to the average size of the argument passed to `gen_tcp:send/2` or equivalent.\n\nTypically corresponds to TCP window size.\n\nIf TLS is used for inter-node communication, the `inet` packet size will be varied so that the system as a whole is both secure and performant.\n\n`inet` packets larger than the TCP window will be split into TCP packets by the system kernel.\n\n`inet` packets smaller than the TCP window _may_ be joined into TCP packets by the system kernel.\n\n* [`inet` packet](http://erlang.org/doc/man/inet.html#packet)",
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 19
+        "y": 20
       },
-      "id": 6,
+      "id": 39,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -1027,10 +1143,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_recv_dvi_bytes{cluster=\"$cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[$__interval]) / rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[$__interval])",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} <- {{peer}}",
+          "legendFormat": "{{node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1038,7 +1154,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Average packet size deviation received from peer node",
+      "title": "Average inet packet size sent to peer node",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1055,7 +1171,134 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "bytes",
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "Corresponds to the average size of the argument received from `gen_tcp:recv/2` or equivalent.\n\nTypically corresponds to TCP window size.\n\nIf TLS is used for inter-node communication, the `inet` packet size will be varied so that the system as a whole is both secure and performant.\n\n* [`inet` packet](http://erlang.org/doc/man/inet.html#packet)",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 50,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "sort": "max",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit@.+1 /",
+          "color": "#7EB26D"
+        },
+        {
+          "alias": "/rabbit@.+2 /",
+          "color": "#EAB839"
+        },
+        {
+          "alias": "/rabbit@.+3 /",
+          "color": "#6DD0E0"
+        },
+        {
+          "alias": "/rabbit@.+4 /",
+          "color": "#508642"
+        },
+        {
+          "alias": "/rabbit@.+5 /",
+          "color": "#CCA300"
+        },
+        {
+          "alias": "/rabbit@.+6 /",
+          "color": "#447EBC"
+        },
+        {
+          "alias": "/rabbit@.+7 /",
+          "color": "#B7DBAB"
+        },
+        {
+          "alias": "/rabbit@.+8 /",
+          "color": "#F4D598"
+        },
+        {
+          "alias": "/rabbit@.+9 /",
+          "color": "#70DBED"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[$__interval]) / rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[$__interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} <- {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Average inet packet size received from peer node",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "Bps",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1082,11 +1325,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 25
       },
       "id": 11,
       "panels": [],
-      "title": "Port driver",
+      "title": "port driver",
       "type": "row"
     },
     {
@@ -1100,7 +1343,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 26
       },
       "id": 12,
       "legend": {
@@ -1193,7 +1436,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "bytes",
+          "format": "decbytes",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1219,13 +1462,13 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "The total number of bytes queued by the port using the ERTS driver queue implementation.",
+      "description": "The total number of bytes queued by the port using the ERTS driver queue implementation\n\nAny values above a few KBs hint to an overloaded distribution",
       "fill": 1,
       "gridPos": {
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 26
       },
       "id": 7,
       "legend": {
@@ -1295,7 +1538,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "bytes",
+          "format": "decbytes",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1322,7 +1565,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 31
       },
       "id": 14,
       "panels": [],
@@ -1338,6 +1581,226 @@
       "type": "row"
     },
     {
+      "cacheTimeout": null,
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGnYlRd",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#37872D",
+            "tooltip": "waiting",
+            "value": "6"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "running",
+            "value": "5"
+          },
+          {
+            "color": "#1F60C4",
+            "tooltip": "garbage_collecting",
+            "value": "4"
+          },
+          {
+            "color": "#8F3BB8",
+            "tooltip": "runnable",
+            "value": "3"
+          },
+          {
+            "color": "#FA6400",
+            "tooltip": "suspended",
+            "value": "2"
+          },
+          {
+            "color": "#C4162A",
+            "tooltip": "exiting",
+            "value": "1"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 17,
+        "x": 0,
+        "y": 32
+      },
+      "highlightCards": true,
+      "id": 18,
+      "legend": {
+        "show": false
+      },
+      "links": [],
+      "nullPointMode": "as empty",
+      "options": {},
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Process state",
+      "tooltip": {
+        "show": true
+      },
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
+        "show": true,
+        "showCrosshair": true,
+        "showWeekends": true
+      },
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of messages currently in the message queue of the process\n\nAny values above 0 hint to an overloaded distribution",
+      "fill": 0,
+      "gridPos": {
+        "h": 5,
+        "w": 7,
+        "x": 17,
+        "y": 32
+      },
+      "id": 16,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "dist",
+          "value": "dist"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/rabbit/",
+          "color": "#C4162A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 0,
+          "yaxis": "left"
+        }
+      ],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Messages in the process queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1346,9 +1809,9 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 31
+        "y": 37
       },
       "id": 15,
       "legend": {
@@ -1448,7 +1911,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "bytes",
+          "format": "decbytes",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1478,9 +1941,9 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 8,
-        "y": 31
+        "w": 12,
+        "x": 12,
+        "y": 37
       },
       "id": 17,
       "legend": {
@@ -1602,19 +2065,156 @@
       }
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 75,
+      "panels": [],
+      "repeat": null,
+      "repeatIteration": 1559579178552,
+      "repeatPanelId": 14,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "title": "$erlang_vm_dist_proc_type process",
+      "type": "row"
+    },
+    {
+      "cacheTimeout": null,
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGnYlRd",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#37872D",
+            "tooltip": "waiting",
+            "value": "6"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "running",
+            "value": "5"
+          },
+          {
+            "color": "#1F60C4",
+            "tooltip": "garbage_collecting",
+            "value": "4"
+          },
+          {
+            "color": "#8F3BB8",
+            "tooltip": "runnable",
+            "value": "3"
+          },
+          {
+            "color": "#FA6400",
+            "tooltip": "suspended",
+            "value": "2"
+          },
+          {
+            "color": "#C4162A",
+            "tooltip": "exiting",
+            "value": "1"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 17,
+        "x": 0,
+        "y": 43
+      },
+      "highlightCards": true,
+      "id": 76,
+      "legend": {
+        "show": false
+      },
+      "links": [],
+      "nullPointMode": "as empty",
+      "options": {},
+      "repeatIteration": 1559579178552,
+      "repeatPanelId": 18,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_connection",
+          "value": "tls_connection"
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Process state",
+      "tooltip": {
+        "show": true
+      },
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
+        "show": true,
+        "showCrosshair": true,
+        "showWeekends": true
+      },
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "The number of messages currently in the message queue of the process",
+      "description": "The number of messages currently in the message queue of the process\n\nAny values above 0 hint to an overloaded distribution",
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 16,
-        "y": 31
+        "w": 7,
+        "x": 17,
+        "y": 43
       },
-      "id": 16,
+      "id": 77,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -1634,11 +2234,14 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
+      "repeatIteration": 1559579178552,
+      "repeatPanelId": 16,
+      "repeatedByRow": true,
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
           "selected": false,
-          "text": "dist",
-          "value": "dist"
+          "text": "tls_connection",
+          "value": "tls_connection"
         }
       },
       "seriesOverrides": [
@@ -1711,140 +2314,6 @@
       }
     },
     {
-      "cacheTimeout": null,
-      "cards": {
-        "cardHSpacing": 2,
-        "cardMinWidth": 5,
-        "cardRound": null,
-        "cardVSpacing": 2
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateGnYlRd",
-        "defaultColor": "#757575",
-        "exponent": 0.5,
-        "mode": "discrete",
-        "thresholds": [
-          {
-            "color": "#C4162A",
-            "tooltip": "exiting",
-            "value": "1"
-          },
-          {
-            "color": "#FA6400",
-            "tooltip": "suspended",
-            "value": "2"
-          },
-          {
-            "color": "#8F3BB8",
-            "tooltip": "runnable",
-            "value": "3"
-          },
-          {
-            "color": "#1F60C4",
-            "tooltip": "garbage_collecting",
-            "value": "4"
-          },
-          {
-            "color": "#96D98D",
-            "tooltip": "running",
-            "value": "5"
-          },
-          {
-            "color": "#37872D",
-            "tooltip": "waiting",
-            "value": "6"
-          }
-        ]
-      },
-      "data": {
-        "decimals": null,
-        "unitFormat": "short"
-      },
-      "description": "",
-      "gridPos": {
-        "h": 5,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "highlightCards": true,
-      "id": 18,
-      "legend": {
-        "show": true
-      },
-      "links": [],
-      "nullPointMode": "as empty",
-      "options": {},
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "dist",
-          "value": "dist"
-        }
-      },
-      "targets": [
-        {
-          "aggregation": "Last",
-          "decimals": 2,
-          "displayAliasType": "Warning / Critical",
-          "displayType": "Regular",
-          "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
-          "refId": "A",
-          "units": "none",
-          "valueHandler": "Number Threshold"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Process state",
-      "tooltip": {
-        "show": true
-      },
-      "type": "flant-statusmap-panel",
-      "useMax": true,
-      "xAxis": {
-        "labelFormat": "%a %m/%d",
-        "minBucketWidthToShowWeekends": 4,
-        "show": true,
-        "showCrosshair": true,
-        "showWeekends": true
-      },
-      "yAxis": {
-        "show": true,
-        "showCrosshair": false
-      },
-      "yAxisSort": "metrics"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 41
-      },
-      "id": 29,
-      "panels": [],
-      "repeat": null,
-      "repeatIteration": 1559221091994,
-      "repeatPanelId": 14,
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "tls_connection",
-          "value": "tls_connection"
-        }
-      },
-      "title": "$erlang_vm_dist_proc_type process",
-      "type": "row"
-    },
-    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1853,11 +2322,11 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 42
+        "y": 48
       },
-      "id": 30,
+      "id": 78,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -1877,7 +2346,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559221091994,
+      "repeatIteration": 1559579178552,
       "repeatPanelId": 15,
       "repeatedByRow": true,
       "scopedVars": {
@@ -1958,7 +2427,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "bytes",
+          "format": "decbytes",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1988,11 +2457,11 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 8,
-        "y": 42
+        "w": 12,
+        "x": 12,
+        "y": 48
       },
-      "id": 31,
+      "id": 79,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -2012,7 +2481,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559221091994,
+      "repeatIteration": 1559579178552,
       "repeatPanelId": 17,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2115,19 +2584,156 @@
       }
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "id": 80,
+      "panels": [],
+      "repeat": null,
+      "repeatIteration": 1559579178552,
+      "repeatPanelId": 14,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "title": "$erlang_vm_dist_proc_type process",
+      "type": "row"
+    },
+    {
+      "cacheTimeout": null,
+      "cards": {
+        "cardHSpacing": 2,
+        "cardMinWidth": 5,
+        "cardRound": null,
+        "cardVSpacing": 2
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGnYlRd",
+        "defaultColor": "#757575",
+        "exponent": 0.5,
+        "mode": "discrete",
+        "thresholds": [
+          {
+            "color": "#37872D",
+            "tooltip": "waiting",
+            "value": "6"
+          },
+          {
+            "color": "#96D98D",
+            "tooltip": "running",
+            "value": "5"
+          },
+          {
+            "color": "#1F60C4",
+            "tooltip": "garbage_collecting",
+            "value": "4"
+          },
+          {
+            "color": "#8F3BB8",
+            "tooltip": "runnable",
+            "value": "3"
+          },
+          {
+            "color": "#FA6400",
+            "tooltip": "suspended",
+            "value": "2"
+          },
+          {
+            "color": "#C4162A",
+            "tooltip": "exiting",
+            "value": "1"
+          }
+        ]
+      },
+      "data": {
+        "decimals": null,
+        "unitFormat": "short"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 17,
+        "x": 0,
+        "y": 54
+      },
+      "highlightCards": true,
+      "id": 81,
+      "legend": {
+        "show": false
+      },
+      "links": [],
+      "nullPointMode": "as empty",
+      "options": {},
+      "repeatIteration": 1559579178552,
+      "repeatPanelId": 18,
+      "repeatedByRow": true,
+      "scopedVars": {
+        "erlang_vm_dist_proc_type": {
+          "selected": false,
+          "text": "tls_sender",
+          "value": "tls_sender"
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Regular",
+          "displayValueWithAlias": "Never",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{node}} -> {{peer}}",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Process state",
+      "tooltip": {
+        "show": true
+      },
+      "type": "flant-statusmap-panel",
+      "useMax": true,
+      "xAxis": {
+        "labelFormat": "%a %m/%d",
+        "minBucketWidthToShowWeekends": 4,
+        "show": true,
+        "showCrosshair": true,
+        "showWeekends": true
+      },
+      "yAxis": {
+        "show": true,
+        "showCrosshair": false
+      },
+      "yAxisSort": "metrics"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "The number of messages currently in the message queue of the process",
+      "description": "The number of messages currently in the message queue of the process\n\nAny values above 0 hint to an overloaded distribution",
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 16,
-        "y": 42
+        "w": 7,
+        "x": 17,
+        "y": 54
       },
-      "id": 32,
+      "id": 82,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -2147,14 +2753,14 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559221091994,
+      "repeatIteration": 1559579178552,
       "repeatPanelId": 16,
       "repeatedByRow": true,
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
           "selected": false,
-          "text": "tls_connection",
-          "value": "tls_connection"
+          "text": "tls_sender",
+          "value": "tls_sender"
         }
       },
       "seriesOverrides": [
@@ -2227,143 +2833,6 @@
       }
     },
     {
-      "cacheTimeout": null,
-      "cards": {
-        "cardHSpacing": 2,
-        "cardMinWidth": 5,
-        "cardRound": null,
-        "cardVSpacing": 2
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateGnYlRd",
-        "defaultColor": "#757575",
-        "exponent": 0.5,
-        "mode": "discrete",
-        "thresholds": [
-          {
-            "color": "#C4162A",
-            "tooltip": "exiting",
-            "value": "1"
-          },
-          {
-            "color": "#FA6400",
-            "tooltip": "suspended",
-            "value": "2"
-          },
-          {
-            "color": "#8F3BB8",
-            "tooltip": "runnable",
-            "value": "3"
-          },
-          {
-            "color": "#1F60C4",
-            "tooltip": "garbage_collecting",
-            "value": "4"
-          },
-          {
-            "color": "#96D98D",
-            "tooltip": "running",
-            "value": "5"
-          },
-          {
-            "color": "#37872D",
-            "tooltip": "waiting",
-            "value": "6"
-          }
-        ]
-      },
-      "data": {
-        "decimals": null,
-        "unitFormat": "short"
-      },
-      "description": "",
-      "gridPos": {
-        "h": 5,
-        "w": 24,
-        "x": 0,
-        "y": 47
-      },
-      "highlightCards": true,
-      "id": 33,
-      "legend": {
-        "show": true
-      },
-      "links": [],
-      "nullPointMode": "as empty",
-      "options": {},
-      "repeatIteration": 1559221091994,
-      "repeatPanelId": 18,
-      "repeatedByRow": true,
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "tls_connection",
-          "value": "tls_connection"
-        }
-      },
-      "targets": [
-        {
-          "aggregation": "Last",
-          "decimals": 2,
-          "displayAliasType": "Warning / Critical",
-          "displayType": "Regular",
-          "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
-          "refId": "A",
-          "units": "none",
-          "valueHandler": "Number Threshold"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Process state",
-      "tooltip": {
-        "show": true
-      },
-      "type": "flant-statusmap-panel",
-      "useMax": true,
-      "xAxis": {
-        "labelFormat": "%a %m/%d",
-        "minBucketWidthToShowWeekends": 4,
-        "show": true,
-        "showCrosshair": true,
-        "showWeekends": true
-      },
-      "yAxis": {
-        "show": true,
-        "showCrosshair": false
-      },
-      "yAxisSort": "metrics"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 52
-      },
-      "id": 34,
-      "panels": [],
-      "repeat": null,
-      "repeatIteration": 1559221091994,
-      "repeatPanelId": 14,
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "tls_sender",
-          "value": "tls_sender"
-        }
-      },
-      "title": "$erlang_vm_dist_proc_type process",
-      "type": "row"
-    },
-    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -2372,11 +2841,11 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 53
+        "y": 59
       },
-      "id": 35,
+      "id": 83,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -2396,7 +2865,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559221091994,
+      "repeatIteration": 1559579178552,
       "repeatPanelId": 15,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2477,7 +2946,7 @@
       "yaxes": [
         {
           "decimals": 0,
-          "format": "bytes",
+          "format": "decbytes",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -2507,11 +2976,11 @@
       "fill": 0,
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 8,
-        "y": 53
+        "w": 12,
+        "x": 12,
+        "y": 59
       },
-      "id": 36,
+      "id": 84,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -2531,7 +3000,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559221091994,
+      "repeatIteration": 1559579178552,
       "repeatPanelId": 17,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2632,232 +3101,6 @@
         "align": false,
         "alignLevel": null
       }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "description": "The number of messages currently in the message queue of the process",
-      "fill": 0,
-      "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 16,
-        "y": 53
-      },
-      "id": 37,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": true,
-        "show": false,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "options": {},
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "repeatIteration": 1559221091994,
-      "repeatPanelId": 16,
-      "repeatedByRow": true,
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "tls_sender",
-          "value": "tls_sender"
-        }
-      },
-      "seriesOverrides": [
-        {
-          "alias": "/rabbit/",
-          "color": "#C4162A"
-        }
-      ],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "gt",
-          "value": 0,
-          "yaxis": "left"
-        }
-      ],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Messages in the process queue",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "decimals": 0,
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "cacheTimeout": null,
-      "cards": {
-        "cardHSpacing": 2,
-        "cardMinWidth": 5,
-        "cardRound": null,
-        "cardVSpacing": 2
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateGnYlRd",
-        "defaultColor": "#757575",
-        "exponent": 0.5,
-        "mode": "discrete",
-        "thresholds": [
-          {
-            "color": "#C4162A",
-            "tooltip": "exiting",
-            "value": "1"
-          },
-          {
-            "color": "#FA6400",
-            "tooltip": "suspended",
-            "value": "2"
-          },
-          {
-            "color": "#8F3BB8",
-            "tooltip": "runnable",
-            "value": "3"
-          },
-          {
-            "color": "#1F60C4",
-            "tooltip": "garbage_collecting",
-            "value": "4"
-          },
-          {
-            "color": "#96D98D",
-            "tooltip": "running",
-            "value": "5"
-          },
-          {
-            "color": "#37872D",
-            "tooltip": "waiting",
-            "value": "6"
-          }
-        ]
-      },
-      "data": {
-        "decimals": null,
-        "unitFormat": "short"
-      },
-      "description": "",
-      "gridPos": {
-        "h": 5,
-        "w": 24,
-        "x": 0,
-        "y": 58
-      },
-      "highlightCards": true,
-      "id": 38,
-      "legend": {
-        "show": true
-      },
-      "links": [],
-      "nullPointMode": "as empty",
-      "options": {},
-      "repeatIteration": 1559221091994,
-      "repeatPanelId": 18,
-      "repeatedByRow": true,
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "tls_sender",
-          "value": "tls_sender"
-        }
-      },
-      "targets": [
-        {
-          "aggregation": "Last",
-          "decimals": 2,
-          "displayAliasType": "Warning / Critical",
-          "displayType": "Regular",
-          "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
-          "refId": "A",
-          "units": "none",
-          "valueHandler": "Number Threshold"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Process state",
-      "tooltip": {
-        "show": true
-      },
-      "type": "flant-statusmap-panel",
-      "useMax": true,
-      "xAxis": {
-        "labelFormat": "%a %m/%d",
-        "minBucketWidthToShowWeekends": 4,
-        "show": true,
-        "showCrosshair": true,
-        "showWeekends": true
-      },
-      "yAxis": {
-        "show": true,
-        "showCrosshair": false
-      },
-      "yAxisSort": "metrics"
     }
   ],
   "refresh": "5s",
@@ -2874,8 +3117,8 @@
       {
         "allValue": null,
         "current": {
-          "text": "rabbitmq-distribution",
-          "value": "rabbitmq-distribution"
+          "text": "rabbitmq-dist-tls",
+          "value": "rabbitmq-dist-tls"
         },
         "datasource": "Prometheus",
         "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
@@ -2899,8 +3142,11 @@
       {
         "allValue": null,
         "current": {
+          "tags": [],
           "text": "All",
-          "value": "$__all"
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": "Prometheus",
         "definition": "label_values(erlang_vm_dist_proc_status,type)",
@@ -2952,5 +3198,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 5
+  "version": 6
 }
