@@ -36,7 +36,7 @@ scopes() -> [ctl, diagnostics].
 switches() -> [].
 aliases() -> [].
 
-description() -> <<"Decommissions MQTT cluster member used to track client ids">>.
+description() -> <<"Removes cluster member and permanently deletes its cluster-wide MQTT state">>.
 
 help_section() ->
     {plugin, mqtt}.
@@ -52,7 +52,7 @@ merge_defaults(Args, Opts) ->
     {Args, Opts}.
 
 usage() ->
-    <<"decomission_mqtt_node <node>">>.
+    <<"decommission_mqtt_node <node>">>.
 
 usage_doc_guides() ->
     [?MQTT_GUIDE_URL].
@@ -63,7 +63,7 @@ run([Node], #{node := NodeName,
         {badrpc, _} = Error ->
             Error;
         nodedown ->
-            list_to_binary(io_lib:format("Node ~p is down but has been successfully removed"
+            list_to_binary(io_lib:format("Node ~s is down but has been successfully removed"
                                          " from the cluster", [Node]));
         Result ->
             %% 'ok' or 'timeout'
