@@ -55,7 +55,13 @@ apply(Meta, {register, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(Meta, {unregister, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
-    State = State0#state{client_ids = maps:remove(ClientId, Ids)},
+    State = case maps:find(ClientId, Ids) of
+      {ok, Pid}         -> State0#state{client_ids = maps:remove(ClientId, Ids)};
+      %% don't delete client id that might belong to a newer connection
+      %% that kicked the one with Pid out
+      {ok, _AnotherPid} -> State0;
+      error             -> State0
+    end,
     {State, ok, [{demonitor, process, Pid}] ++ snapshot_effects(Meta, State)};
 
 apply(Meta, {down, DownPid, _}, #state{client_ids = Ids} = State0) ->
