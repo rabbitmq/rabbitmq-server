@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1559579178552,
+  "iteration": 1559594729622,
   "links": [],
   "panels": [
     {
@@ -388,7 +388,7 @@
             "value": "1"
           },
           {
-            "color": "#FFCB7D",
+            "color": "#FADE2A",
             "tooltip": "waiting",
             "value": "2"
           }
@@ -408,7 +408,7 @@
       "highlightCards": true,
       "id": 19,
       "legend": {
-        "show": false
+        "show": true
       },
       "links": [],
       "nullPointMode": "as empty",
@@ -1612,7 +1612,7 @@
             "value": "4"
           },
           {
-            "color": "#8F3BB8",
+            "color": "#FADE2A",
             "tooltip": "runnable",
             "value": "3"
           },
@@ -1642,7 +1642,7 @@
       "highlightCards": true,
       "id": 18,
       "legend": {
-        "show": false
+        "show": true
       },
       "links": [],
       "nullPointMode": "as empty",
@@ -2075,7 +2075,7 @@
       "id": 75,
       "panels": [],
       "repeat": null,
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 14,
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
@@ -2119,7 +2119,7 @@
             "value": "4"
           },
           {
-            "color": "#8F3BB8",
+            "color": "#FADE2A",
             "tooltip": "runnable",
             "value": "3"
           },
@@ -2149,12 +2149,12 @@
       "highlightCards": true,
       "id": 76,
       "legend": {
-        "show": false
+        "show": true
       },
       "links": [],
       "nullPointMode": "as empty",
       "options": {},
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 18,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2234,7 +2234,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 16,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2346,7 +2346,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 15,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2481,7 +2481,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 17,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2594,7 +2594,7 @@
       "id": 80,
       "panels": [],
       "repeat": null,
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 14,
       "scopedVars": {
         "erlang_vm_dist_proc_type": {
@@ -2638,7 +2638,7 @@
             "value": "4"
           },
           {
-            "color": "#8F3BB8",
+            "color": "#FADE2A",
             "tooltip": "runnable",
             "value": "3"
           },
@@ -2668,12 +2668,12 @@
       "highlightCards": true,
       "id": 81,
       "legend": {
-        "show": false
+        "show": true
       },
       "links": [],
       "nullPointMode": "as empty",
       "options": {},
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 18,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2753,7 +2753,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 16,
       "repeatedByRow": true,
       "scopedVars": {
@@ -2865,7 +2865,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 15,
       "repeatedByRow": true,
       "scopedVars": {
@@ -3000,7 +3000,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "repeatIteration": 1559579178552,
+      "repeatIteration": 1559594729622,
       "repeatPanelId": 17,
       "repeatedByRow": true,
       "scopedVars": {
@@ -3198,5 +3198,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 6
+  "version": 1
 }
