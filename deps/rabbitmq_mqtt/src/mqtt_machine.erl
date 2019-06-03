@@ -74,10 +74,10 @@ apply(Meta, {down, DownPid, _}, #state{client_ids = Ids} = State0) ->
                        end, Ids),
     State = State0#state{client_ids = Ids1},
     Delta = maps:keys(Ids) -- maps:keys(Ids1),
-    LogEffects = lists:map(fun(Id) ->
+    Effects = lists:map(fun(Id) ->
                   [{mod_call, rabbit_log, debug,
                     ["MQTT connection with client id '~s' failed", [Id]]}] end, Delta),
-    {State, ok, snapshot_effects(Meta, State) ++ LogEffects};
+    {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) -> node(Pid) =/= Node end, Ids),
