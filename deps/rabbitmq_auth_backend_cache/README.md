@@ -100,6 +100,7 @@ The following example combines this backend with the [HTTP backend](https://gith
     auth_http.user_path     = http://localhost:8080/auth/user
     auth_http.vhost_path    = http://localhost:8080/auth/vhost
     auth_http.resource_path = http://localhost:8080/auth/resource
+    auth_http.topic_path    = http://localhost:8080/auth/topic
 
 In the classic config format:
 
@@ -114,9 +115,10 @@ In the classic config format:
                                ]
   },
   {rabbitmq_auth_backend_http, [{http_method,   post},
-                                {user_path,     "http://127.0.0.1:8080/auth/user"},
-                                {vhost_path,    "http://127.0.0.1:8080/auth/vhost"},
-                                {resource_path, "http://127.0.0.1:8080/auth/resource"}
+                                {user_path,            "http://127.0.0.1:8080/auth/user"},
+                                {vhost_path,           "http://127.0.0.1:8080/auth/vhost"},
+                                {resource_path,        "http://127.0.0.1:8080/auth/resource"},
+                                {auth_http.topic_path, "http://127.0.0.1:8080/auth/topic"}
                                ]
   }
 ].
@@ -213,6 +215,6 @@ The default values are `rabbit_auth_cache_ets` and `[]`, respectively.
 
 ## License and Copyright
 
-(c) 2016-2018 Pivotal Software Inc.
+(c) 2016-2019 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
