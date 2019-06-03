@@ -67,31 +67,33 @@ apply(Meta, {unregister, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
     {State, ok, [{demonitor, process, Pid}] ++ snapshot_effects(Meta, State)};
 
 apply(Meta, {down, DownPid, _}, #state{client_ids = Ids} = State0) ->
-    Ids1 = maps:filter(fun (ClientId, Pid)
-                             when Pid =:= DownPid ->
-                               rabbit_log_connection:warning(
-                                 "MQTT disconnect from ~p~n",
-                                 [ClientId]),
+    Ids1 = maps:filter(fun (_ClientId, Pid) when Pid =:= DownPid ->
                                false;
                             (_, _) ->
                                true
                        end, Ids),
     State = State0#state{client_ids = Ids1},
-    {State, ok, snapshot_effects(Meta, State)};
+    Delta = maps:keys(Ids) -- maps:keys(Ids1),
+    LogEffects = lists:map(fun(Id) ->
+                  [{mod_call, rabbit_log, debug,
+                    ["MQTT connection with client id '~s' failed", [Id]]}] end, Delta),
+    {State, ok, snapshot_effects(Meta, State) ++ LogEffects};
 
 apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
-    {Effects, Ids1} = maps:fold(fun(ClientId, Pid, {EffectsAcc, Acc}) ->
-                                        case node(Pid) of
-                                            Node ->
-                                                catch gen_server2:cast(Pid, decommission_node),
-                                                rabbit_log_connection:warning(
-                                                  "MQTT disconnect from ~p~n",
-                                                  [ClientId]),
-                                                {[{demonitor, process, Pid} | EffectsAcc], Acc};
-                                            _ ->
-                                                {EffectsAcc, maps:put(ClientId, Pid, Acc)}
-                                        end
-                                end, {[], #{}}, Ids),
+    Ids1 = maps:filter(fun (_ClientId, Pid) -> node(Pid) =/= Node end, Ids),
+    Delta = maps:keys(Ids) -- maps:keys(Ids1),
+
+    Effects = lists:foldl(fun (ClientId, Acc) ->
+                          Pid = maps:get(ClientId, Ids),
+                          [
+                            {demoonitor, process, Pid},
+                            {mod_call, gen_server2, cast, [Pid, decommission_node]},
+                            {mod_call, rabbit_log, debug,
+                              ["MQTT will remove client ID '~s' from known "
+                               "as its node has been decommissioned", [ClientId]]}
+                          ]  ++ Acc
+                          end, [], Delta),
+
     State = State0#state{client_ids = Ids1},
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
@@ -99,7 +101,7 @@ apply(Meta, list, #state{client_ids = Ids} = State) ->
     {State, maps:to_list(Ids), snapshot_effects(Meta, State)};
 
 apply(_Meta, Unknown, State) ->
-    error_logger:error_msg("Unknown command ~p~n", [Unknown]),
+    error_logger:error_msg("MQTT Raft state machine received unknown command ~p~n", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
 state_enter(leader, State) ->
