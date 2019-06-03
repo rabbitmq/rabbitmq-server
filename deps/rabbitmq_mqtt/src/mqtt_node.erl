@@ -58,7 +58,7 @@ start() ->
                 {ok, _, _} ->
                     ok;
                 {timeout, _} = Err ->
-                    rabbit_log:warning("Timeout waiting for mqtt cluster"),
+                    rabbit_log:warning("MQTT: timed out contacting cluster peers"),
                     Err;
                 Err ->
                     Err
