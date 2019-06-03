@@ -1,0 +1,101 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at https://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
+%%
+-module(mqtt_machine).
+-behaviour(ra_machine).
+
+-include_lib("ra/include/ra.hrl").
+
+-export([
+         init/1,
+         apply/3]).
+
+-record(state, {client_ids = #{}}).
+
+-type state() :: #state{}.
+
+-type config() :: map().
+
+-type reply() :: {ok, term()} | {error, term()}.
+-type client_id() :: term().
+
+-type command() :: {register, client_id(), pid()} |
+                   {unregister, client_id(), pid()} |
+                   list.
+
+-spec init(config()) -> state().
+init(_Conf) ->
+    #state{}.
+
+-spec apply(map(), command(), state()) ->
+    {state(), reply(), ra_machine:effects()}.
+apply(Meta, {register, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
+    {Effects, Ids1} =
+        case maps:find(ClientId, Ids) of
+            {ok, OldPid} when Pid =/= OldPid ->
+                catch gen_server2:cast(OldPid, duplicate_id),
+                {[{demonitor, process, OldPid},
+                  {monitor, process, Pid}], maps:remove(ClientId, Ids)};
+            error ->
+                {[{monitor, process, Pid}], Ids}
+        end,
+    State = State0#state{client_ids = maps:put(ClientId, Pid, Ids1)},
+    {State, ok, Effects ++ snapshot_effects(Meta, State)};
+
+apply(Meta, {unregister, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
+    State = State0#state{client_ids = maps:remove(ClientId, Ids)},
+    {State, ok, [{demonitor, process, Pid}] ++ snapshot_effects(Meta, State)};
+
+apply(Meta, {down, DownPid, _}, #state{client_ids = Ids} = State0) ->
+    Ids1 = maps:filter(fun (ClientId, Pid)
+                             when Pid =:= DownPid ->
+                               rabbit_log_connection:warning(
+                                 "MQTT disconnect from ~p~n",
+                                 [ClientId]),
+                               false;
+                            (_, _) ->
+                               true
+                       end, Ids),
+    State = State0#state{client_ids = Ids1},
+    {State, ok, snapshot_effects(Meta, State)};
+
+apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
+    {Effects, Ids1} = maps:fold(fun(ClientId, Pid, {EffectsAcc, Acc}) ->
+                                        case node(Pid) of
+                                            Node ->
+                                                catch gen_server2:cast(Pid, decommission_node),
+                                                rabbit_log_connection:warning(
+                                                  "MQTT disconnect from ~p~n",
+                                                  [ClientId]),
+                                                {[{demonitor, process, Pid} | EffectsAcc], Acc};
+                                            _ ->
+                                                {EffectsAcc, maps:put(ClientId, Pid, Acc)}
+                                        end
+                                end, {[], #{}}, Ids),
+    State = State0#state{client_ids = Ids1},
+    {State, ok, Effects ++ snapshot_effects(Meta, State)};
+
+apply(Meta, list, #state{client_ids = Ids} = State) ->
+    {State, maps:to_list(Ids), snapshot_effects(Meta, State)};
+
+apply(_Meta, Unknown, State) ->
+    error_logger:error_msg("Unknown command ~p~n", [Unknown]),
+    {State, {error, {unknown_command, Unknown}}, []}.
+
+%% ==========================
+
+-spec snapshot_effects(map(), state()) -> ra_machine:effects().
+snapshot_effects(#{index := RaftIdx}, State) ->
+    [{release_cursor, RaftIdx, State}].
