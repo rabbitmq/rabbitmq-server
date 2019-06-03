@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1559219272638,
+  "iteration": 1559573372308,
   "links": [],
   "panels": [
     {
@@ -729,7 +729,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available memory before the memory alarm gets triggered\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "Available memory before the memory alarm gets triggered.\n\nIf the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
         "h": 8,
@@ -829,7 +829,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory available",
+      "title": "Memory available before alarm",
       "tooltip": {
         "shared": true,
         "sort": 0,
