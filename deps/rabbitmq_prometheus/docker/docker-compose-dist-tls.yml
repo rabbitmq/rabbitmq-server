@@ -53,14 +53,14 @@ services:
       - "5678:5672"
       - "15678:15672"
       - "15698:15692"
-  stress_distribution:
+  stress_dist:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rabbitmq-dist-tls1:5672/%2f"
-      QUEUE_PATTERN: "ha3-max1-%d"
+      QUEUE_PATTERN: "ha3-stress_dist-%d"
       QUEUE_PATTERN_FROM: 1
       QUEUE_PATTERN_TO: 10
       PRODUCERS: 10
