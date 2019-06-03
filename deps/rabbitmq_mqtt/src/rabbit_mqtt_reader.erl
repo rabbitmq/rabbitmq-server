@@ -107,16 +107,16 @@ handle_call(Msg, From, State) ->
 handle_cast(duplicate_id,
             State = #state{ proc_state = PState,
                             conn_name  = ConnName }) ->
-    rabbit_log_connection:warning("MQTT disconnecting duplicate client id ~p (~p)~n",
-                 [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
+    rabbit_log_connection:warning("MQTT disconnecting client ~p with duplicate id '~s'~n",
+                 [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     {stop, {shutdown, duplicate_id}, State};
 
 handle_cast(decommission_node,
             State = #state{ proc_state = PState,
                             conn_name  = ConnName }) ->
-    rabbit_log_connection:warning("MQTT disconnecting client id ~p (~p) as node is about"
+    rabbit_log_connection:warning("MQTT disconnecting client ~p with id '~s' as its node is about"
                                   " to be decommissioned~n",
-                 [rabbit_mqtt_processor:info(client_id, PState), ConnName]),
+                 [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     {stop, {shutdown, decommission_node}, State};
 
 handle_cast(Msg, State) ->
@@ -264,8 +264,9 @@ log_tls_alert(Alert, ConnStr) ->
     rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: alert ~s~n",
        [ConnStr, Alert]).
 
-log_new_connection(#state{conn_name = ConnStr}) ->
-    rabbit_log_connection:info("accepting MQTT connection ~p (~s)~n", [self(), ConnStr]).
+log_new_connection(#state{conn_name = ConnStr, proc_state = PState}) ->
+    rabbit_log_connection:info("accepting MQTT connection ~p (~s, client id: ~s)~n",
+                               [self(), ConnStr, rabbit_mqtt_processor:info(client_id, PState)]).
 
 process_received_bytes(<<>>, State = #state{proc_state = ProcState,
                                             received_connect_frame = false}) ->
