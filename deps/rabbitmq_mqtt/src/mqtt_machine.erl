@@ -45,11 +45,13 @@ apply(Meta, {register, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
     {Effects, Ids1} =
         case maps:find(ClientId, Ids) of
             {ok, OldPid} when Pid =/= OldPid ->
-                catch gen_server2:cast(OldPid, duplicate_id),
-                {[{demonitor, process, OldPid},
-                  {monitor, process, Pid}], maps:remove(ClientId, Ids)};
+                Effects0 = [{demonitor, process, OldPid},
+                            {monitor, process, Pid},
+                            {mod_call, gen_server2, cast, [OldPid, duplicate_id]}],
+                {Effects0, maps:remove(ClientId, Ids)};
             error ->
-                {[{monitor, process, Pid}], Ids}
+              Effects0 = [{monitor, process, Pid}],
+              {Effects0, Ids}
         end,
     State = State0#state{client_ids = maps:put(ClientId, Pid, Ids1)},
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
