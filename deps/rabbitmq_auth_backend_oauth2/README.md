@@ -236,7 +236,7 @@ You should configure `UAA_HOST` (localhost:8080/uaa for local machine) and
 `RABBITMQCTL` (a path to `rabbitmqctl` script) environment variables to run this script.
 
 ```
-gem install uaac
+gem install cf-uaac
 gem install bunny
 RABBITMQCTL=<path_to_rabbitmqctl> demo/setup.sh
 ```
@@ -250,6 +250,6 @@ field will be ignored as long as the token provides a client ID.
 
 ## License and Copyright
 
-(c) 2016-2018 Pivotal Software Inc.
+(c) 2016-2019 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
