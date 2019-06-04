@@ -39,6 +39,7 @@
          purge/1,
          cluster_name/1,
          update_machine_state/2,
+         pending_size/1,
          stat/1
          ]).
 
@@ -408,6 +409,10 @@ purge(Node) ->
         Err ->
             Err
     end.
+
+-spec pending_size(state()) -> non_neg_integer().
+pending_size(#state{pending = Pend}) ->
+    maps:size(Pend).
 
 -spec stat(ra_server_id()) ->
     {ok, non_neg_integer(), non_neg_integer()}
