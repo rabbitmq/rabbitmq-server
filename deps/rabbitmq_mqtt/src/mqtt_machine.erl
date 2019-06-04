@@ -41,7 +41,7 @@ init(_Conf) ->
 
 -spec apply(map(), command(), state()) ->
     {state(), reply(), ra_machine:effects()}.
-apply(Meta, {register, ClientId, Pid}, #machine_state{client_ids = Ids} = State0) ->
+apply(_Meta, {register, ClientId, Pid}, #machine_state{client_ids = Ids} = State0) ->
     {Effects, Ids1} =
         case maps:find(ClientId, Ids) of
             {ok, OldPid} when Pid =/= OldPid ->
@@ -99,7 +99,7 @@ apply(_Meta, {nodeup, Node}, State) ->
     Effects = [{monitor, process, Pid} || Pid <- all_pids(State), node(Pid) == Node],
     {State, ok, Effects};
 apply(_Meta, {nodedown, _Node}, State) ->
-    {State, ok}.
+    {State, ok};
 
 apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) -> node(Pid) =/= Node end, Ids),
