@@ -64,7 +64,13 @@ apply(Meta, {unregister, ClientId, Pid}, #machine_state{client_ids = Ids} = Stat
       {ok, _AnotherPid} -> State0;
       error             -> State0
     end,
-    {State, ok, [{demonitor, process, Pid}] ++ snapshot_effects(Meta, State)};
+    Effects0 = [{demonitor, process, Pid}],
+    %% snapshot only when the map has changed
+    Effects = case State of
+      State0 -> Effects0;
+      _      -> Effects0 ++ snapshot_effects(Meta, State)
+    end,
+    {State, ok, Effects};
 
 apply(Meta, {down, DownPid, _}, #machine_state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) when Pid =:= DownPid ->
