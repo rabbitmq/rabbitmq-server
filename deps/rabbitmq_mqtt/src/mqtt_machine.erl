@@ -54,7 +54,7 @@ apply(Meta, {register, ClientId, Pid}, #machine_state{client_ids = Ids} = State0
               {Effects0, Ids}
         end,
     State = State0#machine_state{client_ids = maps:put(ClientId, Pid, Ids1)},
-    {State, ok, Effects ++ snapshot_effects(Meta, State)};
+    {State, ok, Effects};
 
 apply(Meta, {unregister, ClientId, Pid}, #machine_state{client_ids = Ids} = State0) ->
     State = case maps:find(ClientId, Ids) of
