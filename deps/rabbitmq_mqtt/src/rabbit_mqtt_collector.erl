@@ -16,6 +16,8 @@
 
 -module(rabbit_mqtt_collector).
 
+-include("mqtt_machine.hrl").
+
 -export([register/2, unregister/2, list/0, leave/1]).
 
 %%----------------------------------------------------------------------------
@@ -26,7 +28,10 @@ unregister(ClientId, Pid) ->
     run_ra_command({unregister, ClientId, Pid}).
 
 list() ->
-     run_ra_command(list).
+     NodeId = mqtt_node:node_id(),
+     QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
+     {ok, {_, Ids}, _} = ra:leader_query(NodeId, QF),
+     Ids.
 
 leave(NodeBin) ->
     Node = binary_to_atom(NodeBin, utf8),

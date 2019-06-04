@@ -17,15 +17,14 @@
 -behaviour(ra_machine).
 
 -include_lib("ra/include/ra.hrl").
+-include("mqtt_machine.hrl").
 
 -export([init/1,
          apply/3,
          state_enter/2,
          notify_connection/2]).
 
--record(state, {client_ids = #{}}).
-
--type state() :: #state{}.
+-type state() :: #machine_state{}.
 
 -type config() :: map().
 
@@ -38,11 +37,11 @@
 
 -spec init(config()) -> state().
 init(_Conf) ->
-    #state{}.
+    #machine_state{}.
 
 -spec apply(map(), command(), state()) ->
     {state(), reply(), ra_machine:effects()}.
-apply(Meta, {register, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
+apply(Meta, {register, ClientId, Pid}, #machine_state{client_ids = Ids} = State0) ->
     {Effects, Ids1} =
         case maps:find(ClientId, Ids) of
             {ok, OldPid} when Pid =/= OldPid ->
@@ -54,12 +53,12 @@ apply(Meta, {register, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
               Effects0 = [{monitor, process, Pid}],
               {Effects0, Ids}
         end,
-    State = State0#state{client_ids = maps:put(ClientId, Pid, Ids1)},
+    State = State0#machine_state{client_ids = maps:put(ClientId, Pid, Ids1)},
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
-apply(Meta, {unregister, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
+apply(Meta, {unregister, ClientId, Pid}, #machine_state{client_ids = Ids} = State0) ->
     State = case maps:find(ClientId, Ids) of
-      {ok, Pid}         -> State0#state{client_ids = maps:remove(ClientId, Ids)};
+      {ok, Pid}         -> State0#machine_state{client_ids = maps:remove(ClientId, Ids)};
       %% don't delete client id that might belong to a newer connection
       %% that kicked the one with Pid out
       {ok, _AnotherPid} -> State0;
@@ -67,20 +66,20 @@ apply(Meta, {unregister, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
     end,
     {State, ok, [{demonitor, process, Pid}] ++ snapshot_effects(Meta, State)};
 
-apply(Meta, {down, DownPid, _}, #state{client_ids = Ids} = State0) ->
+apply(Meta, {down, DownPid, _}, #machine_state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) when Pid =:= DownPid ->
                                false;
                             (_, _) ->
                                true
                        end, Ids),
-    State = State0#state{client_ids = Ids1},
+    State = State0#machine_state{client_ids = Ids1},
     Delta = maps:keys(Ids) -- maps:keys(Ids1),
     Effects = lists:map(fun(Id) ->
                   [{mod_call, rabbit_log, debug,
                     ["MQTT connection with client id '~s' failed", [Id]]}] end, Delta),
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
-apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
+apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) -> node(Pid) =/= Node end, Ids),
     Delta = maps:keys(Ids) -- maps:keys(Ids1),
 
@@ -95,10 +94,10 @@ apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
                           ]  ++ Acc
                           end, [], Delta),
 
-    State = State0#state{client_ids = Ids1},
+    State = State0#machine_state{client_ids = Ids1},
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
-apply(Meta, list, #state{client_ids = Ids} = State) ->
+apply(Meta, list, #machine_state{client_ids = Ids} = State) ->
     {State, maps:to_list(Ids), snapshot_effects(Meta, State)};
 
 apply(_Meta, Unknown, State) ->
@@ -122,5 +121,5 @@ notify_connection(Pid, Reason) ->
 snapshot_effects(#{index := RaftIdx}, State) ->
     [{release_cursor, RaftIdx, State}].
 
-all_pids(#state{client_ids = Ids}) ->
+all_pids(#machine_state{client_ids = Ids}) ->
     maps:values(Ids).
