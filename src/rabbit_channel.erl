@@ -189,6 +189,7 @@
          messages_unconfirmed,
          messages_uncommitted,
          acks_uncommitted,
+         pending_raft_commands,
          prefetch_count,
          global_prefetch_count,
          state,
@@ -2362,6 +2363,8 @@ i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> ?QUEUE:len(Msgs);
 i(messages_uncommitted,    #ch{})                         -> 0;
 i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
+i(pending_raft_commands,   #ch{queue_states = QS}) ->
+    pending_raft_commands(QS);
 i(state,                   #ch{cfg = #conf{state = running}}) -> credit_flow:state();
 i(state,                   #ch{cfg = #conf{state = State}}) -> State;
 i(prefetch_count,          #ch{cfg = #conf{consumer_prefetch = C}})    -> C;
@@ -2376,6 +2379,11 @@ i(reductions, _State) ->
     Reductions;
 i(Item, _) ->
     throw({bad_argument, Item}).
+
+pending_raft_commands(QStates) ->
+    maps:fold(fun (_, V, Acc) ->
+                      Acc + rabbit_fifo_client:pending_size(V)
+              end, 0, QStates).
 
 name(#ch{cfg = #conf{conn_name = ConnName, channel = Channel}}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
