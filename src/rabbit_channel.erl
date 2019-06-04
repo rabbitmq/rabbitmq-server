@@ -2233,10 +2233,11 @@ confirm(MsgSeqNos, QRef, State = #ch{queue_names = QNames, unconfirmed = UC}) ->
     %% does not exist in unconfirmed messages.
     %% Neither does the 'ignore' atom, so it's a reasonable fallback.
     QName = maps:get(QRef, QNames, ignore),
-    {MXs, UC1} =
+    {ConfirmMXs, RejectMXs, UC1} =
         unconfirmed_messages:confirm_multiple_msg_ref(MsgSeqNos, QName, QRef, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    record_confirms(MXs, State#ch{unconfirmed = UC1}).
+    State1 = record_confirms(ConfirmMXs, State#ch{unconfirmed = UC1}),
+    record_rejects(RejectMXs, State1).
 
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;

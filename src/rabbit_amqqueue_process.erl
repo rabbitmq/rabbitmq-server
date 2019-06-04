@@ -603,13 +603,22 @@ confirm_messages(MsgIds, MTC) ->
                       none ->
                           {CMs, MTC0};
                       {SenderPid, MsgSeqNo} ->
-                          {rabbit_misc:gb_trees_cons(SenderPid,
-                                                     MsgSeqNo, CMs),
+                          {maps:update_with(SenderPid,
+                                            fun(MsgSeqNos) ->
+                                                [MsgSeqNo | MsgSeqNos]
+                                            end,
+                                            [MsgSeqNo],
+                                            CMs),
                            maps:remove(MsgId, MTC0)}
 
                   end
-          end, {gb_trees:empty(), MTC}, MsgIds),
-    rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
+          end, {#{}, MTC}, MsgIds),
+    maps:fold(
+        fun(Pid, MsgSeqNos, _) ->
+            rabbit_misc:confirm_to_sender(Pid, MsgSeqNos)
+        end,
+        ok,
+        CMs),
     MTC1.
 
 send_or_record_confirm(#delivery{confirm    = false}, State) ->

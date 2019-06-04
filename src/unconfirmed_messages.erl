@@ -33,7 +33,6 @@
 
 -export([new/0,
          insert/5,
-         confirm_msg_ref/4,
          confirm_multiple_msg_ref/4,
          forget_ref/2,
 
@@ -112,27 +111,22 @@ insert(MsgId, QueueNames, QueueRefs, XName,
             error({message_already_exists, MsgId, QueueNames, QueueRefs, XName, UC})
     end.
 
-%% Confirms a message on behalf of the given queue. If it was the last queue (ref)
-%% on the waiting list, returns 'confirmed' and performs the necessary cleanup.
--spec confirm_msg_ref(msg_id(), queue_name(), queue_ref(), ?MODULE()) ->
-    {{confirmed | rejected, {msg_id(), exchange_name()}} | not_confirmed, ?MODULE()}.
-confirm_msg_ref(MsgId, QueueName, QueueRef,
-                #unconfirmed{reverse = Reverse} = UC) ->
-    remove_msg_ref(confirm, MsgId, QueueName, QueueRef,
-                   UC#unconfirmed{reverse = remove_from_reverse(QueueRef, [MsgId], Reverse)}).
-
+%% Confirms messages on behalf of the given queue. If it was the last queue (ref)
+%% on the waiting list, returns message id and excahnge name
+%% and performs the necessary cleanup.
 -spec confirm_multiple_msg_ref(msg_id(), queue_name(), queue_ref(), ?MODULE()) ->
-    {{confirmed | rejected, {msg_id(), exchange_name()}} | not_confirmed, ?MODULE()}.
+    {[{msg_id(), exchange_name()}], [{msg_id(), exchange_name()}], ?MODULE()}.
 confirm_multiple_msg_ref(MsgIds, QueueName, QueueRef,
                          #unconfirmed{reverse = Reverse} = UC0) ->
     lists:foldl(
-        fun(MsgId, {C, UC}) ->
+        fun(MsgId, {C, R, UC}) ->
             case remove_msg_ref(confirm, MsgId, QueueName, QueueRef, UC) of
-                {{confirmed, V}, UC1} -> {[V | C], UC1};
-                {not_confirmed, UC1}  -> {C, UC1}
+                {{confirmed, V}, UC1} -> {[V | C], R,       UC1};
+                {{rejected, V}, UC1}  -> {C,       [V | R], UC1};
+                {not_confirmed, UC1}  -> {C,       R,       UC1}
             end
         end,
-        {[], UC0#unconfirmed{reverse = remove_from_reverse(QueueRef, MsgIds, Reverse)}},
+        {[], [], UC0#unconfirmed{reverse = remove_from_reverse(QueueRef, MsgIds, Reverse)}},
         MsgIds).
 
 %% Removes all messages for a queue.
@@ -179,14 +173,15 @@ reject_msg(MsgId, #unconfirmed{ordered = Ordered, index = Index, reverse = Rever
     {Rejected :: [{msg_id(), exchange_name()}], ?MODULE()}.
 reject_all_for_queue(QueueRef, #unconfirmed{reverse = Reverse0} = UC0) ->
     MsgIds = maps:keys(maps:get(QueueRef, Reverse0, #{})),
-    lists:foldl(fun(MsgId, {R, UC}) ->
-        case reject_msg(MsgId, UC) of
-            {not_confirmed, UC1} -> {R, UC1};
-            {{rejected, V}, UC1} -> {[V | R], UC1}
-        end
-    end,
-    {[], UC0#unconfirmed{reverse = maps:remove(QueueRef, Reverse0)}},
-    MsgIds).
+    lists:foldl(
+        fun(MsgId, {R, UC}) ->
+            case reject_msg(MsgId, UC) of
+                {not_confirmed, UC1} -> {R, UC1};
+                {{rejected, V}, UC1} -> {[V | R], UC1}
+            end
+        end,
+        {[], UC0#unconfirmed{reverse = maps:remove(QueueRef, Reverse0)}},
+        MsgIds).
 
 %% Returns a smallest message id.
 -spec smallest(?MODULE()) -> msg_id().
