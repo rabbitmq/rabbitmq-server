@@ -192,7 +192,7 @@ To run the demo you need to have a [UAA](https://github.com/cloudfoundry/uaa) no
 installed or built from source.
 
 To make UAA use a particular config file, such as those provided in the demo directory,
-export the `CLOUD_FOUNDRY_CONFIG_PATH` environment variable. For example, to use symmetric keys,
+export the `CLOUDFOUNDRY_CONFIG_PATH` environment variable. For example, to use symmetric keys,
 see the UAA config files under the `demo/symmetric_keys` directory.
 
 `demo/symmetric_keys/rabbit.config` contains a RabbitMQ configuration file that
@@ -203,7 +203,7 @@ sets up a matching signing key on the RabbitMQ end.
 To run UAA with a custom config file path, use the following from the UAA git repository:
 
 ```
-CLOUD_FOUNDRY_CONFIG_PATH=<path_to_plugin>/demo/symmetric_keys ./gradlew run
+CLOUDFOUNDRY_CONFIG_PATH=<path_to_plugin>/demo/symmetric_keys ./gradlew run
 ```
 
 #### Running RabbitMQ
@@ -218,7 +218,7 @@ The `rabbitmq_auth_backend_oauth2` plugin must be enabled on the RabbitMQ node.
 
 #### Asymmetric Key Example
 
-To use an RSA (asymmetric) key, you can set `CLOUD_FOUNDRY_CONFIG_PATH` to  `demo/rsa_keys`.
+To use an RSA (asymmetric) key, you can set `CLOUDFOUNDRY_CONFIG_PATH` to  `demo/rsa_keys`.
 This directory also contains `rabbit.config` file, as well as a public key (`public_key.pem`)
 which will be used for signature verification.
 
