@@ -20,7 +20,8 @@
 
 -export([init/1,
          apply/3,
-         state_enter/2]).
+         state_enter/2,
+         notify_connection/2]).
 
 -record(state, {client_ids = #{}}).
 
@@ -47,7 +48,7 @@ apply(Meta, {register, ClientId, Pid}, #state{client_ids = Ids} = State0) ->
             {ok, OldPid} when Pid =/= OldPid ->
                 Effects0 = [{demonitor, process, OldPid},
                             {monitor, process, Pid},
-                            {mod_call, gen_server2, cast, [OldPid, duplicate_id]}],
+                            {mod_call, ?MODULE, notify_connection, [OldPid, duplicate_id]}],
                 {Effects0, maps:remove(ClientId, Ids)};
             error ->
               Effects0 = [{monitor, process, Pid}],
@@ -87,7 +88,7 @@ apply(Meta, {leave, Node}, #state{client_ids = Ids} = State0) ->
                           Pid = maps:get(ClientId, Ids),
                           [
                             {demonitor, process, Pid},
-                            {mod_call, gen_server2, cast, [Pid, decommission_node]},
+                            {mod_call, ?MODULE, notify_connection, [Pid, decommission_node]},
                             {mod_call, rabbit_log, debug,
                               ["MQTT will remove client ID '~s' from known "
                                "as its node has been decommissioned", [ClientId]]}
@@ -112,6 +113,10 @@ state_enter(_, _) ->
     [].
 
 %% ==========================
+
+%% Avoids blocking the Raft leader.
+notify_connection(Pid, Reason) ->
+  spawn(fun() -> gen_server2:cast(Pid, Reason) end).
 
 -spec snapshot_effects(map(), state()) -> ra_machine:effects().
 snapshot_effects(#{index := RaftIdx}, State) ->
