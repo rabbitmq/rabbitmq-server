@@ -65,20 +65,23 @@ test_successful_access_with_a_token(_) ->
              #resource{virtual_host = <<"vhost">>,
                        kind = queue,
                        name = <<"foo">>},
-             configure)),
+             configure,
+             #{})),
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
                          User,
                          #resource{virtual_host = <<"vhost">>,
                                    kind = exchange,
                                    name = <<"foo">>},
-                         write)),
+                         write,
+                         #{})),
 
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
                          User,
                          #resource{virtual_host = <<"vhost">>,
                                    kind = custom,
                                    name = <<"bar">>},
-                         read)),
+                         read,
+                         #{})),
 
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_topic_access(
                          User,
@@ -146,13 +149,15 @@ test_insufficient_permissions_in_a_valid_token(_) ->
                           #resource{virtual_host = <<"vhost">>,
                                     kind = queue,
                                     name = <<"foo1">>},
-                          configure)),
+                          configure,
+                          #{})),
     ?assertEqual(false, rabbit_auth_backend_oauth2:check_resource_access(
                           User,
                           #resource{virtual_host = <<"vhost">>,
                                     kind = custom,
                                     name = <<"bar">>},
-                          write)),
+                          write,
+                          #{})),
     ?assertEqual(false, rabbit_auth_backend_oauth2:check_topic_access(
                           User,
                           #resource{virtual_host = <<"vhost">>,

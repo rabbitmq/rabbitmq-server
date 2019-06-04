@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ HTTP authentication.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_oauth2).
@@ -23,7 +23,7 @@
 
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/3,
+         check_vhost_access/3, check_resource_access/4,
          check_topic_access/4]).
 
 -import(rabbit_data_coercion, [to_map/1]).
@@ -62,7 +62,7 @@ user_login_authorization(Username, AuthProps) ->
     end.
 
 check_vhost_access(#auth_user{impl = DecodedToken},
-                   VHost, _Sock) ->
+                   VHost, _AuthzData) ->
     with_decoded_token(DecodedToken,
         fun() ->
             Scopes      = get_scopes(DecodedToken),
@@ -72,7 +72,7 @@ check_vhost_access(#auth_user{impl = DecodedToken},
         end).
 
 check_resource_access(#auth_user{impl = DecodedToken},
-                      Resource, Permission) ->
+                      Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedToken,
         fun() ->
             Scopes = get_scopes(DecodedToken),
