@@ -739,14 +739,21 @@ maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
     end.
 
 send_reject_publish(#delivery{confirm = true,
-                                sender = SenderPid,
-                                msg_seq_no = MsgSeqNo} = Delivery,
+                              sender = SenderPid,
+                              flow = Flow,
+                              msg_seq_no = MsgSeqNo,
+                              message = #basic_message{id = MsgId}},
                       _Delivered,
                       State = #q{ backing_queue = BQ,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}) ->
-    {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC),
     gen_server2:cast(SenderPid, {reject_publish, MsgSeqNo, self()}),
+
+    MTC1 = case gb_trees:is_defined(MsgId, MTC) of
+        true  -> gb_trees:delete(MsgId, MTC);
+        false -> MTC
+    end,
+    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
     State#q{ backing_queue_state = BQS1, msg_id_to_channel = MTC1 };
 send_reject_publish(#delivery{confirm = false},
                       _Delivered, State) ->
