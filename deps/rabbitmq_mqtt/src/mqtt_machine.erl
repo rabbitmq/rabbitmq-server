@@ -72,6 +72,13 @@ apply(Meta, {unregister, ClientId, Pid}, #machine_state{client_ids = Ids} = Stat
     end,
     {State, ok, Effects};
 
+apply(_Meta, {down, DownPid, noconnection}, State) ->
+    %% Monitor the node the pid is on (see {nodeup, Node} below)
+    %% so that we can detect when the node is re-connected and discover the
+    %% actual fate of the connection processes on it
+    Effect = {monitor, node, node(DownPid)},
+    {State, ok, Effect};
+
 apply(Meta, {down, DownPid, _}, #machine_state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) when Pid =:= DownPid ->
                                false;
@@ -84,6 +91,15 @@ apply(Meta, {down, DownPid, _}, #machine_state{client_ids = Ids} = State0) ->
                   [{mod_call, rabbit_log, debug,
                     ["MQTT connection with client id '~s' failed", [Id]]}] end, Delta),
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
+
+apply(_Meta, {nodeup, Node}, State) ->
+    %% Work out if any pids that were disconnected are still
+    %% alive.
+    %% Re-request the monitor for the pids on the now-back node.
+    Effects = [{monitor, process, Pid} || Pid <- all_pids(State), node(Pid) == Node],
+    {State, ok, Effects};
+apply(_Meta, {nodedown, _Node}, State) ->
+    {State, ok}.
 
 apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
     Ids1 = maps:filter(fun (_ClientId, Pid) -> node(Pid) =/= Node end, Ids),
