@@ -46,6 +46,7 @@ register() ->
                           {policy_validator, <<"queue-mode">>},
                           {policy_validator, <<"overflow">>},
                           {policy_validator, <<"delivery-limit">>},
+                          {policy_validator, <<"confirm-on">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -140,7 +141,14 @@ validate_policy0(<<"delivery-limit">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
 validate_policy0(<<"delivery-limit">>, Value) ->
-    {error, "~p is not a valid delivery limit", [Value]}.
+    {error, "~p is not a valid delivery limit", [Value]};
+
+validate_policy0(<<"confirm-on">>, <<"enqueue">>) ->
+    ok;
+validate_policy0(<<"confirm-on">>, <<"ack">>) ->
+    ok;
+validate_policy0(<<"confirm-on">>, Value) ->
+    {error, "~p is not a valid confirm-on setting", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);

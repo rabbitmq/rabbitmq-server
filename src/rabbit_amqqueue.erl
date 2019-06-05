@@ -693,7 +693,8 @@ declare_args() ->
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
      {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
-     {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2}].
+     {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2},
+     {<<"x-confirm-on">>,              fun check_confirm_on/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -784,6 +785,14 @@ check_queue_type({longstr, Val}, _Args) ->
         false -> {error, invalid_queue_type}
     end;
 check_queue_type({Type,    _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
+
+check_confirm_on({longstr, Val}, _Args) ->
+    case lists:member(Val, [<<"enqueue">>, <<"ack">>]) of
+        true  -> ok;
+        false -> {error, invalid_confirm_on}
+    end;
+check_confirm_on({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 -spec list() -> [amqqueue:amqqueue()].
