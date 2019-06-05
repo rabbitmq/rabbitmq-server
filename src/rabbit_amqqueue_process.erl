@@ -126,7 +126,8 @@
          synchronised_slave_pids,
          recoverable_slaves,
          state,
-         garbage_collection
+         garbage_collection,
+         confirm_on
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -503,6 +504,8 @@ init_queue_mode(Mode, State = #q {backing_queue = BQ,
     BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
     State#q{backing_queue_state = BQS1}.
 
+init_confirm_on(undefined, State = #q{confirm_on = ack}) ->
+    init_confirm_on(<<"enqueue">>, State);
 init_confirm_on(<<"ack">>, State = #q{confirm_on = enqueue}) ->
     State#q{confirm_on = ack};
 init_confirm_on(<<"enqueue">>, State = #q{confirm_on = ack,
@@ -991,7 +994,7 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
                                        msg_id_to_channel   = MTC1}),
     {Result, maybe_send_drained(Result =:= empty, State1)}.
 
-ack(AckTags, ChPid, State) ->
+ack(AckTags, ChPid, State, ConfirmOrReject) ->
     subtract_acks(ChPid, AckTags, State,
                   fun (State1 = #q{backing_queue       = BQ,
                                    backing_queue_state = BQS,
@@ -1000,7 +1003,10 @@ ack(AckTags, ChPid, State) ->
                         {MsgIds, BQS1} = BQ:ack(AckTags, BQS),
                         case ConfirmOn of
                             ack ->
-                                MTC1 = confirm_messages(MsgIds, MTC),
+                                MTC1 = case ConfirmOrReject of
+                                    confirm -> confirm_messages(MsgIds, MTC);
+                                    reject  -> reject_messages(MsgIds, MTC)
+                                end,
                                 State1#q{backing_queue_state = BQS1,
                                          msg_id_to_channel = MTC1};
                             enqueue ->
@@ -1328,6 +1334,7 @@ i(user_who_performed_action, #q{q = Q}) ->
     Opts = amqqueue:get_options(Q),
     maps:get(user, Opts, ?UNKNOWN_USER);
 i(type, _) -> classic;
+i(confirm_on, #q{confirm_on = ConfirmOn}) -> ConfirmOn;
 i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:info(Item, BQS).
 
@@ -1734,7 +1741,7 @@ handle_cast({deliver,
 %% rabbit_amqqueue:deliver/2).
 
 handle_cast({ack, AckTags, ChPid}, State) ->
-    noreply(ack(AckTags, ChPid, State));
+    noreply(ack(AckTags, ChPid, State, confirm));
 
 handle_cast({reject, true,  AckTags, ChPid}, State) ->
     noreply(requeue(AckTags, ChPid, State));
@@ -1747,7 +1754,7 @@ handle_cast({reject, false, AckTags, ChPid}, State) ->
                                                dead_letter_rejected_msgs(
                                                  AckTags, X, State1)
                                        end) end,
-              fun () -> ack(AckTags, ChPid, State) end));
+              fun () -> ack(AckTags, ChPid, State, reject) end));
 
 handle_cast({delete_exclusive, ConnPid}, State) ->
     log_delete_exclusive(ConnPid, State),
