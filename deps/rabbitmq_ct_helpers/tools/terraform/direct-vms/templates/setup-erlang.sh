@@ -97,11 +97,11 @@ END {
 
 setup_erlang_deb_repository() {
   # Setup repository to get Erlang.
-  readonly esl_package=/tmp/erlang-solutions_1.0_all.deb
-  wget -q -O"$esl_package" \
-    https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
-  dpkg -i "$esl_package"
-  apt-get -qq update
+  wget -O- https://www.rabbitmq.com/rabbitmq-release-signing-key.asc \
+    | apt-key add -
+  cat >/etc/apt/sources.list.d/rabbitmq-erlang.list <<EOF
+deb https://dl.bintray.com/rabbitmq-erlang/debian stretch erlang elixir
+EOF
 
   # Configure Erlang version pinning.
   cat >/etc/apt/preferences.d/erlang <<EOF
@@ -109,6 +109,9 @@ Package: erlang*
 Pin: version $erlang_package_version
 Pin-Priority: 1000
 EOF
+
+  apt-get -qq install -y --no-install-recommends apt-transport-https
+  apt-get -qq update
 }
 
 apt_install_erlang() {
