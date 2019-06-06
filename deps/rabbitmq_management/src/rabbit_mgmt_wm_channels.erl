@@ -37,12 +37,17 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    try
-        rabbit_mgmt_util:reply_list_or_paginate(augmented(ReqData, Context),
-            ReqData, Context)
-    catch
-        {error, invalid_range_parameters, Reason} ->
-            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            try
+                rabbit_mgmt_util:reply_list_or_paginate(augmented(ReqData, Context),
+                                                        ReqData, Context)
+            catch
+                {error, invalid_range_parameters, Reason} ->
+                    rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+            end;
+        true ->
+            rabbit_mgmt_util:bad_request(<<"Management stats disabled">>, ReqData, Context)
     end.
 
 is_authorized(ReqData, Context) ->

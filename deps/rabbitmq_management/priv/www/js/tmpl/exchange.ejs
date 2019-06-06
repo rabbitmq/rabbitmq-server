@@ -3,8 +3,10 @@
 <div class="section">
   <h2>Overview</h2>
   <div class="hider updatable">
+<% if (!disable_stats) { %>
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-x', exchange.message_stats) %>
+<% } %>
 <% } %>
     <h3>Details</h3>
     <table class="facts">
@@ -24,6 +26,7 @@
   </div>
 </div>
 
+<% if (!disable_stats) { %>
 <% if (rates_mode == 'detailed') { %>
 <div class="section-hidden">
 <h2>Message rates breakdown</h2>
@@ -46,6 +49,7 @@
 </table>
 </div>
 </div>
+<% } %>
 <% } %>
 
 

@@ -48,8 +48,13 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 all_nodes(ReqData) ->
-    rabbit_mgmt_db:augment_nodes(
-      all_nodes_raw(), rabbit_mgmt_util:range_ceil(ReqData)).
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            rabbit_mgmt_db:augment_nodes(
+              all_nodes_raw(), rabbit_mgmt_util:range_ceil(ReqData));
+        true ->
+            all_nodes_raw()
+    end.
 
 all_nodes_raw() ->
     S = rabbit_mnesia:status(),

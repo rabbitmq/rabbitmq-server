@@ -67,9 +67,16 @@ is_authorized(ReqData, Context) ->
 %% Exported functions
 
 basic(ReqData) ->
-    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
-        [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
-            Q <- down_queues(ReqData)].
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
+                [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
+                    Q <- down_queues(ReqData)];
+        true ->
+            [rabbit_mgmt_format:queue(Q) ++ policy(Q) || Q <- queues0(ReqData)] ++
+                [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
+                    Q <- down_queues(ReqData)]
+    end.
 
 augmented(ReqData, Context) ->
     augment(rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context), ReqData).
@@ -78,8 +85,13 @@ augmented(ReqData, Context) ->
 %% Private helpers
 
 augment(Basic, ReqData) ->
-    rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData),
-                                  basic).
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData),
+                                          basic);
+        true ->
+            Basic
+    end.
 
 basic_vhost_filtered(ReqData, Context) ->
     rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context).
@@ -89,3 +101,9 @@ queues0(ReqData) ->
 
 down_queues(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list_down/1).
+
+policy(Q) ->
+    case rabbit_policy:name(Q) of
+        none -> [];
+        Policy -> [{policy, Policy}]
+    end.

@@ -3,10 +3,17 @@
     <li id="interval">
       <label for="update-every" id="status"></label>
       <select id="update-every">
-        <option value="5000">Refresh every 5 seconds</option>
+        <% if(disable_stats) { %>
+         <option value="">Do not refresh</option>
+         <option value="5000">Refresh every 5 seconds</option>
+        <% } else { %>
+         <option value="5000">Refresh every 5 seconds</option>
+        <% } %>      
         <option value="10000">Refresh every 10 seconds</option>
         <option value="30000">Refresh every 30 seconds</option>
-        <option value="">Do not refresh</option>
+        <% if(!disable_stats) { %>
+         <option value="">Do not refresh</option>
+        <% } %>      
       </select>
     </li>
     <li id="vhost">

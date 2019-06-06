@@ -8,21 +8,28 @@
  <thead>
   <tr>
     <%= group_heading('connections', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <% if (!disable_stats) { %>
     <%= group_heading('connections', 'Details', []) %>
     <%= group_heading('connections', 'Network', []) %>
+    <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="connections">+/-</span></th>
   </tr>
   <tr>
 <% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
+<% if(disable_stats) { %>
+    <th><%= fmt_sort('Name',           'name') %></th>
+<% } else { %>
     <th><%= fmt_sort('Name',           'client_properties.connection_name') %></th>
+<% } %>
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',           'node') %></th>
 <% } %>
 <% if (show_column('connections',      'user')) { %>
     <th><%= fmt_sort('User name',      'user') %></th>
 <% } %>
+<% if (!disable_stats) { %>
 <% if (show_column('connections',      'state')) { %>
     <th><%= fmt_sort('State',          'state') %></th>
 <% } %>
@@ -62,6 +69,7 @@
 <% if (show_column('connections',      'connected_at')) { %>
     <th><%= fmt_sort('Connected at',   'connected_at') %></th>
 <% } %>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -73,7 +81,7 @@
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(connection.vhost) %></td>
 <% } %>
-<% if(connection.client_properties.connection_name) { %>
+<% if(connection.client_properties) { %>
     <td>
       <%= link_conn(connection.name) %>
       <sub><%= fmt_string(short_conn(connection.client_properties.connection_name)) %></sub>
@@ -87,6 +95,7 @@
 <% if (show_column('connections', 'user')) { %>
     <td class="c"><%= fmt_string(connection.user) %></td>
 <% } %>
+<% if (!disable_stats) { %>
 <% if (show_column('connections', 'state')) { %>
     <td><%= fmt_object_state(connection) %></td>
 <% } %>
@@ -135,6 +144,7 @@
 <% if (show_column('connections', 'connected_at')) { %>
     <td><%= fmt_timestamp_mini(connection.connected_at) %></td>
 <% } %>
+  <% } %>
   </tr>
   <% } %>
  </tbody>

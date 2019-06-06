@@ -49,10 +49,15 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
-        rabbit_mgmt_util:reply(
-          hd(rabbit_mgmt_db:augment_vhosts(
-               [rabbit_vhost:info(id(ReqData))], rabbit_mgmt_util:range(ReqData))),
-          ReqData, Context)
+        case rabbit_mgmt_util:disable_stats(ReqData) of
+            false ->
+                rabbit_mgmt_util:reply(
+                  hd(rabbit_mgmt_db:augment_vhosts(
+                       [rabbit_vhost:info(id(ReqData))], rabbit_mgmt_util:range(ReqData))),
+                  ReqData, Context);
+            true ->
+                rabbit_mgmt_util:reply(rabbit_vhost:info(id(ReqData)), ReqData, Context)
+        end
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)

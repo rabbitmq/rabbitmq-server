@@ -842,7 +842,11 @@ connections_test(Config) ->
                "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
     timer:sleep(1500),
-    http_get(Config, Path, ?OK),
+    Connection = http_get(Config, Path, ?OK),
+    ?assert(maps:is_key(recv_oct, Connection)),
+    ?assert(maps:is_key(garbage_collection, Connection)),
+    ?assert(maps:is_key(send_oct_details, Connection)),
+    ?assert(maps:is_key(reductions, Connection)),
     http_delete(Config, Path, {group, '2xx'}),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
     %% closed. It may not be worth fixing.

@@ -43,15 +43,19 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
-    Arg = case rabbit_mgmt_util:vhost(ReqData) of
-              none  -> all;
-              VHost -> VHost
-          end,
-
-    Consumers = rabbit_mgmt_format:strip_pids(rabbit_mgmt_db:get_all_consumers(Arg)),
-    Formatted = [rabbit_mgmt_format:format_consumer_arguments(C) || C <- Consumers],
-    rabbit_mgmt_util:reply_list(
-      filter_user(Formatted, User), ReqData, Context).
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            Arg = case rabbit_mgmt_util:vhost(ReqData) of
+                      none  -> all;
+                      VHost -> VHost
+                  end,            
+            Consumers = rabbit_mgmt_format:strip_pids(rabbit_mgmt_db:get_all_consumers(Arg)),
+            Formatted = [rabbit_mgmt_format:format_consumer_arguments(C) || C <- Consumers],
+            rabbit_mgmt_util:reply_list(
+              filter_user(Formatted, User), ReqData, Context);
+        true ->
+            rabbit_mgmt_util:bad_request(<<"Management stats disabled">>, ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

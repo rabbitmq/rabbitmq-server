@@ -44,8 +44,14 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(
-      maps:from_list(rabbit_mgmt_format:strip_pids(conn(ReqData))), ReqData, Context).
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            rabbit_mgmt_util:reply(
+              maps:from_list(rabbit_mgmt_format:strip_pids(conn_stats(ReqData))), ReqData, Context);
+        true ->
+            rabbit_mgmt_util:reply([{name, rabbit_mgmt_util:id(connection, ReqData)}],
+                                   ReqData, Context)
+    end.
 
 delete_resource(ReqData, Context) ->
     case conn(ReqData) of
@@ -70,6 +76,19 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 conn(ReqData) ->
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            conn_stats(ReqData);
+        true ->
+            case rabbit_connection_tracking:lookup(rabbit_mgmt_util:id(connection, ReqData)) of
+                #tracked_connection{name = Name, pid = Pid, username = Username, type = Type} ->
+                    [{name, Name}, {pid, Pid}, {user, Username}, {type, Type}];
+                not_found ->
+                    not_found
+            end
+    end.
+
+conn_stats(ReqData) ->
     rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),
                                   rabbit_mgmt_util:range_ceil(ReqData)).
 

@@ -3,10 +3,11 @@
 
 <% if (!node.running) { %>
 <p class="warning">Node not running</p>
-<% } else if (node.os_pid == undefined) { %>
+<% } else if ((node.os_pid == undefined) && (!disable_stats)) { %>
 <p class="warning">Node statistics not available</p>
 <% } else { %>
 
+<% if(!disable_stats) { %>
 <div class="section">
 <h2>Overview</h2>
 <div class="hider">
@@ -72,6 +73,7 @@
 </div>
 </div>
 
+<% if(!disable_stats) { %>
 <div class="section">
 <h2>Process statistics</h2>
 <div class="hider">
@@ -210,6 +212,7 @@
 
 </div>
 </div>
+<% } %>
 
 <div class="section-hidden">
 <h2>Cluster links</h2>
@@ -256,13 +259,14 @@
 <% } %>
 
 </div>
+<% } %>
 
 <!--
   The next two need to be non-updatable or we will wipe the memory details
   as soon as we have drawn it.
  -->
 
-<% if (node.running && node.os_pid != undefined) { %>
+<% if (node.running && (node.os_pid != undefined || disable_stats)) { %>
 
 <div class="section">
 <h2>Memory details</h2>
@@ -286,6 +290,7 @@
 
 <% } %>
 
+<% if(!disable_stats) { %>
 <div class="updatable">
 <% if (node.running && node.os_pid != undefined) { %>
 
@@ -405,6 +410,7 @@
 </div>
 </div>
 
+<% } %>
 <% } %>
 
 </div>
