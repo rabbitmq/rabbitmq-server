@@ -1,6 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.671
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.676
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
