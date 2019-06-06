@@ -704,6 +704,7 @@ do_query_terraform_map(Config, TfState, Var) ->
     case rabbit_ct_helpers:exec(Cmd) of
         {ok, Output} ->
             Map = parse_terraform_map(Output),
+            ct:pal(?LOW_IMPORTANCE, "Terraform map: ~p", [Map]),
             {ok, Map};
         _ ->
             {skip, "Terraform failed to query VMs"}
@@ -713,11 +714,12 @@ parse_terraform_map(Output) ->
     Lines = [string:strip(L, right, $,)
              || L <- string:tokens(
                        string:strip(Output, right, $\n),
-                       "\n")],
+                       "\n"),
+                string:find(L, "=") =/= nomatch],
     [begin
          [K0, V0] = string:tokens(L, "="),
-         K = string:strip(K0),
-         V = string:strip(V0),
+         K = string:strip(string:strip(K0), both, $"),
+         V = string:strip(string:strip(V0), both, $"),
          {K, V}
      end || L <- Lines].
 
