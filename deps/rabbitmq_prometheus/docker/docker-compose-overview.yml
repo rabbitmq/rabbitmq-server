@@ -13,7 +13,7 @@ volumes:
 services:
   rabbitmq1: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.671-2019.06.03
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.676-2019.06.06
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -52,7 +52,7 @@ services:
       - "15695:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.8.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.06.06
     networks:
       - "rabbitmq-prometheus"
     environment:
