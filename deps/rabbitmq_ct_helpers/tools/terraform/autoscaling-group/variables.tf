@@ -7,6 +7,14 @@ the underlying OS.
 EOF
 }
 
+variable "erlang_git_ref" {
+  default     = ""
+  description = <<EOF
+Git reference if building Erlang from Git. Specifying the Erlang
+version is still required.
+EOF
+}
+
 variable "elixir_version" {
   default     = ""
   description = <<EOF

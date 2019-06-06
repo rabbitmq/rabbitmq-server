@@ -10,6 +10,7 @@ module "direct_vms" {
   instance_count = 0
 
   erlang_version = "${var.erlang_version}"
+  erlang_git_ref = "${var.erlang_git_ref}"
   elixir_version = "${var.elixir_version}"
   erlang_cookie = "${var.erlang_cookie}"
   erlang_nodename = "${var.erlang_nodename}"
