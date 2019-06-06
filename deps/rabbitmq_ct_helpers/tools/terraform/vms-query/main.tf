@@ -14,7 +14,7 @@ data "aws_instances" "vms" {
 data "template_file" "erlang_node_hostname" {
   count = "${length(data.aws_instances.vms.ids)}"
   template = "$${private_dns}"
-  vars {
+  vars = {
     // FIXME: Here we hard-code how Amazon EC2 formats hostnames based
     // on the private IP address.
     private_dns = "ip-${
@@ -25,7 +25,7 @@ data "template_file" "erlang_node_hostname" {
 data "template_file" "erlang_node_nodename" {
   count = "${length(data.aws_instances.vms.ids)}"
   template = "${var.erlang_nodename}@$${private_dns}"
-  vars {
+  vars = {
     private_dns = "${
       data.template_file.erlang_node_hostname.*.rendered[count.index]}"
   }

@@ -37,7 +37,7 @@ resource "aws_vpc" "vpc" {
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags {
+  tags = {
     Name                    = "${local.vm_name}"
     rabbitmq-testing        = true
     rabbitmq-testing-id     = "${local.uuid}"
@@ -163,7 +163,7 @@ resource "aws_security_group" "allow_erlang_dist" {
 // control the VM.
 data "template_file" "user_data" {
   template = "${file("${path.module}/templates/setup-erlang.sh")}"
-  vars {
+  vars = {
     default_user     = "${local.username}"
     distribution     = "${local.distribution}"
 
@@ -193,7 +193,7 @@ resource "aws_instance" "vm" {
 
   subnet_id       = "${aws_subnet.vpc.id}"
 
-  vpc_security_group_ids = ["${local.security_groups}"]
+  vpc_security_group_ids = flatten(local.security_groups)
 
   user_data = "${data.template_file.user_data.rendered}"
 
@@ -204,7 +204,7 @@ resource "aws_instance" "vm" {
     delete_on_termination = true
   }
 
-  tags {
+  tags = {
     Name                = "${local.vm_name} - #${count.index}"
     rabbitmq-testing    = true
     rabbitmq-testing-id = "${local.uuid}"
@@ -221,7 +221,7 @@ resource "aws_instance" "vm" {
 data "template_file" "erlang_node_hostname" {
   count = "${var.instance_count}"
   template = "$${private_dns}"
-  vars {
+  vars = {
     private_dns = "${element(split(".", aws_instance.vm.*.private_dns[count.index]), 0)}"
   }
 }
@@ -229,7 +229,7 @@ data "template_file" "erlang_node_hostname" {
 data "template_file" "erlang_node_nodename" {
   count = "${var.instance_count}"
   template = "${var.erlang_nodename}@$${private_dns}"
-  vars {
+  vars = {
     private_dns = "${data.template_file.erlang_node_hostname.*.rendered[count.index]}"
   }
 }
