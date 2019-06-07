@@ -30,6 +30,24 @@
     [{tcp_config, [{port,34567}]}]}],
   [rabbitmq_web_mqtt]},
 
+ {num_acceptors_tcp,
+   "web_mqtt.num_acceptors.tcp = 20",
+   [{rabbitmq_web_mqtt,
+     [{num_tcp_acceptors, 20}]}],
+   [rabbitmq_web_mqtt]},
+
+ {num_acceptors_tls,
+  "web_mqtt.num_acceptors.ssl = 20",
+  [{rabbitmq_web_mqtt,
+    [{num_ssl_acceptors, 20}]}],
+  [rabbitmq_web_mqtt]},
+
+  {max_connections,
+   "web_mqtt.max_connections = 5000",
+   [{rabbitmq_web_mqtt,
+     [{max_connections, 5000}]}],
+   [rabbitmq_web_mqtt]},
+
  {ssl_listener,
   "web_mqtt.ssl.listener = 127.0.0.4:15672",
   [{rabbitmq_web_mqtt,
@@ -201,4 +219,3 @@
   [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
   [rabbitmq_web_mqtt]}
 ].
-
