@@ -45,62 +45,64 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 %%----------------------------------------------------------------------------
 
 mqtt_init() ->
-    CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
-    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
+  CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
+  CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
-    Routes = cowboy_router:compile([{'_', [
-        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
-    ]}]),
-    CowboyOpts = CowboyOpts0#{env          => #{dispatch => Routes},
-                              middlewares  => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler],
-                              proxy_header => get_env(proxy_protocol, false)},
-    case get_env(tcp_config, []) of
-        [] ->
-            ok;
-        TCPConf0 ->
-            {TCPConf, IpStr, Port} = get_tcp_conf(TCPConf0),
-            case ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
-                ranch_tcp, TCPConf,
-                rabbit_web_mqtt_connection_sup, CowboyOpts) of
-                {ok, _}                       -> ok;
-                {error, {already_started, _}} -> ok;
-                {error, ErrTCP}               ->
-                    rabbit_log_connection:error(
-                        "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
-                        " listener settings: ~p~n",
-                        [ErrTCP, TCPConf]),
-                    throw(ErrTCP)
-            end,
-            listener_started('http/web-mqtt', TCPConf),
-            rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
-                            [IpStr, Port])
-    end,
-    case get_env(ssl_config, []) of
-        [] ->
-            ok;
-        TLSConf0 ->
-            rabbit_networking:ensure_ssl(),
-            {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
-            {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
-                ranch_ssl, TLSConf,
-                rabbit_web_mqtt_connection_sup, CowboyOpts),
-            case ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
-                ranch_ssl, TLSConf,
-                rabbit_web_mqtt_connection_sup, CowboyOpts) of
-                {ok, _}                       -> ok;
-                {error, {already_started, _}} -> ok;
-                {error, ErrTLS}               ->
-                    rabbit_log_connection:error(
-                        "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p,"
-                        " listener settings: ~p~n",
-                        [ErrTLS, TLSConf]),
-                    throw(ErrTLS)
-            end,
-            listener_started('https/web-mqtt', TLSConf),
-            rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
-                            [TLSIpStr, TLSPort])
-    end,
-    ok.
+  Routes = cowboy_router:compile([{'_', [
+      {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
+  ]}]),
+  CowboyOpts = CowboyOpts0#{env          => #{dispatch => Routes},
+                            middlewares  => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler],
+                            proxy_header => get_env(proxy_protocol, false)},
+  case get_env(tcp_config, []) of
+      []       -> ok;
+      TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts)
+  end,
+  case get_env(ssl_config, []) of
+      []       -> ok;
+      TLSConf0 -> start_tls_listener(TLSConf0, CowboyOpts)
+  end,
+  ok.
+
+start_tcp_listener(TCPConf0, CowboyOpts) ->
+  {TCPConf, IpStr, Port} = get_tcp_conf(TCPConf0),
+  case ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
+      ranch_tcp, TCPConf,
+      rabbit_web_mqtt_connection_sup, CowboyOpts) of
+      {ok, _}                       -> ok;
+      {error, {already_started, _}} -> ok;
+      {error, ErrTCP}               ->
+          rabbit_log_connection:error(
+              "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
+              " listener settings: ~p~n",
+              [ErrTCP, TCPConf]),
+          throw(ErrTCP)
+  end,
+  listener_started('http/web-mqtt', TCPConf),
+  rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
+                  [IpStr, Port]).
+
+start_tls_listener(TLSConf0, CowboyOpts) ->
+  rabbit_networking:ensure_ssl(),
+  {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
+  {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
+      ranch_ssl, TLSConf,
+      rabbit_web_mqtt_connection_sup, CowboyOpts),
+  case ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
+      ranch_ssl, TLSConf,
+      rabbit_web_mqtt_connection_sup, CowboyOpts) of
+      {ok, _}                       -> ok;
+      {error, {already_started, _}} -> ok;
+      {error, ErrTLS}               ->
+          rabbit_log_connection:error(
+              "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p,"
+              " listener settings: ~p~n",
+              [ErrTLS, TLSConf]),
+          throw(ErrTLS)
+  end,
+  listener_started('https/web-mqtt', TLSConf),
+  rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
+                  [TLSIpStr, TLSPort]).
 
 listener_started(Protocol, Listener) ->
     Port = rabbit_misc:pget(port, Listener),
@@ -111,7 +113,9 @@ listener_started(Protocol, Listener) ->
     ok.
 
 get_tcp_conf(TCPConf0) ->
-    TCPConf1 = [{connection_type, supervisor}|TCPConf0],
+    TCPConf1 = [{connection_type, supervisor},
+                %% see rabbitmq/rabbitmq-web-mqtt#28 for background
+                {max_connections, infinity}] ++ TCPConf0,
     TCPConf2 = case proplists:get_value(port, TCPConf1) of
                    undefined -> [{port, 15675}|TCPConf1];
                    _ -> TCPConf1
@@ -119,7 +123,9 @@ get_tcp_conf(TCPConf0) ->
     get_ip_port(TCPConf2).
 
 get_tls_conf(TLSConf0) ->
-    TLSConf1 = [{connection_type, supervisor}|TLSConf0],
+    TLSConf1 = [{connection_type, supervisor},
+                %% see rabbitmq/rabbitmq-web-mqtt#28 for background
+                {max_connections, infinity}] ++ TLSConf0,
     TLSConf2 = case proplists:get_value(port, TLSConf1) of
                    undefined -> [{port, 15675}|proplists:delete(port, TLSConf1)];
                    _ -> TLSConf1
