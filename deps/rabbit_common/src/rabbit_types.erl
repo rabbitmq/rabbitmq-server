@@ -31,7 +31,7 @@
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
               proc_type_and_name/0, timestamp/0,
               tracked_connection/0, node_type/0, topic_access_context/0,
-              authz_data/0]).
+              authz_data/0, authz_context/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
@@ -150,7 +150,8 @@
                    impl     :: any()}).
 
 -type(authz_data() ::
-        #{peeraddr := inet:ip_address() | binary()} | undefined).
+        #{peeraddr := inet:ip_address() | binary(),
+          _ => _      } | undefined).
 
 -type(user() ::
         #user{username       :: username(),
@@ -183,3 +184,5 @@
 -type(topic_access_context() :: #{routing_key  => rabbit_router:routing_key(),
                                   variable_map => map(),
                                   _ => _}).
+
+-type(authz_context() :: map()).

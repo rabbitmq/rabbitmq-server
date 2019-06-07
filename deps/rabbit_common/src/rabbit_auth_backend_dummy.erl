@@ -22,7 +22,7 @@
 
 -export([user/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
 -spec user() -> rabbit_types:user().
 
@@ -41,5 +41,5 @@ user_login_authorization(_, _) ->
     {refused, "cannot log in conventionally as dummy user", []}.
 
 check_vhost_access(#auth_user{}, _VHostPath, _AuthzData) -> true.
-check_resource_access(#auth_user{}, #resource{}, _Permission) -> true.
+check_resource_access(#auth_user{}, #resource{}, _Permission, _Context) -> true.
 check_topic_access(#auth_user{}, #resource{}, _Permission, _Context) -> true.
