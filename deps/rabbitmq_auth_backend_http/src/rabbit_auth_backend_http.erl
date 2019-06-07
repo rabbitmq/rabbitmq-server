@@ -23,7 +23,7 @@
 
 -export([description/0, p/1, q/1, join_tags/1]).
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
 %% If keepalive connection is closed, retry N times before failing.
 -define(RETRY_ON_KEEPALIVE_CLOSED, 3).
@@ -58,21 +58,25 @@ user_login_authorization(Username, AuthProps) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, #{peeraddr := PeerAddr}) ->
+check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, AuthzData = #{peeraddr := PeerAddr}) ->
+    AuthzData1 = maps:remove(peeraddr, AuthzData),
+    OptionsParameters = context_as_parameters(AuthzData1),
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
                           {ip,       parse_peeraddr(PeerAddr)},
-                          {tags,     join_tags(Tags)}]).
+                          {tags,     join_tags(Tags)}] ++ OptionsParameters).
 
 check_resource_access(#auth_user{username = Username, tags = Tags},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
-                      Permission) ->
+                      Permission,
+                      AuthzContext) ->
+    OptionsParameters = context_as_parameters(AuthzContext),
     bool_req(resource_path, [{username,   Username},
                              {vhost,      VHost},
                              {resource,   Type},
                              {name,       Name},
                              {permission, Permission},
-                             {tags, join_tags(Tags)}]).
+                             {tags, join_tags(Tags)}] ++ OptionsParameters).
 
 check_topic_access(#auth_user{username = Username, tags = Tags},
                    #resource{virtual_host = VHost, kind = topic = Type, name = Name},
