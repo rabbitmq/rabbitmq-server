@@ -25,7 +25,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
 -export([get_connections/0]).
 
@@ -97,11 +97,12 @@ user_login_authorization(Username, AuthProps) ->
 
 check_vhost_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
-                   VHost, _AuthzData) ->
+                   VHost, AuthzData) ->
+    OptionsArgs = context_as_options(AuthzData, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username, Username},
             {user_dn,  UserDN},
-            {vhost,    VHost}] ++ ADArgs,
+            {vhost,    VHost}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)]),
     R = evaluate_ldap(env(vhost_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
@@ -111,14 +112,16 @@ check_vhost_access(User = #auth_user{username = Username,
 check_resource_access(User = #auth_user{username = Username,
                                         impl     = #impl{user_dn = UserDN}},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
-                      Permission) ->
+                      Permission,
+                      AuthzContext) ->
+    OptionsArgs = context_as_options(AuthzContext, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
             {resource,   Type},
             {name,       Name},
-            {permission, Permission}] ++ ADArgs,
+            {permission, Permission}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
     R = evaluate_ldap(env(resource_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
@@ -130,7 +133,7 @@ check_topic_access(User = #auth_user{username = Username,
                    #resource{virtual_host = VHost, kind = topic = Resource, name = Name},
                    Permission,
                    Context) ->
-    OptionsArgs = topic_context_as_options(Context, undefined),
+    OptionsArgs = context_as_options(Context, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
@@ -146,13 +149,13 @@ check_topic_access(User = #auth_user{username = Username,
 
 %%--------------------------------------------------------------------
 
-topic_context_as_options(Context, Namespace) when is_map(Context) ->
+context_as_options(Context, Namespace) when is_map(Context) ->
     % filter keys that would erase fixed variables
     lists:flatten([begin
          Value = maps:get(Key, Context),
          case Value of
              MapOfValues when is_map(MapOfValues) ->
-                 topic_context_as_options(MapOfValues, Key);
+                 context_as_options(MapOfValues, Key);
              SimpleValue ->
                  case Namespace of
                      undefined ->
@@ -164,7 +167,7 @@ topic_context_as_options(Context, Namespace) when is_map(Context) ->
      end || Key <- maps:keys(Context), lists:member(
                     rabbit_data_coercion:to_atom(Key),
                     ?RESOURCE_ACCESS_QUERY_VARIABLES) =:= false]);
-topic_context_as_options(_, _) ->
+context_as_options(_, _) ->
     [].
 
 create_option_name_with_namespace(Namespace, Key) ->
