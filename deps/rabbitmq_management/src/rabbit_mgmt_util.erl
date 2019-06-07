@@ -993,7 +993,7 @@ list_visible_vhosts(User = #user{tags = Tags}, AuthzData) ->
 
 list_login_vhosts(User, AuthzData) ->
     [V || V <- rabbit_vhost:list(),
-          case catch rabbit_access_control:check_vhost_access(User, V, AuthzData) of
+          case catch rabbit_access_control:check_vhost_access(User, V, AuthzData, #{}) of
               ok -> true;
               _  -> false
           end].
