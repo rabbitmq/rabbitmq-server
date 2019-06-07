@@ -12,6 +12,10 @@
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
     [{datatype, integer}]}.
+{mapping, "web_mqtt.tcp.max_connections", "rabbitmq_web_mqtt.tcp_config.max_connections", [
+    {datatype, [{enum, [none]}, integer]}
+]}.
+
 {mapping, "web_mqtt.ws_path", "rabbitmq_web_mqtt.ws_path",
     [{datatype, string}]}.
 

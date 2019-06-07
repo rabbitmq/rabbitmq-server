@@ -29,6 +29,11 @@
   [{rabbitmq_web_mqtt,
     [{tcp_config, [{port,34567}]}]}],
   [rabbitmq_web_mqtt]},
+  {tcp_config_max_connections,
+   "web_mqtt.tcp.max_connections = 5000",
+   [{rabbitmq_web_mqtt,
+     [{tcp_config, [{max_connections, 5000}]}]}],
+   [rabbitmq_web_mqtt]},
 
  {ssl_listener,
   "web_mqtt.ssl.listener = 127.0.0.4:15672",
@@ -200,4 +205,3 @@
   [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
   [rabbitmq_web_mqtt]}
 ].
-
