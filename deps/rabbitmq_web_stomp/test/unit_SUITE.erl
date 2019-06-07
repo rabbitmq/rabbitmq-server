@@ -43,25 +43,25 @@ end_per_group(_, Config) ->
 %% -------------------------------------------------------------------
 
 get_tcp_conf(_Config) ->
-    [{ip, {127, 0, 0, 1}}, {port, 15674}] = lists:sort(rabbit_ws_listener:get_tcp_conf(
+    [{ip, {127, 0, 0, 1}}, {port, 15674}] = lists:sort(rabbit_web_stomp_listener:get_tcp_conf(
         [{ip, {127, 0, 0, 1}}, {port, 1245}], 15674
     )),
-    [{ip, {127, 0, 0, 1}}, {port, 15674}] = lists:sort(rabbit_ws_listener:get_tcp_conf(
+    [{ip, {127, 0, 0, 1}}, {port, 15674}] = lists:sort(rabbit_web_stomp_listener:get_tcp_conf(
         [{ip, {127, 0, 0, 1}}], 15674
     )),
-    [{port, 15674}] = lists:sort(rabbit_ws_listener:get_tcp_conf(
+    [{port, 15674}] = lists:sort(rabbit_web_stomp_listener:get_tcp_conf(
         [], 15674
     )),
     ok.
 
 get_tcp_port(_Config) ->
-    15674 = rabbit_ws_listener:get_tcp_port([{port, 15674}]),
-    15674 = rabbit_ws_listener:get_tcp_port([{port, 15674}, {tcp_config, []}]),
-    12345 = rabbit_ws_listener:get_tcp_port([{port, 15674}, {tcp_config, [{port, 12345}]}]),
+    15674 = rabbit_web_stomp_listener:get_tcp_port([{port, 15674}]),
+    15674 = rabbit_web_stomp_listener:get_tcp_port([{port, 15674}, {tcp_config, []}]),
+    12345 = rabbit_web_stomp_listener:get_tcp_port([{port, 15674}, {tcp_config, [{port, 12345}]}]),
     ok.
 
 get_binding_address(_Config) ->
-    "0.0.0.0" = rabbit_ws_listener:get_binding_address([]),
-    "192.168.1.10" = rabbit_ws_listener:get_binding_address([{ip, "192.168.1.10"}]),
-    "192.168.1.10" = rabbit_ws_listener:get_binding_address([{ip, {192, 168, 1, 10}}]),
+    "0.0.0.0" = rabbit_web_stomp_listener:get_binding_address([]),
+    "192.168.1.10" = rabbit_web_stomp_listener:get_binding_address([{ip, "192.168.1.10"}]),
+    "192.168.1.10" = rabbit_web_stomp_listener:get_binding_address([{ip, {192, 168, 1, 10}}]),
     ok.

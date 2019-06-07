@@ -10,10 +10,10 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% Copyright (c) 2012-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2012-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_ws_middleware).
+-module(rabbit_web_stomp_middleware).
 -behavior(cowboy_middleware).
 
 -export([execute/2]).

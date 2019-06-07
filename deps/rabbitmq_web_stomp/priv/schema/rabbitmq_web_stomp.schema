@@ -6,9 +6,11 @@
 
 {mapping, "web_stomp.num_acceptors.tcp", "rabbitmq_web_stomp.num_tcp_acceptors",
     [{datatype, integer}]}.
-
 {mapping, "web_stomp.num_acceptors.ssl", "rabbitmq_web_stomp.num_ssl_acceptors",
     [{datatype, integer}]}.
+{mapping, "web_stomp.max_connections", "rabbitmq_web_stomp.max_connections", [
+    {datatype, [{enum, [infinity]}, integer]}
+]}.
 
 {mapping, "web_stomp.tcp.port", "rabbitmq_web_stomp.tcp_config.port",
     [{datatype, integer}]}.
