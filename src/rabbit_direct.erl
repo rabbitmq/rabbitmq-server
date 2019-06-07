@@ -185,7 +185,8 @@ connect1(User, VHost, Protocol, Pid, Infos) ->
     % Note: peer_host can be either a tuple or
     % a binary if reverse_dns_lookups is enabled
     PeerHost = proplists:get_value(peer_host, Infos),
-    try rabbit_access_control:check_vhost_access(User, VHost, {ip, PeerHost}) of
+    AuthzContext = proplists:get_value(variable_map, Infos, #{}),
+    try rabbit_access_control:check_vhost_access(User, VHost, {ip, PeerHost}, AuthzContext) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
 	      rabbit_core_metrics:connection_created(Pid, Infos),
               rabbit_event:notify(connection_created, Infos),

@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
-         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
+         check_vhost_access/4, check_resource_access/4, check_topic_access/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -43,6 +43,7 @@ check_user_pass_login(Username, Password) ->
             {'refused', rabbit_types:username(), string(), [any()]}.
 
 check_user_login(Username, AuthProps) ->
+    %% extra auth properties like MQTT client id are in AuthProps
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     R = lists:foldl(
           fun ({ModN, ModZs0}, {refused, _, _, _}) ->
@@ -137,18 +138,20 @@ get_authz_data_from(undefined) ->
 % is enabled and it's a direct connection.
 -spec check_vhost_access(User :: rabbit_types:user(),
                          VHostPath :: rabbit_types:vhost(),
-                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address() | binary()} | undefined) ->
+                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address() | binary()} | undefined,
+                         AuthzContext :: map()) ->
     'ok' | rabbit_types:channel_exit().
 check_vhost_access(User = #user{username       = Username,
-                                authz_backends = Modules}, VHostPath, AuthzRawData) ->
+                                authz_backends = Modules}, VHostPath, AuthzRawData, AuthzContext) ->
     AuthzData = get_authz_data_from(AuthzRawData),
+    FullAuthzContext = create_vhost_access_authz_data(AuthzData, AuthzContext),
     lists:foldl(
       fun({Mod, Impl}, ok) ->
               check_access(
                 fun() ->
                         rabbit_vhost:exists(VHostPath) andalso
                             Mod:check_vhost_access(
-                              auth_user(User, Impl), VHostPath, AuthzData)
+                              auth_user(User, Impl), VHostPath, FullAuthzContext)
                 end,
                 Mod, "access to vhost '~s' refused for user '~s'",
                 [VHostPath, Username], not_allowed);
@@ -156,22 +159,31 @@ check_vhost_access(User = #user{username       = Username,
               Else
       end, ok, Modules).
 
+create_vhost_access_authz_data(undefined, Context) when map_size(Context) == 0 ->
+    undefined;
+create_vhost_access_authz_data(undefined, Context) ->
+    Context;
+create_vhost_access_authz_data(PeerAddr, Context) when map_size(Context) == 0 ->
+    PeerAddr;
+create_vhost_access_authz_data(PeerAddr, Context) ->
+    maps:merge(PeerAddr, Context).
+
 -spec check_resource_access
-        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom()) ->
+        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom(), rabbit_types:authz_context()) ->
             'ok' | rabbit_types:channel_exit().
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
-                      Permission) ->
+                      Permission, Context) ->
     check_resource_access(User, R#resource{name = <<"amq.default">>},
-                          Permission);
+                          Permission, Context);
 check_resource_access(User = #user{username       = Username,
                                    authz_backends = Modules},
-                      Resource, Permission) ->
+                      Resource, Permission, Context) ->
     lists:foldl(
       fun({Module, Impl}, ok) ->
               check_access(
                 fun() -> Module:check_resource_access(
-                           auth_user(User, Impl), Resource, Permission) end,
+                           auth_user(User, Impl), Resource, Permission, Context) end,
                 Module, "access to ~s refused for user '~s'",
                 [rabbit_misc:rs(Resource), Username]);
          (_, Else) -> Else
