@@ -1071,7 +1071,8 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
 get_amqp_params(_ConnPid, rabbit_reader) -> [];
 get_amqp_params(ConnPid, _Any) when is_pid(ConnPid) ->
     Timeout = get_operation_timeout(),
-    get_amqp_params(ConnPid, rabbit_misc:is_process_alive(ConnPid), Timeout).
+    get_amqp_params(ConnPid, rabbit_misc:is_process_alive(ConnPid), Timeout);
+get_amqp_params(_, _) -> [].
 
 get_amqp_params(ConnPid, false, _Timeout) ->
     %% Connection process is dead
