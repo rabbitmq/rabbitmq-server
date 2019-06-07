@@ -323,11 +323,12 @@ declare_invalid_args(Config) ->
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-max-priority">>, long, 2000}])),
 
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-overflow">>, longstr, <<"reject-publish">>}])),
+    [?assertExit(
+        {{shutdown, {server_initiated_close, 406, _}}, _},
+        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
+                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                     {<<"x-overflow">>, longstr, XOverflow}]))
+     || XOverflow <- [<<"reject-publish">>, <<"reject-publish-dlx">>]],
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},

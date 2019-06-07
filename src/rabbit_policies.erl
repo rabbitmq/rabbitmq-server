@@ -131,6 +131,8 @@ validate_policy0(<<"overflow">>, <<"drop-head">>) ->
     ok;
 validate_policy0(<<"overflow">>, <<"reject-publish">>) ->
     ok;
+validate_policy0(<<"overflow">>, <<"reject-publish-dlx">>) ->
+    ok;
 validate_policy0(<<"overflow">>, Value) ->
     {error, "~p is not a valid overflow value", [Value]};
 

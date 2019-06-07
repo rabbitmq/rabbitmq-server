@@ -189,6 +189,7 @@
          messages_unconfirmed,
          messages_uncommitted,
          acks_uncommitted,
+         pending_raft_commands,
          prefetch_count,
          global_prefetch_count,
          state,
@@ -2241,10 +2242,11 @@ confirm(MsgSeqNos, QRef, State = #ch{queue_names = QNames, unconfirmed = UC}) ->
     %% does not exist in unconfirmed messages.
     %% Neither does the 'ignore' atom, so it's a reasonable fallback.
     QName = maps:get(QRef, QNames, ignore),
-    {MXs, UC1} =
+    {ConfirmMXs, RejectMXs, UC1} =
         unconfirmed_messages:confirm_multiple_msg_ref(MsgSeqNos, QName, QRef, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    record_confirms(MXs, State#ch{unconfirmed = UC1}).
+    State1 = record_confirms(ConfirmMXs, State#ch{unconfirmed = UC1}),
+    record_rejects(RejectMXs, State1).
 
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;
@@ -2371,6 +2373,8 @@ i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> ?QUEUE:len(Msgs);
 i(messages_uncommitted,    #ch{})                         -> 0;
 i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
+i(pending_raft_commands,   #ch{queue_states = QS}) ->
+    pending_raft_commands(QS);
 i(state,                   #ch{cfg = #conf{state = running}}) -> credit_flow:state();
 i(state,                   #ch{cfg = #conf{state = State}}) -> State;
 i(prefetch_count,          #ch{cfg = #conf{consumer_prefetch = C}})    -> C;
@@ -2385,6 +2389,11 @@ i(reductions, _State) ->
     Reductions;
 i(Item, _) ->
     throw({bad_argument, Item}).
+
+pending_raft_commands(QStates) ->
+    maps:fold(fun (_, V, Acc) ->
+                      Acc + rabbit_fifo_client:pending_size(V)
+              end, 0, QStates).
 
 name(#ch{cfg = #conf{conn_name = ConnName, channel = Channel}}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
