@@ -79,11 +79,11 @@ access_response(Config) ->
     false = rpc(Config,rabbit_auth_backend_internal, check_vhost_access, [Auth, RestrictedVhost, undefined]),
     false = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, RestrictedVhost, undefined]),
 
-    true = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure]),
-    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
+    true = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure, #{}]),
+    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure, #{}]),
 
-    false = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, RestrictedResource, configure]),
-    false = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, RestrictedResource, configure]),
+    false = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, RestrictedResource, configure, #{}]),
+    false = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, RestrictedResource, configure, #{}]),
 
     true = rpc(Config,rabbit_auth_backend_internal, check_topic_access, [Auth, TopicResource, write, AuthorisedTopicContext]),
     true = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, TopicResource, write, AuthorisedTopicContext]),
@@ -99,8 +99,8 @@ cache_expiration(Config) ->
     true = rpc(Config,rabbit_auth_backend_internal, check_vhost_access, [Auth, AvailableVhost, undefined]),
     true = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, AvailableVhost, undefined]),
 
-    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
-    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
+    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure, #{}]),
+    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure, #{}]),
 
     rpc(Config,rabbit_auth_backend_internal, change_password, [<<"guest">>, <<"newpass">>, <<"acting-user">>]),
 
@@ -109,16 +109,16 @@ cache_expiration(Config) ->
     true = rpc(Config,rabbit_auth_backend_internal, check_vhost_access, [Auth, AvailableVhost, undefined]),
     true = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, AvailableVhost, undefined]),
 
-    true = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure]),
-    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
+    true = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure, #{}]),
+    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure, #{}]),
 
     rpc(Config,rabbit_auth_backend_internal, delete_user, [<<"guest">>, <<"acting-user">>]),
 
     false = rpc(Config,rabbit_auth_backend_internal, check_vhost_access, [Auth, AvailableVhost, undefined]),
     true = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, AvailableVhost, undefined]),
 
-    false = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure]),
-    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
+    false = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure, #{}]),
+    true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure, #{}]),
 
     {ok, TTL} = rpc(Config, application, get_env, [rabbitmq_auth_backend_cache, cache_ttl]),
     timer:sleep(TTL),
@@ -128,8 +128,8 @@ cache_expiration(Config) ->
     false = rpc(Config,rabbit_auth_backend_internal, check_vhost_access, [Auth, AvailableVhost, undefined]),
     false = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, AvailableVhost, undefined]),
 
-    false = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure]),
-    false = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]).
+    false = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure, #{}]),
+    false = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure, #{}]).
 
 cache_expiration_topic(Config) ->
     AvailableVhost = <<"/">>,

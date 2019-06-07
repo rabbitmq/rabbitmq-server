@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_cache).
@@ -21,7 +21,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
 %% Implementation of rabbit_auth_backend
 
@@ -51,8 +51,8 @@ check_vhost_access(#auth_user{} = AuthUser, VHostPath, AuthzData) ->
         end).
 
 check_resource_access(#auth_user{} = AuthUser,
-                      #resource{} = Resource, Permission) ->
-    with_cache(authz, {check_resource_access, [AuthUser, Resource, Permission]},
+                      #resource{} = Resource, Permission, AuthzContext) ->
+    with_cache(authz, {check_resource_access, [AuthUser, Resource, Permission, AuthzContext]},
         fun(true)  -> success;
            (false) -> refusal;
            ({error, _} = Err) -> Err;
