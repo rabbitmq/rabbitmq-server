@@ -2,6 +2,9 @@
     [{datatype, integer}]}.
 {mapping, "web_mqtt.num_acceptors.ssl", "rabbitmq_web_mqtt.num_ssl_acceptors",
     [{datatype, integer}]}.
+{mapping, "web_mqtt.max_connections", "rabbitmq_web_mqtt.max_connections", [
+    {datatype, [{enum, [infinity]}, integer]}
+]}.
 
 {mapping, "web_mqtt.tcp.backlog", "rabbitmq_web_mqtt.tcp_config.backlog",
     [{datatype, integer}]}.
@@ -12,9 +15,6 @@
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
     [{datatype, integer}]}.
-{mapping, "web_mqtt.tcp.max_connections", "rabbitmq_web_mqtt.tcp_config.max_connections", [
-    {datatype, [{enum, [infinity]}, integer]}
-]}.
 
 {mapping, "web_mqtt.ws_path", "rabbitmq_web_mqtt.ws_path",
     [{datatype, string}]}.

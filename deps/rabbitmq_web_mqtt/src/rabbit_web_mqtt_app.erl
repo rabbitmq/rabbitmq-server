@@ -66,8 +66,9 @@ mqtt_init() ->
 
 start_tcp_listener(TCPConf0, CowboyOpts) ->
   {TCPConf, IpStr, Port} = get_tcp_conf(TCPConf0),
+  MaxConnections = get_max_connections(),
   case ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
-      ranch_tcp, TCPConf,
+      ranch_tcp, [{max_connections, MaxConnections}|TCPConf],
       rabbit_web_mqtt_connection_sup, CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
@@ -85,11 +86,12 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
 start_tls_listener(TLSConf0, CowboyOpts) ->
   rabbit_networking:ensure_ssl(),
   {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
+  MaxConnections = get_max_connections(),
   {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
-      ranch_ssl, TLSConf,
+      ranch_ssl, [{max_connections, MaxConnections}|TLSConf],
       rabbit_web_mqtt_connection_sup, CowboyOpts),
   case ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
-      ranch_ssl, TLSConf,
+      ranch_ssl, [{max_connections, MaxConnections}|TLSConf],
       rabbit_web_mqtt_connection_sup, CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
@@ -113,9 +115,7 @@ listener_started(Protocol, Listener) ->
     ok.
 
 get_tcp_conf(TCPConf0) ->
-    TCPConf1 = [{connection_type, supervisor},
-                %% see rabbitmq/rabbitmq-web-mqtt#28 for background
-                {max_connections, infinity}] ++ TCPConf0,
+    TCPConf1 = [{connection_type, supervisor}|TCPConf0],
     TCPConf2 = case proplists:get_value(port, TCPConf1) of
                    undefined -> [{port, 15675}|TCPConf1];
                    _ -> TCPConf1
@@ -123,9 +123,7 @@ get_tcp_conf(TCPConf0) ->
     get_ip_port(TCPConf2).
 
 get_tls_conf(TLSConf0) ->
-    TLSConf1 = [{connection_type, supervisor},
-                %% see rabbitmq/rabbitmq-web-mqtt#28 for background
-                {max_connections, infinity}] ++ TLSConf0,
+    TLSConf1 = [{connection_type, supervisor}|TLSConf0],
     TLSConf2 = case proplists:get_value(port, TLSConf1) of
                    undefined -> [{port, 15675}|proplists:delete(port, TLSConf1)];
                    _ -> TLSConf1
@@ -144,6 +142,9 @@ normalize_ip(IpStr) when is_list(IpStr) ->
     Ip;
 normalize_ip(Ip) ->
     Ip.
+
+get_max_connections() ->
+  get_env(max_connections, infinity).
 
 get_env(Key, Default) ->
     rabbit_misc:get_env(rabbitmq_web_mqtt, Key, Default).
