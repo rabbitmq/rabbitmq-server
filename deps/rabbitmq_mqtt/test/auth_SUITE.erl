@@ -9,7 +9,8 @@ all() ->
     [{group, anonymous_no_ssl_user},
      {group, anonymous_ssl_user},
      {group, no_ssl_user},
-     {group, ssl_user}].
+     {group, ssl_user},
+     {group, client_id_propagation}].
 
 groups() ->
     [{anonymous_ssl_user, [],
@@ -49,7 +50,11 @@ groups() ->
        port_vhost_mapping_success_no_mapping,
        port_vhost_mapping_not_allowed,
        port_vhost_mapping_vhost_does_not_exist
-     ]}].
+     ]},
+     {client_id_propagation, [],
+      [client_id_propagation]
+     }
+    ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -65,8 +70,14 @@ init_per_group(Group, Config) ->
         {rmq_certspwd, "bunnychow"}
     ]),
     MqttConfig = mqtt_config(Group),
+    AuthConfig = auth_config(Group),
     rabbit_ct_helpers:run_setup_steps(Config1,
         [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
+        [ fun(Conf) -> case AuthConfig of
+                            undefined -> Conf;
+                            _         -> merge_app_env(AuthConfig, Conf)
+                       end
+          end ] ++
         rabbit_ct_broker_helpers:setup_steps() ++
         rabbit_ct_client_helpers:setup_steps()).
 
@@ -89,7 +100,18 @@ mqtt_config(ssl_user) ->
                      {allow_anonymous, false}]};
 mqtt_config(no_ssl_user) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  false},
-                     {allow_anonymous, false}]}.
+                     {allow_anonymous, false}]};
+mqtt_config(client_id_propagation) ->
+    {rabbitmq_mqtt, [{ssl_cert_login,  true},
+                     {allow_anonymous, true}]}.
+
+auth_config(client_id_propagation) ->
+    {rabbit, [
+            {auth_backends, [rabbit_auth_backend_mqtt_mock]}
+          ]
+    };
+auth_config(_) ->
+    undefined.
 
 init_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
                                          Testcase == ssl_user_auth_failure ->
@@ -368,6 +390,40 @@ connect_ssl(Config) ->
                        {proto_ver, 3},
                        {logger, info},
                        {ssl, SSLConfig}]).
+
+client_id_propagation(Config) ->
+    ClientId = <<"simpleClient">>,
+    {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>, Config),
+    receive {mqttc, C, connected} -> ok
+    after ?CONNECT_TIMEOUT -> exit(emqttc_connection_timeout)
+    end,
+    emqttc:subscribe(C, <<"TopicA">>, qos0),
+    [{authentication, AuthProps}] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                                 rabbit_auth_backend_mqtt_mock,
+                                                                 get,
+                                                                 [authentication]),
+    ?assertEqual(ClientId, proplists:get_value(client_id, AuthProps)),
+
+    [{vhost_access, AuthzData}] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                               rabbit_auth_backend_mqtt_mock,
+                                                               get,
+                                                               [vhost_access]),
+    ?assertEqual(ClientId, maps:get(<<"client_id">>, AuthzData)),
+
+    [{resource_access, AuthzContext}] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                                     rabbit_auth_backend_mqtt_mock,
+                                                                     get,
+                                                                     [resource_access]),
+    ?assertEqual(ClientId, maps:get(<<"client_id">>, AuthzContext)),
+
+    [{topic_access, TopicContext}] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                                  rabbit_auth_backend_mqtt_mock,
+                                                                  get,
+                                                                  [topic_access]),
+    VariableMap = maps:get(variable_map, TopicContext),
+    ?assertEqual(ClientId, maps:get(<<"client_id">>, VariableMap)),
+
+    emqttc:disconnect(C).
 
 connect_user(User, Pass, Config) ->
     Creds = case User of
