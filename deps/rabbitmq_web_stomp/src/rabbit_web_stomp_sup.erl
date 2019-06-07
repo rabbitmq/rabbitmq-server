@@ -11,10 +11,10 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_ws_sup).
+-module(rabbit_web_stomp_sup).
 -behaviour(supervisor2).
 
 -export([start_link/0, init/1]).

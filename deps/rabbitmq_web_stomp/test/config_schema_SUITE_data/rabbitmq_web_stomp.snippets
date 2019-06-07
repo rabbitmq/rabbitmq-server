@@ -24,6 +24,24 @@
   [{rabbitmq_web_stomp,[{port,12345}]}],
   [rabbitmq_web_stomp]},
 
+  {num_acceptors_tcp,
+    "web_stomp.num_acceptors.tcp = 20",
+    [{rabbitmq_web_stomp,
+      [{num_tcp_acceptors, 20}]}],
+    [rabbitmq_web_stomp]},
+
+  {num_acceptors_tls,
+   "web_stomp.num_acceptors.ssl = 20",
+   [{rabbitmq_web_stomp,
+     [{num_ssl_acceptors, 20}]}],
+   [rabbitmq_web_stomp]},
+
+  {max_connections,
+   "web_stomp.max_connections = 5000",
+  [{rabbitmq_web_stomp,
+    [{max_connections, 5000}]}],
+  [rabbitmq_web_stomp]},
+
  {ssl_listener,
   "web_stomp.ssl.listener = 127.0.0.4:15672",
   [{rabbitmq_web_stomp,
