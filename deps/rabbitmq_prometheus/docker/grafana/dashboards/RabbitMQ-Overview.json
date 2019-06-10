@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1559573372308,
+  "iteration": 1560179360116,
   "links": [],
   "panels": [
     {
@@ -1732,7 +1732,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "* [Publishers guide](https://www.rabbitmq.com/publishers.html)",
       "fill": 10,
       "gridPos": {
         "h": 5,
@@ -4887,7 +4887,6 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
           "text": "rabbitmq-overview",
           "value": "rabbitmq-overview"
         },
@@ -4941,5 +4940,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 5
+  "version": 1
 }
