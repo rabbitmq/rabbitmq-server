@@ -33,6 +33,7 @@ WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/lib/rabbitmq/bin/rabbitmq-server
 ExecStop=/usr/lib/rabbitmq/bin/rabbitmqctl shutdown
 # See rabbitmq/rabbitmq-server-release#51
+SuccessExitStatus=69
 
 [Install]
 WantedBy=multi-user.target
