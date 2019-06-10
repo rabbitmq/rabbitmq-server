@@ -26,6 +26,7 @@ start(normal, []) ->
     {ok, Listeners} = application:get_env(tcp_listeners),
     {ok, SslListeners} = application:get_env(ssl_listeners),
     Result = rabbit_mqtt_sup:start_link({Listeners, SslListeners}, []),
+    ok = mqtt_node:start(),
     EMPid = case rabbit_event:start_link() of
               {ok, Pid}                       -> Pid;
               {error, {already_started, Pid}} -> Pid
@@ -45,7 +46,7 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
 
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
-        AggregatorPid, Ref, fun({_, {Pid, _}}) ->
+        AggregatorPid, Ref, fun({_, Pid}) ->
             rabbit_mqtt_reader:info(Pid, Items)
         end,
         rabbit_mqtt_collector:list()).
@@ -53,4 +54,4 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
 connection_info_local(Items) ->
     Connections = rabbit_mqtt_collector:list(),
     [rabbit_mqtt_reader:info(Pid, Items)
-     || {_, {Pid, _}} <- Connections].
+     || {_, Pid} <- Connections].

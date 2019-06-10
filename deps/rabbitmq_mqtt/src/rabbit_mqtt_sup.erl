@@ -38,10 +38,7 @@ init([{Listeners, SslListeners0}]) ->
                      end}
           end,
     {ok, {{one_for_all, 10, 10},
-          [{collector,
-            {rabbit_mqtt_collector, start_link, []},
-            transient, ?WORKER_WAIT, worker, [rabbit_mqtt_collector]},
-           {rabbit_mqtt_retainer_sup,
+          [{rabbit_mqtt_retainer_sup,
             {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
              transient, ?SUPERVISOR_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
            listener_specs(fun tcp_listener_spec/1,

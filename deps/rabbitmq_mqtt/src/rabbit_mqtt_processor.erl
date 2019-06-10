@@ -134,26 +134,37 @@ process_request(?CONNECT,
                                 {SessionPresent0, PState2} = maybe_clean_sess(PState1),
                                 {{?CONNACK_ACCEPT, SessionPresent0}, PState2};
                             {?CONNACK_ACCEPT, Conn, VHost, AState} ->
-                                RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
-                                link(Conn),
-                                {ok, Ch} = amqp_connection:open_channel(Conn),
-                                link(Ch),
-                                amqp_channel:enable_delivery_flow_control(Ch),
-                                ok = rabbit_mqtt_collector:register(ClientId, self()),
-                                Prefetch = rabbit_mqtt_util:env(prefetch),
-                                #'basic.qos_ok'{} = amqp_channel:call(
-                                  Ch, #'basic.qos'{prefetch_count = Prefetch}),
-                                rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
-                                PState3 = PState1#proc_state{
-                                            will_msg   = make_will_msg(Var),
-                                            clean_sess = CleanSess,
-                                            channels   = {Ch, undefined},
-                                            connection = Conn,
-                                            client_id  = ClientId,
-                                            retainer_pid = RetainerPid,
-                                            auth_state = AState},
-                                {SessionPresent1, PState4} = maybe_clean_sess(PState3),
-                                {{?CONNACK_ACCEPT, SessionPresent1}, PState4};
+                                case rabbit_mqtt_collector:register(ClientId, self()) of
+                                  ok ->
+                                    RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
+                                    link(Conn),
+                                    {ok, Ch} = amqp_connection:open_channel(Conn),
+                                    link(Ch),
+                                    amqp_channel:enable_delivery_flow_control(Ch),
+                                    Prefetch = rabbit_mqtt_util:env(prefetch),
+                                    #'basic.qos_ok'{} = amqp_channel:call(
+                                      Ch, #'basic.qos'{prefetch_count = Prefetch}),
+                                    rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
+                                    PState3 = PState1#proc_state{
+                                                will_msg   = make_will_msg(Var),
+                                                clean_sess = CleanSess,
+                                                channels   = {Ch, undefined},
+                                                connection = Conn,
+                                                client_id  = ClientId,
+                                                retainer_pid = RetainerPid,
+                                                auth_state = AState},
+                                    {SessionPresent1, PState4} = maybe_clean_sess(PState3),
+                                    {{?CONNACK_ACCEPT, SessionPresent1}, PState4};
+                                  %% e.g. this node was removed from the MQTT cluster members
+                                  {error, _} = Err ->
+                                    rabbit_log_connection:error("MQTT cannot accept a connection: "
+                                                                "client ID tracker is unavailable: ~p", [Err]),
+                                    {?CONNACK_SERVER, PState1};
+                                  {timeout, _} ->
+                                    rabbit_log_connection:error("MQTT cannot accept a connection: "
+                                                                "client ID registration timed out"),
+                                    {?CONNACK_SERVER, PState1}
+                                end;
                             ConnAck ->
                                 {ConnAck, PState1}
                         end

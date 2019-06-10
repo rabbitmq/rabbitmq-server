@@ -11,91 +11,38 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mqtt_collector).
 
--behaviour(gen_server).
+-include("mqtt_machine.hrl").
 
--export([start_link/0, register/2, unregister/2, list/0]).
-
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
-
--record(state, {client_ids}).
-
--define(SERVER, ?MODULE).
+-export([register/2, unregister/2, list/0, leave/1]).
 
 %%----------------------------------------------------------------------------
-
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
 register(ClientId, Pid) ->
-    gen_server:call(rabbit_mqtt_collector, {register, ClientId, Pid}, infinity).
+    run_ra_command({register, ClientId, Pid}).
 
 unregister(ClientId, Pid) ->
-    gen_server:call(rabbit_mqtt_collector, {unregister, ClientId, Pid}, infinity).
+    run_ra_command({unregister, ClientId, Pid}).
 
 list() ->
-    gen_server:call(rabbit_mqtt_collector, list).
+     NodeId = mqtt_node:node_id(),
+     QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
+     {ok, {_, Ids}, _} = ra:leader_query(NodeId, QF),
+     Ids.
+
+leave(NodeBin) ->
+    Node = binary_to_atom(NodeBin, utf8),
+    run_ra_command({leave, Node}),
+    mqtt_node:leave(Node).
 
 %%----------------------------------------------------------------------------
-
-init([]) ->
-    {ok, #state{client_ids = #{}}}. % clientid -> {pid, monitor}
-
-%%--------------------------------------------------------------------------
-
-handle_call({register, ClientId, Pid}, _From,
-            State = #state{client_ids = Ids}) ->
-    Ids1 = case maps:find(ClientId, Ids) of
-               {ok, {OldPid, MRef}} when Pid =/= OldPid ->
-                   catch gen_server2:cast(OldPid, duplicate_id),
-                   erlang:demonitor(MRef),
-                   maps:remove(ClientId, Ids);
-               error ->
-                   Ids
-           end,
-    Ids2 = maps:put(ClientId, {Pid, erlang:monitor(process, Pid)}, Ids1),
-    {reply, ok, State#state{client_ids = Ids2}};
-
-handle_call({unregister, ClientId, Pid}, _From, State = #state{client_ids = Ids}) ->
-    {Reply, Ids1} = case maps:find(ClientId, Ids) of
-                        {ok, {Pid, MRef}} -> erlang:demonitor(MRef),
-                                             {ok, maps:remove(ClientId, Ids)};
-                        _                 -> {ok, Ids}
-                    end,
-    {reply, Reply, State#state{ client_ids = Ids1 }};
-
-handle_call(list, _From, State = #state{client_ids = Ids}) ->
-    {reply, maps:to_list(Ids), State};
-
-handle_call(Msg, _From, State) ->
-    {stop, {unhandled_call, Msg}, State}.
-
-handle_cast(Msg, State) ->
-    {stop, {unhandled_cast, Msg}, State}.
-
-handle_info({'EXIT', _, {shutdown, closed}}, State) ->
-    {stop, {shutdown, closed}, State};
-
-handle_info({'DOWN', MRef, process, DownPid, _Reason},
-            State = #state{client_ids = Ids}) ->
-    Ids1 = maps:filter(fun (ClientId, {Pid, M})
-                           when Pid =:= DownPid, MRef =:= M ->
-                               rabbit_log_connection:warning(
-                                              "MQTT disconnect from ~p~n",
-                                              [ClientId]),
-                               false;
-                           (_, _) ->
-                               true
-                       end, Ids),
-    {noreply, State #state{ client_ids = Ids1 }}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+-spec run_ra_command(term()) -> term() | {error, term()}.
+run_ra_command(RaCommand) ->
+    NodeId = mqtt_node:node_id(),
+    case ra:process_command(NodeId, RaCommand) of
+        {ok, Result, _} -> Result;
+        _ = Error -> Error
+    end.
