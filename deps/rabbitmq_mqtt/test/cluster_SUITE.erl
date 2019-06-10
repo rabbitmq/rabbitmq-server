@@ -96,55 +96,27 @@ connection_id_tracking(Config) ->
     emqttc:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, C} = emqttc:start_link([{host, "localhost"},
-                                 {port, P},
-                                 {client_id, <<"simpleClient">>},
-                                 {proto_ver, 3},
-                                 {logger, info},
-                                 {puback_timeout, 1}]),
-    unlink(C),
-    MRef = erlang:monitor(process, C),
+    {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
     emqttc:subscribe(C, <<"TopicA">>, qos0),
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     [_] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
-    receive
-        {'DOWN', MRef, _, _, _} ->
-            ok
-    after
-        30000 ->
-            exit(missing_down_message)
-    end,
+    await_disconnection(MRef),
     [] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []).
 
 connection_id_tracking_with_decommissioned_node(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, C} = emqttc:start_link([{host, "localhost"},
-                                 {port, P},
-                                 {client_id, <<"simpleClient">>},
-                                 {proto_ver, 3},
-                                 {logger, info},
-                                 {puback_timeout, 1}]),
-    unlink(C),
-    MRef = erlang:monitor(process, C),
+    {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
     emqttc:subscribe(C, <<"TopicA">>, qos0),
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     [_] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
-    receive
-        {'DOWN', MRef, _, _, _} ->
-            ok
-    after
-        30000 ->
-            exit(missing_down_message)
-    end,
+    await_disconnection(MRef),
     [] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []).
 
 %%
