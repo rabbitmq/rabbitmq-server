@@ -30,6 +30,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
          emit_info_local/4, emit_info_down/4]).
+-export([count/0]).
 -export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
          list_with_possible_retry/1]).
 -export([list_by_type/1]).
@@ -793,6 +794,11 @@ list() ->
 
 do_list() ->
     mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()).
+
+-spec count() -> non_neg_integer().
+
+count() ->
+    mnesia:table_info(rabbit_queue, size).
 
 -spec list_names() -> [rabbit_amqqueue:name()].
 

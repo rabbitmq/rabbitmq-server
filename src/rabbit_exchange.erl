@@ -23,7 +23,7 @@
          lookup/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
          update_scratch/3, update_decorators/1, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
-         route/2, delete/3, validate_binding/2]).
+         route/2, delete/3, validate_binding/2, count/0]).
 -export([list_names/0]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/2, serial/1, peek_serial/1, update/2]).
@@ -237,6 +237,11 @@ lookup_or_die(Name) ->
 -spec list() -> [rabbit_types:exchange()].
 
 list() -> mnesia:dirty_match_object(rabbit_exchange, #exchange{_ = '_'}).
+
+-spec count() -> non_neg_integer().
+
+count() ->
+    mnesia:table_info(rabbit_exchange, size).
 
 -spec list_names() -> [rabbit_exchange:name()].
 
