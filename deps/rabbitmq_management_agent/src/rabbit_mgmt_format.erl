@@ -387,6 +387,7 @@ queue(Q) when ?is_amqqueue(Q) ->
     Arguments = amqqueue:get_arguments(Q),
     Pid = amqqueue:get_pid(Q),
     State = amqqueue:get_state(Q),
+    Type = amqqueue:get_type(Q),
     format(
       [{name,        Name},
        {durable,     Durable},
@@ -395,6 +396,7 @@ queue(Q) when ?is_amqqueue(Q) ->
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
        {pid,         Pid},
+       {type,        Type},
        {state,       State}] ++ rabbit_amqqueue:format(Q),
       {fun format_exchange_and_queue/1, false}).
 
