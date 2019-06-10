@@ -52,7 +52,7 @@ services:
       - "15695:15692"
   publisher-confirms:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.06.06
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.06.10
     networks:
       - "rabbitmq-prometheus"
     environment:

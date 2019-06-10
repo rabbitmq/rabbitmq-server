@@ -55,7 +55,7 @@ services:
       - "15698:15692"
   stress_dist:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
-    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.06.06
+    image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.06.10
     networks:
       - "rabbitmq-prometheus"
     environment:
