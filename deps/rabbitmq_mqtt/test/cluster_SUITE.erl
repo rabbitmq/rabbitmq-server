@@ -53,7 +53,7 @@ init_per_testcase(Testcase, Config) ->
         {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
                                tcp_port_mqtt_tls_extra]},
         {rmq_nodes_clustered, true},
-        {rmq_nodes_count, 3}
+        {rmq_nodes_count, 5}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       [ fun merge_app_env/1 ] ++
@@ -70,6 +70,19 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
+%% Note about running this testsuite in a mixed-versions cluster:
+%% All even-numbered nodes will use the same code base when using a
+%% secondary Umbrella. Odd-numbered nodes might use an incompatible code
+%% base. When cluster-wide client ID tracking was introduced, it was not
+%% put behind a feature flag because there was no need for one. Here, we
+%% don't have a way to ensure that all nodes participate in client ID
+%% tracking. However, those using the same code should. That's why we
+%% limit our RPC calls to those nodes.
+%%
+%% That's also the reason why we use a 5-node cluster: with node 2 and
+%% 4 which might not participate, it leaves nodes 1, 3 and 5: thus 3
+%% nodes, the minimum to use Ra in proper conditions.
+
 connection_id_tracking(Config) ->
     ID = <<"duplicate-id">>,
     {ok, MRef1, C1} = connect_to_node(Config, 0, ID),
@@ -78,17 +91,17 @@ connection_id_tracking(Config) ->
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
 
     %% connect to the same node (A or 0)
-    {ok, MRef2, C2} = connect_to_node(Config, 0, ID),
+    {ok, MRef2, _C2} = connect_to_node(Config, 0, ID),
 
     %% C1 is disconnected
     await_disconnection(MRef1),
 
-    %% connect to a different node (B or 1)
-    {ok, _, C3} = connect_to_node(Config, 1, ID),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []),
+    %% connect to a different node (C or 2)
+    {ok, _, C3} = connect_to_node(Config, 2, ID),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
 
     %% C2 is disconnected
     await_disconnection(MRef2),
@@ -102,10 +115,10 @@ connection_id_tracking_on_nodedown(Config) ->
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
     await_disconnection(MRef),
-    [] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []).
+    [] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []).
 
 connection_id_tracking_with_decommissioned_node(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -114,10 +127,10 @@ connection_id_tracking_with_decommissioned_node(Config) ->
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
     await_disconnection(MRef),
-    [] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_mqtt_collector, list, []).
+    [] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []).
 
 %%
 %% Helpers
