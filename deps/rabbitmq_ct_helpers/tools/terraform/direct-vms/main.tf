@@ -193,7 +193,7 @@ resource "aws_instance" "vm" {
 
   subnet_id       = "${aws_subnet.vpc.id}"
 
-  vpc_security_group_ids = flatten(local.security_groups)
+  vpc_security_group_ids = local.security_groups
 
   user_data = "${data.template_file.user_data.rendered}"
 

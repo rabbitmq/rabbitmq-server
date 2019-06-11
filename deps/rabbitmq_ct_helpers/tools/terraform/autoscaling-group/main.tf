@@ -31,7 +31,7 @@ resource "aws_launch_configuration" "lc" {
   instance_type   = "${module.direct_vms.instance_type}"
   key_name        = "${module.direct_vms.ssh_key_name}"
 
-  security_groups = flatten(module.direct_vms.security_groups)
+  security_groups = module.direct_vms.security_groups
 
   user_data       = "${module.direct_vms.instance_user_data}"
 

@@ -47,7 +47,7 @@ output "ssh_key_name" {
 }
 
 output "security_groups" {
-  value = ["${local.security_groups}"]
+  value = local.security_groups
 }
 
 output "instance_user_data" {
