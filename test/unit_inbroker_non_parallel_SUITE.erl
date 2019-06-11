@@ -17,6 +17,7 @@
 -module(unit_inbroker_non_parallel_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -41,7 +42,11 @@ groups() ->
           log_management, %% Check log files.
           log_file_initialised_during_startup,
           log_file_fails_to_initialise_during_startup,
-          externally_rotated_logs_are_automatically_reopened %% Check log files.
+          externally_rotated_logs_are_automatically_reopened, %% Check log files.
+          exchange_count,
+          queue_count,
+          connection_count,
+          connection_lookup
         ]}
     ].
 
@@ -685,6 +690,44 @@ disk_monitor_enable1() ->
     application:set_env(rabbit, disk_monitor_failure_retries, 10),
     application:set_env(rabbit, disk_monitor_failure_retry_interval, 120000),
     passed.
+
+%% ---------------------------------------------------------------------------
+%% Count functions for management only API purposes
+%% ---------------------------------------------------------------------------
+exchange_count(Config) ->
+    %% Default exchanges == 7
+    ?assertEqual(7, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, count, [])).
+
+queue_count(Config) ->
+    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-queue">> }),
+
+    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, [])),
+
+    amqp_channel:call(Ch, #'queue.delete'{ queue = <<"my-queue">> }),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+connection_count(Config) ->
+    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
+
+    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, [])),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+connection_lookup(Config) ->
+    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
+
+    [Connection] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []),
+    ?assertMatch(Connection, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
+                                                          lookup,
+                                                          [Connection#tracked_connection.name])),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
