@@ -28,7 +28,8 @@ node_id(Node) ->
 start() ->
     Name = mqtt_node,
     NodeId = node_id(),
-    Nodes = [{Name, N} || N <- rabbit_mnesia:cluster_nodes(all)] -- [NodeId],
+    Nodes = [{Name, N} || N <- rabbit_mnesia:cluster_nodes(all),
+                          can_participate_in_clientid_tracking(N)] -- [NodeId],
     Res = case ra_directory:uid_of(Name) of
               undefined ->
                   UId = ra:new_uid(ra_lib:to_binary(Name)),
@@ -76,4 +77,10 @@ leave(Node) ->
     catch
         exit:{{nodedown, Node}, _} ->
             nodedown
+    end.
+
+can_participate_in_clientid_tracking(Node) ->
+    case rpc:call(Node, mqtt_machine, module_info, []) of
+        {badrpc, _} -> false;
+        _           -> true
     end.
