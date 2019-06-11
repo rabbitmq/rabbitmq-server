@@ -4890,7 +4890,7 @@
           "text": "rabbitmq-overview",
           "value": "rabbitmq-overview"
         },
-        "datasource": "Prometheus",
+        "datasource": "prometheus",
         "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
         "hide": 0,
         "includeAll": false,
