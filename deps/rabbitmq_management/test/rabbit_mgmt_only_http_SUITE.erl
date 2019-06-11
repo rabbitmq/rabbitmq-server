@@ -47,13 +47,15 @@
 all() ->
     [
      {group, all_tests_with_prefix},
-     {group, all_tests_without_prefix}
+     {group, all_tests_without_prefix},
+     {group, stats_disabled_on_request}
     ].
 
 groups() ->
     [
      {all_tests_with_prefix, [], all_tests()},
-     {all_tests_without_prefix, [], all_tests()}
+     {all_tests_without_prefix, [], all_tests()},
+     {stats_disabled_on_request, [], [disable_with_disable_stats_parameter_test]}
     ].
 
 all_tests() -> [
@@ -86,14 +88,14 @@ all_tests() -> [
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
-merge_app_env(Config) ->
+merge_app_env(Config, DisableStats) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                     {rabbit, [
                                               {collect_statistics_interval, ?COLLECT_INTERVAL}
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
-                                     {disable_management_stats, true},
+                                     {disable_management_stats, DisableStats},
                                      {sample_retention_policies,
                                           [{global,   [{605, 1}]},
                                            {basic,    [{605, 1}]},
@@ -106,12 +108,19 @@ start_broker(Config) ->
     Steps = Setup0 ++ Setup1,
     rabbit_ct_helpers:run_setup_steps(Config, Steps).
 
-finish_init(Group, Config) ->
+finish_init(Group, Config) when Group == all_tests_with_prefix ->
+    finish_init(Group, Config, true);
+finish_init(Group, Config) when Group == all_tests_without_prefix ->
+    finish_init(Group, Config, true);
+finish_init(Group, Config) when Group == stats_disabled_on_request ->
+    finish_init(Group, Config, false).
+
+finish_init(Group, Config, DisableStats) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
     NodeConf = [{rmq_nodename_suffix, Group}],
     Config1 = rabbit_ct_helpers:set_config(Config, NodeConf),
-    merge_app_env(Config1).
+    merge_app_env(Config1, DisableStats).
 
 init_per_group(all_tests_with_prefix=Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
@@ -1158,7 +1167,6 @@ samples_range_test(Config) ->
     http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?BAD_REQUEST),
     http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?BAD_REQUEST),
 
-
     %% Connections.
     [Connection] = http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(maps:is_key(name, Connection)),
@@ -1220,6 +1228,110 @@ samples_range_test(Config) ->
     ?assert(maps:is_key(cluster_state, VHost)),
 
     http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+
+    passed.
+
+disable_with_disable_stats_parameter_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+
+    %% Ensure we have some queue and exchange stats, needed later
+    http_put(Config, "/queues/%2F/test0", #{}, {group, '2xx'}),
+    timer:sleep(1500),
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<>>,
+                                           routing_key = <<"test0">>},
+                      #amqp_msg{payload = <<"message">>}),
+
+    %% Channels.
+
+    timer:sleep(1500),
+    %% Check first that stats are available
+    http_get(Config, "/channels", ?OK),
+    %% Now we can disable them
+    http_get(Config, "/channels?disable_stats=true", ?BAD_REQUEST),
+
+
+    %% Connections.
+
+    %% Check first that stats are available
+    [ConnectionStats] = http_get(Config, "/connections", ?OK),
+    ?assert(maps:is_key(recv_oct_details, ConnectionStats)),
+    %% Now we can disable them
+    [Connection] = http_get(Config, "/connections?disable_stats=true", ?OK),
+    ?assert(maps:is_key(name, Connection)),
+    ?assert(not maps:is_key(recv_oct_details, Connection)),
+
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+
+    %% Exchanges.
+
+    %% Check first that stats are available
+    %% Exchange stats aren't published - even as 0 - until some messages have gone
+    %% through. At the end of this test we ensure that at least the default exchange
+    %% has something to show.
+    ExchangeStats = http_get(Config, "/exchanges", ?OK),
+    ?assert(lists:any(fun(E) ->
+                              maps:is_key(message_stats, E)
+                      end, ExchangeStats)),
+    %% Now we can disable them
+    Exchanges = http_get(Config, "/exchanges?disable_stats=true", ?OK),
+    ?assert(lists:all(fun(E) ->
+                              not maps:is_key(message_stats, E)
+                      end, Exchanges)),
+    Exchange = http_get(Config, "/exchanges/%2F/amq.direct?disable_stats=true&lengths_age=60&lengths_incr=1", ?OK),
+    ?assert(not maps:is_key(message_stats, Exchange)),
+
+    %% Nodes.
+
+    %% Check that stats are available
+    [NodeStats] = http_get(Config, "/nodes", ?OK),
+    ?assert(maps:is_key(channel_closed_details, NodeStats)),
+    %% Now we can disable them
+    [Node] = http_get(Config, "/nodes?disable_stats=true", ?OK),
+    ?assert(not maps:is_key(channel_closed_details, Node)),
+    ?assert(not maps:is_key(channel_closed, Node)),
+    ?assert(not maps:is_key(disk_free, Node)),
+    ?assert(not maps:is_key(io_read_count, Node)),
+
+
+    %% Overview.
+
+    %% Check that stats are available
+    OverviewStats = http_get(Config, "/overview", ?OK),
+    ?assert(maps:is_key(message_stats, OverviewStats)),
+    %% Now we can disable them
+    Overview = http_get(Config, "/overview?disable_stats=true&lengths_age=60&lengths_incr=1", ?OK),
+    ?assert(not maps:is_key(queue_totals, Overview)),
+    ?assert(not maps:is_key(churn_rates, Overview)),
+    ?assert(not maps:is_key(message_stats, Overview)),
+
+    %% Queues.
+
+    %% Check that stats are available
+    [QueueStats] = http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
+    ?assert(maps:is_key(message_stats, QueueStats)),
+    %% Now we can disable them
+    [Queue] = http_get(Config, "/queues/%2F?disable_stats=true", ?OK),
+    ?assert(not maps:is_key(message_stats, Queue)),
+    ?assert(not maps:is_key(messages_details, Queue)),
+    ?assert(not maps:is_key(reductions_details, Queue)),
+
+    http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
+
+    %% Vhosts.
+
+    %% Check that stats are available
+    VHostStats = http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
+    ?assert(lists:all(fun(E) ->
+                              maps:is_key(message_stats, E) and
+                                  maps:is_key(messages_ready_details, E)
+                      end, VHostStats)),
+    %% Now we can disable them
+    VHosts = http_get(Config, "/vhosts?disable_stats=true&lengths_age=60&lengths_incr=1", ?OK),
+    ?assert(lists:all(fun(E) ->
+                              not maps:is_key(message_stats, E) and
+                                  not maps:is_key(messages_ready_details, E)
+                      end, VHosts)),
 
     passed.
 

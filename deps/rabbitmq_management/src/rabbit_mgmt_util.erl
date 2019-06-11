@@ -110,7 +110,7 @@ is_authorized_vhost_visible(ReqData, Context) ->
                   end).
 
 disable_stats(ReqData) ->
-    MgmtOnly = case id(dstats, ReqData) of
+    MgmtOnly = case qs_val(<<"disable_stats">>, ReqData) of
                    <<"true">> -> true;
                    _ -> false
                end,
