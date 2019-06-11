@@ -392,6 +392,8 @@ connect_ssl(Config) ->
                        {ssl, SSLConfig}]).
 
 client_id_propagation(Config) ->
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config,
+      rabbit_auth_backend_mqtt_mock),
     ClientId = <<"simpleClient">>,
     {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>, Config),
     receive {mqttc, C, connected} -> ok
