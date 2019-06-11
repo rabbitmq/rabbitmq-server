@@ -16,6 +16,7 @@
 
 -module(unit_inbroker_non_parallel_SUITE).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -570,8 +571,9 @@ head_message_timestamp_statistics(Config) ->
       ?MODULE, head_message_timestamp1, [Config]).
 
 head_message_timestamp1(_Config) ->
-    %% Can't find a way to receive the ack here so can't test pending acks status
-
+    %% there is no convenient rabbit_channel API for confirms
+    %% this test could use, so it relies on tx.* methods
+    %% and gen_server2 flushing
     application:set_env(rabbit, collect_statistics, fine),
 
     %% Set up a channel and queue
@@ -592,6 +594,11 @@ head_message_timestamp1(_Config) ->
     Event1 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
     '' = proplists:get_value(head_message_timestamp, Event1),
 
+    rabbit_channel:do(Ch, #'tx.select'{}),
+    receive #'tx.select_ok'{} -> ok
+    after ?TIMEOUT -> throw(failed_to_receive_tx_select_ok)
+    end,
+
     %% Publish two messages and check timestamp is that of first message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
                                            routing_key = QName},
@@ -599,13 +606,18 @@ head_message_timestamp1(_Config) ->
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
                                            routing_key = QName},
                       rabbit_basic:build_content(#'P_basic'{timestamp = 2}, <<"">>)),
+    rabbit_channel:do(Ch, #'tx.commit'{}),
+    rabbit_channel:flush(Ch),
+    receive #'tx.commit_ok'{} -> ok
+    after ?TIMEOUT -> throw(failed_to_receive_tx_commit_ok)
+    end,
     Event2 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    1 = proplists:get_value(head_message_timestamp, Event2),
+    ?assertEqual(1, proplists:get_value(head_message_timestamp, Event2)),
 
     %% Get first message and check timestamp is that of second message
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
     Event3 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    2 = proplists:get_value(head_message_timestamp, Event3),
+    ?assertEqual(2, proplists:get_value(head_message_timestamp, Event3)),
 
     %% Get second message and check timestamp is empty again
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
