@@ -54,10 +54,7 @@ init([Type, Name, Config0]) ->
                                                                 Config0),
                     Conf
             end,
-    case Name of
-      {VHost, ShovelName} -> rabbit_log:debug("Initialising a Shovel '~s' of type '~s' in virtual host '~s'", [ShovelName, Type, VHost]);
-      ShovelName          -> rabbit_log:debug("Initialising a Shovel '~s' of type '~s'", [ShovelName, Type])
-    end,
+    rabbit_log_shovel:debug("Initialising a Shovel '~s' of type '~s'", [human_readable_name(Name), Type]),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, type = Type, config = Config}}.
 
@@ -67,36 +64,24 @@ handle_call(_Msg, _From, State) ->
 handle_cast(init, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_source(Config0) of
       Config ->
-        case maps:get(name, Config) of
-          {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' connected to source", [ShovelName, VHost]);
-          ShovelName          -> rabbit_log:debug("Shovel '~s' connected to source", [ShovelName])
-        end,
+        rabbit_log_shovel:debug("Shovel '~s' connected to source", [human_readable_name(maps:get(name, Config))]),
         %% this makes sure that connection pid is updated in case
         %% any of the subsequent connection/init steps fail. See
         %% rabbitmq/rabbitmq-shovel#54 for context.
         gen_server2:cast(self(), connect_dest),
         {noreply, State#state{config = Config}}
     catch _:_ ->
-      case maps:get(name, Config0) of
-        {VHost, ShovelName} -> rabbit_log:error("Shovel '~s' in virtual host '~s' failed to connect to source", [ShovelName, VHost]);
-        ShovelName          -> rabbit_log:error("Shovel '~s' failed to connect to source", [ShovelName])
-      end,
+      rabbit_log_shovel:error("Shovel '~s' could not connect to source", [human_readable_name(maps:get(name, Config0))]),
       {stop, shutdown, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
       Config ->
-        case maps:get(name, Config) of
-          {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' connected to destination", [ShovelName, VHost]);
-          ShovelName          -> rabbit_log:debug("Shovel '~s' connected to destination", [ShovelName])
-        end,
+        rabbit_log_shovel:debug("Shovel '~s' connected to destination", [human_readable_name(maps:get(name, Config))]),
         gen_server2:cast(self(), init_shovel),
         {noreply, State#state{config = Config}}
     catch _:_ ->
-      case maps:get(name, Config0) of
-        {VHost, ShovelName} -> rabbit_log:error("Shovel '~s' in virtual host '~s' failed to connect to destination", [ShovelName, VHost]);
-        ShovelName          -> rabbit_log:error("Shovel '~s' failed to connect to destination", [ShovelName])
-      end,
+      rabbit_log_shovel:error("Shovel '~s' could not connect to destination", [human_readable_name(maps:get(name, Config0))]),
       {stop, shutdown, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
@@ -106,10 +91,7 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
     process_flag(trap_exit, true),
     Config1 = rabbit_shovel_behaviour:init_dest(Config),
     Config2 = rabbit_shovel_behaviour:init_source(Config1),
-    case maps:get(name, Config2) of
-      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' has finished setting up its topology", [ShovelName, VHost]);
-      ShovelName          -> rabbit_log:debug("Shovel '~s' has finished setting up its topology", [ShovelName])
-    end,
+    rabbit_log_shovel:debug("Shovel '~s' has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
     State1 = State#state{config = Config2},
     ok = report_running(State1),
     {noreply, State1}.
@@ -120,37 +102,22 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
         not_handled ->
             case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
                 not_handled ->
-                    case Name of
-                      {VHost, ShovelName} -> rabbit_log:warning("Shovel '~s' in virtual host '~s' could not handle a destination message ~p", [ShovelName, VHost, Msg]);
-                      ShovelName          -> rabbit_log:warning("Shovel '~s' could not handle a destination message ~p", [ShovelName, Msg])
-                    end,
+                    rabbit_log_shovel:warning("Shovel '~s' could not handle a destination message ~p", [human_readable_name(Name), Msg]),
                     {noreply, State};
                 {stop, {outbound_conn_died, Reason}} ->
-                    case Name of
-                      {VHost, ShovelName} -> rabbit_log:error("Shovel '~s' in virtual host '~s' detected destination connection failure", [ShovelName, VHost]);
-                      ShovelName          -> rabbit_log:error("Shovel '~s' detected destination connection failure", [ShovelName])
-                    end,
+                    rabbit_log_shovel:error("Shovel '~s' detected destination connection failure", [human_readable_name(Name), Msg]),
                     {stop, Reason, State};
                 {stop, Reason} ->
-                    case Name of
-                      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' decided to stop due a message from destination: ~p", [ShovelName, VHost, Msg]);
-                      ShovelName          -> rabbit_log:debug("Shovel '~s' decided to stop due a message from destination: ~p", [ShovelName, Msg])
-                    end,
+                    rabbit_log_shovel:debug("Shovel '~s' decided to stop due a message from destination: ~p", [human_readable_name(Name), Msg]),
                     {stop, Reason, State};
                 Config1 ->
                     {noreply, State#state{config = Config1}}
             end;
         {stop, {inbound_conn_died, Reason}} ->
-            case Name of
-              {VHost, ShovelName} -> rabbit_log:error("Shovel '~s' in virtual host '~s' detected source connection failure", [ShovelName, VHost, Msg]);
-              ShovelName          -> rabbit_log:error("Shovel '~s' detected source connection failure: ~p", [ShovelName, Msg])
-            end,
+            rabbit_log_shovel:error("Shovel '~s' detected source connection failure", [human_readable_name(Name), Msg]),
             {stop, Reason, State};
         {stop, Reason} ->
-            case Name of
-              {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' decided to stop due a message from source: ~p", [ShovelName, VHost, Msg]);
-              ShovelName          -> rabbit_log:debug("Shovel '~s' decided to stop due a message from source: ~p", [ShovelName, Msg])
-            end,
+            rabbit_log_shovel:error("Shovel '~s' decided to stop due a message from source: ~p", [human_readable_name(Name), Msg]),
             {stop, Reason, State};
         Config1 ->
             {noreply, State#state{config = Config1}}
@@ -158,7 +125,8 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
 
 terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
                                                  type = dynamic}) ->
-    rabbit_log:info("Shovel '~s' in virtual host '~s' is stopping (it was configured to autodelete and transfer is completed)", [Name, VHost]),
+    rabbit_log_shovel:info("Shovel '~s' is stopping (it was configured to autodelete and transfer is completed)",
+                           [human_readable_name({VHost, Name})]),
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
     put(shovel_worker_autodelete, true),
@@ -168,47 +136,23 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
 terminate(shutdown, State) ->
     close_connections(State),
     ok;
-terminate(shutdown, State) ->
-    close_connections(State),
-    ok;
 terminate(socket_closed_unexpectedly, State) ->
-    close_connections(State),
-    ok;
-terminate(socket_closed_unexpectedly, State) ->
-    close_connections(State),
-    ok;
-terminate({'EXIT', outbound_conn_died}, State = #state{name = {VHost, Name}}) ->
-    rabbit_log:error("Shovel '~s' in virtual host '~s' is stopping because destination connection failed", [Name, VHost]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "destination connection failed"}),
     close_connections(State),
     ok;
 terminate({'EXIT', outbound_conn_died}, State = #state{name = Name}) ->
-    rabbit_log:error("Shovel '~s' is stopping because destination connection failed", [Name]),
+    rabbit_log_shovel:error("Shovel '~s' is stopping because destination connection failed", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "destination connection failed"}),
     close_connections(State),
     ok;
-terminate({'EXIT', inbound_conn_died}, State = #state{name = {VHost, Name}}) ->
-    rabbit_log:error("Shovel '~s' in virtual host '~s' is stopping because destination connection failed", [Name, VHost]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "source connection failed"}),
-    close_connections(State),
-    ok;
 terminate({'EXIT', inbound_conn_died}, State = #state{name = Name}) ->
-    rabbit_log:error("Shovel '~s' is stopping because source connection failed", [Name]),
+    rabbit_log_shovel:error("Shovel '~s' is stopping because destination connection failed", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "source connection failed"}),
-    close_connections(State),
-    ok;
-terminate(Reason, State = #state{name = {VHost, Name}}) ->
-    rabbit_log:error("Shovel '~s' in virtual host '~s' is stopping, reason: ~p", [Name, VHost, Reason]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, Reason}),
     close_connections(State),
     ok;
 terminate(Reason, State = #state{name = Name}) ->
-    rabbit_log:error("Shovel '~s' is stopping, reason: ~p", [Name, Reason]),
+    rabbit_log_shovel:error("Shovel '~s' is stopping, reason: ~p", [human_readable_name(Name), Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, Reason}),
     close_connections(State),
@@ -220,6 +164,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%---------------------------
 %% Helpers
 %%---------------------------
+
+human_readable_name(Name) ->
+  case Name of
+    {VHost, ShovelName} -> rabbit_misc:format("'~s' in virtual host '~s'", [ShovelName, VHost]);
+    ShovelName          -> rabbit_misc:format("'~s'", [ShovelName])
+  end.
 
 report_running(#state{config = Config} = State) ->
     InUri = rabbit_shovel_behaviour:source_uri(Config),
