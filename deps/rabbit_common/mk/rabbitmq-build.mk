@@ -44,6 +44,7 @@ LAGER_EXTRA_SINKS += rabbit_log \
 		     rabbit_log_queue \
 		     rabbit_log_ra \
 		     rabbit_log_federation \
+		     rabbit_log_shovel \
 		     rabbit_log_upgrade
 lager_extra_sinks = $(subst $(space),$(comma),$(LAGER_EXTRA_SINKS))
 
