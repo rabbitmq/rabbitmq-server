@@ -54,7 +54,7 @@ init([Type, Name, Config0]) ->
                                                                 Config0),
                     Conf
             end,
-    rabbit_log_shovel:debug("Initialising a Shovel '~s' of type '~s'", [human_readable_name(Name), Type]),
+    rabbit_log_shovel:debug("Initialising a Shovel ~s of type '~s'", [human_readable_name(Name), Type]),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, type = Type, config = Config}}.
 
@@ -64,24 +64,24 @@ handle_call(_Msg, _From, State) ->
 handle_cast(init, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_source(Config0) of
       Config ->
-        rabbit_log_shovel:debug("Shovel '~s' connected to source", [human_readable_name(maps:get(name, Config))]),
+        rabbit_log_shovel:debug("Shovel ~s connected to source", [human_readable_name(maps:get(name, Config))]),
         %% this makes sure that connection pid is updated in case
         %% any of the subsequent connection/init steps fail. See
         %% rabbitmq/rabbitmq-shovel#54 for context.
         gen_server2:cast(self(), connect_dest),
         {noreply, State#state{config = Config}}
     catch _:_ ->
-      rabbit_log_shovel:error("Shovel '~s' could not connect to source", [human_readable_name(maps:get(name, Config0))]),
+      rabbit_log_shovel:error("Shovel ~s could not connect to source", [human_readable_name(maps:get(name, Config0))]),
       {stop, shutdown, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
       Config ->
-        rabbit_log_shovel:debug("Shovel '~s' connected to destination", [human_readable_name(maps:get(name, Config))]),
+        rabbit_log_shovel:debug("Shovel ~s connected to destination", [human_readable_name(maps:get(name, Config))]),
         gen_server2:cast(self(), init_shovel),
         {noreply, State#state{config = Config}}
     catch _:_ ->
-      rabbit_log_shovel:error("Shovel '~s' could not connect to destination", [human_readable_name(maps:get(name, Config0))]),
+      rabbit_log_shovel:error("Shovel ~s could not connect to destination", [human_readable_name(maps:get(name, Config0))]),
       {stop, shutdown, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
@@ -91,7 +91,7 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
     process_flag(trap_exit, true),
     Config1 = rabbit_shovel_behaviour:init_dest(Config),
     Config2 = rabbit_shovel_behaviour:init_source(Config1),
-    rabbit_log_shovel:debug("Shovel '~s' has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
+    rabbit_log_shovel:debug("Shovel ~s has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
     State1 = State#state{config = Config2},
     ok = report_running(State1),
     {noreply, State1}.
@@ -102,22 +102,22 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
         not_handled ->
             case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
                 not_handled ->
-                    rabbit_log_shovel:warning("Shovel '~s' could not handle a destination message ~p", [human_readable_name(Name), Msg]),
+                    rabbit_log_shovel:warning("Shovel ~s could not handle a destination message ~p", [human_readable_name(Name), Msg]),
                     {noreply, State};
                 {stop, {outbound_conn_died, Reason}} ->
-                    rabbit_log_shovel:error("Shovel '~s' detected destination connection failure", [human_readable_name(Name), Msg]),
+                    rabbit_log_shovel:error("Shovel ~s detected destination connection failure", [human_readable_name(Name), Msg]),
                     {stop, Reason, State};
                 {stop, Reason} ->
-                    rabbit_log_shovel:debug("Shovel '~s' decided to stop due a message from destination: ~p", [human_readable_name(Name), Msg]),
+                    rabbit_log_shovel:debug("Shovel ~s decided to stop due a message from destination: ~p", [human_readable_name(Name), Msg]),
                     {stop, Reason, State};
                 Config1 ->
                     {noreply, State#state{config = Config1}}
             end;
         {stop, {inbound_conn_died, Reason}} ->
-            rabbit_log_shovel:error("Shovel '~s' detected source connection failure", [human_readable_name(Name), Msg]),
+            rabbit_log_shovel:error("Shovel ~s detected source connection failure", [human_readable_name(Name), Msg]),
             {stop, Reason, State};
         {stop, Reason} ->
-            rabbit_log_shovel:error("Shovel '~s' decided to stop due a message from source: ~p", [human_readable_name(Name), Msg]),
+            rabbit_log_shovel:error("Shovel ~s decided to stop due a message from source: ~p", [human_readable_name(Name), Msg]),
             {stop, Reason, State};
         Config1 ->
             {noreply, State#state{config = Config1}}
