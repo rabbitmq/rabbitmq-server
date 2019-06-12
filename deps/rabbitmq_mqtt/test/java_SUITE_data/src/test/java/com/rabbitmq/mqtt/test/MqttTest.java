@@ -52,7 +52,7 @@ public class MqttTest implements MqttCallback {
 
     private final String host = "localhost";
     private final String brokerUrl = "tcp://" + host + ":" + getPort();
-    private final String brokerTwoUrl = "tcp://" + host + ":" + getSecondPort();
+    private final String brokerThreeUrl = "tcp://" + host + ":" + getThirdPort();
     private String clientId;
     private String clientId2;
     private MqttClient client;
@@ -79,8 +79,8 @@ public class MqttTest implements MqttCallback {
         return Integer.parseInt(port.toString());
     }
 
-    private static int getSecondPort() {
-        Object port = System.getProperty("mqtt.port.2", "1883");
+    private static int getThirdPort() {
+        Object port = System.getProperty("mqtt.port.3", "1883");
         Assert.assertNotNull(port);
         return Integer.parseInt(port.toString());
     }
@@ -523,10 +523,10 @@ public class MqttTest implements MqttCallback {
 
     @Test public void multipleClusterClientIds() throws MqttException, InterruptedException {
         client.connect(conOpt);
-        client2 = new MqttClient(brokerTwoUrl, clientId, null);
-        client2.connect(conOpt);
+        MqttClient client3 = new MqttClient(brokerThreeUrl, clientId, null);
+        client3.connect(conOpt);
         waitAtMost(timeout).until(isClientConnected(),equalTo(false));
-        client2.disconnect();
+        client3.disconnect();
     }
 
     @Test public void ping() throws MqttException, InterruptedException {
