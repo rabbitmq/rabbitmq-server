@@ -250,8 +250,7 @@ handle_dest(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
                        end, Seq, Multiple, State);
 
 handle_dest(#'basic.cancel'{}, #{name := Name}) ->
-    rabbit_log:warning("Shovel ~p received 'basic.cancel' from the broker~n",
-                       [Name]),
+    rabbit_log:warning("Shovel ~p received a 'basic.cancel' from the server", [Name]),
     {stop, {shutdown, restart}};
 
 handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
@@ -314,12 +313,12 @@ publish(IncomingTag, Method, Msg,
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' in vhost '~s' has no more URIs to try for connection and will terminate~n",
+          "Shovel '~s' in vhost '~s' has no more URIs to try for connection",
           [Name, VHost]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan([], ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' has no more URIs to try for connection and will terminate~n",
+          "Shovel '~s' has no more URIs to try for connection",
           [ShovelName]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan(URIs, ShovelName) ->
