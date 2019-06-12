@@ -80,6 +80,7 @@ make_internal_sink_name(ldap)       -> rabbit_log_ldap_lager_event;
 make_internal_sink_name(mirroring)  -> rabbit_log_mirroring_lager_event;
 make_internal_sink_name(queue)      -> rabbit_log_queue_lager_event;
 make_internal_sink_name(federation) -> rabbit_log_federation_lager_event;
+make_internal_sink_name(shovel)     -> rabbit_log_shovel_lager_event;
 make_internal_sink_name(upgrade)    -> rabbit_log_upgrade_lager_event;
 make_internal_sink_name(default)    -> rabbit_log_lager_event;
 make_internal_sink_name(Category)   -> erlang:error({unknown_category, Category}).
