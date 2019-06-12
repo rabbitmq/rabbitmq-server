@@ -31,12 +31,26 @@ start_link(Name, Config) ->
 %%----------------------------------------------------------------------------
 
 init([Name, Config0]) ->
-    Config = rabbit_data_coercion:to_proplist(Config0),
+    Config  = rabbit_data_coercion:to_proplist(Config0),
+    Delay   = pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY),
+    case Name of
+      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' will use reconnection delay of ~p", [ShovelName, VHost, Delay]);
+      ShovelName          -> rabbit_log:debug("Shovel '~s' will use reconnection delay of ~s", [ShovelName, Delay])
+    end,
+    Restart = case Delay of
+        N when is_integer(N) andalso N > 0 ->
+          case pget(<<"src-delete-after">>, Config, <<"never">>) of
+            %% always try to reconnect
+            <<"never">>                        -> {permanent, N};
+            %% this Shovel is an autodelete one
+            M when is_integer(M) andalso M > 0 -> {transient, N}
+          end;
+        %% reconnect-delay = 0 means "do not reconnect"
+        _                                  -> temporary
+    end,
+
     {ok, {{one_for_one, 1, ?MAX_WAIT},
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},
-            case pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY) of
-                N when is_integer(N) andalso N > 0 -> {transient, N};
-                _                                  -> temporary
-            end,
+            Restart,
             16#ffffffff, worker, [rabbit_shovel_worker]}]}}.
