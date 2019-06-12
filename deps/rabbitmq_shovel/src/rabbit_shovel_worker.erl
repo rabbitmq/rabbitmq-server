@@ -198,7 +198,7 @@ terminate({'EXIT', inbound_conn_died}, State = #state{name = {VHost, Name}}) ->
 terminate({'EXIT', inbound_conn_died}, State = #state{name = Name}) ->
     rabbit_log:error("Shovel '~s' is stopping because source connection failed", [Name]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "destination connection failed"}),
+                                {terminated, "source connection failed"}),
     close_connections(State),
     ok;
 terminate(Reason, State = #state{name = {VHost, Name}}) ->
