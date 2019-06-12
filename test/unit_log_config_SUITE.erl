@@ -135,6 +135,11 @@ sink_rewrite_sinks() ->
      {rabbit_log_queue_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]},
+
+     {rabbit_log_shovel_lager_event,
+      [{handlers, [{lager_forwarder_backend,[lager_event,inherit]}]},
+       {rabbit_handlers,
+        [{lager_forwarder_backend,[lager_event,inherit]}]}]},
      {rabbit_log_upgrade_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}
@@ -220,6 +225,11 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
          {rabbit_log_queue_lager_event,
             [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
              {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]},
+
+         {rabbit_log_shovel_lager_event,
+            [{handlers, [{lager_forwarder_backend,[lager_event,inherit]}]},
+             {rabbit_handlers,
+              [{lager_forwarder_backend,[lager_event,inherit]}]}]},
          {rabbit_log_upgrade_lager_event,
             [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
              {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}]),
@@ -297,6 +307,12 @@ level_sinks() ->
      {rabbit_log_queue_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]},
+
+     {rabbit_log_shovel_lager_event,
+        [{handlers, [{lager_forwarder_backend,[lager_event,inherit]}]},
+         {rabbit_handlers,
+             [{lager_forwarder_backend,
+                  [lager_event,inherit]}]}]},
      {rabbit_log_upgrade_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}
@@ -387,6 +403,11 @@ file_sinks() ->
      {rabbit_log_queue_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]},
+
+     {rabbit_log_shovel_lager_event,
+        [{handlers, [{lager_forwarder_backend,[lager_event,inherit]}]},
+         {rabbit_handlers,
+          [{lager_forwarder_backend,[lager_event,inherit]}]}]},
      {rabbit_log_upgrade_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}
@@ -620,6 +641,11 @@ default_expected_sinks(UpgradeFile) ->
      {rabbit_log_queue_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]},
+
+     {rabbit_log_shovel_lager_event,
+        [{handlers, [{lager_forwarder_backend,[lager_event,inherit]}]},
+         {rabbit_handlers,
+          [{lager_forwarder_backend,[lager_event,inherit]}]}]},
      {rabbit_log_upgrade_lager_event,
         [{handlers,
             [{lager_file_backend,
@@ -684,6 +710,11 @@ tty_expected_sinks() ->
      {rabbit_log_queue_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]},
+
+     {rabbit_log_shovel_lager_event,
+        [{handlers, [{lager_forwarder_backend,[lager_event,inherit]}]},
+         {rabbit_handlers,
+          [{lager_forwarder_backend,[lager_event,inherit]}]}]},
      {rabbit_log_upgrade_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}].
