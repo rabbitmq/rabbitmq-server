@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             message_bytes_unacknowledged message_bytes_ram message_bytes_persistent
             head_message_timestamp disk_reads disk_writes consumers
             consumer_utilisation memory slave_pids synchronised_slave_pids state type
-            leader members online)a
+            leader members online confirm_on)a
 
   def description(), do: "Lists queues and their properties"
   def usage(), do: "list_queues [--vhost <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<column>, ...]"
