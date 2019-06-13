@@ -391,6 +391,13 @@ end}.
     {datatype, integer}
 ]}.
 
+%% Default worker process pool size. Used to limit maximum concurrency rate
+%% of certain operations, e.g. queue initialisation and recovery on node boot.
+
+{mapping, "default_worker_pool_size", "rabbit.default_worker_pool_size", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
 %% Password hashing implementation. Will only affect newly
 %% created users. To recalculate hash for an existing user
 %% it's necessary to update her password.

@@ -566,6 +566,14 @@ credential_validator.regexp = ^abc\\d+",
   [{rabbit,[{log, [{categories, [{connection, [{file, "file_name_connection"}]},
                                  {channel, [{file, "file_name_channel"}]}]}]}]}],
   []},
+
+ {default_worker_pool_size,
+  "default_worker_pool_size = 512",
+  [{rabbit, [
+      {default_worker_pool_size, 512}
+    ]}],
+  []},
+
  {delegate_count,
   "delegate_count = 64",
   [{rabbit, [
