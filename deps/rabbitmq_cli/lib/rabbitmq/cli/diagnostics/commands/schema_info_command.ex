@@ -22,12 +22,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.SchemaInfoCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @info_keys ~w(name snmp load_order active_replicas all_nodes attributes checkpoints disc_copies 
-    disc_only_copies external_copies frag_properties master_nodes ram_copies 
-    storage_properties subscribers user_properties cstruct local_content 
-    where_to_commit where_to_read name access_mode cookie load_by_force 
-    load_node record_name size storage_type type where_to_write index arity 
-    majority memory commit_work where_to_wlock load_reason record_validation 
+  @info_keys ~w(name snmp load_order active_replicas all_nodes attributes checkpoints disc_copies
+    disc_only_copies external_copies frag_properties master_nodes ram_copies
+    storage_properties subscribers user_properties cstruct local_content
+    where_to_commit where_to_read name access_mode cookie load_by_force
+    load_node record_name size storage_type type where_to_write index arity
+    majority memory commit_work where_to_wlock load_reason record_validation
    version wild_pattern index_info)a
 
   def info_keys(), do: @info_keys
@@ -76,7 +76,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.SchemaInfoCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists all tables on the mnesia schema"
+  def description(), do: "Lists schema database tables and their properties"
 
-  def banner(_, %{node: node_name}), do: "Asking node #{node_name} to report the mnesia schema..."
+  def banner(_, %{node: node_name}), do: "Asking node #{node_name} to report its schema..."
 end
