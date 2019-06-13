@@ -22,6 +22,8 @@
 
 -export([init/1]).
 
+-export([default_pool_size/0]).
+
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
@@ -32,18 +34,21 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    start_link(erlang:system_info(schedulers)).
+    Size = default_pool_size(),
+    start_link(Size).
 
-start_link(WCount) ->
-    start_link(WCount, worker_pool:default_pool()).
+start_link(PoolSize) ->
+    rabbit_log:info("Will use ~p processes for default worker pool", [PoolSize]),
+    start_link(PoolSize, worker_pool:default_pool()).
 
-start_link(WCount, PoolName) ->
+start_link(PoolSize, PoolName) ->
+    rabbit_log:info("Starting worker pool '~p' with ~p processes in it", [PoolName, PoolSize]),
     SupName = list_to_atom(atom_to_list(PoolName) ++ "_sup"),
-    supervisor:start_link({local, SupName}, ?MODULE, [WCount, PoolName]).
+    supervisor:start_link({local, SupName}, ?MODULE, [PoolSize, PoolName]).
 
 %%----------------------------------------------------------------------------
 
-init([WCount, PoolName]) ->
+init([PoolSize, PoolName]) ->
     %% we want to survive up to 1K of worker restarts per second,
     %% e.g. when a large worker pool used for network connections
     %% encounters a network failure. This is the case in the LDAP authentication
@@ -53,4 +58,21 @@ init([WCount, PoolName]) ->
             16#ffffffff, worker, [worker_pool]} |
            [{N, {worker_pool_worker, start_link, [PoolName]}, transient,
              16#ffffffff, worker, [worker_pool_worker]}
-            || N <- lists:seq(1, WCount)]]}}.
+            || N <- lists:seq(1, PoolSize)]]}}.
+
+%%
+%% Implementation
+%%
+
+-spec default_pool_size() -> integer().
+
+default_pool_size() ->
+  case rabbit_misc:get_env(rabbit, default_worker_pool_size, undefined) of
+    N when is_integer(N) -> N;
+    _                    -> guess_default_pool_size()
+  end.
+
+-spec guess_default_pool_size() -> integer().
+
+guess_default_pool_size() ->
+  erlang:system_info(schedulers).
