@@ -45,7 +45,10 @@
 
          %% Hooks used in `rabbit_node_monitor'
          on_node_up/1,
-         on_node_down/1
+         on_node_down/1,
+
+         %% Helpers for diagnostics commands
+         schema_info/1
         ]).
 
 %% Used internally in rpc calls
@@ -753,6 +756,18 @@ running_disc_nodes() ->
     {_AllNodes, DiscNodes, RunningNodes} = cluster_status(status),
     ordsets:to_list(ordsets:intersection(ordsets:from_list(DiscNodes),
                                          ordsets:from_list(RunningNodes))).
+
+%%--------------------------------------------------------------------
+%% Helpers for diagnostics commands
+%%--------------------------------------------------------------------
+
+schema_info(Items) ->
+    Tables = mnesia:system_info(tables),
+    [info(Table, Items) || Table <- Tables].
+
+info(Table, Items) ->
+    All = [{name, Table} | mnesia:table_info(Table, all)],
+    [{Item, proplists:get_value(Item, All)} || Item <- Items].
 
 %%--------------------------------------------------------------------
 %% Internal helpers
