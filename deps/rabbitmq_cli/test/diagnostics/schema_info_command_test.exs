@@ -3,8 +3,6 @@ defmodule SchemaInfoCommandTest do
   import TestHelper
 
   @command RabbitMQ.CLI.Diagnostics.Commands.SchemaInfoCommand
-  @vhost "test1"
-  @user "guest"
   @default_timeout :infinity
 
   setup_all do
