@@ -19,7 +19,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
--export([new/9,
+-export([new/8,
+         new/9,
+         new_with_version/9,
          new_with_version/10,
          fields/0,
          fields/1,
@@ -184,6 +186,40 @@
           pid() | none,
           rabbit_framing:amqp_table(),
           rabbit_types:vhost() | undefined,
+          map()) -> amqqueue().
+
+new(#resource{kind = queue} = Name,
+    Pid,
+    Durable,
+    AutoDelete,
+    Owner,
+    Args,
+    VHost,
+    Options)
+  when (is_pid(Pid) orelse is_tuple(Pid) orelse Pid =:= none) andalso
+       is_boolean(Durable) andalso
+       is_boolean(AutoDelete) andalso
+       (is_pid(Owner) orelse Owner =:= none) andalso
+       is_list(Args) andalso
+       (is_binary(VHost) orelse VHost =:= undefined) andalso
+       is_map(Options) ->
+    new(Name,
+        Pid,
+        Durable,
+        AutoDelete,
+        Owner,
+        Args,
+        VHost,
+        Options,
+        ?amqqueue_v1_type).
+
+-spec new(rabbit_amqqueue:name(),
+          pid() | ra_server_id() | none,
+          boolean(),
+          boolean(),
+          pid() | none,
+          rabbit_framing:amqp_table(),
+          rabbit_types:vhost() | undefined,
           map(),
           atom()) -> amqqueue().
 
@@ -228,6 +264,44 @@ new(#resource{kind = queue} = Name,
               VHost,
               Options)
     end.
+
+-spec new_with_version
+(amqqueue_v1 | amqqueue_v2,
+ rabbit_amqqueue:name(),
+ pid() | ra_server_id() | none,
+ boolean(),
+ boolean(),
+ pid() | none,
+ rabbit_framing:amqp_table(),
+ rabbit_types:vhost() | undefined,
+ map()) -> amqqueue().
+
+new_with_version(RecordVersion,
+                 #resource{kind = queue} = Name,
+                 Pid,
+                 Durable,
+                 AutoDelete,
+                 Owner,
+                 Args,
+                 VHost,
+                 Options)
+  when (is_pid(Pid) orelse is_tuple(Pid) orelse Pid =:= none) andalso
+       is_boolean(Durable) andalso
+       is_boolean(AutoDelete) andalso
+       (is_pid(Owner) orelse Owner =:= none) andalso
+       is_list(Args) andalso
+       (is_binary(VHost) orelse VHost =:= undefined) andalso
+       is_map(Options) ->
+    new_with_version(RecordVersion,
+                     Name,
+                     Pid,
+                     Durable,
+                     AutoDelete,
+                     Owner,
+                     Args,
+                     VHost,
+                     Options,
+                     ?amqqueue_v1_type).
 
 -spec new_with_version
 (amqqueue_v1 | amqqueue_v2,
@@ -359,6 +433,8 @@ get_exclusive_owner(#amqqueue{exclusive_owner = Owner}) ->
 get_exclusive_owner(Queue) ->
     amqqueue_v1:get_exclusive_owner(Queue).
 
+% gm_pids
+
 -spec get_gm_pids(amqqueue()) -> [{pid(), pid()} | pid()] | none.
 
 get_gm_pids(#amqqueue{gm_pids = GMPids}) ->
@@ -421,7 +497,7 @@ get_pid(#amqqueue{pid = Pid}) -> Pid;
 get_pid(Queue)                -> amqqueue_v1:get_pid(Queue).
 
 -spec set_pid
-(amqqueue_v2(),  pid() | ra_server_id() | none) -> amqqueue_v2();
+(amqqueue_v2(), pid() | ra_server_id() | none) -> amqqueue_v2();
 (amqqueue_v1:amqqueue_v1(), pid() | none) -> amqqueue_v1:amqqueue_v1().
 
 set_pid(#amqqueue{} = Queue, Pid) ->
@@ -509,7 +585,8 @@ set_slave_pids(Queue, SlavePids) ->
 
 -spec get_slave_pids_pending_shutdown(amqqueue()) -> [pid()].
 
-get_slave_pids_pending_shutdown(#amqqueue{slave_pids_pending_shutdown = Slaves}) ->
+get_slave_pids_pending_shutdown(
+  #amqqueue{slave_pids_pending_shutdown = Slaves}) ->
     Slaves;
 get_slave_pids_pending_shutdown(Queue) ->
     amqqueue_v1:get_slave_pids_pending_shutdown(Queue).
