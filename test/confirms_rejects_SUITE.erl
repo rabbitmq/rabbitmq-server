@@ -22,7 +22,9 @@ groups() ->
         dead_queue_rejects,
         mixed_dead_alive_queues_reject,
         {confirm_on_ack, [],
-         [coa_policy_resets_to_enqueue,
+         [coa_argument_not_supported,
+          coa_ha_mode_policies_conflict,
+          coa_policy_resets_to_enqueue,
           coa_confirms_on_ack,
           coa_rejects_on_nack_without_requeue,
           coa_confirms_on_no_ack,
@@ -72,6 +74,7 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(Testcase, Config)
         when Testcase == policy_resets_to_default;
+             Testcase == coa_argument_not_supported;
              Testcase == coa_policy_resets_to_enqueue;
              Testcase == coa_confirms_on_no_ack;
              Testcase == coa_confirms_on_ack;
@@ -83,6 +86,8 @@ init_per_testcase(Testcase, Config)
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     rabbit_ct_helpers:testcase_started(
         rabbit_ct_helpers:set_config(Config, [{conn, Conn}]), Testcase);
+init_per_testcase(coa_ha_mode_policies_conflict = Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config)
         when Testcase == confirms_rejects_conflict;
              Testcase == dead_queue_rejects;
@@ -108,7 +113,8 @@ end_per_testcase(coa_rejects_on_dead_letter = Testcase, Config) ->
     clean_acks_mailbox(),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config)
-        when Testcase == coa_confirms_on_ack;
+        when Testcase == coa_argument_not_supported;
+             Testcase == coa_confirms_on_ack;
              Testcase == coa_confirms_on_no_ack;
              Testcase == coa_policy_resets_to_enqueue;
              Testcase == coa_rejects_on_nack_without_requeue;
@@ -125,6 +131,11 @@ end_per_testcase(Testcase, Config)
     rabbit_ct_client_helpers:close_connection(Conn),
     clean_consume_mailbox(),
     clean_acks_mailbox(),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(coa_ha_mode_policies_conflict = Testcase, Config) ->
+    TestNameBin = <<"coa_ha_mode_policies_conflict">>,
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<TestNameBin/binary, "_invalid_policy">>),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<TestNameBin/binary, "_valid_policy">>),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(policy_resets_to_default = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -366,6 +377,37 @@ policy_resets_to_default(Config) ->
         {_, false} -> error({message_should_be_enqueued, NotRejectedMessage});
         _ -> ok
     end.
+
+coa_argument_not_supported(Config) ->
+    Conn = ?config(conn, Config),
+
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    QueueName = <<"coa_policy_resets_to_enqueue">>,
+    Declare = #'queue.declare'{queue = QueueName,
+                               durable = true,
+                               arguments = [{<<"x-confirm-on">>, longstr, <<"ack">>}]},
+    try amqp_channel:call(Ch, Declare) of
+        _ -> exit(expected_to_exit)
+    catch
+        exit:{{shutdown, {server_initiated_close, Code, _}},_} ->
+            ?PRECONDITION_FAILED = Code
+    end.
+
+coa_ha_mode_policies_conflict(Config) ->
+    TestName = <<"coa_ha_mode_policies_conflict">>,
+    InvalidPolicy = [{<<"ha-mode">>, <<"all">>},
+                     {<<"confirm-on">>, <<"ack">>}],
+    {error_string, _} = rabbit_ct_broker_helpers:rpc(
+                            Config, 0, rabbit_policy, set,
+                            [<<"/">>, <<TestName/binary, "_invalid_policy">>, TestName,
+                             InvalidPolicy, 0, <<"queues">>, <<"acting-user">>]),
+    ValidPolicy = [{<<"confirm-on">>, <<"ack">>}],
+    ok = rabbit_ct_broker_helpers:rpc(
+            Config, 0, rabbit_policy, set,
+            [<<"/">>, <<TestName/binary, "_valid_policy">>, TestName,
+             ValidPolicy, 0, <<"queues">>, <<"acting-user">>]).
+
 
 coa_policy_resets_to_enqueue(Config) ->
     Conn = ?config(conn, Config),

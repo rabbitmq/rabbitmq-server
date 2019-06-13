@@ -494,7 +494,35 @@ validation_op(Name, Terms) ->
     validation(Name, Terms, operator_policy_validator).
 
 validation(Name, Terms) ->
-    validation(Name, Terms, policy_validator).
+    conflict_validation(Terms, policy_conflicts,
+                        validation(Name, Terms, policy_validator)).
+
+conflict_validation(Terms, Validator, ok) ->
+    Registry = rabbit_registry:lookup_all(Validator),
+    {RegistryKeys, _} = lists:unzip(Registry),
+    [] = dups(RegistryKeys), %% ASSERTION
+
+    ModuleToKeys = lists:foldl(
+        fun({Key, Module}, ModuleToKeys) ->
+            maps:update_with(Module,
+                             fun(Keys) -> [Key | Keys] end,
+                             [Key],
+                             ModuleToKeys)
+        end,
+        #{},
+        Registry),
+
+    maps:fold(
+        fun (Module, Keys, ok) ->
+                Policies = [Term
+                            || Term = {Key, _} <- Terms,
+                            lists:member(binary_to_atom(Key, utf8), Keys)],
+                Module:validate_policy_conflicts(Policies);
+            (_Module, _Keys, Error) ->
+                Error
+        end,
+        ok,
+        ModuleToKeys).
 
 validation(_Name, [], _Validator) ->
     {error, "no policy provided", []};

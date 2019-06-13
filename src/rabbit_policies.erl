@@ -20,11 +20,15 @@
 %% validation functions.
 
 -behaviour(rabbit_policy_validator).
+-behaviour(rabbit_policy_conflict_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
 -include("rabbit.hrl").
 
--export([register/0, validate_policy/1, merge_policy_value/3]).
+-export([register/0,
+         validate_policy/1,
+         merge_policy_value/3,
+         validate_policy_conflicts/1]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "internal policies"},
@@ -47,6 +51,8 @@ register() ->
                           {policy_validator, <<"overflow">>},
                           {policy_validator, <<"delivery-limit">>},
                           {policy_validator, <<"confirm-on">>},
+                          {policy_conflicts, <<"confirm-on">>},
+                          {policy_conflicts, <<"ha-mode">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -67,6 +73,18 @@ validate_policy(Terms) ->
     lists:foldl(fun ({Key, Value}, ok) -> validate_policy0(Key, Value);
                     (_, Error)         -> Error
                 end, ok, Terms).
+
+validate_policy_conflicts(Terms) ->
+    ConfirmOn = proplists:get_value(<<"confirm-on">>, Terms, undefined),
+    HaMode = proplists:get_value(<<"ha-mode">>, Terms, undefined),
+    case {ConfirmOn, HaMode} of
+        {<<"ack">>, undefined} ->
+            ok;
+        {<<"ack">>, _} ->
+            {error, "Confirm on ack is incompatible with HA mode", []};
+        _ ->
+            ok
+    end.
 
 validate_policy0(<<"alternate-exchange">>, Value)
   when is_binary(Value) ->

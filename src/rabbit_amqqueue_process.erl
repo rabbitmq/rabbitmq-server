@@ -425,9 +425,10 @@ bq_init(BQ, Q, Recover) ->
                     rabbit_amqqueue:run_backing_queue(Self, Mod, Fun)
             end).
 
-process_args_policy(State = #q{q                   = Q,
+process_args_policy(State0 = #q{q                   = Q,
                                args_policy_version = N}) ->
-      ArgsTable =
+
+    ArgsTable =
         [{<<"expires">>,                 fun res_min/2, fun init_exp/2},
          {<<"dead-letter-exchange">>,    fun res_arg/2, fun init_dlx/2},
          {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
@@ -435,12 +436,20 @@ process_args_policy(State = #q{q                   = Q,
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
          {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
-         {<<"confirm-on">>,              fun res_arg/2, fun init_confirm_on/2}],
-      drop_expired_msgs(
-         lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
-                             Fun(args_policy_lookup(Name, Resolve, Q), StateN)
-                     end, State#q{args_policy_version = N + 1}, ArgsTable)).
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
+    State1 = lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
+                            Fun(args_policy_lookup(Name, Resolve, Q), StateN)
+                         end,
+                         State0#q{args_policy_version = N + 1},
+                         ArgsTable),
+    %% Policies which cannot be set as x- args
+    PoliciesTable = [{<<"confirm-on">>, fun init_confirm_on/2}],
+    State2 = lists:foldl(fun({Name, Fun}, StateN) ->
+                            Fun(rabbit_policy:get(Name, Q), StateN)
+                         end,
+                         State1,
+                         PoliciesTable),
+    drop_expired_msgs(State2).
 
 args_policy_lookup(Name, Resolve, Q) ->
     Args = amqqueue:get_arguments(Q),
