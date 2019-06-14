@@ -133,7 +133,9 @@ extract_protocol(Infos) ->
 
 maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
     Module = rabbit_data_coercion:to_atom(string:to_lower(
-        "rabbit_" ++ rabbit_data_coercion:to_list(Protocol) ++ "_connection_info")
+        "rabbit_" ++
+        lists:flatten(string:replace(rabbit_data_coercion:to_list(Protocol), " ", "_", all)) ++
+        "_connection_info")
     ),
     Args = [Creds, VHost, Pid, Infos],
     code_server_cache:maybe_call_mfa(Module, additional_authn_params, Args, []).
