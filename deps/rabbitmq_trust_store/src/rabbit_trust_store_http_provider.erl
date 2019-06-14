@@ -4,6 +4,8 @@
 
 -behaviour(rabbit_trust_store_certificate_provider).
 
+-define(PROFILE, ?MODULE).
+
 -export([list_certs/1, list_certs/2, load_cert/3]).
 
 -record(http_state,{
@@ -13,14 +15,14 @@
 }).
 
 list_certs(Config) ->
-    init(),
+    init(Config),
     State = init_state(Config),
     list_certs(Config, State).
 
 list_certs(_, #http_state{url = Url,
                           http_options = HttpOptions,
                           headers = Headers} = State) ->
-    Res = httpc:request(get, {Url, Headers}, HttpOptions, [{body_format, binary}]),
+    Res = httpc:request(get, {Url, Headers}, HttpOptions, [{body_format, binary}], ?PROFILE),
     case Res of
         {ok, {{_, 200, _}, RespHeaders, Body}} ->
             Certs = decode_cert_list(Body),
@@ -40,7 +42,8 @@ load_cert(_, Attributes, Config) ->
     Res = httpc:request(get,
                         {Url, Headers},
                         HttpOptions,
-                        [{body_format, binary}, {full_result, false}]),
+                        [{body_format, binary}, {full_result, false}],
+                        ?PROFILE),
     case Res of
         {ok, {200, Body}} ->
             [{'Certificate', Cert, not_encrypted}] = public_key:pem_decode(Body),
@@ -54,9 +57,11 @@ join_url(BaseUrl, CertPath)  ->
     ++ "/" ++
     string:strip(rabbit_data_coercion:to_list(CertPath), left, $/).
 
-init() ->
-    inets:start(),
-    ssl:start().
+init(Config) ->
+    inets:start(httpc, [{profile, ?PROFILE}]),
+    application:ensure_all_started(ssl),
+    Options = proplists:get_value(proxy_options, Config, []),
+    httpc:set_options(Options, ?PROFILE).
 
 init_state(Config) ->
     Url = proplists:get_value(url, Config),
