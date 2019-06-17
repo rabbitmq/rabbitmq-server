@@ -495,7 +495,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_node_queue_size{cluster=\"$cluster\"}[$__interval])",
+          "expr": "erlang_vm_dist_node_queue_size{cluster=\"$cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
