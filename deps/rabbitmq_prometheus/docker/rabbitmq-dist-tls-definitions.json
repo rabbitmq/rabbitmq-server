@@ -14,17 +14,17 @@
   "policies": [
     {
       "apply-to": "queues",
-      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-dist-tls1","rabbit@rabbitmq-dist-tls2"]},
-      "name": "ha1.2",
-      "pattern": "ha1.2*",
+      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-dist-tls0","rabbit@rabbitmq-dist-tls1"]},
+      "name": "ha0.1",
+      "pattern": "ha0.1*",
       "priority": 0,
       "vhost": "/"
     },
     {
       "apply-to": "queues",
-      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-dist-tls1","rabbit@rabbitmq-dist-tls3"]},
-      "name": "ha1.3",
-      "pattern": "ha1.3*",
+      "definition": {"ha-mode": "nodes", "ha-params": ["rabbit@rabbitmq-dist-tls0","rabbit@rabbitmq-dist-tls2"]},
+      "name": "ha0.2",
+      "pattern": "ha0.2*",
       "priority": 0,
       "vhost": "/"
     },

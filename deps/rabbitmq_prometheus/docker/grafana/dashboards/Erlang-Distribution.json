@@ -16,8 +16,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 131,
-  "iteration": 1560250933348,
+  "id": 58,
+  "iteration": 1560788812926,
   "links": [],
   "panels": [
     {
@@ -456,7 +456,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
+      "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the 64MB threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
       "fill": 1,
       "gridPos": {
         "h": 5,
@@ -484,7 +484,48 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -596,40 +637,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -723,40 +768,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -850,40 +899,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -975,40 +1028,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -1100,40 +1157,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -1227,40 +1288,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -1365,40 +1430,44 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -1840,40 +1909,44 @@
       },
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -1972,40 +2045,44 @@
       },
       "seriesOverrides": [
         {
-          "alias": "/rabbit@.+1 /",
-          "color": "#7EB26D"
+          "alias": "/^rabbit@[\\w-]+0/",
+          "color": "#56A64B"
         },
         {
-          "alias": "/rabbit@.+2 /",
-          "color": "#EAB839"
+          "alias": "/^rabbit@[\\w-]+1/",
+          "color": "#F2CC0C"
         },
         {
-          "alias": "/rabbit@.+3 /",
-          "color": "#6DD0E0"
+          "alias": "/^rabbit@[\\w-]+2/",
+          "color": "#3274D9"
         },
         {
-          "alias": "/rabbit@.+4 /",
-          "color": "#508642"
+          "alias": "/^rabbit@[\\w-]+3/",
+          "color": "#A352CC"
         },
         {
-          "alias": "/rabbit@.+5 /",
-          "color": "#CCA300"
+          "alias": "/^rabbit@[\\w-]+4/",
+          "color": "#FF780A"
         },
         {
-          "alias": "/rabbit@.+6 /",
-          "color": "#447EBC"
+          "alias": "/^rabbit@[\\w-]+5/",
+          "color": "#96D98D"
         },
         {
-          "alias": "/rabbit@.+7 /",
-          "color": "#B7DBAB"
+          "alias": "/^rabbit@[\\w-]+6/",
+          "color": "#FFEE52"
         },
         {
-          "alias": "/rabbit@.+8 /",
-          "color": "#F4D598"
+          "alias": "/^rabbit@[\\w-]+7/",
+          "color": "#8AB8FF"
         },
         {
-          "alias": "/rabbit@.+9 /",
-          "color": "#70DBED"
+          "alias": "/^rabbit@[\\w-]+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@[\\w-]+9/",
+          "color": "#FFB357"
         }
       ],
       "spaceLength": 10,
@@ -2077,7 +2154,6 @@
       {
         "allValue": null,
         "current": {
-          "tags": [],
           "text": "rmq-prometheus",
           "value": "rmq-prometheus"
         },
@@ -2158,5 +2234,5 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 4
+  "version": 7
 }
