@@ -33,9 +33,9 @@ scrape_configs:
   - job_name: 'rabbitmq'
     static_configs:
       - targets:
-          - 'rabbitmq0:15692'
-          - 'rabbitmq1:15692'
-          - 'rabbitmq2:15692'
-          - 'rabbitmq-dist-tls0:15692'
-          - 'rabbitmq-dist-tls1:15692'
-          - 'rabbitmq-dist-tls2:15692'
+          - 'rmq0:15692'
+          - 'rmq1:15692'
+          - 'rmq2:15692'
+          - 'rmq0-dist-tls:15692'
+          - 'rmq1-dist-tls:15692'
+          - 'rmq2-dist-tls:15692'

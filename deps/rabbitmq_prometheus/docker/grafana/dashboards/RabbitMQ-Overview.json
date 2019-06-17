@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1560179360116,
+  "iteration": 1560805749014,
   "links": [],
   "panels": [
     {
@@ -729,11 +729,11 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available memory before the memory alarm gets triggered.\n\nIf the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "Available memory before the memory alarm gets triggered and publishers are blocked\n\nIf the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
         "h": 8,
-        "w": 6,
+        "w": 12,
         "x": 0,
         "y": 4
       },
@@ -759,43 +759,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -818,7 +818,7 @@
           "fill": true,
           "line": true,
           "op": "lt",
-          "value": 1073741824,
+          "value": 536870912,
           "yaxis": "left"
         },
         {
@@ -833,7 +833,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory available before alarm",
+      "title": "Memory available before publishers blocked",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -880,9 +880,9 @@
       "description": "* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
-        "h": 8,
+        "h": 4,
         "w": 6,
-        "x": 6,
+        "x": 12,
         "y": 4
       },
       "id": 8,
@@ -907,43 +907,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -981,7 +981,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Disk space available",
+      "title": "Disk space available before publishers blocked",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1030,7 +1030,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 12,
+        "x": 18,
         "y": 4
       },
       "id": 2,
@@ -1056,43 +1056,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -1130,7 +1130,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "File descriptors available",
+      "title": "File descriptors available before publishers blocked",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1177,10 +1177,10 @@
       "description": "All work happens in an Erlang process - it's the basic unit of concurrency. Think of an Erlang process as a lightweight thread. A RabbitMQ queue is an Erlang process. Same for a channel, connection, vhost or message store.",
       "fill": 0,
       "gridPos": {
-        "h": 8,
+        "h": 4,
         "w": 6,
-        "x": 18,
-        "y": 4
+        "x": 12,
+        "y": 8
       },
       "id": 6,
       "legend": {
@@ -1204,43 +1204,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -1278,7 +1278,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Erlang processes available",
+      "title": "Erlang processes available before publishers blocked",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1327,7 +1327,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 12,
+        "x": 18,
         "y": 8
       },
       "id": 5,
@@ -1352,43 +1352,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -1426,7 +1426,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "TCP sockets available",
+      "title": "TCP sockets available before publishers blocked",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1514,43 +1514,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -1646,43 +1646,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -1791,43 +1791,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -1923,43 +1923,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -2160,43 +2160,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -2292,43 +2292,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -2542,43 +2542,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -2674,43 +2674,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -2911,43 +2911,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -3060,43 +3060,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -3297,43 +3297,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -3548,43 +3548,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -3680,43 +3680,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -3829,43 +3829,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -3978,43 +3978,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -4140,43 +4140,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -4272,43 +4272,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -4421,43 +4421,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -4583,43 +4583,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -4715,43 +4715,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -4865,43 +4865,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w-]+0/",
+          "alias": "/^rabbit@\\w+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w-]+1/",
+          "alias": "/^rabbit@\\w+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w-]+2/",
+          "alias": "/^rabbit@\\w+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w-]+3/",
+          "alias": "/^rabbit@\\w+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w-]+4/",
+          "alias": "/^rabbit@\\w+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w-]+5/",
+          "alias": "/^rabbit@\\w+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w-]+6/",
+          "alias": "/^rabbit@\\w+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w-]+7/",
+          "alias": "/^rabbit@\\w+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w-]+8/",
+          "alias": "/^rabbit@\\w+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w-]+9/",
+          "alias": "/^rabbit@\\w+9/",
           "color": "#FFB357"
         }
       ],
@@ -5016,7 +5016,7 @@
     ]
   },
   "time": {
-    "from": "now-10m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -5044,5 +5044,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 1
+  "version": 5
 }

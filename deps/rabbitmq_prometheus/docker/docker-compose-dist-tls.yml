@@ -11,7 +11,7 @@ volumes:
   rabbitmq-prometheus_grafana:
 
 services:
-  rabbitmq-dist-tls0: &rabbitmq
+  rmq0-dist-tls: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
     image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.686-2019.06.13
     networks:
@@ -25,9 +25,9 @@ services:
     # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
     cap_add:
       - ALL
-    hostname: rabbitmq-dist-tls0
+    hostname: rmq0-dist-tls
     environment:
-      RABBITMQ_ERLANG_COOKIE: rabbitmq-dist-tls
+      RABBITMQ_ERLANG_COOKIE: rmq0-dist-tls
     volumes:
       - ./rabbitmq-dist-tls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
@@ -39,16 +39,16 @@ services:
       nofile:
         soft: "2000"
         hard: "2000"
-  rabbitmq-dist-tls1:
+  rmq1-dist-tls:
     << : *rabbitmq
-    hostname: rabbitmq-dist-tls1
+    hostname: rmq1-dist-tls
     ports:
       - "5677:5672"
       - "15677:15672"
       - "15697:15692"
-  rabbitmq-dist-tls2:
+  rmq2-dist-tls:
     << : *rabbitmq
-    hostname: rabbitmq-dist-tls2
+    hostname: rmq2-dist-tls
     ports:
       - "5678:5672"
       - "15678:15672"
@@ -59,7 +59,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq-dist-tls0:5672/%2f"
+      URI: "amqp://guest:guest@rmq0-dist-tls:5672/%2f"
       QUEUE_PATTERN: "ha3-stress_dist-%d"
       QUEUE_PATTERN_FROM: 1
       QUEUE_PATTERN_TO: 10

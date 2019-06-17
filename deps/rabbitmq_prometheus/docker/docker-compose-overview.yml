@@ -11,7 +11,7 @@ volumes:
   rabbitmq-prometheus_grafana:
 
 services:
-  rabbitmq0: &rabbitmq
+  rmq0: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
     image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.686-2019.06.13
     networks:
@@ -25,7 +25,7 @@ services:
     # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
     cap_add:
       - ALL
-    hostname: rabbitmq0
+    hostname: rmq0
     environment:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-overview
     volumes:
@@ -36,16 +36,16 @@ services:
       nofile:
         soft: "2000"
         hard: "2000"
-  rabbitmq1:
+  rmq1:
     << : *rabbitmq
-    hostname: rabbitmq1
+    hostname: rmq1
     ports:
       - "5674:5672"
       - "15674:15672"
       - "15694:15692"
-  rabbitmq2:
+  rmq2:
     << : *rabbitmq
-    hostname: rabbitmq2
+    hostname: rmq2
     ports:
       - "5675:5672"
       - "15675:15672"
@@ -56,7 +56,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq0:5672/%2f"
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
       QUEUE: publisher-confirms
       ROUTING_KEY: publisher-confirms
       AUTOACK: "true"
@@ -69,7 +69,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
       VARIABLE_RATE: "2:30,4:30,10:30"
       VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
@@ -80,7 +80,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
       VARIABLE_RATE: "5:30,10:30,20:30"
       VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
@@ -90,14 +90,14 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq2:5672/%2f"
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
       QUEUE: ha3-slow-consumer-persistent
       ROUTING_KEY: slow-consumer-persistent
-      QUEUE_ARGS: x-max-length=1000
+      QUEUE_ARGS: x-max-length=10000
       FLAG: persistent
       AUTO_DELETE: "false"
       SIZE: 51200
-      VARIABLE_RATE: "100:20,0:25"
+      VARIABLE_RATE: "100:20,0:20"
       CONSUMER_RATE: 50
       QOS: 50
       AUTOACK: "false"
@@ -107,7 +107,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
       QUEUE: basic-get
       ROUTING_KEY: basic-get
       VARIABLE_RATE: "1:1,0:30"
@@ -120,7 +120,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rabbitmq1:5672/%2f"
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
       QUEUE: basic-get
       ROUTING_KEY: basic-get
       PRODUCERS: 0
@@ -136,7 +136,7 @@ services:
     command: /bin/bash -c "while true; do bin/runjava com.rabbitmq.perf.PerfTest; sleep 10; done"
     environment:
       TIME: 60
-      URI: "amqp://guest:guest@rabbitmq0:5672/%2f"
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
       VARIABLE_RATE: "1:10,0:20"
       QUEUE: nack
       QUEUE_ARGS: x-max-length=100
