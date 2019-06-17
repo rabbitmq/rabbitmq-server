@@ -105,6 +105,7 @@ all_tests() -> [
     definitions_remove_things_test,
     definitions_server_named_queue_test,
     definitions_with_charset_test,
+    long_definitions_test,
     aliveness_test,
     healthchecks_test,
     arguments_test,
@@ -236,25 +237,30 @@ end_per_testcase(Testcase, Config) ->
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
-end_per_testcase0(Testcase = queues_test, Config) ->
+end_per_testcase0(long_definitions_test, Config) ->
+    Vhosts = long_definitions_vhosts(),
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Name)
+     || #{name := Name} <- Vhosts],
+    Config;
+end_per_testcase0(queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase0(Testcase = vhost_limits_list_test, Config) ->
+    Config;
+end_per_testcase0(vhost_limits_list_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_2_user">>),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase0(Testcase = vhost_limit_set_test, Config) ->
+    Config;
+end_per_testcase0(vhost_limit_set_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase0(Testcase = permissions_vhost_test, Config) ->
+    Config;
+end_per_testcase0(permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost1">>),
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+    Config;
 end_per_testcase0(_, Config) -> Config.
 
 %% -------------------------------------------------------------------
@@ -1553,6 +1559,23 @@ definitions_test(Config) ->
 
     unregister_parameters_and_policy_validator(Config),
     passed.
+
+long_definitions_test(Config) ->
+    %% Vhosts take time to start. Generate a bunch of them
+    Vhosts = long_definitions_vhosts(),
+    LongDefs =
+        #{users       => [],
+          vhosts      => Vhosts,
+          permissions => [],
+          queues      => [],
+          exchanges   => [],
+          bindings    => []},
+    http_post(Config, "/definitions", LongDefs, {group, '2xx'}),
+    passed.
+
+long_definitions_vhosts() ->
+    [#{name => <<"long_definitions_test-", (integer_to_binary(N))/binary>>}
+     || N <- lists:seq(1, 500)].
 
 defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
