@@ -456,7 +456,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above 0 hint to an overloaded distribution\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)",
+      "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
       "fill": 1,
       "gridPos": {
         "h": 5,
@@ -484,12 +484,7 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/rabbit/",
-          "color": "#C4162A"
-        }
-      ],
+      "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
@@ -508,7 +503,7 @@
           "fill": true,
           "line": true,
           "op": "gt",
-          "value": 0,
+          "value": 65536000,
           "yaxis": "left"
         }
       ],
