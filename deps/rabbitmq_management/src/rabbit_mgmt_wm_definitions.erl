@@ -152,6 +152,9 @@ is_authorized_qs(ReqData, Context, Auth) ->
 %%--------------------------------------------------------------------
 
 accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
+    %% At this point the request was fully received.
+    %% There is no point in the idle_timeout anymore.
+    disable_idle_timeout(ReqData),
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
             apply_defs(Body, Username, fun() -> {true, ReqData, Context} end,
@@ -164,6 +167,9 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
                        fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end,
                        VHost)
     end.
+
+disable_idle_timeout(#{pid := Pid, streamid := StreamID}) ->
+    Pid ! {{Pid, StreamID}, {set_options, #{idle_timeout => infinity}}}.
 
 apply_defs(Body, ActingUser, SuccessFun, ErrorFun) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [rabbit_data_coercion:to_binary(ActingUser)]),
