@@ -43,7 +43,8 @@ groups() ->
                                import_case6,
                                import_case7,
                                import_case8,
-                               import_case9
+                               import_case9,
+                               import_case10
                               ]}
     ].
 
@@ -91,6 +92,8 @@ import_case8(Config) -> import_file_case(Config, "case8").
 
 import_case9(Config) -> import_from_directory_case(Config, "case9").
 
+import_case10(Config) -> import_from_directory_case_fails(Config, "case10").
+
 import_case5(Config) ->
     import_file_case(Config, "case5"),
     ?assertEqual(rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -106,14 +109,28 @@ import_file_case(Config, CaseName) ->
     ok.
 
 import_from_directory_case(Config, CaseName) ->
+    import_from_directory_case_expect(Config, CaseName, ok).
+
+import_from_directory_case_fails(Config, CaseName) ->
+    import_from_directory_case_expect(Config, CaseName, error).
+
+import_from_directory_case_expect(Config, CaseName, Expected) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName),
     ?assert(filelib:is_dir(CasePath)),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_directory_import_case, [CasePath]),
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 ?MODULE, run_directory_import_case,
+                                 [CasePath, Expected]),
     ok.
 
-run_directory_import_case(Path) ->
+run_directory_import_case(Path, Expected) ->
     ct:pal("Will load definitions from files under ~p~n", [Path]),
-    rabbit_mgmt_load_definitions:maybe_load_definitions_from(true, Path).
+    Result = rabbit_mgmt_load_definitions:maybe_load_definitions_from(true, Path),
+    case Expected of
+        ok ->
+            ok = Result;
+        error ->
+            {error, {failed_to_import_definitions, _, _}} = Result
+    end.
 
 run_import_case(Path) ->
    {ok, Body} = file:read_file(Path),
