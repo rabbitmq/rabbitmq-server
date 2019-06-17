@@ -1575,7 +1575,7 @@ long_definitions_test(Config) ->
 
 long_definitions_vhosts() ->
     [#{name => <<"long_definitions_test-", (integer_to_binary(N))/binary>>}
-     || N <- lists:seq(1, 500)].
+     || N <- lists:seq(1, 120)].
 
 defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
