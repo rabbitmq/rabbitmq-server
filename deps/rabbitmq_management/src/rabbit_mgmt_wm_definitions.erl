@@ -225,7 +225,7 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun) ->
     end.
 
 apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun, VHost) ->
-    rabbit_log:info("Asked to import vhost definitions. Vhost: ~p Acting user: ~p",
+    rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
                     [VHost, ActingUser]),
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
