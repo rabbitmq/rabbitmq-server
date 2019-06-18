@@ -76,4 +76,7 @@ load_definitions_from_file(File) ->
 
 load_definitions(Body) ->
     rabbit_mgmt_wm_definitions:apply_defs(
-      Body, ?INTERNAL_USER, fun () -> ok end, fun (E) -> {error, E} end).
+        Body, ?INTERNAL_USER,
+        fun () -> ok end,
+        fun (E) -> {error, E} end,
+        fun (_Msg) -> ok end).

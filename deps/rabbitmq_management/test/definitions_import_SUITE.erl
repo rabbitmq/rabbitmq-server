@@ -138,4 +138,5 @@ run_import_case(Path) ->
    rabbit_mgmt_wm_definitions:apply_defs(Body, ?INTERNAL_USER,
                                          fun ()  -> ct:pal("Import case ~p succeeded~n",  [Path]) end,
                                          fun (E) -> ct:pal("Import case ~p failed: ~p~n", [Path, E]),
-                                                    ct:fail({failure, Path, E}) end).
+                                                    ct:fail({failure, Path, E}) end,
+                                         fun (Msg) -> ct:pal("Import progress: ~p~n", [Msg]) end).
