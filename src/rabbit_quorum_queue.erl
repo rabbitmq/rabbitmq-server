@@ -744,7 +744,7 @@ add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                 {timeout, _} ->
                     {error, timeout};
                 E ->
-                    %% TODO should we stop the ra process here?
+                    _ = ra:force_delete_server(ServerId),
                     E
             end;
         E ->
