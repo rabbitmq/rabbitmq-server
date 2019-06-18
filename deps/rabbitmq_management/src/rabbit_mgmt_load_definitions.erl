@@ -59,8 +59,10 @@ load_definitions_from_files({error, E}, Dir) ->
 load_definitions_from_filenames([]) ->
     ok;
 load_definitions_from_filenames([File|Rest]) ->
-    load_definitions_from_file(File),
-    load_definitions_from_filenames(Rest).
+    case load_definitions_from_file(File) of
+        ok         -> load_definitions_from_filenames(Rest);
+        {error, E} -> {error, {failed_to_import_definitions, File, E}}
+    end.
 
 load_definitions_from_file(File) ->
     case file:read_file(File) of
