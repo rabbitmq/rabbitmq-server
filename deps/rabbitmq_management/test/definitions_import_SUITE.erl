@@ -129,7 +129,7 @@ run_directory_import_case(Path, Expected) ->
         ok ->
             ok = Result;
         error ->
-            {error, {failed_to_import_definitions, _, _}} = Result
+            ?assertMatch({error, {failed_to_import_definitions, _, _}}, Result)
     end.
 
 run_import_case(Path) ->
