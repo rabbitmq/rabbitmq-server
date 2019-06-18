@@ -1,3 +1,9 @@
+rabbitmq-server (3.7.16~rc.1-1) unstable; urgency=low
+
+  * New Upstream Release.
+
+ -- RabbitMQ Team <info@rabbitmq.com>  Tue, 18 Jun 2019 17:24:38 +0000
+
 rabbitmq-server (3.7.15-1) unstable; urgency=low
 
   * New Upstream Release.
@@ -802,4 +808,3 @@ rabbitmq-server (1.0.0-alpha-1) unstable; urgency=low
   * Initial release
 
  -- Tony Garnock-Jones <tonyg@shortstop.lshift.net>  Wed, 31 Jan 2007 19:06:33 +0000
-
