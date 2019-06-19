@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1560805749014,
+  "iteration": 1560942614798,
   "links": [],
   "panels": [
     {
@@ -881,7 +881,7 @@
       "fill": 0,
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 12,
         "x": 12,
         "y": 4
       },
@@ -1030,8 +1030,8 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 18,
-        "y": 4
+        "x": 12,
+        "y": 8
       },
       "id": 2,
       "legend": {
@@ -1130,7 +1130,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "File descriptors available before publishers blocked",
+      "title": "File descriptors available",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1149,154 +1149,6 @@
           "decimals": 0,
           "format": "short",
           "label": "",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "cacheTimeout": null,
-      "dashLength": 10,
-      "dashes": false,
-      "description": "All work happens in an Erlang process - it's the basic unit of concurrency. Think of an Erlang process as a lightweight thread. A RabbitMQ queue is an Erlang process. Same for a channel, connection, vhost or message store.",
-      "fill": 0,
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 8
-      },
-      "id": 6,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": true,
-        "show": false,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "options": {},
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/^rabbit@\\w+0/",
-          "color": "#56A64B"
-        },
-        {
-          "alias": "/^rabbit@\\w+1/",
-          "color": "#F2CC0C"
-        },
-        {
-          "alias": "/^rabbit@\\w+2/",
-          "color": "#3274D9"
-        },
-        {
-          "alias": "/^rabbit@\\w+3/",
-          "color": "#A352CC"
-        },
-        {
-          "alias": "/^rabbit@\\w+4/",
-          "color": "#FF780A"
-        },
-        {
-          "alias": "/^rabbit@\\w+5/",
-          "color": "#96D98D"
-        },
-        {
-          "alias": "/^rabbit@\\w+6/",
-          "color": "#FFEE52"
-        },
-        {
-          "alias": "/^rabbit@\\w+7/",
-          "color": "#8AB8FF"
-        },
-        {
-          "alias": "/^rabbit@\\w+8/",
-          "color": "#CA95E5"
-        },
-        {
-          "alias": "/^rabbit@\\w+9/",
-          "color": "#FFB357"
-        }
-      ],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "rabbitmq_erlang_processes_limit{cluster=\"$cluster\"} - rabbitmq_erlang_processes_used{cluster=\"$cluster\"}",
-          "format": "time_series",
-          "instant": false,
-          "intervalFactor": 1,
-          "legendFormat": "{{node}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [
-        {
-          "colorMode": "critical",
-          "fill": true,
-          "line": true,
-          "op": "lt",
-          "value": 100000,
-          "yaxis": "left"
-        },
-        {
-          "colorMode": "warning",
-          "fill": true,
-          "line": true,
-          "op": "lt",
-          "value": 300000,
-          "yaxis": "left"
-        }
-      ],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Erlang processes available before publishers blocked",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "decimals": 0,
-          "format": "short",
-          "label": null,
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -1426,7 +1278,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "TCP sockets available before publishers blocked",
+      "title": "TCP sockets available",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5016,7 +4868,7 @@
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-10m",
     "to": "now"
   },
   "timepicker": {
@@ -5044,5 +4896,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 5
+  "version": 1
 }
