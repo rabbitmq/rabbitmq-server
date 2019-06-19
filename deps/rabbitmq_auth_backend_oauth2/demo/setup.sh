@@ -47,6 +47,7 @@ uaac member add "rabbitmq.read:uaa_vhost/some*" rabbit_nosuper
 $ctl add_vhost uaa_vhost
 $ctl add_vhost other_vhost
 
+# add e.g. --access_token_validity 60 --refresh_token_validity 3600 to experiment with token validity
 uaac client add rabbit_client --name rabbit_client --scope 'rabbitmq.*' --authorized_grant_types password,client_credentials --authorities rabbitmq --secret rabbit_secret --redirect_uri 'http://localhost:15672'
 
 # Set guest user permissions to create queues.
