@@ -147,6 +147,14 @@
         {2, queue_index_journal_write, counter, "Queue Index Journal write operations", queue_index_journal_write_count}
     ]},
 
+    {ra_metrics, [
+        {2, raft_term, counter, "Raft member term"},
+        {3, raft_log_snapshot_index, counter, "Raft log snapshot index"},
+        {4, raft_log_last_applied_index, counter, "Raft log last applied index"},
+        {5, raft_log_commit_index, counter, "Raft log commit index"},
+        {6, raft_log_last_written_index, counter, "Raft log last written index"}
+    ]},
+
     {queue_coarse_metrics, [
         {2, queue_messages_ready, gauge, "Messages ready to be delivered to consumers"},
         {3, queue_messages_unacked, gauge, "Messages delivered to consumers but not yet acknowledged"},

@@ -78,8 +78,14 @@ init_per_group(with_metrics, Config0) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config3, A),
 
     Q = <<"prometheus_test_queue">>,
-    amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
-    amqp_channel:cast(Ch, #'basic.publish'{routing_key = Q}, #amqp_msg{payload = <<"msg">>}),
+    amqp_channel:call(Ch,
+                      #'queue.declare'{queue = Q,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
+                                      }),
+    amqp_channel:cast(Ch,
+                      #'basic.publish'{routing_key = Q},
+                      #amqp_msg{payload = <<"msg">>}),
     timer:sleep(150),
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
     timer:sleep(10000),
@@ -167,6 +173,7 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open_limit", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_io_read", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_raft_term", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers", [{capture, none}])),
     %% Checking the first TOTALS metric

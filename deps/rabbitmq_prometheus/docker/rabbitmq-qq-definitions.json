@@ -1,0 +1,23 @@
+{
+  "global_parameters": [
+    {"name": "cluster_name", "value": "rabbitmq-qq"}
+  ],
+  "permissions": [
+    {
+      "configure": ".*",
+      "read": ".*",
+      "user": "guest",
+      "vhost": "/",
+      "write": ".*"
+    }
+  ],
+  "users": [
+    {
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "name": "guest",
+      "password_hash": "hENva+fxJ7gnmaBK/WhwNHOYbvB53/QjNcqhtF4KqF7p21+x",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [{"name": "/"}]
+}

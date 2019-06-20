@@ -39,3 +39,6 @@ scrape_configs:
           - 'rmq0-dist-tls:15692'
           - 'rmq1-dist-tls:15692'
           - 'rmq2-dist-tls:15692'
+          - 'rmq0-qq:15692'
+          - 'rmq1-qq:15692'
+          - 'rmq2-qq:15692'

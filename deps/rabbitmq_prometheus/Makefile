@@ -132,6 +132,7 @@ DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
 .PHONY: update_dashboards
 update_dashboards:
 	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Overview-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Overview.json ; \
+	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Raft-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Raft.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
 	true

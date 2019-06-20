@@ -1,0 +1,436 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "RabbitMQ Raft metrics",
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": 3,
+  "iteration": 1561057199575,
+  "links": [],
+  "panels": [
+    {
+      "aliasColors": {},
+      "bars": true,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 62,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "hideZero": true,
+        "max": true,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": true,
+        "values": true
+      },
+      "lines": false,
+      "linewidth": 0,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\"} - rabbitmq_raft_log_commit_index{cluster=\"$cluster\"}) by(queue)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Uncommitted entries",
+      "tooltip": {
+        "shared": true,
+        "sort": 1,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#37872D",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateRdYlGn",
+        "exponent": 0.3,
+        "mode": "opacity"
+      },
+      "dataFormat": "timeseries",
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 11
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 64,
+      "legend": {
+        "show": false
+      },
+      "links": [],
+      "options": {},
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "expr": "rate(rabbitmq_raft_log_commit_index{cluster=\"$cluster\"}[$__interval])",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Entries committed / s",
+      "tooltip": {
+        "show": true,
+        "showHistogram": true
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "short",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "aliasColors": {},
+      "bars": true,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 10,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 11
+      },
+      "id": 63,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": false,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(rate(rabbitmq_raft_term[30s])) by(queue)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Number of elections / s",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": true,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 18,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": true
+      },
+      "lines": false,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Number of entries in the log",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 18,
+  "style": "dark",
+  "tags": [
+    "pivotal",
+    "prometheus",
+    "rabbitmq"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": "rabbitmq-qq",
+          "value": "rabbitmq-qq"
+        },
+        "datasource": "prometheus",
+        "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Cluster",
+        "multi": false,
+        "name": "cluster",
+        "options": [],
+        "query": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "15s",
+      "30s",
+      "1m",
+      "5m",
+      "10m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
+  },
+  "timezone": "",
+  "title": "RabbitMQ-Raft",
+  "uid": "f1Mee9nZz",
+  "version": 18
+}
