@@ -130,6 +130,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
                              id => ServerId,
                              uid => UId,
                              friendly_name => FName,
+                             metrics_key => QName,
                              initial_members => ServerIds,
                              log_init_args => #{uid => UId},
                              tick_timeout => TickTimeout,
