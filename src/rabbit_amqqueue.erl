@@ -1113,8 +1113,8 @@ is_mirrored(Q) ->
 
 is_dead_exclusive(#amqqueue{exclusive_owner = none}) ->
     false;
-is_dead_exclusive(#amqqueue{exclusive_owner = Pid}) when is_pid(Pid) ->
-    not rabbit_mnesia:is_process_alive(Pid).
+is_dead_exclusive(#amqqueue{exclusive_owner = OwnerPid, pid = QPid}) when is_pid(OwnerPid), is_pid(QPid) ->
+    not (rabbit_mnesia:is_process_alive(OwnerPid) andalso rabbit_mnesia:is_process_alive(QPid)).
 
 on_node_up(Node) ->
     ok = rabbit_misc:execute_mnesia_transaction(
