@@ -24,7 +24,7 @@
 -callback description() -> [proplists:property()].
 
 %% If this mechanism is enabled, should it be offered for a given socket?
-%% (primarily so EXTERNAL can be SSL-only)
+%% (primarily so EXTERNAL can be TLS-only)
 -callback should_offer(rabbit_net:socket()) -> boolean().
 
 %% Called before authentication starts. Should create a state
