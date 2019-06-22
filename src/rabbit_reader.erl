@@ -1273,6 +1273,29 @@ handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
     self() ! terminate_connection,
     State;
+handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reason},
+               State = #v1{connection =
+                               #connection{protocol   = Protocol,
+                                           user       = User = #user{username = Username},
+                                           log_name   = ConnName},
+                           sock       = Sock}) when ?IS_RUNNING(State) ->
+    rabbit_log_connection:debug(
+        "connection ~p (~s): "
+        "user '~s' attempts to update secret, reason: ~s~n",
+        [self(), dynamic_connection_name(ConnName), Username, Reason]),
+    case rabbit_access_control:update_state(User, NewSecret) of
+      {ok, User1} ->
+        rabbit_log_connection:debug("User1: ~p", [User1]),
+        ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
+        rabbit_log_connection:info(
+            "connection ~p (~s): "
+            "user '~s' updated secret, reason: ~s~n",
+            [self(), dynamic_connection_name(ConnName), Username, Reason]),
+        State;
+      Else ->
+        rabbit_log_connection:info("Secret update failed: ~p", [Else]),
+        State
+    end;
 handle_method0(_Method, State) when ?IS_STOPPING(State) ->
     State;
 handle_method0(_Method, #v1{connection_state = S}) ->

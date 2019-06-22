@@ -21,6 +21,8 @@
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4]).
 
+-export([update_state/2]).
+
 %%----------------------------------------------------------------------------
 
 -export_type([permission_atom/0]).
@@ -216,4 +218,32 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
             FullErrArgs = ErrArgs ++ [Module, E],
             rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
+    end.
+
+-spec update_state(User :: rabbit_types:user(), NewState :: term()) ->
+    {'ok', rabbit_types:auth_user()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
+
+update_state(User = #user{authz_backends = Backends0}, NewState) ->
+    %% N.B.: we use foldl/3 and prepending, so the final list of
+    %% backends
+    Backends = lists:foldl(
+                fun({Module, Impl}, {ok, Acc}) ->
+                        case Module:state_can_expire() of
+                          true  ->
+                            case Module:update_state(auth_user(User, Impl), NewState) of
+                              {ok, #auth_user{impl = Impl1}} ->
+                                {ok, [{Module, Impl1} | Acc]};
+                              Else -> Else
+                            end;
+                          false ->
+                            {ok, [{Module, Impl} | Acc]}
+                        end;
+                   (_, {error, _} = Err)      -> Err;
+                   (_, {refused, _, _} = Err) -> Err
+                end, {ok, []}, Backends0),
+    case Backends of
+      {ok, Pairs} -> {ok, User#user{authz_backends = lists:reverse(Pairs)}};
+      Else        -> Else
     end.
