@@ -1285,7 +1285,6 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         [self(), dynamic_connection_name(ConnName), Username, Reason]),
     case rabbit_access_control:update_state(User, NewSecret) of
       {ok, User1} ->
-        rabbit_log_connection:debug("Updated user/auth state from ~p to ~p", [User, User1]),
         %% User/auth backend state has been updated. Now we can propagate it to channels
         %% asynchronously and return. All the channels have to do is to update their
         %% own state.
