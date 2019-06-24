@@ -1285,7 +1285,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         [self(), dynamic_connection_name(ConnName), Username, Reason]),
     case rabbit_access_control:update_state(User, NewSecret) of
       {ok, User1} ->
-        rabbit_log_connection:debug("Updated user/auth state: ~p", [User1]),
+        rabbit_log_connection:debug("Updated user/auth state from ~p to ~p", [User, User1]),
         %% User/auth backend state has been updated. Now we can propagate it to channels
         %% asynchronously and return. All the channels have to do is to update their
         %% own state.
@@ -1302,9 +1302,15 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
             "user '~s' updated secret, reason: ~s~n",
             [self(), dynamic_connection_name(ConnName), Username, Reason]),
         State;
-      Else ->
-        rabbit_log_connection:info("Secret update failed: ~p", [Else]),
-        State
+      {refused, Reason} ->
+        rabbit_log_connection:error("Secret update was refused for user '~p': ~p",
+                                    [Username, Reason]),
+        rabbit_misc:protocol_error(not_allowed, "New secret was refused by one of the backends", []);
+      {error, Reason} ->
+        rabbit_log_connection:error("Secret update for user '~p' failed: ~p",
+                                    [Username, Reason]),
+        rabbit_misc:protocol_error(not_allowed,
+                                  "Secret update failed", [])
     end;
 handle_method0(_Method, State) when ?IS_STOPPING(State) ->
     State;
