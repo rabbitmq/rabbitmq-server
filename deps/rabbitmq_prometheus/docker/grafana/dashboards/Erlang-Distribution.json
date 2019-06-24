@@ -16,8 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 58,
-  "iteration": 1560788812926,
+  "iteration": 1561396389555,
   "links": [],
   "panels": [
     {
@@ -554,7 +553,7 @@
       "title": "Data buffered in the distribution links queue",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -696,7 +695,7 @@
       "title": "Data sent to peer node / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -827,7 +826,7 @@
       "title": "Data received from peer node / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -958,7 +957,7 @@
       "title": "Distribution messages sent to peer node / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1087,7 +1086,7 @@
       "title": "Distribution messages received from peer node / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1216,7 +1215,7 @@
       "title": "Average inet packet size sent to peer node",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1347,7 +1346,7 @@
       "title": "Average inet packet size received from peer node",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1489,7 +1488,7 @@
       "title": "Memory used by the port driver",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1591,7 +1590,7 @@
       "title": "Data in the port driver buffer",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1832,7 +1831,7 @@
       "title": "Messages in the process queue",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1968,7 +1967,7 @@
       "title": "Memory used by the process",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2104,7 +2103,7 @@
       "title": "Process reductions",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2154,22 +2153,22 @@
       {
         "allValue": null,
         "current": {
-          "text": "rmq-prometheus",
-          "value": "rmq-prometheus"
+          "text": "rabbitmq-qq",
+          "value": "rabbitmq-qq"
         },
         "datasource": "prometheus",
-        "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "definition": "label_values(erlang_vm_dist_proc_status,cluster)",
         "hide": 0,
         "includeAll": false,
         "label": "Cluster",
         "multi": false,
         "name": "cluster",
         "options": [],
-        "query": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "query": "label_values(erlang_vm_dist_proc_status,cluster)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 0,
+        "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
@@ -2196,7 +2195,7 @@
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 0,
+        "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",

@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1560942614798,
+  "iteration": 1561370142014,
   "links": [],
   "panels": [
     {
@@ -836,7 +836,7 @@
       "title": "Memory available before publishers blocked",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 1,
         "value_type": "individual"
       },
       "type": "graph",
@@ -849,7 +849,7 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
+          "decimals": null,
           "format": "bytes",
           "label": null,
           "logBase": 1,
@@ -880,8 +880,8 @@
       "description": "* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
-        "h": 4,
-        "w": 12,
+        "h": 8,
+        "w": 6,
         "x": 12,
         "y": 4
       },
@@ -984,7 +984,7 @@
       "title": "Disk space available before publishers blocked",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 1,
         "value_type": "individual"
       },
       "type": "graph",
@@ -997,12 +997,12 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
+          "decimals": null,
           "format": "bytes",
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -1030,8 +1030,8 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 12,
-        "y": 8
+        "x": 18,
+        "y": 4
       },
       "id": 2,
       "legend": {
@@ -1133,7 +1133,7 @@
       "title": "File descriptors available",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 1,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1146,12 +1146,12 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
+          "decimals": null,
           "format": "short",
           "label": "",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -1281,7 +1281,7 @@
       "title": "TCP sockets available",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 1,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1294,12 +1294,12 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
+          "decimals": null,
           "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -1426,7 +1426,7 @@
       "title": "Messages ready to be delivered",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1558,7 +1558,7 @@
       "title": "Messages unacknowledged by consumers",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1703,7 +1703,7 @@
       "title": "Messages published / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1835,7 +1835,7 @@
       "title": "Messages confirmed to publishers / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -1940,7 +1940,7 @@
       "title": "Unroutable messages returned to publishers / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2072,7 +2072,7 @@
       "title": "Messages published to queues / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2204,7 +2204,7 @@
       "title": "Messages unconfirmed to publishers / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2309,7 +2309,7 @@
       "title": "Unroutable messages dropped / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2454,7 +2454,7 @@
       "title": "Messages delivered / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2586,7 +2586,7 @@
       "title": "Messages delivered auto ack / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2691,7 +2691,7 @@
       "title": "basic.get with auto ack / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2840,7 +2840,7 @@
       "title": "Messages redelivered / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -2972,7 +2972,7 @@
       "title": "Messages delivered with manual ack / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3077,7 +3077,7 @@
       "title": "basic.get with manual ack / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3209,7 +3209,7 @@
       "title": "Messages acknowledged / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3315,7 +3315,7 @@
       "title": "basic.get with no messages / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3460,7 +3460,7 @@
       "title": "Total queues",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3609,7 +3609,7 @@
       "title": "Queues declared / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3758,7 +3758,7 @@
       "title": "Queues created / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -3907,7 +3907,7 @@
       "title": "Queues deleted / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4052,7 +4052,7 @@
       "title": "Total channels",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4201,7 +4201,7 @@
       "title": "Channels opened / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4350,7 +4350,7 @@
       "title": "Channels closed / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4495,7 +4495,7 @@
       "title": "Total connections",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4645,7 +4645,7 @@
       "title": "Connections opened / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4794,7 +4794,7 @@
       "title": "Connections closed / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -4843,8 +4843,8 @@
       {
         "allValue": null,
         "current": {
-          "text": "rabbitmq-overview",
-          "value": "rabbitmq-overview"
+          "text": "",
+          "value": ""
         },
         "datasource": "prometheus",
         "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
@@ -4858,7 +4858,7 @@
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 0,
+        "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
@@ -4868,7 +4868,7 @@
     ]
   },
   "time": {
-    "from": "now-10m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -4896,5 +4896,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 1
+  "version": 7
 }
