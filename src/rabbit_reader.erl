@@ -1277,7 +1277,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
                State = #v1{connection =
                                #connection{protocol   = Protocol,
                                            user       = User = #user{username = Username},
-                                           log_name   = ConnName},
+                                           log_name   = ConnName} = Conn,
                            sock       = Sock}) when ?IS_RUNNING(State) ->
     rabbit_log_connection:debug(
         "connection ~p (~s) of user '~s': "
@@ -1300,7 +1300,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
             "connection ~p (~s): "
             "user '~s' updated secret, reason: ~s~n",
             [self(), dynamic_connection_name(ConnName), Username, Reason]),
-        State#v1{connection = #connection{user = User1}};
+        State#v1{connection = Conn#connection{user = User1}};
       {refused, Reason} ->
         rabbit_log_connection:error("Secret update was refused for user '~p': ~p",
                                     [Username, Reason]),
