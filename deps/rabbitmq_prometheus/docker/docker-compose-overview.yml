@@ -13,7 +13,7 @@ volumes:
 services:
   rmq0: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.700-2019.06.20
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.0-alpha.700-2019.06.24
     networks:
       - "rabbitmq-prometheus"
     ports:
