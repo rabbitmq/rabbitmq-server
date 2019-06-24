@@ -284,7 +284,9 @@ RUN set -eux; \
 	rabbitmqadmin --version
 EXPOSE 15671 15672
 
-
+# rabbitmq_top
+RUN rabbitmq-plugins enable --offline rabbitmq_top && \
+    rabbitmq-plugins is_enabled rabbitmq_top --offline
 
 # rabbitmq_prometheus
 RUN rm /plugins/rabbit_common*.ez
