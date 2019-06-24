@@ -30,6 +30,7 @@ services:
       RABBITMQ_ERLANG_COOKIE: rabbitmq-qq
     volumes:
       - ./rabbitmq-qq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-qq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./rabbitmq-qq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
   rmq1-qq:
     << : *rabbitmq
@@ -50,7 +51,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URIS: "amqp://guest:guest@rmq0-qq:5672/%2f,amqp://guest:guest@rmq1-qq:5672/%2f,amqp://guest:guest@rmq1-qq:5672/%2f"
+      URIS: "amqp://guest:guest@rmq0-qq:5672/%2f,amqp://guest:guest@rmq1-qq:5672/%2f,amqp://guest:guest@rmq2-qq:5672/%2f"
       QUEUE_PATTERN: "qq%d"
       QUEUE_PATTERN_FROM: 1
       QUEUE_PATTERN_TO: 10
@@ -59,6 +60,6 @@ services:
       QUEUE_ARGS: x-queue-type=quorum,x-max-length=1000
       FLAG: persistent
       AUTO_DELETE: "false"
-      RATE: 10
+      RATE: 200
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: &startup_timeout 30

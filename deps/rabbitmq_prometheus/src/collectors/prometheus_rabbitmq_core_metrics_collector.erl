@@ -152,7 +152,8 @@
         {3, raft_log_snapshot_index, counter, "Raft log snapshot index"},
         {4, raft_log_last_applied_index, counter, "Raft log last applied index"},
         {5, raft_log_commit_index, counter, "Raft log commit index"},
-        {6, raft_log_last_written_index, counter, "Raft log last written index"}
+        {6, raft_log_last_written_index, counter, "Raft log last written index"},
+        {7, raft_entry_commit_latency, gauge, "Time taken for an entry to be committed"}
     ]},
 
     {queue_coarse_metrics, [

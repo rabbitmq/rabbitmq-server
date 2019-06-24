@@ -16,60 +16,97 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 3,
-  "iteration": 1561057199575,
+  "iteration": 1561396911983,
   "links": [],
   "panels": [
     {
       "aliasColors": {},
-      "bars": true,
+      "bars": false,
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
-      "fill": 10,
+      "description": "Number of operations committed by a majority of nodes in the Raft cluster.",
+      "fill": 0,
       "gridPos": {
-        "h": 11,
-        "w": 24,
+        "h": 9,
+        "w": 12,
         "x": 0,
         "y": 0
       },
-      "id": 62,
+      "id": 64,
       "legend": {
         "alignAsTable": true,
         "avg": false,
         "current": true,
-        "hideEmpty": false,
-        "hideZero": true,
         "max": true,
         "min": false,
-        "rightSide": false,
         "show": true,
-        "sort": "current",
+        "sort": "total",
         "sortDesc": true,
         "total": true,
         "values": true
       },
-      "lines": false,
-      "linewidth": 0,
+      "lines": true,
+      "linewidth": 1,
       "links": [],
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@\\w+0/",
+          "color": "#56A64B"
+        },
+        {
+          "alias": "/^rabbit@\\w+1/",
+          "color": "#F2CC0C"
+        },
+        {
+          "alias": "/^rabbit@\\w+2/",
+          "color": "#3274D9"
+        },
+        {
+          "alias": "/^rabbit@\\w+3/",
+          "color": "#A352CC"
+        },
+        {
+          "alias": "/^rabbit@\\w+4/",
+          "color": "#FF780A"
+        },
+        {
+          "alias": "/^rabbit@\\w+5/",
+          "color": "#96D98D"
+        },
+        {
+          "alias": "/^rabbit@\\w+6/",
+          "color": "#FFEE52"
+        },
+        {
+          "alias": "/^rabbit@\\w+7/",
+          "color": "#8AB8FF"
+        },
+        {
+          "alias": "/^rabbit@\\w+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@\\w+9/",
+          "color": "#FFB357"
+        }
+      ],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\"} - rabbitmq_raft_log_commit_index{cluster=\"$cluster\"}) by(queue)",
+          "expr": "sum(rate(rabbitmq_raft_log_commit_index{cluster=\"$cluster\", node=~\"$node\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{queue}}",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
@@ -77,10 +114,10 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Uncommitted entries",
+      "title": "Entries committed / s",
       "tooltip": {
         "shared": true,
-        "sort": 1,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -95,7 +132,7 @@
         {
           "decimals": null,
           "format": "short",
-          "label": "",
+          "label": null,
           "logBase": 1,
           "max": null,
           "min": null,
@@ -122,33 +159,33 @@
         "cardRound": null
       },
       "color": {
-        "cardColor": "#37872D",
+        "cardColor": "rgb(255, 255, 255)",
         "colorScale": "sqrt",
         "colorScheme": "interpolateRdYlGn",
-        "exponent": 0.3,
+        "exponent": 0.5,
         "mode": "opacity"
       },
       "dataFormat": "timeseries",
-      "description": "",
+      "description": "Time taken for an entry to be committed",
       "gridPos": {
-        "h": 7,
+        "h": 9,
         "w": 12,
-        "x": 0,
-        "y": 11
+        "x": 12,
+        "y": 0
       },
       "heatmap": {},
       "hideZeroBuckets": false,
       "highlightCards": true,
-      "id": 64,
+      "id": 65,
       "legend": {
-        "show": false
+        "show": true
       },
       "links": [],
       "options": {},
       "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "rate(rabbitmq_raft_log_commit_index{cluster=\"$cluster\"}[$__interval])",
+          "expr": "max(rabbitmq_raft_entry_commit_latency{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -158,7 +195,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Entries committed / s",
+      "title": "Entry commit latency",
       "tooltip": {
         "show": true,
         "showHistogram": true
@@ -171,30 +208,166 @@
       "xBucketSize": null,
       "yAxis": {
         "decimals": null,
-        "format": "short",
+        "format": "ms",
         "logBase": 1,
         "max": null,
         "min": null,
         "show": true,
         "splitFactor": null
       },
-      "yBucketBound": "auto",
+      "yBucketBound": "lower",
       "yBucketNumber": null,
       "yBucketSize": null
     },
     {
       "aliasColors": {},
-      "bars": true,
+      "bars": false,
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
       "description": "",
-      "fill": 10,
+      "fill": 0,
       "gridPos": {
-        "h": 7,
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 62,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "hideZero": true,
+        "max": true,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "sort": "total",
+        "sortDesc": true,
+        "total": true,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {},
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@\\w+0/",
+          "color": "#56A64B"
+        },
+        {
+          "alias": "/^rabbit@\\w+1/",
+          "color": "#F2CC0C"
+        },
+        {
+          "alias": "/^rabbit@\\w+2/",
+          "color": "#3274D9"
+        },
+        {
+          "alias": "/^rabbit@\\w+3/",
+          "color": "#A352CC"
+        },
+        {
+          "alias": "/^rabbit@\\w+4/",
+          "color": "#FF780A"
+        },
+        {
+          "alias": "/^rabbit@\\w+5/",
+          "color": "#96D98D"
+        },
+        {
+          "alias": "/^rabbit@\\w+6/",
+          "color": "#FFEE52"
+        },
+        {
+          "alias": "/^rabbit@\\w+7/",
+          "color": "#8AB8FF"
+        },
+        {
+          "alias": "/^rabbit@\\w+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@\\w+9/",
+          "color": "#FFB357"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} - rabbitmq_raft_log_commit_index{cluster=\"$cluster\", node=~\"$node\"}) by(node)",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Uncommitted entries",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": null,
+          "format": "short",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "",
+      "fill": 0,
+      "gridPos": {
+        "h": 9,
         "w": 12,
         "x": 12,
-        "y": 11
+        "y": 9
       },
       "id": 63,
       "legend": {
@@ -204,30 +377,73 @@
         "max": true,
         "min": false,
         "rightSide": false,
-        "show": false,
-        "total": false,
+        "show": true,
+        "sort": "total",
+        "sortDesc": true,
+        "total": true,
         "values": true
       },
-      "lines": false,
+      "lines": true,
       "linewidth": 1,
       "links": [],
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {},
       "percentage": false,
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@\\w+0/",
+          "color": "#56A64B"
+        },
+        {
+          "alias": "/^rabbit@\\w+1/",
+          "color": "#F2CC0C"
+        },
+        {
+          "alias": "/^rabbit@\\w+2/",
+          "color": "#3274D9"
+        },
+        {
+          "alias": "/^rabbit@\\w+3/",
+          "color": "#A352CC"
+        },
+        {
+          "alias": "/^rabbit@\\w+4/",
+          "color": "#FF780A"
+        },
+        {
+          "alias": "/^rabbit@\\w+5/",
+          "color": "#96D98D"
+        },
+        {
+          "alias": "/^rabbit@\\w+6/",
+          "color": "#FFEE52"
+        },
+        {
+          "alias": "/^rabbit@\\w+7/",
+          "color": "#8AB8FF"
+        },
+        {
+          "alias": "/^rabbit@\\w+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@\\w+9/",
+          "color": "#FFB357"
+        }
+      ],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_term[30s])) by(queue)",
+          "expr": "sum(rate(rabbitmq_raft_term{cluster=\"$cluster\", node=~\"$node\"}[30s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{queue}}",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
@@ -235,10 +451,10 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Number of elections / s",
+      "title": "Leader elections / s",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -275,14 +491,14 @@
     },
     {
       "aliasColors": {},
-      "bars": true,
+      "bars": false,
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
       "description": "",
       "fill": 0,
       "gridPos": {
-        "h": 9,
+        "h": 13,
         "w": 24,
         "x": 0,
         "y": 18
@@ -293,13 +509,15 @@
         "avg": false,
         "current": true,
         "max": true,
-        "min": true,
+        "min": false,
         "rightSide": false,
-        "show": false,
-        "total": false,
+        "show": true,
+        "sort": "total",
+        "sortDesc": true,
+        "total": true,
         "values": true
       },
-      "lines": false,
+      "lines": true,
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
@@ -308,17 +526,58 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@\\w+0/",
+          "color": "#56A64B"
+        },
+        {
+          "alias": "/^rabbit@\\w+1/",
+          "color": "#F2CC0C"
+        },
+        {
+          "alias": "/^rabbit@\\w+2/",
+          "color": "#3274D9"
+        },
+        {
+          "alias": "/^rabbit@\\w+3/",
+          "color": "#A352CC"
+        },
+        {
+          "alias": "/^rabbit@\\w+4/",
+          "color": "#FF780A"
+        },
+        {
+          "alias": "/^rabbit@\\w+5/",
+          "color": "#96D98D"
+        },
+        {
+          "alias": "/^rabbit@\\w+6/",
+          "color": "#FFEE52"
+        },
+        {
+          "alias": "/^rabbit@\\w+7/",
+          "color": "#8AB8FF"
+        },
+        {
+          "alias": "/^rabbit@\\w+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@\\w+9/",
+          "color": "#FFB357"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "",
+          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} -rabbitmq_raft_log_snapshot_index{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node) > 5000",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "",
+          "legendFormat": "{{node}} {{queue}}",
           "refId": "A"
         }
       ],
@@ -326,10 +585,10 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Number of entries in the log",
+      "title": "Raft member with >5k entries in the log",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -347,7 +606,7 @@
           "label": "",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -378,19 +637,18 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
           "text": "rabbitmq-qq",
           "value": "rabbitmq-qq"
         },
         "datasource": "prometheus",
-        "definition": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "definition": "label_values(rabbitmq_raft_term,cluster)",
         "hide": 0,
         "includeAll": false,
         "label": "Cluster",
         "multi": false,
         "name": "cluster",
         "options": [],
-        "query": "label_values(rabbitmq_memory_used_bytes,cluster)",
+        "query": "label_values(rabbitmq_raft_term,cluster)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -400,11 +658,36 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "prometheus",
+        "definition": "label_values(rabbitmq_raft_term,node)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Node",
+        "multi": false,
+        "name": "node",
+        "options": [],
+        "query": "label_values(rabbitmq_raft_term,node)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
       }
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -432,5 +715,5 @@
   "timezone": "",
   "title": "RabbitMQ-Raft",
   "uid": "f1Mee9nZz",
-  "version": 18
+  "version": 30
 }
