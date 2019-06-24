@@ -539,6 +539,12 @@ start_loaded_apps(Apps, RestartTypes) ->
     application:set_env(ra, logger_module, rabbit_log_ra_shim),
     %% use a larger segments size for queues
     application:set_env(ra, segment_max_entries, 32768),
+    case application:get_env(ra, wal_max_size_bytes) of
+        undefined ->
+            application:set_env(ra, wal_max_size_bytes, 536870912); %% 5 * 2 ^ 20
+        _ ->
+            ok
+    end,
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
             [];
