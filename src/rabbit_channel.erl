@@ -63,7 +63,7 @@
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
--export([source/2]).
+-export([source/2, update_user_state/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
@@ -459,11 +459,21 @@ force_event_refresh(Ref) ->
 list_queue_states(Pid) ->
     gen_server2:call(Pid, list_queue_states).
 
--spec source(pid(), any()) -> any().
+-spec source(pid(), any()) -> 'ok' | {error, channel_terminated}.
 
 source(Pid, Source) when is_pid(Pid) ->
     case erlang:is_process_alive(Pid) of
-        true  -> Pid ! {channel_source, Source};
+        true  -> Pid ! {channel_source, Source},
+                 ok;
+        false -> {error, channel_terminated}
+    end.
+
+-spec update_user_state(pid(), rabbit_types:user()) -> 'ok' | {error, channel_terminated}.
+
+update_user_state(Pid, UserState) when is_pid(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true  -> Pid ! {update_user_state, UserState},
+                 ok;
         false -> {error, channel_terminated}
     end.
 
@@ -850,7 +860,10 @@ handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
             Return
     end;
 handle_info({channel_source, Source}, State = #ch{cfg = Cfg}) ->
-    noreply(State#ch{cfg = Cfg#conf{source = Source}}).
+    noreply(State#ch{cfg = Cfg#conf{source = Source}});
+handle_info({update_user_state, User}, State = #ch{cfg = Cfg}) ->
+    noreply(State#ch{cfg = Cfg#conf{user = User}}).
+
 
 handle_pre_hibernate(State0) ->
     ok = clear_permission_cache(),
@@ -973,7 +986,7 @@ return_queue_declare_ok(#resource{name = ActualName},
 
 check_resource_access(User, Resource, Perm, Context) ->
     V = {Resource, Context, Perm},
-    
+
     Cache = case get(permission_cache) of
                 undefined -> [];
                 Other     -> Other

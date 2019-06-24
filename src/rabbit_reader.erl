@@ -1280,12 +1280,22 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
                                            log_name   = ConnName},
                            sock       = Sock}) when ?IS_RUNNING(State) ->
     rabbit_log_connection:debug(
-        "connection ~p (~s): "
-        "user '~s' attempts to update secret, reason: ~s~n",
+        "connection ~p (~s) of user '~s': "
+        "asked to update secret, reason: ~s~n",
         [self(), dynamic_connection_name(ConnName), Username, Reason]),
     case rabbit_access_control:update_state(User, NewSecret) of
       {ok, User1} ->
-        rabbit_log_connection:debug("User1: ~p", [User1]),
+        rabbit_log_connection:debug("Updated user/auth state: ~p", [User1]),
+        %% User/auth backend state has been updated. Now we can propagate it to channels
+        %% asynchronously and return. All the channels have to do is to update their
+        %% own state.
+        %%
+        %% Any secret update errors coming from the authz backend will be handled in the other branch.
+        %% Therefore we optimistically do no error handling here. MK.
+        lists:foreach(fun(Ch) ->
+          rabbit_log:debug("Updating user/auth backend state for channel ~p", [Ch]),
+          rabbit_channel:update_user_state(Ch, User1)
+        end, all_channels()),
         ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
         rabbit_log_connection:info(
             "connection ~p (~s): "
