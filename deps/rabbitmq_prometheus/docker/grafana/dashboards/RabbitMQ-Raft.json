@@ -16,8 +16,18 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1561396911983,
-  "links": [],
+  "iteration": 1561456770242,
+  "links": [
+    {
+      "icon": "doc",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Quorum Queues Documentation",
+      "tooltip": "",
+      "type": "link",
+      "url": "http://next.rabbitmq.com/quorum-queues.html"
+    }
+  ],
   "panels": [
     {
       "aliasColors": {},
@@ -25,7 +35,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Number of operations committed by a majority of nodes in the Raft cluster.",
+      "description": "##### Rate of Raft operations committed\n\nThis includes all queue operations, including publishes & consumer acknowledgements.\n\nThis tracks the progress of the Raft commit index on all members, including followers.\n\nIf a RabbitMQ node does not run a Raft member, it will not report any entries committed.",
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -166,7 +176,7 @@
         "mode": "opacity"
       },
       "dataFormat": "timeseries",
-      "description": "Time taken for an entry to be committed",
+      "description": "##### Time for an entry to be committed\n\nThis is an indicator of Raft operational overhead. Values will increase with increased load as the system trades latency for throughput.\n\nThis metric samples  the time it takes for an entry to be written to a Raft log and that entry being committed.\n\nBecause quorum queues fsync all operations to disk before committing them, they are not suitable for low-latency workloads.",
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -225,7 +235,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "##### Pending Raft entries\n\nTracks the number of Raft log entries that have been written but not yet committed.\n\nHigh & growing values may be indicative of a quorum of members not being available so that a queue can make progress.",
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -361,7 +371,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "##### Rate of Raft elections\n\nTracks the increments of the Raft term.\n\nSustained non-zero rates are indicative of network and/or availability issue. The other reason may be quorum queue declarations. Some declarations are expected. Sustained declarations hint to system design problems.",
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -495,7 +505,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "##### Number of entries in the Raft log\n\nTracks the number of Raft log entries since the last snapshot.\n\nLarge values can either be indicative of large quorum queue backlogs or availability problems. If the uncommitted entries metric is large as well, there is a genuine availability problem in the system.",
       "fill": 0,
       "gridPos": {
         "h": 13,
@@ -585,7 +595,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Raft member with >5k entries in the log",
+      "title": "Raft members with >5k entries in the log",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -637,8 +647,8 @@
       {
         "allValue": null,
         "current": {
-          "text": "rabbitmq-qq",
-          "value": "rabbitmq-qq"
+          "text": "",
+          "value": ""
         },
         "datasource": "prometheus",
         "definition": "label_values(rabbitmq_raft_term,cluster)",
@@ -715,5 +725,5 @@
   "timezone": "",
   "title": "RabbitMQ-Raft",
   "uid": "f1Mee9nZz",
-  "version": 30
+  "version": 2
 }
