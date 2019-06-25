@@ -93,8 +93,8 @@ endif
 # Log Erlang version.
 	@echo
 	@echo '--------------------------------------------------'
-	@echo "Erlang version used to compile:"
-	@erl -A0 -noinput -eval 'io:format("~s", [erlang:system_info(system_version)]), halt().'
+	@echo "Erlang and Elixir versions used to compile:"
+	@elixir --version
 	@echo '--------------------------------------------------'
 	@echo
 # Possibly update debian/changelog (in the created source directory):
