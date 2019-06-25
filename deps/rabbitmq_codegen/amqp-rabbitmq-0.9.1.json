@@ -157,7 +157,7 @@
                          "arguments": [],
                          "name": "unblocked"},
                         {"id": 70,
-                         "arguments": [{"type": "shortstr", "name": "new-secret"},
+                         "arguments": [{"type": "longstr", "name": "new-secret"},
                                        {"type": "shortstr", "name": "reason"}],
                          "name": "update-secret",
                          "synchronous" : true},
