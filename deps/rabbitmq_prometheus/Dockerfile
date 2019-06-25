@@ -301,8 +301,6 @@ RUN rm /plugins/rabbitmq_prometheus*.ez
 COPY plugins/rabbitmq_prometheus*.ez  /plugins/
 RUN rm /plugins/ra-*.ez
 COPY plugins/ra-*.ez  /plugins/
-RUN rm /opt/rabbitmq/ebin/rabbit_quorum_queue.beam
-COPY plugins/rabbit_quorum_queue.beam  /opt/rabbitmq/ebin/
 
 ARG RABBITMQ_PROMETHEUS_VERSION
 RUN chmod --recursive --verbose a+r /plugins/*.ez && \
