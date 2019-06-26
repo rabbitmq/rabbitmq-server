@@ -34,9 +34,17 @@ dist:
 	@echo '--------------------------------------------------'
 	@echo
 	xzcat $(SOURCE_DIST_FILE) | tar -xf -
+
+# We explicitely set $HOME as a Make variable below because some package
+# builders do that, as part of cleaning the build environment. It
+# exercises our hack to convince mix(1) to work offline because that
+# hack depends on `$HOME`. A Make variable on the command line takes
+# precedence over variables declared in Makefiles, so our hack needs to
+# consider this.
 	$(MAKE) -C $(SOURCE_DIR) install-windows \
 		DESTDIR=$(abspath $(TARGET_DIR)) \
-		WINDOWS_PREFIX=
+		WINDOWS_PREFIX= \
+		HOME="$(HOME)"
 
 	cp -a README-etc $(TARGET_DIR)/etc/README.txt
 

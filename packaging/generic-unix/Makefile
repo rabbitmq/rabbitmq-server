@@ -35,9 +35,17 @@ dist:
 	@echo
 	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 
-# web-manpages are not used by generic-unix but by `make release` in the.
+# web-manpages are not used by generic-unix but by `make release` in the
 # Umbrella. Those manpages are copied to www.rabbitmq.com
+#
+# We explicitely set $HOME as a Make variable below because some package
+# builders do that, as part of cleaning the build environment. It
+# exercises our hack to convince mix(1) to work offline because that
+# hack depends on `$HOME`. A Make variable on the command line takes
+# precedence over variables declared in Makefiles, so our hack needs to
+# consider this.
 	$(MAKE) -C $(SOURCE_DIR) \
+		HOME="$(HOME)" \
 		PREFIX= RMQ_ROOTDIR= \
 		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
 		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
