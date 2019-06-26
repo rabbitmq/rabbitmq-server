@@ -129,6 +129,14 @@ $(DOCKER_COMPOSE_FILES):
 down: DOCKER_COMPOSE_ACTION = down
 down: $(DOCKER_COMPOSE_FILES)
 
+define DOCKER_COMPOSE_UP
+cd docker && \
+docker-compose --file docker-compose-$(@F).yml up --detach
+endef
+.PHONY: metrics overview dist-tls qq
+metrics overview dist-tls qq:
+	@$(DOCKER_COMPOSE_UP)
+
 .PHONY: up
 up: DOCKER_COMPOSE_ACTION = up --detach
 up: $(DOCKER_COMPOSE_FILES)
