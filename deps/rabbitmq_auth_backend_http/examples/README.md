@@ -26,11 +26,15 @@ Run
 start.sh
 ```
 
-to launch it after [installing Django](https://docs.djangoproject.com/en/2.1/intro/install/). You may need to hack `start.sh` if you are not running Debian or Ubuntu.
+to launch it after [installing Django](https://docs.djangoproject.com/en/2.1/intro/install/).
+You may need to hack `start.sh` if you are not running Debian or Ubuntu.
 
 The app will use a local SQLite database. It uses the standard
 Django authentication database. All users get access to all vhosts and
 resources.
+
+The app recognises two users (to make the setup easier): `admin` and `someuser`.
+Passwords for those users do not matter. user `admin` as tagged as `administrator`.
 
 ### HTTP Endpoint Examples
 
@@ -210,3 +214,22 @@ auth_http.topic_path    = http://localhost:62190/auth/topic.php
 ```
 
 See [RabbitMQ Access Control guide](http://www.rabbitmq.com/access-control.html) for more information.
+
+## Running with Docker Compose
+
+An example node can be started using a provided `docker-compose.yml` file that sets up RabbitMQ.
+There's also a file that sets up the Django example above:
+
+```bash
+docker-compose -f docker-compose.yml -f rabbitmq_auth_backend_django/docker-compose.yml up --build
+```
+
+Another file, `docker/nodered/docker-compose.yml`, will run [nodered](https://nodered.org/) on port 1880
+with a configured MQTT client that will connect to RabbitMQ and perform basic operations that will trigger
+requests to the example service:
+
+```bash
+docker-compose -f docker-compose.yml -f rabbitmq_auth_backend_django/docker-compose.yml -f docker/nodered/docker-compose.yml up --build
+```
+
+Edit the provided [config file](docker/rabbitmq.conf) and enable caching and logging settings.

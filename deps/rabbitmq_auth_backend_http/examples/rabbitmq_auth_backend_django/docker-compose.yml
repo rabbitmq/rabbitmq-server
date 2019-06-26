@@ -1,0 +1,6 @@
+version: "3"
+
+services:
+  auth-backend:
+    build: ./rabbitmq_auth_backend_django
+    
