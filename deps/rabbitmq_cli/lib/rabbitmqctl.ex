@@ -170,14 +170,14 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp maybe_print_stacktrace(error, stacktrace, %{print_stacktrace: true}) do
+  def maybe_print_stacktrace(error, stacktrace, %{print_stacktrace: true}) do
     IO.puts("Stack trace: \n")
     IO.puts(Exception.format(:error, error, stacktrace))
   end
-  defp maybe_print_stacktrace(_error, %{print_stacktrace: false}) do
+  def maybe_print_stacktrace(_error, stacktrace, %{print_stacktrace: false}) do
     nil
   end
-  defp maybe_print_stacktrace(_error, _opts) do
+  def maybe_print_stacktrace(_error, stacktrace, _opts) do
     nil
   end
 
@@ -380,7 +380,7 @@ defmodule RabbitMQCtl do
 
   defp format_error(:function_clause, _opts, _module) do
     {:error, ExitCodes.exit_software(),
-      Exception.format_stacktrace()}
+      "Function clause.\nStacktrace:\n" <> Exception.format_stacktrace(System.stacktrace())}
   end
   defp format_error({:error, {:node_name, :hostname_not_allowed}}, _, _) do
     {:error, ExitCodes.exit_dataerr(),
