@@ -1,6 +1,7 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.702
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.705
+DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
@@ -51,20 +52,17 @@ docker_image_build:
 	  --build-arg PGP_KEYSERVER=pgpkeys.eu \
 	  --build-arg RABBITMQ_VERSION=$(BASED_ON_RABBITMQ_VERSION) \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(RABBITMQ_VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq-prometheus:latest .
+	  --tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION) \
+	  --tag $(DOCKER_IMAGE_NAME):latest .
 .PHONY: dib
 dib: docker_image_build
 
 .PHONY: docker_image_push
 docker_image_push:
-	@docker push pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION) && \
-	docker push pivotalrabbitmq/rabbitmq-prometheus:latest
+	@docker push $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION) && \
+	docker push $(DOCKER_IMAGE_NAME):latest
 .PHONY: dip
 dip: docker_image_push
-
-define RUN_DOCKER_IMAGE
-endef
 
 .PHONY: docker_image_run
 docker_image_run:
@@ -72,9 +70,17 @@ docker_image_run:
 	  --publish=5672:5672 \
 	  --publish=15672:15672 \
 	  --publish=15692:15692 \
-	  pivotalrabbitmq/rabbitmq-prometheus:$(DOCKER_IMAGE_VERSION)
+	  $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)
 .PHONY: dir
 dir: docker_image_run
+
+.PHONY: docker_image_version_bump
+docker_image_version_bump:
+	@sed -i '' 's|$(DOCKER_IMAGE_NAME):.*|$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)|g' \
+	  docker/docker-compose-{overview,dist-tls,qq}.yml
+.PHONY: divb
+divb: docker_image_version_bump
+
 
 define CTOP_CONTAINER
 docker pull quay.io/vektorlab/ctop:latest && \
@@ -136,8 +142,12 @@ update_dashboards:
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
 	true
+.PHONY: ud
+ud: update_dashboards
 
 .PHONY: clean_docker
 clean_docker:
 	@docker system prune -f && \
 	docker volume prune -f
+.PHONY: cd
+cd: clean_docker
