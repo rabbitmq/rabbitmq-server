@@ -31,7 +31,7 @@ endif
 
 include rabbitmq-components.mk
 include erlang.mk
-include stats.mk
+include mk/stats.mk
 
 # --------------------------------------------------------------------
 # Mix Hex cache management.
@@ -197,7 +197,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 			(cd $$(dirname "$$mix_exs") && \
 			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force && \
 			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
-			 cp $(DEPS_DIR)/rabbit_common/mk/rabbitmq-mix.mk . && \
+			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
 			 rm -rf _build deps); \
 		fi; \
 		if test -f "$$dep/license_info"; then \
