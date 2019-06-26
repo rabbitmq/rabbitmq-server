@@ -21,9 +21,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
--import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
-                                   open_unmanaged_connection/1]).
-
 -compile(export_all).
 
 all() ->
@@ -73,6 +70,7 @@ init_per_group(with_metrics, Config0) ->
         {prometheus, [{global_labels, [{node, node()}, {cluster, "rabbitmq_prometheus_test"}]}]}
     ),
     Config3 = init_per_group(with_metrics, Config2, []),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config3, quorum_queue),
 
     A = rabbit_ct_broker_helpers:get_node_config(Config3, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config3, A),
