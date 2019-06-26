@@ -510,7 +510,7 @@ defmodule RabbitMQCtl do
   defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) do
     {:error, ExitCodes.exit_unavailable(), err}
   end
-  defp format_error({:error, :check_failed}, _, _) do
+  defp format_error({:error, :check_failed, _}, _, _) do
     {:error, ExitCodes.exit_unavailable(), nil}
   end
 

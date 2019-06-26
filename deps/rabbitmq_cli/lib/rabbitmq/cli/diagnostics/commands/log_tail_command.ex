@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
   @moduledoc """
   Displays standard log file location on the target node
   """
@@ -21,19 +21,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
 
   alias RabbitMQ.CLI.Core.LogFiles
 
-  def switches, do: [all: :boolean]
-  def aliases, do: [a: :all]
+  def switches, do: [number: :integer]
+  def aliases, do: ['N': :number]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{all: false}, opts)}
+    {args, Map.merge(%{number: 10}, opts)}
   end
-
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
-  def run([], %{node: node_name, timeout: timeout, all: all}) do
-    case all do
-      true  -> LogFiles.get_log_locations(node_name, timeout);
-      false -> LogFiles.get_default_log_location(node_name, timeout)
+  def run([], %{node: node_name, timeout: timeout, number: n}) do
+    case LogFiles.get_default_log_location(node_name, timeout) do
+      {:ok, file} ->
+        :rabbit_misc.rpc_call(node_name,
+                              :rabbit_log_tail, :tail_n_lines, [file, n],
+                              timeout)
+      error -> error
     end
   end
 
@@ -41,11 +43,17 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Shows the log file location(s) on the target node"
+  def description(), do: "Prints the last N lines of the log on the node"
 
-  def usage, do: "log_location [--all|-a]"
+  def usage, do: "log_tail [--number|-N <number>]"
 
-  def banner([], %{node: node_name}) do
-    "Log file location on node #{node_name} ..."
+  def usage_additional do
+    [
+      ["<number>", "number of lines to print. 10 by default"]
+    ]
+  end
+
+  def banner([], %{node: node_name, number: n}) do
+    "Last #{n} lines of the log on node #{node_name} ..."
   end
 end
