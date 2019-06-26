@@ -26,14 +26,15 @@ Run
 start.sh
 ```
 
-to launch it after [installing Django](https://docs.djangoproject.com/en/2.1/intro/install/). You may need to hack `start.sh` if you are not running Debian or Ubuntu.
+to launch it after [installing Django](https://docs.djangoproject.com/en/2.1/intro/install/).
+You may need to hack `start.sh` if you are not running Debian or Ubuntu.
 
 The app will use a local SQLite database. It uses the standard
 Django authentication database. All users get access to all vhosts and
 resources.
 
-App has hardcoded users (to make set up easier): `admin` and `someuser`.
-Passwords for those users don't matter. user `admin` will be authorized with `administrator` tag.
+The app recognises two users (to make the setup easier): `admin` and `someuser`.
+Passwords for those users do not matter. user `admin` as tagged as `administrator`.
 
 ### HTTP Endpoint Examples
 
@@ -214,20 +215,21 @@ auth_http.topic_path    = http://localhost:62190/auth/topic.php
 
 See [RabbitMQ Access Control guide](http://www.rabbitmq.com/access-control.html) for more information.
 
-## Running using docker
+## Running with Docker Compose
 
-You can run example using docker-compose by specifying two `docker-compose.yml` files.
-One common which sets up rabbitmq, and second which runs auth backend.
+An example node can be started using a provided `docker-compose.yml` file that sets up RabbitMQ.
+There's also a file that sets up the Django example above:
 
 ```bash
 docker-compose -f docker-compose.yml -f rabbitmq_auth_backend_django/docker-compose.yml up --build
 ```
 
-You can also provide third file `docker/nodered/docker-compose.yml` which will set run [nodered](https://nodered.org/) running on port 1880
-with configured mqtt client that will connect to rabbitmq. You can play around with it and observe calls to auth-backend.
+Another file, `docker/nodered/docker-compose.yml`, will run [nodered](https://nodered.org/) on port 1880
+with a configured MQTT client that will connect to RabbitMQ and perform basic operations that will trigger
+requests to the example service:
 
 ```bash
 docker-compose -f docker-compose.yml -f rabbitmq_auth_backend_django/docker-compose.yml -f docker/nodered/docker-compose.yml up --build
 ```
 
-You can edit [config file](docker/rabbitmq.conf) and enable caching and observe changes in logging.
+Edit the provided [config file](docker/rabbitmq.conf) and enable caching and logging settings.
