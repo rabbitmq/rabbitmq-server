@@ -1,9 +1,42 @@
 -module(rabbit_log_tail).
 
 -export([tail_n_lines/2]).
-% -export([init_tail_stream/2, tail_send/2, tail_receive/2]).
+-export([init_tail_stream/3]).
 
 -define(GUESS_OFFSET, 200).
+
+init_tail_stream(Filename, Pid, Ref) ->
+    RPCProc = self(),
+    Reader = spawn(fun() ->
+        link(Pid),
+        case file:open(Filename, [read, binary]) of
+            {ok, File} ->
+                {ok, _} = file:position(File, eof),
+                RPCProc ! {Ref, opened},
+                read_loop(File, Pid, Ref);
+            {error, _} = Err ->
+                RPCProc ! {Ref, Err}
+        end
+    end),
+    receive
+        {Ref, opened} -> {ok, Ref};
+        {Ref, {error, Err}} -> {error, Err}
+    after 5000 ->
+        exit(Reader, timeout),
+        {error, timeout}
+    end.
+
+read_loop(File, Pid, Ref) ->
+    case file:read(File, ?GUESS_OFFSET) of
+        {ok, Data} ->
+            Pid ! {Ref, Data, confinue},
+            read_loop(File, Pid, Ref);
+        eof ->
+            timer:sleep(1000),
+            read_loop(File, Pid, Ref);
+        {error, _} = Err ->
+            Pid ! {Ref, Err, finished}
+    end.
 
 tail_n_lines(Filename, N) ->
     case file:open(Filename, [read, binary]) of
