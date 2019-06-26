@@ -16,7 +16,8 @@ endif
 
 SOURCE_DIR = rabbitmq-server-$(VERSION)
 TARGET_DIR = rabbitmq_server-$(VERSION)
-TARGET_TARBALL = rabbitmq-server-generic-unix-$(VERSION)
+TARBALL_SUFFIX ?= generic-unix
+TARGET_TARBALL = rabbitmq-server-$(TARBALL_SUFFIX)-$(VERSION)
 
 unexport DEPS_DIR
 unexport ERL_LIBS
@@ -68,7 +69,7 @@ dist:
 	fi
 
 clean: clean_partial
-	rm -f rabbitmq-server-generic-unix-*.tar.xz
+	rm -f rabbitmq-server-$(TARBALL_SUFFIX)-*.tar.xz
 
 clean_partial:
 	rm -rf rabbitmq-server-* rabbitmq_server-*
