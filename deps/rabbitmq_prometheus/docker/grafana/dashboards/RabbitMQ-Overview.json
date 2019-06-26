@@ -2826,7 +2826,7 @@
           "yaxis": "left"
         },
         {
-          "colorMode": "warning",
+          "colorMode": "critical",
           "fill": true,
           "line": true,
           "op": "gt",
