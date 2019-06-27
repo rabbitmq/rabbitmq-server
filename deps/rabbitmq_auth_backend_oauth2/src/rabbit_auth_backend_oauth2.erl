@@ -44,8 +44,7 @@ user_login_authentication(Username0, AuthProps0) ->
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
         {error, _} = E  -> E;
-        {refused, Err}  ->
-            {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+        {refused, Err}  -> {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
             Username = username_from(Username0, DecodedToken),
             Tags     = tags_from(DecodedToken),
@@ -89,8 +88,16 @@ check_topic_access(#auth_user{impl = DecodedToken},
 
 state_can_expire() -> true.
 
-update_state(AuthUser, _NewState) ->
-  AuthUser.
+update_state(AuthUser, NewToken) ->
+  case check_token(NewToken) of
+      {error, _} = E  -> E;
+      {refused, Err}  -> {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+      {ok, DecodedToken} ->
+          Tags = tags_from(DecodedToken),
+
+          {ok, AuthUser#auth_user{tags = Tags,
+                                  impl = DecodedToken}}
+  end.
 
 %%--------------------------------------------------------------------
 
