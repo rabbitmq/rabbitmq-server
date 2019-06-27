@@ -22,29 +22,36 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailStreamCommand do
   alias RabbitMQ.CLI.Core.LogFiles
 
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  def switches(), do: [duration: :integer, timeout: :integer]
+  def aliases(), do: [d: :duration, t: :timeout]
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{duration: :infinity}, opts)}
+  end
+
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
-  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def printer(), do: RabbitMQ.CLI.Printers.StdIORaw
 
-  def run([], %{node: node_name, timeout: timeout}) do
+  def run([], %{node: node_name, timeout: timeout, duration: duration}) do
     case LogFiles.get_default_log_location(node_name, timeout) do
       {:ok, file} ->
         pid = self()
         ref = make_ref()
         subscribed = :rabbit_misc.rpc_call(
                           node_name,
-                          :rabbit_log_tail, :init_tail_stream, [file, pid, ref],
+                          :rabbit_log_tail, :init_tail_stream,
+                          [file, pid, ref, duration],
                           timeout)
         case subscribed do
           {:ok, ^ref} ->
-            Stream.unfold(:started,
-              fn(_) ->
-                receive do
-                  {^ref, data, :finished} -> {data, nil};
-                  {^ref, data, :confinue} -> {data, :confinue}
-                end
+            Stream.unfold(:confinue,
+              fn(:finished) -> nil
+                (:confinue) ->
+                  receive do
+                    {^ref, data, :finished} -> {data, :finished};
+                    {^ref, data, :confinue} -> {data, :confinue}
+                  end
               end)
           error -> error
         end
@@ -54,13 +61,22 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailStreamCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def help_section(), do: :configuration
+  def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Streams logs from the node"
 
-  def usage, do: "log_tail_stream"
+  def usage, do: "log_tail_stream [--duration|-d <duration_in_seconds>]"
 
-  def banner([], %{node: node_name}) do
+  def usage_additional() do
+    [
+      ["<duration_in_seconds>", "duration in seconds to stream log. Default is indinity"]
+    ]
+  end
+
+  def banner([], %{node: node_name, duration: :infinity}) do
     "Streaming logs from node #{node_name} ..."
+  end
+  def banner([], %{node: node_name, duration: duration}) do
+    "Streaming logs from node #{node_name} for #{duration} seconds ..."
   end
 end
