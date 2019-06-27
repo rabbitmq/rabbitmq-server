@@ -21,8 +21,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
 
   alias RabbitMQ.CLI.Core.LogFiles
 
-  def switches, do: [all: :boolean]
-  def aliases, do: [a: :all]
+  def switches, do: [all: :boolean, timeout: :integer]
+  def aliases, do: [a: :all, t: :timeout]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{all: false}, opts)}

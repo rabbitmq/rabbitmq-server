@@ -21,8 +21,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
 
   alias RabbitMQ.CLI.Core.LogFiles
 
-  def switches, do: [number: :integer]
-  def aliases, do: ['N': :number]
+  def switches, do: [number: :integer, timeout: :integer]
+  def aliases, do: ['N': :number, t: :timeout]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{number: 10}, opts)}
@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def help_section(), do: :configuration
+  def help_section(), do: :observability_and_health_checks
 
   def description(), do: "Prints the last N lines of the log on the node"
 
