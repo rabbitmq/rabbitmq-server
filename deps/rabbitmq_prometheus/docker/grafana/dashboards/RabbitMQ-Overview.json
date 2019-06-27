@@ -1146,8 +1146,8 @@
       },
       "yaxes": [
         {
-          "decimals": null,
-          "format": "short",
+          "decimals": 0,
+          "format": "none",
           "label": "",
           "logBase": 1,
           "max": null,
@@ -1294,8 +1294,8 @@
       },
       "yaxes": [
         {
-          "decimals": null,
-          "format": "short",
+          "decimals": 0,
+          "format": "none",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1490,7 +1490,7 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "nullPointMode": "null",
+      "nullPointMode": "null as zero",
       "options": {},
       "percentage": false,
       "pointradius": 2,
