@@ -24,7 +24,7 @@
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4,
-         check_topic_access/4]).
+         check_topic_access/4, state_can_expire/0, update_state/2]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 
@@ -86,6 +86,11 @@ check_topic_access(#auth_user{impl = DecodedToken},
             Scopes = get_scopes(DecodedToken),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
+
+state_can_expire() -> true.
+
+update_state(AuthUser, _NewState) ->
+  AuthUser.
 
 %%--------------------------------------------------------------------
 
