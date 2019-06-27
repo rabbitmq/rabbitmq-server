@@ -23,6 +23,10 @@ unexport DEPS_DIR
 unexport ERL_LIBS
 MAKEOVERRIDES =
 
+# See comment below about `$(HOME)` and Freedesktop.org variables.
+XDG_DATA_HOME ?= $(HOME)/.local/share
+XDG_CONFIG_HOME ?= $(HOME)/.config
+
 all: dist
 	@:
 
@@ -43,10 +47,13 @@ dist:
 # builders do that, as part of cleaning the build environment. It
 # exercises our hack to convince mix(1) to work offline because that
 # hack depends on `$HOME`. A Make variable on the command line takes
-# precedence over variables declared in Makefiles, so our hack needs to
-# consider this.
+# precedence over variables declared in Makefiles, so our hack needs
+# to consider this. We do the same with the Freedesktop.org-specified
+# variables ($XDG_*_HOME).
 	$(MAKE) -C $(SOURCE_DIR) \
 		HOME="$(HOME)" \
+		XDG_DATA_HOME="$(XDG_DATA_HOME)" \
+		XDG_CONFIG_HOME="$(XDG_CONFIG_HOME)" \
 		PREFIX= RMQ_ROOTDIR= \
 		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
 		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
