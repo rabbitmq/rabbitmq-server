@@ -5,6 +5,12 @@
 
 HEX_OFFLINE = 1
 
-override HOME = $(DEPS_DIR)
+# mix(1) centralizes its data in `$MIX_HOME`. When unset, it defaults
+# to something under `$XDG_DATA_HOME`/`$XDG_CONFIG_HOME` or `$HOME`
+# depending on the Elixir version.
+#
+# We store those data for offline build in `$(DEPS_DIR)`.
 
-export HEX_OFFLINE HOME
+override MIX_HOME = $(DEPS_DIR)/.mix
+
+export HEX_OFFLINE MIX_HOME
