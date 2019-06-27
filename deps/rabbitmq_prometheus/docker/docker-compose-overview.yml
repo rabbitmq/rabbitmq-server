@@ -50,47 +50,65 @@ services:
       - "5675:5672"
       - "15675:15672"
       - "15695:15692"
-  publisher-confirms:
+  basic-get:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:dev-2019.06.10
     networks:
       - "rabbitmq-prometheus"
     environment:
       URI: "amqp://guest:guest@rmq0:5672/%2f"
+      QUEUE: basic-get
+      ROUTING_KEY: basic-get
+      VARIABLE_RATE: "1:1,0:30"
+      POLLING: "true"
+      POLLING_INTERVAL: 5000
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: &startup_timeout 60
+  basic-get-auto:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
+      QUEUE: basic-get
+      ROUTING_KEY: basic-get
+      PRODUCERS: 0
+      POLLING: "true"
+      POLLING_INTERVAL: 5000
+      AUTOACK: "true"
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+  greedy-consumer:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
+      QUEUE: greedy-consumer
+      ROUTING_KEY: greedy-consumer
+      VARIABLE_RATE: "100:20,0:20"
+      CONSUMER_RATE: 50
+      QOS: 2000
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+  publisher-confirms:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
       QUEUE: publisher-confirms
       ROUTING_KEY: publisher-confirms
       AUTOACK: "true"
       VARIABLE_RATE: "12:30,25:30,50:30,100:30"
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
-      SERVERS_STARTUP_TIMEOUT: &startup_timeout 60
-  unroutable-return:
-    image: *perf-test-image
-    networks:
-      - "rabbitmq-prometheus"
-    environment:
-      URI: "amqp://guest:guest@rmq1:5672/%2f"
-      VARIABLE_RATE: "2:30,4:30,10:30"
-      VARIABLE_SIZE: "100:30,200:30"
-      CONSUMERS: 0
-      FLAG: mandatory
-      SERVERS_STARTUP_TIMEOUT: *startup_timeout
-  unroutable-drop:
-    image: *perf-test-image
-    networks:
-      - "rabbitmq-prometheus"
-    environment:
-      URI: "amqp://guest:guest@rmq1:5672/%2f"
-      VARIABLE_RATE: "5:30,10:30,20:30"
-      VARIABLE_SIZE: "100:30,200:30"
-      CONSUMERS: 0
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
   slow-consumer-persistent:
     image: *perf-test-image
     networks:
       - "rabbitmq-prometheus"
     environment:
-      URI: "amqp://guest:guest@rmq2:5672/%2f"
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
       QUEUE: ha3-slow-consumer-persistent
       ROUTING_KEY: slow-consumer-persistent
       QUEUE_ARGS: x-max-length=10000
@@ -102,32 +120,6 @@ services:
       QOS: 50
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
-  basic-get:
-    image: *perf-test-image
-    networks:
-      - "rabbitmq-prometheus"
-    environment:
-      URI: "amqp://guest:guest@rmq1:5672/%2f"
-      QUEUE: basic-get
-      ROUTING_KEY: basic-get
-      VARIABLE_RATE: "1:1,0:30"
-      POLLING: "true"
-      POLLING_INTERVAL: 5000
-      AUTOACK: "false"
-      SERVERS_STARTUP_TIMEOUT: *startup_timeout
-  basic-get-auto:
-    image: *perf-test-image
-    networks:
-      - "rabbitmq-prometheus"
-    environment:
-      URI: "amqp://guest:guest@rmq1:5672/%2f"
-      QUEUE: basic-get
-      ROUTING_KEY: basic-get
-      PRODUCERS: 0
-      POLLING: "true"
-      POLLING_INTERVAL: 5000
-      AUTOACK: "true"
-      SERVERS_STARTUP_TIMEOUT: *startup_timeout
   nack:
     image: *perf-test-image
     networks:
@@ -136,7 +128,7 @@ services:
     command: /bin/bash -c "while true; do bin/runjava com.rabbitmq.perf.PerfTest; sleep 10; done"
     environment:
       TIME: 60
-      URI: "amqp://guest:guest@rmq0:5672/%2f"
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
       VARIABLE_RATE: "1:10,0:20"
       QUEUE: nack
       QUEUE_ARGS: x-max-length=100
@@ -145,4 +137,25 @@ services:
       NACK: "true"
       QOS: 5
       CONSUMER_LATENCY: 3000000
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+  unroutable-return:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
+      VARIABLE_RATE: "2:30,4:30,10:30"
+      VARIABLE_SIZE: "100:30,200:30"
+      CONSUMERS: 0
+      FLAG: mandatory
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+  unroutable-drop:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
+      VARIABLE_RATE: "5:30,10:30,20:30"
+      VARIABLE_SIZE: "100:30,200:30"
+      CONSUMERS: 0
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
