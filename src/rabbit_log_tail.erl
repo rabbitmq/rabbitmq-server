@@ -1,19 +1,23 @@
 -module(rabbit_log_tail).
 
 -export([tail_n_lines/2]).
--export([init_tail_stream/3]).
+-export([init_tail_stream/4]).
 
 -define(GUESS_OFFSET, 200).
 
-init_tail_stream(Filename, Pid, Ref) ->
+init_tail_stream(Filename, Pid, Ref, Duration) ->
     RPCProc = self(),
     Reader = spawn(fun() ->
         link(Pid),
         case file:open(Filename, [read, binary]) of
             {ok, File} ->
+                TimeLimit = case Duration of
+                    infinity -> infinity;
+                    _        -> erlang:system_time(second) + Duration
+                end,
                 {ok, _} = file:position(File, eof),
                 RPCProc ! {Ref, opened},
-                read_loop(File, Pid, Ref);
+                read_loop(File, Pid, Ref, TimeLimit);
             {error, _} = Err ->
                 RPCProc ! {Ref, Err}
         end
@@ -26,16 +30,20 @@ init_tail_stream(Filename, Pid, Ref) ->
         {error, timeout}
     end.
 
-read_loop(File, Pid, Ref) ->
-    case file:read(File, ?GUESS_OFFSET) of
-        {ok, Data} ->
-            Pid ! {Ref, Data, confinue},
-            read_loop(File, Pid, Ref);
-        eof ->
-            timer:sleep(1000),
-            read_loop(File, Pid, Ref);
-        {error, _} = Err ->
-            Pid ! {Ref, Err, finished}
+read_loop(File, Pid, Ref, TimeLimit) ->
+    case is_integer(TimeLimit) andalso erlang:system_time(second) > TimeLimit of
+        true  -> Pid ! {Ref, <<>>, finished};
+        false ->
+            case file:read(File, ?GUESS_OFFSET) of
+                {ok, Data} ->
+                    Pid ! {Ref, Data, confinue},
+                    read_loop(File, Pid, Ref, TimeLimit);
+                eof ->
+                    timer:sleep(1000),
+                    read_loop(File, Pid, Ref, TimeLimit);
+                {error, _} = Err ->
+                    Pid ! {Ref, Err, finished}
+            end
     end.
 
 tail_n_lines(Filename, N) ->
@@ -46,7 +54,7 @@ tail_n_lines(Filename, N) ->
             Result = reverse_read_n_lines(N, N, File, Eof, Eof),
             file:close(File),
             Result;
-        Error -> Error
+        {error, _} = Error -> Error
     end.
 
 reverse_read_n_lines(N, OffsetN, File, Position, Eof) ->
@@ -63,7 +71,7 @@ reverse_read_n_lines(N, OffsetN, File, Position, Eof) ->
                 _ ->
                     reverse_read_n_lines(N, N - NLines + 1, File, GuessPosition, Eof)
             end;
-        Error -> Error
+        {error, _} = Error -> Error
     end.
 
 read_from_position(File, GuessPosition, Eof) ->
@@ -71,15 +79,16 @@ read_from_position(File, GuessPosition, Eof) ->
 
 read_lines_from_position(File, GuessPosition, Eof) ->
     case read_from_position(File, GuessPosition, Eof) of
-        {ok, Data} -> {ok, crop_lines(Data)};
-        Error      -> Error
-    end.
-
-crop_lines(Data) ->
-    %% Drop the first line, because it's most likely partial.
-    case binary:split(Data, <<"\n">>, [global, trim]) of
-        [_|Rest] -> Rest;
-        [] -> []
+        {ok, Data} ->
+            Lines = binary:split(Data, <<"\n">>, [global, trim]),
+            case {GuessPosition, Lines} of
+                %% If position is 0 - there are no partial lines
+                {0, _}          -> {ok, Lines};
+                %% Remove first line as it can be partial
+                {_, [_ | Rest]} -> {ok, Rest};
+                {_, []}         -> {ok, []}
+            end;
+        {error, _} = Error -> Error
     end.
 
 offset(Base, N) ->
