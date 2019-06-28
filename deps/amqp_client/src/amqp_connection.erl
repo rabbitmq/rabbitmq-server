@@ -73,7 +73,7 @@
 -export([start/1, start/2, close/1, close/2, close/3, close/4]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
--export([connection_name/1]).
+-export([connection_name/1, update_secret/3]).
 -export([socket_adapter_info/2]).
 
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
@@ -299,6 +299,16 @@ close(ConnectionPid, Code, Text, Timeout) ->
 
 register_blocked_handler(ConnectionPid, BlockHandler) ->
     amqp_gen_connection:register_blocked_handler(ConnectionPid, BlockHandler).
+
+-spec update_secret(pid(), term(), binary()) ->
+    {'ok', rabbit_types:auth_user()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
+
+update_secret(ConnectionPid, NewSecret, Reason) ->
+  Update = #'connection.update_secret'{new_secret = NewSecret,
+                                       reason = Reason},
+  amqp_gen_connection:update_secret(ConnectionPid, Update).
 
 %%---------------------------------------------------------------------------
 %% Other functions

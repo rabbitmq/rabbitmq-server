@@ -24,7 +24,7 @@
 -export([start_link/2, connect/1, open_channel/3, hard_error_in_channel/3,
          channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
          close/3, server_close/2, info/2, info_keys/0, info_keys/1,
-         register_blocked_handler/2]).
+         register_blocked_handler/2, update_secret/2]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
@@ -83,6 +83,9 @@ close(Pid, Close, Timeout) ->
 
 server_close(Pid, Close) ->
     gen_server:cast(Pid, {server_close, Close}).
+
+update_secret(Pid, Method) ->
+    gen_server:call(Pid, {command, {update_secret, Method}}, amqp_util:call_timeout()).
 
 info(Pid, Items) ->
     gen_server:call(Pid, {info, Items}, amqp_util:call_timeout()).
@@ -273,7 +276,11 @@ handle_command({open_channel, ProposedNumber, Consumer}, _From,
                                                Mod:open_channel_args(MState)),
      State};
 handle_command({close, #'connection.close'{} = Close, Timeout}, From, State) ->
-    app_initiated_close(Close, From, Timeout, State).
+    app_initiated_close(Close, From, Timeout, State);
+handle_command({update_secret, #'connection.update_secret'{} = Method}, _From,
+               State = #state{module = Mod,
+                              module_state = MState}) ->
+    {reply, Mod:do(Method, MState), State}.
 
 %%---------------------------------------------------------------------------
 %% Handling methods from broker
@@ -295,6 +302,8 @@ handle_method(#'connection.unblocked'{} = Unblocked, State = #state{block_handle
     case BlockHandler of none        -> ok;
                          {Pid, _Ref} -> Pid ! Unblocked
     end,
+    {noreply, State};
+handle_method(#'connection.update_secret_ok'{} = _Method, State) ->
     {noreply, State};
 handle_method(Other, State) ->
     server_misbehaved_close(#amqp_error{name        = command_invalid,
