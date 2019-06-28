@@ -188,10 +188,15 @@ test_successful_token_refresh(Config) ->
     ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)),
 
     {ok, Ch2} = amqp_connection:open_channel(Conn),
+
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch2, #'queue.declare'{exclusive = true}),
+
     amqp_channel:close(Ch2),
     close_connection_and_channel(Conn, Ch).
+
 
 test_failed_connection_with_expired_token(Config) ->
     {_Algo, Token} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
