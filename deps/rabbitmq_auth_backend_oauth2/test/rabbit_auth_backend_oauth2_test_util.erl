@@ -50,8 +50,15 @@ expirable_token() ->
     TokenPayload = fixture_token(),
     TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRATION_TIME)}.
 
+expirable_token(Seconds) ->
+    TokenPayload = fixture_token(),
+    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(Seconds)}.
+
 wait_for_token_to_expire() ->
     timer:sleep(?EXPIRATION_TIME).
+
+wait_for_token_to_expire(DurationInMs) ->
+    timer:sleep(DurationInMs).
 
 expired_token() ->
     expired_token_with_scopes(full_permission_scopes()).

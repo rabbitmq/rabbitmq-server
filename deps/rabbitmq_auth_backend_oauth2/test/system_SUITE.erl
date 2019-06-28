@@ -37,7 +37,8 @@ groups() ->
     [
      {happy_path, [], [
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
-                       test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost
+                       test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
+                       test_successful_token_refresh
                       ]},
      {unhappy_path, [], [
                        test_failed_connection_with_expired_token,
@@ -134,6 +135,17 @@ generate_expired_token(Config, Scopes) ->
           end,
     ?UTIL_MOD:sign_token_hs(?UTIL_MOD:expired_token_with_scopes(Scopes), Jwk).
 
+generate_expirable_token(Config, Seconds) ->
+    generate_expirable_token(Config, ?UTIL_MOD:full_permission_scopes(), Seconds).
+
+generate_expirable_token(Config, Scopes, Seconds) ->
+    Jwk = case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
+              undefined -> ?UTIL_MOD:fixture_jwk();
+              Value     -> Value
+          end,
+    Expiration = os:system_time(seconds) + timer:seconds(Seconds),
+    ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scopes_and_expiration(Scopes, Expiration), Jwk).
+
 preconfigure_token(Config) ->
     Token = generate_valid_token(Config),
     rabbit_ct_helpers:set_config(Config, {fixture_jwt, Token}).
@@ -160,7 +172,26 @@ test_successful_connection_with_a_full_permission_token_and_explicitly_configure
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
+test_successful_token_refresh(Config) ->
+    Duration = 5,
+    {_Algo, Token} = generate_expirable_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                       <<"rabbitmq.write:vhost1/*">>,
+                                                       <<"rabbitmq.read:vhost1/*">>],
+                                                       Duration),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
 
+    {_Algo, Token2} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                    <<"rabbitmq.write:vhost1/*">>,
+                                                    <<"rabbitmq.read:vhost1/*">>]),
+    ?UTIL_MOD:wait_for_token_to_expire(Duration),
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)),
+
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch2, #'queue.declare'{exclusive = true}),
+    amqp_channel:close(Ch2),
+    close_connection_and_channel(Conn, Ch).
 
 test_failed_connection_with_expired_token(Config) ->
     {_Algo, Token} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
