@@ -1301,13 +1301,13 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
             "user '~s' updated secret, reason: ~s~n",
             [self(), dynamic_connection_name(ConnName), Username, Reason]),
         State#v1{connection = Conn#connection{user = User1}};
-      {refused, Reason} ->
+      {refused, Message} ->
         rabbit_log_connection:error("Secret update was refused for user '~p': ~p",
-                                    [Username, Reason]),
+                                    [Username, Message]),
         rabbit_misc:protocol_error(not_allowed, "New secret was refused by one of the backends", []);
-      {error, Reason} ->
+      {error, Message} ->
         rabbit_log_connection:error("Secret update for user '~p' failed: ~p",
-                                    [Username, Reason]),
+                                    [Username, Message]),
         rabbit_misc:protocol_error(not_allowed,
                                   "Secret update failed", [])
     end;
