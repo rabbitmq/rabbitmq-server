@@ -44,9 +44,11 @@ user_login_authentication(Username0, AuthProps0) ->
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
         %% avoid logging the token
-        {error, {invalid_token, error, _Err, _Stacktrace}} -> {error, invalid_token};
         {error, _} = E  -> E;
-        {refused, Err}  -> {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+          {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+        {refused, Err} ->
+          {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
             Username = username_from(Username0, DecodedToken),
             Tags     = tags_from(DecodedToken),
@@ -93,9 +95,11 @@ state_can_expire() -> true.
 update_state(AuthUser, NewToken) ->
   case check_token(NewToken) of
       %% avoid logging the token
-      {error, {invalid_token, error, _Err, _Stacktrace}} -> {error, invalid_token};
       {error, _} = E  -> E;
-      {refused, Err}  -> {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+      {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+        {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+      {refused, Err} ->
+        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~p", [Err])};
       {ok, DecodedToken} ->
           Tags = tags_from(DecodedToken),
 

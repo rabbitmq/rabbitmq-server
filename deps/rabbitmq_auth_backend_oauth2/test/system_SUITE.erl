@@ -45,7 +45,8 @@ groups() ->
                        test_failed_connection_with_a_non_token,
                        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
                        test_failed_connection_with_a_token_with_insufficient_resource_permission,
-                       test_failed_token_refresh
+                       test_failed_token_refresh_case1,
+                       test_failed_token_refresh_case2
                       ]}
     ].
 
@@ -73,7 +74,7 @@ init_per_group(_Group, Config) ->
     lists:foreach(fun(Value) ->
                           rabbit_ct_broker_helpers:add_vhost(Config, Value)
                   end,
-                  [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>]),
+                  [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]),
     Config.
 
 end_per_group(_Group, Config) ->
@@ -81,12 +82,18 @@ end_per_group(_Group, Config) ->
     lists:foreach(fun(Value) ->
                           rabbit_ct_broker_helpers:delete_vhost(Config, Value)
                   end,
-                  [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>]),
+                  [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]),
     Config.
 
 
 init_per_testcase(test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost = Testcase, Config) ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+
+init_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_case1 orelse
+                                         Testcase =:= test_failed_token_refresh_case2 ->
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost4">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
@@ -96,6 +103,12 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost = Testcase, Config) ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_case1 orelse
+                                        Testcase =:= test_failed_token_refresh_case2 ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
@@ -227,15 +240,40 @@ test_failed_connection_with_a_token_with_insufficient_resource_permission(Config
        amqp_channel:call(Ch, #'queue.declare'{queue = <<"alt-prefix.eq.1">>, exclusive = true})),
     close_connection(Conn).
 
-test_failed_token_refresh(Config) ->
-    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
-                                                   <<"rabbitmq.write:vhost1/*">>,
-                                                   <<"rabbitmq.read:vhost1/*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
+test_failed_token_refresh_case1(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
+                                                   <<"rabbitmq.write:vhost4/*">>,
+                                                   <<"rabbitmq.read:vhost4/*">>]),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
 
-    {_Algo, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
-                                                      <<"rabbitmq.write:vhost1/*">>,
-                                                      <<"rabbitmq.read:vhost1/*">>]),
+    {_Algo, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
+                                                      <<"rabbitmq.write:vhost4/*">>,
+                                                      <<"rabbitmq.read:vhost4/*">>]),
+    %% the error is communicated asynchronously via a connection-level error
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)),
+
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
     ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
-                amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)).
+       amqp_channel:call(Ch2, #'queue.declare'{queue = <<"a.q">>, exclusive = true})),
+
+    close_connection_and_channel(Conn, Ch).
+
+test_failed_token_refresh_case2(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
+                                                   <<"rabbitmq.write:vhost4/*">>,
+                                                   <<"rabbitmq.read:vhost4/*">>]),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+
+    %% the error is communicated asynchronously via a connection-level error
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, <<"not-a-token-^^^^5%">>, <<"token refresh">>)),
+
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
+       amqp_connection:open_channel(Conn)),
+
+    close_connection_and_channel(Conn, Ch).
