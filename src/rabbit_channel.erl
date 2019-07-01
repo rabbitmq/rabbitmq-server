@@ -70,8 +70,6 @@
          prioritise_call/4, prioritise_cast/3, prioritise_info/3,
          format_message_queue/2]).
 
--deprecated([{force_event_refresh, 1, eventually}]).
-
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
@@ -452,6 +450,9 @@ ready_for_close(Pid) ->
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
@@ -691,6 +692,9 @@ handle_cast({send_drained, CTagCredit},
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 handle_cast({force_event_refresh, Ref}, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
                         Ref),
