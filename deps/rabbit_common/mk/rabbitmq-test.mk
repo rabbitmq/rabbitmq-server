@@ -22,7 +22,7 @@ xref: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 # --------------------------------------------------------------------
 
 FLY ?= fly
-FLY_TARGET ?= $(shell $(FLY) targets | awk '/ci-aws\.rabbitmq\.com/ { print $$1; }')
+FLY_TARGET ?= $(shell $(FLY) targets | awk '/ci\.rabbitmq\.com/ { print $$1; }')
 
 CONCOURSE_TASK = $(ERLANG_MK_TMP)/concourse-task.yaml
 
@@ -71,7 +71,7 @@ endif
 	$(verbose) test -d "$(PIPELINE_DIR)"
 	$(verbose) echo '  MAKE_TARGET: "$*"' >> "$(CONCOURSE_TASK)"
 	$(FLY) -t $(FLY_TARGET) execute \
-		--config "$(CONCOURSE_TASK)" \
+		--config="$(CONCOURSE_TASK)" \
 		$(foreach input,$(TASK_INPUTS), \
 		$(if $(filter $(PROJECT),$(input)), \
 		--input="$(input)=.", \
