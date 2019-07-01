@@ -43,6 +43,8 @@ user_login_authentication(Username0, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
+        %% avoid logging the token
+        {error, {invalid_token, error, _Err, _Stacktrace}} -> {error, invalid_token};
         {error, _} = E  -> E;
         {refused, Err}  -> {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
@@ -90,6 +92,8 @@ state_can_expire() -> true.
 
 update_state(AuthUser, NewToken) ->
   case check_token(NewToken) of
+      %% avoid logging the token
+      {error, {invalid_token, error, _Err, _Stacktrace}} -> {error, invalid_token};
       {error, _} = E  -> E;
       {refused, Err}  -> {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
       {ok, DecodedToken} ->

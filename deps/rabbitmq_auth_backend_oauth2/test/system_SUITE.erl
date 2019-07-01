@@ -44,7 +44,8 @@ groups() ->
                        test_failed_connection_with_expired_token,
                        test_failed_connection_with_a_non_token,
                        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
-                       test_failed_connection_with_a_token_with_insufficient_resource_permission
+                       test_failed_connection_with_a_token_with_insufficient_resource_permission,
+                       test_failed_token_refresh
                       ]}
     ].
 
@@ -225,3 +226,16 @@ test_failed_connection_with_a_token_with_insufficient_resource_permission(Config
     ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
        amqp_channel:call(Ch, #'queue.declare'{queue = <<"alt-prefix.eq.1">>, exclusive = true})),
     close_connection(Conn).
+
+test_failed_token_refresh(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                   <<"rabbitmq.write:vhost1/*">>,
+                                                   <<"rabbitmq.read:vhost1/*">>]),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    {_Algo, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                      <<"rabbitmq.write:vhost1/*">>,
+                                                      <<"rabbitmq.read:vhost1/*">>]),
+    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+                amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)).
