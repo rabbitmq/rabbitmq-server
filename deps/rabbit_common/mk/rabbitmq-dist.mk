@@ -105,14 +105,10 @@ endef
 # it finds a Mix configuration file, it calls do_ez_target_mix. It
 # should be called as:
 #
-#   $(call ez_target,app_name)
+#   $(call ez_target,path_to_app)
 
 define ez_target
-dist_$(1)_appdir = $$(if $$(filter $(PROJECT),$(1)), \
-			$(CURDIR), \
-			$$(if $$(shell test -d $(APPS_DIR)/$(1) && echo OK), \
-			      $(APPS_DIR)/$(1), \
-			      $(DEPS_DIR)/$(1)))
+dist_$(1)_appdir  = $(2)
 dist_$(1)_appfile = $$(dist_$(1)_appdir)/ebin/$(1).app
 dist_$(1)_mixfile = $$(dist_$(1)_appdir)/mix.exs
 
@@ -135,10 +131,10 @@ ifeq ($(wildcard $(DIST_PLUGINS_LIST)),)
 $(error DIST_PLUGINS_LIST ($(DIST_PLUGINS_LIST)) is missing)
 endif
 
-$(eval $(foreach app, \
-  $(filter-out rabbit looking_glass lz4, \
-  $(sort $(notdir $(shell cat $(DIST_PLUGINS_LIST)))) $(PROJECT)), \
-  $(call ez_target,$(app))))
+$(eval $(foreach path, \
+  $(filter-out %/rabbit %/looking_glass %/lz4, \
+  $(sort $(shell cat $(DIST_PLUGINS_LIST))) $(CURDIR)), \
+  $(call ez_target,$(if $(filter $(path),$(CURDIR)),$(PROJECT),$(notdir $(path))),$(path))))
 endif
 endif
 
