@@ -259,7 +259,7 @@ test_failed_token_refresh_case1(Config) ->
     ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
        amqp_channel:call(Ch2, #'queue.declare'{queue = <<"a.q">>, exclusive = true})),
 
-    close_connection_and_channel(Conn, Ch).
+    close_connection(Conn).
 
 test_failed_token_refresh_case2(Config) ->
     {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
@@ -276,4 +276,4 @@ test_failed_token_refresh_case2(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
        amqp_connection:open_channel(Conn)),
 
-    close_connection_and_channel(Conn, Ch).
+    close_connection(Conn).
