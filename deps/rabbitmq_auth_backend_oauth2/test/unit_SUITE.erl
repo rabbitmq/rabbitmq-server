@@ -18,7 +18,8 @@ all() ->
         test_insufficient_permissions_in_a_valid_token,
         test_command_json,
         test_command_pem,
-        test_command_pem_no_kid
+        test_command_pem_no_kid,
+        test_token_expiration
     ].
 
 init_per_suite(Config) ->
@@ -182,24 +183,27 @@ test_token_expiration(_) ->
              #resource{virtual_host = <<"vhost">>,
                        kind = queue,
                        name = <<"foo">>},
-             configure)),
+             configure,
+             #{})),
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
                        kind = exchange,
                        name = <<"foo">>},
-             write)),
+             write,
+             #{})),
 
     ?UTIL_MOD:wait_for_token_to_expire(),
     #{<<"exp">> := Exp} = TokenData,
-    ExpectedError = "Auth token expired at unix time: " ++ integer_to_list(Exp),
+    ExpectedError = "Provided JWT token has expired at timestamp " ++ integer_to_list(Exp) ++ " (validated at " ++ integer_to_list(Exp) ++ ")",
     ?assertEqual({error, ExpectedError},
                  rabbit_auth_backend_oauth2:check_resource_access(
                    User,
                    #resource{virtual_host = <<"vhost">>,
                              kind = queue,
                              name = <<"foo">>},
-                   configure)),
+                   configure,
+                   #{})),
 
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}])).

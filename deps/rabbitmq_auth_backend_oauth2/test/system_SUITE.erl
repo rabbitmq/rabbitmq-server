@@ -216,7 +216,7 @@ test_failed_connection_with_expired_token(Config) ->
     {_Algo, Token} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
                                                      <<"rabbitmq.write:vhost1/*">>,
                                                      <<"rabbitmq.read:vhost1/*">>]),
-    ?assertEqual({error, not_allowed},
+    ?assertMatch({error, {auth_failure, _}},
                  open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
 
 test_failed_connection_with_a_non_token(Config) ->
