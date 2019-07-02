@@ -1054,11 +1054,16 @@ start_logger() ->
 log_locations() ->
     rabbit_lager:log_locations().
 
+-spec force_event_refresh(reference()) -> 'ok'.
+
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Ref) ->
-    rabbit_direct:force_event_refresh(Ref),
-    rabbit_networking:force_connection_event_refresh(Ref),
-    rabbit_channel:force_event_refresh(Ref),
-    rabbit_amqqueue:force_event_refresh(Ref).
+    ok = rabbit_direct:force_event_refresh(Ref),
+    ok = rabbit_networking:force_connection_event_refresh(Ref),
+    ok = rabbit_channel:force_event_refresh(Ref),
+    ok = rabbit_amqqueue:force_event_refresh(Ref).
 
 %%---------------------------------------------------------------------------
 %% misc

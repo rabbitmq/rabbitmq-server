@@ -217,6 +217,11 @@ info(Pid, Items) ->
         {error, Error} -> throw(Error)
     end.
 
+-spec force_event_refresh(pid(), reference()) -> 'ok'.
+
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Pid, Ref) ->
     gen_server:cast(Pid, {force_event_refresh, Ref}).
 

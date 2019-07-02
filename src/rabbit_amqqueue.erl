@@ -813,6 +813,9 @@ list_local(VHostPath) ->
            State =/= crashed,
            node() =:= node(QPid) ].
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,
                       {force_event_refresh, Ref}) || Q <- list()],

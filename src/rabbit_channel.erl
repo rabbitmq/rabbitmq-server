@@ -69,6 +69,10 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
+         handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
+         prioritise_call/4, prioritise_cast/3, prioritise_info/3,
+         format_message_queue/2]).
+
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
@@ -415,6 +419,14 @@ refresh_interceptors() ->
 ready_for_close(Pid) ->
     rabbit_channel_common:ready_for_close(Pid).
 
+<<<<<<< HEAD
+=======
+-spec force_event_refresh(reference()) -> 'ok'.
+
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
+>>>>>>> c93c3cc14... Merge pull request #2049 from rabbitmq/pt-166962656-stats-failure-38-lre
 force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
@@ -650,6 +662,9 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 handle_cast({force_event_refresh, Ref}, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
                         Ref),
