@@ -1054,8 +1054,6 @@ start_logger() ->
 log_locations() ->
     rabbit_lager:log_locations().
 
--spec force_event_refresh(reference()) -> 'ok'.
-
 % Note: https://www.pivotaltracker.com/story/show/166962656
 % This event is necessary for the stats timer to be initialized with
 % the correct values once the management agent has started
