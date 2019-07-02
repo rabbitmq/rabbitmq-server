@@ -1293,7 +1293,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         %% Therefore we optimistically do no error handling here. MK.
         lists:foreach(fun(Ch) ->
           rabbit_log:debug("Updating user/auth backend state for channel ~p", [Ch]),
-          rabbit_channel:update_user_state(Ch, User1)
+          _ = rabbit_channel:update_user_state(Ch, User1)
         end, all_channels()),
         ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
         rabbit_log_connection:info(
