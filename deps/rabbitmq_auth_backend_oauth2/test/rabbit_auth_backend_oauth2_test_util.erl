@@ -2,7 +2,7 @@
 
 -compile(export_all).
 
--define(EXPIRATION_TIME, 2000).
+-define(DEFAULT_EXPIRATION_IN_SECONDS, 2).
 
 %%
 %% API
@@ -47,15 +47,15 @@ full_permission_scopes() ->
      <<"rabbitmq.read:*/*">>].
 
 expirable_token() ->
-    TokenPayload = fixture_token(),
-    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRATION_TIME)}.
+    expirable_token(?DEFAULT_EXPIRATION_IN_SECONDS).
 
 expirable_token(Seconds) ->
     TokenPayload = fixture_token(),
-    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(Seconds)}.
+    %% expiration is a timestamp with precision in seconds
+    TokenPayload#{<<"exp">> := os:system_time(seconds) + Seconds}.
 
 wait_for_token_to_expire() ->
-    timer:sleep(?EXPIRATION_TIME).
+    timer:sleep(timer:seconds(?DEFAULT_EXPIRATION_IN_SECONDS)).
 
 wait_for_token_to_expire(DurationInMs) ->
     timer:sleep(DurationInMs).
@@ -64,12 +64,13 @@ expired_token() ->
     expired_token_with_scopes(full_permission_scopes()).
 
 expired_token_with_scopes(Scopes) ->
-    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) - timer:seconds(10)).
+    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) - 10).
 
 fixture_token_with_scopes(Scopes) ->
-    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) + timer:seconds(10)).
+    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) + 10).
 
 token_with_scopes_and_expiration(Scopes, Expiration) ->
+    %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => Expiration,
       <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,

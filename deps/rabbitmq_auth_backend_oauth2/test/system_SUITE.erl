@@ -157,7 +157,7 @@ generate_expirable_token(Config, Scopes, Seconds) ->
               undefined -> ?UTIL_MOD:fixture_jwk();
               Value     -> Value
           end,
-    Expiration = os:system_time(seconds) + timer:seconds(Seconds),
+    Expiration = os:system_time(seconds) + Seconds,
     ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scopes_and_expiration(Scopes, Expiration), Jwk).
 
 preconfigure_token(Config) ->
@@ -198,7 +198,7 @@ test_successful_token_refresh(Config) ->
     {_Algo, Token2} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
                                                     <<"rabbitmq.write:vhost1/*">>,
                                                     <<"rabbitmq.read:vhost1/*">>]),
-    ?UTIL_MOD:wait_for_token_to_expire(Duration),
+    ?UTIL_MOD:wait_for_token_to_expire(timer:seconds(Duration)),
     ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)),
 
     {ok, Ch2} = amqp_connection:open_channel(Conn),
