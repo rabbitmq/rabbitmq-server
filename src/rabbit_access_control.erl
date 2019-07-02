@@ -227,7 +227,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
 
 update_state(User = #user{authz_backends = Backends0}, NewState) ->
     %% N.B.: we use foldl/3 and prepending, so the final list of
-    %% backends
+    %% backends is in reverse order from the original list.
     Backends = lists:foldl(
                 fun({Module, Impl}, {ok, Acc}) ->
                         case Module:state_can_expire() of
