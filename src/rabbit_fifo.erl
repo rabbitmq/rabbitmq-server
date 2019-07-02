@@ -265,7 +265,7 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
     end;
 apply(_, #checkout{spec = {dequeue, _}},
       #?MODULE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
-    {State0, {error, unsupported}};
+    {State0, {error, {unsupported, single_active_consumer}}};
 apply(#{from := From} = Meta, #checkout{spec = {dequeue, Settlement},
                                         meta = ConsumerMeta,
                                         consumer_id = ConsumerId},
@@ -647,7 +647,7 @@ handle_aux(_, cast, Cmd, {Name, Use0}, Log, _) ->
                   true = ets:insert(rabbit_fifo_usage,
                                     {Name, utilisation(Use0)}),
                   Use0;
-              eval ->
+              _ ->
                   Use0
           end,
     {no_reply, {Name, Use}, Log}.

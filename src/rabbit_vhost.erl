@@ -57,11 +57,11 @@ recover(VHost) ->
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
-    {RecoveredClassic, FailedClassic, Quorum} = rabbit_amqqueue:recover(VHost),
-    AllQs = RecoveredClassic ++ FailedClassic ++ Quorum,
+    {Recovered, Failed} = rabbit_amqqueue:recover(VHost),
+    AllQs = Recovered ++ Failed,
     QNames = [amqqueue:get_name(Q) || Q <- AllQs],
     ok = rabbit_binding:recover(rabbit_exchange:recover(VHost), QNames),
-    ok = rabbit_amqqueue:start(RecoveredClassic),
+    ok = rabbit_amqqueue:start(Recovered),
     %% Start queue mirrors.
     ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
     ok.

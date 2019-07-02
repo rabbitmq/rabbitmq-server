@@ -507,12 +507,13 @@ noreply(NewState) ->
     {NewState1, Timeout} = next_state(NewState),
     {noreply, ensure_stats_timer(ensure_rate_timer(NewState1)), Timeout}.
 
-next_state(State = #q{backing_queue       = BQ,
+next_state(State = #q{q = Q,
+                      backing_queue       = BQ,
                       backing_queue_state = BQS,
                       msg_id_to_channel   = MTC}) ->
     assert_invariant(State),
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
-    MTC1 = confirm_messages(MsgIds, MTC),
+    MTC1 = confirm_messages(MsgIds, MTC, amqqueue:get_name(Q)),
     State1 = State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1},
     case BQ:needs_timeout(BQS1) of
         false -> {stop_sync_timer(State1),   hibernate     };
@@ -595,9 +596,9 @@ maybe_send_drained(WasEmpty, State) ->
     end,
     State.
 
-confirm_messages([], MTC) ->
+confirm_messages([], MTC, _QName) ->
     MTC;
-confirm_messages(MsgIds, MTC) ->
+confirm_messages(MsgIds, MTC, QName) ->
     {CMs, MTC1} =
         lists:foldl(
           fun(MsgId, {CMs, MTC0}) ->
@@ -617,7 +618,7 @@ confirm_messages(MsgIds, MTC) ->
           end, {#{}, MTC}, MsgIds),
     maps:fold(
         fun(Pid, MsgSeqNos, _) ->
-            rabbit_misc:confirm_to_sender(Pid, MsgSeqNos)
+            rabbit_misc:confirm_to_sender(Pid, QName, MsgSeqNos)
         end,
         ok,
         CMs),
@@ -638,8 +639,9 @@ send_or_record_confirm(#delivery{confirm    = true,
     {eventually, State#q{msg_id_to_channel = MTC1}};
 send_or_record_confirm(#delivery{confirm    = true,
                                  sender     = SenderPid,
-                                 msg_seq_no = MsgSeqNo}, State) ->
-    rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
+                                 msg_seq_no = MsgSeqNo},
+                       #q{q = Q} = State) ->
+    rabbit_misc:confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
     {immediately, State}.
 
 %% This feature was used by `rabbit_amqqueue_process` and
@@ -657,9 +659,9 @@ send_mandatory(#delivery{mandatory  = true,
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
                   flow    = Flow,
-                  message = #basic_message{id = MsgId}}, BQ, BQS, MTC) ->
+                  message = #basic_message{id = MsgId}}, BQ, BQS, MTC, QName) ->
     MTC1 = case Confirm of
-               true  -> confirm_messages([MsgId], MTC);
+               true  -> confirm_messages([MsgId], MTC, QName);
                false -> MTC
            end,
     BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
@@ -688,7 +690,8 @@ run_message_queue(ActiveConsumersChanged, State) ->
 attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                                       flow    = Flow,
                                       message = Message},
-                 Props, Delivered, State = #q{backing_queue       = BQ,
+                 Props, Delivered, State = #q{q                   = Q,
+                                              backing_queue       = BQ,
                                               backing_queue_state = BQS,
                                               msg_id_to_channel   = MTC}) ->
     case rabbit_queue_consumers:deliver(
@@ -698,7 +701,7 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                                 Message, Props, SenderPid, Flow, BQS),
                           {{Message, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
-                           discard(Delivery, BQ, BQS, MTC)}
+                           discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q))}
            end, qname(State), State#q.consumers, State#q.single_active_consumer_on, State#q.active_consumer) of
         {delivered, ActiveConsumersChanged, {BQS1, MTC1}, Consumers} ->
             {delivered,   maybe_notify_decorators(
@@ -754,7 +757,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
                                         sender  = SenderPid,
                                         flow    = Flow},
                    Delivered,
-                   State = #q{backing_queue = BQ}) ->
+                   State = #q{q = Q, backing_queue = BQ}) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Message, Confirm, State1),
     case attempt_delivery(Delivery, Props, Delivered, State1) of
@@ -764,7 +767,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
         {undelivered, State2 = #q{ttl = 0, dlx = undefined,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}} ->
-            {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC),
+            {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q)),
             State2#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1};
         {undelivered, State2 = #q{backing_queue_state = BQS}} ->
 
@@ -818,10 +821,11 @@ send_reject_publish(#delivery{confirm = true,
                               msg_seq_no = MsgSeqNo,
                               message = #basic_message{id = MsgId}},
                       _Delivered,
-                      State = #q{ backing_queue = BQ,
+                      State = #q{ q = Q,
+                                  backing_queue = BQ,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}) ->
-    gen_server2:cast(SenderPid, {reject_publish, MsgSeqNo, self()}),
+    gen_server2:cast(SenderPid, {queue_event, Q, {reject_publish, MsgSeqNo, self()}}),
 
     MTC1 = maps:remove(MsgId, MTC),
     BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
@@ -1282,7 +1286,7 @@ handle_call({init, Recover}, From, State) ->
     end;
 
 handle_call(info, _From, State) ->
-    reply(infos(info_keys(), State), State);
+    reply({ok, infos(info_keys(), State)}, State);
 
 handle_call({info, Items}, _From, State) ->
     try
@@ -1556,7 +1560,7 @@ handle_cast({deliver,
     noreply(maybe_deliver_or_enqueue(Delivery, SlaveWhenPublished, State1));
 %% [0] The second ack is since the channel thought we were a slave at
 %% the time it published this message, so it used two credits (see
-%% rabbit_amqqueue:deliver/2).
+%% rabbit_queue_type:deliver/2).
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));

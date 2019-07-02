@@ -649,7 +649,7 @@ single_active_consumer_basic_get_test(_) ->
     ?assertEqual(single_active, State0#rabbit_fifo.cfg#cfg.consumer_strategy),
     ?assertEqual(0, map_size(State0#rabbit_fifo.consumers)),
     {State1, _} = enq(1, 1, first, State0),
-    {_State, {error, unsupported}} =
+    {_State, {error, {unsupported, single_active_consumer}}} =
         apply(meta(2), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State1),
     ok.

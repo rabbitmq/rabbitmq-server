@@ -925,8 +925,8 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
                                       [ra_server_sup_sup])
                end),
     %% Check that all queue states have been cleaned
-    wait_for_cleanup(Server, NCh1, 0),
-    wait_for_cleanup(Server, NCh2, 0).
+    wait_for_cleanup(Server, NCh2, 0),
+    wait_for_cleanup(Server, NCh1, 0).
 
 cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% Declare/delete the queue and publish in one channel, while consuming on a
@@ -1685,6 +1685,8 @@ subscribe_redelivery_count(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
+    after 5000 ->
+              exit(basic_deliver_timeout)
     end,
 
     receive
@@ -1695,6 +1697,8 @@ subscribe_redelivery_count(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,
                                                 requeue      = true})
+    after 5000 ->
+              exit(basic_deliver_timeout_2)
     end,
 
     receive
@@ -1704,8 +1708,13 @@ subscribe_redelivery_count(Config) ->
             ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag2,
                                                multiple     = false}),
+            ct:pal("wait_for_messages_ready", []),
             wait_for_messages_ready(Servers, RaName, 0),
+            ct:pal("wait_for_messages_pending_ack", []),
             wait_for_messages_pending_ack(Servers, RaName, 0)
+    after 5000 ->
+              flush(500),
+              exit(basic_deliver_timeout_3)
     end.
 
 subscribe_redelivery_limit(Config) ->

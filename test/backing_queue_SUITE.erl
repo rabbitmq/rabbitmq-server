@@ -693,17 +693,17 @@ bq_variable_queue_delete_msg_store_files_callback1(Config) ->
     QPid = amqqueue:get_pid(Q),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
-    publish_and_confirm(Q, Payload, Count),
+    QTState = publish_and_confirm(Q, Payload, Count),
 
     rabbit_amqqueue:set_ram_duration_target(QPid, 0),
 
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
 
     CountMinusOne = Count - 1,
-    {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
-        rabbit_amqqueue:basic_get(Q, self(), true, Limiter,
+    {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}, _} =
+        rabbit_amqqueue:basic_get(Q, true, Limiter,
                                   <<"bq_variable_queue_delete_msg_store_files_callback1">>,
-                                  #{}),
+                                  QTState),
     {ok, CountMinusOne} = rabbit_amqqueue:purge(Q),
 
     %% give the queue a second to receive the close_fds callback msg
@@ -722,8 +722,7 @@ bq_queue_recover1(Config) ->
     {new, Q} = rabbit_amqqueue:declare(QName0, true, false, [], none, <<"acting-user">>),
     QName = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
-    publish_and_confirm(Q, <<>>, Count),
-
+    QT = publish_and_confirm(Q, <<>>, Count),
     SupPid = get_queue_sup_pid(Q),
     true = is_pid(SupPid),
     exit(SupPid, kill),
@@ -733,7 +732,7 @@ bq_queue_recover1(Config) ->
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
     rabbit_amqqueue:stop(?VHOST),
-    {Recovered, [], []} = rabbit_amqqueue:recover(?VHOST),
+    {Recovered, []} = rabbit_amqqueue:recover(?VHOST),
     rabbit_amqqueue:start(Recovered),
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
     rabbit_amqqueue:with_or_die(
@@ -741,9 +740,9 @@ bq_queue_recover1(Config) ->
       fun (Q1) when ?is_amqqueue(Q1) ->
               QPid1 = amqqueue:get_pid(Q1),
               CountMinusOne = Count - 1,
-              {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
-                  rabbit_amqqueue:basic_get(Q1, self(), false, Limiter,
-                                            <<"bq_queue_recover1">>, #{}),
+              {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}, _} =
+                  rabbit_amqqueue:basic_get(Q1, false, Limiter,
+                                            <<"bq_queue_recover1">>, QT),
               exit(QPid1, shutdown),
               VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1}, VQ2} =
@@ -1110,8 +1109,10 @@ variable_queue_requeue1(Config) ->
       ?config(variable_queue_type, Config)).
 
 variable_queue_requeue2(VQ0, _Config) ->
+    rabbit_log:info("variable_queue_requeue2", []),
     {_PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
         variable_queue_with_holes(VQ0),
+    rabbit_log:info("variable_queue_requeue2 X1", []),
     Msgs =
         lists:zip(RequeuedMsgs,
                   lists:duplicate(length(RequeuedMsgs), true)) ++
@@ -1124,7 +1125,9 @@ variable_queue_requeue2(VQ0, _Config) ->
                               I = msg2int(M),       %% assertion
                               VQb
                       end, VQ1, Msgs),
+    rabbit_log:info("variable_queue_requeue2 X2", []),
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
+    rabbit_log:info("variable_queue_requeue2 X3", []),
     VQ3.
 
 %% requeue from ram_pending_ack into q3, move to delta and then empty queue
@@ -1375,25 +1378,34 @@ variable_queue_init(Q, Recover) ->
 
 publish_and_confirm(Q, Payload, Count) ->
     Seqs = lists:seq(1, Count),
-    [begin
-         Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                                    <<>>, #'P_basic'{delivery_mode = 2},
-                                    Payload),
-         Delivery = #delivery{mandatory = false, sender = self(),
-                              confirm = true, message = Msg, msg_seq_no = Seq,
-                              flow = noflow},
-         _QPids = rabbit_amqqueue:deliver([Q], Delivery)
-     end || Seq <- Seqs],
-    wait_for_confirms(gb_sets:from_list(Seqs)).
+    QTState0 = rabbit_queue_type:new(Q, rabbit_queue_type:init()),
+    QTState =
+    lists:foldl(
+      fun (Seq, Acc0) ->
+              Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+                                         <<>>, #'P_basic'{delivery_mode = 2},
+                                         Payload),
+              Delivery = #delivery{mandatory = false, sender = self(),
+                                   confirm = true, message = Msg, msg_seq_no = Seq,
+                                   flow = noflow},
+              {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Delivery, Acc0),
+              Acc
+      end, QTState0, Seqs),
+    wait_for_confirms(gb_sets:from_list(Seqs)),
+    QTState.
 
 wait_for_confirms(Unconfirmed) ->
     case gb_sets:is_empty(Unconfirmed) of
         true  -> ok;
-        false -> receive {'$gen_cast', {confirm, Confirmed, _}} ->
+        false -> receive {'$gen_cast',
+                          {queue_event, _QName,
+                          {confirm, Confirmed, _}}} ->
                          wait_for_confirms(
                            rabbit_misc:gb_sets_difference(
                              Unconfirmed, gb_sets:from_list(Confirmed)))
-                 after ?TIMEOUT -> exit(timeout_waiting_for_confirm)
+                 after ?TIMEOUT ->
+                           flush(),
+                           exit(timeout_waiting_for_confirm)
                  end
     end.
 
@@ -1445,6 +1457,7 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     variable_queue_wait_for_shuffling_end(
       lists:foldl(
         fun (N, VQN) ->
+
                 rabbit_variable_queue:publish(
                   rabbit_basic:message(
                     rabbit_misc:r(<<>>, exchange, <<>>),
@@ -1533,14 +1546,18 @@ variable_queue_status(VQ) ->
         rabbit_variable_queue:info(backing_queue_status, VQ).
 
 variable_queue_wait_for_shuffling_end(VQ) ->
+    rabbit_log:info("~w 1", [?FUNCTION_NAME]),
     case credit_flow:blocked() of
         false -> VQ;
-        true  -> receive
-                     {bump_credit, Msg} ->
-                         credit_flow:handle_bump_msg(Msg),
-                         variable_queue_wait_for_shuffling_end(
-                           rabbit_variable_queue:resume(VQ))
-                 end
+        true  ->
+            rabbit_log:info("~w waiting for bump_credit", [?FUNCTION_NAME]),
+            receive
+                {bump_credit, Msg} ->
+                    rabbit_log:info("~w waiting bump_credit", [?FUNCTION_NAME]),
+                    credit_flow:handle_bump_msg(Msg),
+                    variable_queue_wait_for_shuffling_end(
+                      rabbit_variable_queue:resume(VQ))
+            end
     end.
 
 msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
@@ -1559,13 +1576,17 @@ requeue_one_by_one(Acks, VQ) ->
 %% Create a vq with messages in q1, delta, and q3, and holes (in the
 %% form of pending acks) in the latter two.
 variable_queue_with_holes(VQ0) ->
+    rabbit_log:info("~w 1", [?FUNCTION_NAME]),
     Interval = 2048, %% should match vq:IO_BATCH_SIZE
     Count = rabbit_queue_index:next_segment_boundary(0)*2 + 2 * Interval,
+    rabbit_log:info("~w 1b", [?FUNCTION_NAME]),
     Seq = lists:seq(1, Count),
     VQ1 = variable_queue_set_ram_duration_target(0, VQ0),
+    rabbit_log:info("~w 1c", [?FUNCTION_NAME]),
     VQ2 = variable_queue_publish(
             false, 1, Count,
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+    rabbit_log:info("~w 2", [?FUNCTION_NAME]),
     {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ2),
     Acks = lists:reverse(AcksR),
     AckSeqs = lists:zip(Acks, Seq),
@@ -1575,6 +1596,7 @@ variable_queue_with_holes(VQ0) ->
     %% in various vq states
     {_MsgIds, VQ4} = rabbit_variable_queue:requeue(
                        Acks -- (Subset1 ++ Subset2 ++ Subset3), VQ3),
+    rabbit_log:info("~w 3", [?FUNCTION_NAME]),
     VQ5 = requeue_one_by_one(Subset1, VQ4),
     %% by now we have some messages (and holes) in delta
     VQ6 = requeue_one_by_one(Subset2, VQ5),
@@ -1585,11 +1607,15 @@ variable_queue_with_holes(VQ0) ->
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ7),
     %% assertions
     Status = variable_queue_status(VQ8),
+
+    rabbit_log:info("~w 4", [?FUNCTION_NAME]),
     vq_with_holes_assertions(VQ8, proplists:get_value(mode, Status)),
     Depth = Count + Interval,
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
     Len = rabbit_variable_queue:len(VQ8),
+
+    rabbit_log:info("~w 5", [?FUNCTION_NAME]),
     {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + Interval), VQ8}.
 
 vq_with_holes_assertions(VQ, default) ->
@@ -1613,3 +1639,12 @@ check_variable_queue_status(VQ0, Props) ->
     S = variable_queue_status(VQ1),
     assert_props(S, Props),
     VQ1.
+
+flush() ->
+    receive
+        Any ->
+            ct:pal("flush ~p", [Any]),
+            flush()
+    after 0 ->
+              ok
+    end.

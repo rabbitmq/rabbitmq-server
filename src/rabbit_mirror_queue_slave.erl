@@ -587,11 +587,12 @@ send_or_record_confirm(published, #delivery { sender     = ChPid,
 send_or_record_confirm(_Status, #delivery { sender     = ChPid,
                                             confirm    = true,
                                             msg_seq_no = MsgSeqNo },
-                       MS, _State) ->
-    ok = rabbit_misc:confirm_to_sender(ChPid, [MsgSeqNo]),
+                       MS, #state{q = Q} = _State) ->
+    ok = rabbit_misc:confirm_to_sender(ChPid, amqqueue:get_name(Q), [MsgSeqNo]),
     MS.
 
-confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
+confirm_messages(MsgIds, State = #state{q = Q, msg_id_status = MS}) ->
+    QName = amqqueue:get_name(Q),
     {CMs, MS1} =
         lists:foldl(
           fun (MsgId, {CMsN, MSN} = Acc) ->
@@ -619,7 +620,10 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                           Acc
                   end
           end, {gb_trees:empty(), MS}, MsgIds),
-    rabbit_misc:gb_trees_foreach(fun rabbit_misc:confirm_to_sender/2, CMs),
+    Fun = fun (Pid, MsgSeqNos) ->
+                  rabbit_misc:confirm_to_sender(Pid, QName, MsgSeqNos)
+          end,
+    rabbit_misc:gb_trees_foreach(Fun, CMs),
     State #state { msg_id_status = MS1 }.
 
 handle_process_result({ok,   State}) -> noreply(State);

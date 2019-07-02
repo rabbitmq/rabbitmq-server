@@ -248,8 +248,10 @@ consume_survives(Config,
     DeathFun(Config, A),
     %% verify that the consumer got all msgs, or die - the await_response
     %% calls throw an exception if anything goes wrong....
-    rabbit_ha_test_consumer:await_response(ConsumerPid),
+    ct:pal("awaiting produce ~w", [ProducerPid]),
     rabbit_ha_test_producer:await_response(ProducerPid),
+    ct:pal("awaiting consumer ~w", [ConsumerPid]),
+    rabbit_ha_test_consumer:await_response(ConsumerPid),
     ok.
 
 confirms_survive(Config, DeathFun) ->

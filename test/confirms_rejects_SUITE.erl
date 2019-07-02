@@ -127,7 +127,7 @@ dead_queue_rejects(Config) ->
                                            durable = true}),
 
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
-                                  #amqp_msg{payload = <<"HI">>}),
+                      #amqp_msg{payload = <<"HI">>}),
 
     receive
         {'basic.ack',_,_} -> ok
@@ -138,13 +138,14 @@ dead_queue_rejects(Config) ->
     kill_the_queue(QueueName, Config),
 
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
-                                  #amqp_msg{payload = <<"HI">>}),
+                      #amqp_msg{payload = <<"HI">>}),
 
     receive
         {'basic.ack',_,_} -> error(expecting_nack_got_ack);
         {'basic.nack',_,_,_} -> ok
     after 10000 ->
-        error(timeout_waiting_for_nack)
+              flush(),
+              error(timeout_waiting_for_nack)
     end.
 
 mixed_dead_alive_queues_reject(Config) ->
@@ -385,9 +386,12 @@ kill_the_queue(QueueName) ->
     [begin
         {ok, Q} = rabbit_amqqueue:lookup({resource, <<"/">>, queue, QueueName}),
         Pid = amqqueue:get_pid(Q),
+        ct:pal("~w killed", [Pid]),
+        timer:sleep(1),
         exit(Pid, kill)
      end
-     || _ <- lists:seq(1, 11)],
+     || _ <- lists:seq(1, 50)],
+    timer:sleep(1),
     {ok, Q} = rabbit_amqqueue:lookup({resource, <<"/">>, queue, QueueName}),
     Pid = amqqueue:get_pid(Q),
     case is_process_alive(Pid) of
@@ -396,7 +400,11 @@ kill_the_queue(QueueName) ->
         false -> ok
     end.
 
-
-
-
-
+flush() ->
+    receive
+        Any ->
+            ct:pal("flush ~p", [Any]),
+            flush()
+    after 0 ->
+              ok
+    end.

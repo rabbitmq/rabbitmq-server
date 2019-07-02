@@ -557,8 +557,10 @@ set_recoverable_slaves(Queue, Slaves) ->
 % type_state (new in v2)
 
 -spec get_type_state(amqqueue()) -> map().
-get_type_state(#amqqueue{type_state = TState}) -> TState;
-get_type_state(_)                               -> [].
+get_type_state(#amqqueue{type_state = TState}) ->
+    TState;
+get_type_state(_) ->
+    #{}.
 
 -spec set_type_state(amqqueue(), map()) -> amqqueue().
 set_type_state(#amqqueue{} = Queue, TState) ->
