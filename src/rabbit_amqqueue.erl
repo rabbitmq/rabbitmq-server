@@ -51,8 +51,6 @@
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
--deprecated([{force_event_refresh, 1, eventually}]).
-
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
@@ -1031,6 +1029,9 @@ list_local(VHostPath) ->
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Ref) ->
     [gen_server2:cast(amqqueue:get_pid(Q),
                       {force_event_refresh, Ref}) || Q <- list()],

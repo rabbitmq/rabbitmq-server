@@ -66,8 +66,6 @@
 
 -export([conserve_resources/3, server_properties/1]).
 
--deprecated([{force_event_refresh, 2, eventually}]).
-
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
@@ -220,6 +218,9 @@ info(Pid, Items) ->
 
 -spec force_event_refresh(pid(), reference()) -> 'ok'.
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Pid, Ref) ->
     gen_server:cast(Pid, {force_event_refresh, Ref}).
 
