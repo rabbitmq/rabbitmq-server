@@ -61,9 +61,6 @@ groups() ->
               login_of_passwordless_user,
               set_tags_for_passwordless_user
             ]},
-          {access_control, [parallel], [
-              state_update
-          ]},
           set_disk_free_limit_command,
           set_vm_memory_high_watermark_command,
           topic_matching,
