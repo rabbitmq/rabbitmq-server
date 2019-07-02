@@ -57,9 +57,9 @@
          % policy_version
          get_policy_version/1,
          set_policy_version/2,
-         % quorum_nodes
-         get_quorum_nodes/1,
-         set_quorum_nodes/2,
+         % type_state
+         get_type_state/1,
+         set_type_state/2,
          % recoverable_slaves
          get_recoverable_slaves/1,
          set_recoverable_slaves/2,
@@ -93,6 +93,8 @@
 -dialyzer({nowarn_function, is_quorum/1}).
 
 -define(record_version, ?MODULE).
+-define(is_backwards_compat_classic(T),
+        (T =:= classic orelse T =:= ?amqqueue_v1_type)).
 
 -record(amqqueue, {
           name :: rabbit_amqqueue:name() | '_', %% immutable
@@ -214,7 +216,7 @@ new(#resource{kind = queue} = Name,
           rabbit_framing:amqp_table(),
           rabbit_types:vhost() | undefined,
           map(),
-          ?amqqueue_v1_type) -> amqqueue().
+          ?amqqueue_v1_type | classic) -> amqqueue().
 
 new(#resource{kind = queue} = Name,
     Pid,
@@ -224,14 +226,15 @@ new(#resource{kind = queue} = Name,
     Args,
     VHost,
     Options,
-    ?amqqueue_v1_type)
+    Type)
   when (is_pid(Pid) orelse Pid =:= none) andalso
        is_boolean(Durable) andalso
        is_boolean(AutoDelete) andalso
        (is_pid(Owner) orelse Owner =:= none) andalso
        is_list(Args) andalso
        (is_binary(VHost) orelse VHost =:= undefined) andalso
-       is_map(Options) ->
+       is_map(Options) andalso
+       ?is_backwards_compat_classic(Type) ->
     new(
       Name,
       Pid,
@@ -297,14 +300,15 @@ new_with_version(?record_version,
                  Args,
                  VHost,
                  Options,
-                 ?amqqueue_v1_type)
+                 Type)
   when (is_pid(Pid) orelse Pid =:= none) andalso
        is_boolean(Durable) andalso
        is_boolean(AutoDelete) andalso
        (is_pid(Owner) orelse Owner =:= none) andalso
        is_list(Args) andalso
        (is_binary(VHost) orelse VHost =:= undefined) andalso
-       is_map(Options) ->
+       is_map(Options) andalso
+       ?is_backwards_compat_classic(Type) ->
     new_with_version(
       ?record_version,
       Name,
@@ -451,16 +455,16 @@ get_recoverable_slaves(#amqqueue{recoverable_slaves = Slaves}) ->
 set_recoverable_slaves(#amqqueue{} = Queue, Slaves) ->
     Queue#amqqueue{recoverable_slaves = Slaves}.
 
-% quorum_nodes (new in v2)
+% type_state (new in v2)
 
--spec get_quorum_nodes(amqqueue()) -> no_return().
+-spec get_type_state(amqqueue()) -> no_return().
 
-get_quorum_nodes(_) -> throw({unsupported, ?record_version, get_quorum_nodes}).
+get_type_state(_) -> throw({unsupported, ?record_version, get_type_state}).
 
--spec set_quorum_nodes(amqqueue(), [node()]) -> no_return().
+-spec set_type_state(amqqueue(), [node()]) -> no_return().
 
-set_quorum_nodes(_, _) ->
-    throw({unsupported, ?record_version, set_quorum_nodes}).
+set_type_state(_, _) ->
+    throw({unsupported, ?record_version, set_type_state}).
 
 % slave_pids
 
@@ -527,8 +531,8 @@ is_classic(Queue) ->
 
 -spec is_quorum(amqqueue()) -> boolean().
 
-is_quorum(Queue) ->
-    get_type(Queue) =:= quorum.
+is_quorum(Queue) when ?is_amqqueue(Queue) ->
+    false.
 
 fields() -> fields(?record_version).
 

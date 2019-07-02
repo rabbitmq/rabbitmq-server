@@ -81,7 +81,7 @@ init_state({Name, _}, QName = #resource{}) ->
     %% know what to do if the queue has `disappeared`. Let it crash.
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     Leader = amqqueue:get_pid(Q),
-    Nodes = amqqueue:get_quorum_nodes(Q),
+    Nodes = rabbit_amqqueue:get_quorum_nodes(Q),
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
@@ -117,7 +117,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
     Id = {RaName, node()},
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
     NewQ0 = amqqueue:set_pid(Q, Id),
-    NewQ1 = amqqueue:set_quorum_nodes(NewQ0, Nodes),
+    NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
@@ -222,7 +222,7 @@ become_leader(QName, Name) ->
                     end),
                   case rabbit_amqqueue:lookup(QName) of
                       {ok, Q0} when ?is_amqqueue(Q0) ->
-                          Nodes = amqqueue:get_quorum_nodes(Q0),
+                          Nodes = get_nodes(Q0),
                           [rpc:call(Node, ?MODULE, rpc_delete_metrics,
                                     [QName], ?RPC_TIMEOUT)
                            || Node <- Nodes, Node =/= node()];
@@ -369,7 +369,7 @@ delete(Q,
        _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
-    QNodes = amqqueue:get_quorum_nodes(Q),
+    QNodes = get_nodes(Q),
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
     {ok, ReadyMsgs, _} = stat(Q),
@@ -600,8 +600,8 @@ cleanup_data_dir() ->
                  {Name, _} = amqqueue:get_pid(Q),
                  Name
              end
-             || Q <- rabbit_amqqueue:list_by_type(quorum),
-                lists:member(node(), amqqueue:get_quorum_nodes(Q))],
+             || Q <- rabbit_amqqueue:list_by_type(?MODULE),
+                lists:member(node(), get_nodes(Q))],
     Registered = ra_directory:list_registered(),
     _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
                                        not lists:member(Name, Names)],
@@ -644,7 +644,7 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            Nodes = amqqueue:get_quorum_nodes(Q),
+            Nodes = get_nodes(Q),
             [begin
                  case get_sys_status({RName, N}) of
                      {ok, Sys} ->
@@ -696,7 +696,7 @@ add_member(VHost, Name, Node, Timeout) ->
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            QNodes = amqqueue:get_quorum_nodes(Q),
+            QNodes = get_nodes(Q),
             case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
                 false ->
                     {error, node_not_running};
@@ -727,9 +727,10 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
             case ra:add_member(Members, ServerId, Timeout) of
                 {ok, _, Leader} ->
                     Fun = fun(Q1) ->
-                                  Q2 = amqqueue:set_quorum_nodes(
-                                         Q1,
-                                         [Node | amqqueue:get_quorum_nodes(Q1)]),
+                                  Q2 = update_type_state(
+                                         Q1, fun(#{nodes := Nodes} = Ts) ->
+                                                     Ts#{nodes => [Node | Nodes]}
+                                             end),
                                   amqqueue:set_pid(Q2, Leader)
                           end,
                     rabbit_misc:execute_mnesia_transaction(
@@ -753,7 +754,7 @@ delete_member(VHost, Name, Node) ->
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            QNodes = amqqueue:get_quorum_nodes(Q),
+            QNodes = get_nodes(Q),
             case lists:member(Node, QNodes) of
                 false ->
                     %% idempotent by design
@@ -779,10 +780,11 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
             case ra:leave_and_delete_server(Members, ServerId) of
                 ok ->
                     Fun = fun(Q1) ->
-                                  amqqueue:set_quorum_nodes(
+                                  update_type_state(
                                     Q1,
-                                    lists:delete(Node,
-                                                 amqqueue:get_quorum_nodes(Q1)))
+                                    fun(#{nodes := Nodes} = Ts) ->
+                                            Ts#{nodes => lists:delete(Node, Nodes)}
+                                    end)
                           end,
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
@@ -802,7 +804,7 @@ shrink_all(Node) ->
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: removing member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
-         Size = length(amqqueue:get_quorum_nodes(Q)),
+         Size = length(get_nodes(Q)),
          case delete_member(Q, Node) of
              ok ->
                  {QName, {ok, Size-1}};
@@ -812,8 +814,8 @@ shrink_all(Node) ->
                  {QName, {error, Size, Err}}
          end
      end || Q <- rabbit_amqqueue:list(),
-            amqqueue:get_type(Q) == quorum,
-            lists:member(Node, amqqueue:get_quorum_nodes(Q))].
+            amqqueue:get_type(Q) == ?MODULE,
+            lists:member(Node, get_nodes(Q))].
 
 -spec grow(node(), binary(), binary(), all | even) ->
     [{rabbit_amqqueue:name(),
@@ -821,7 +823,7 @@ shrink_all(Node) ->
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     Running = rabbit_mnesia:cluster_nodes(running),
     [begin
-         Size = length(amqqueue:get_quorum_nodes(Q)),
+         Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
@@ -836,12 +838,12 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
          end
      end
      || Q <- rabbit_amqqueue:list(),
-        amqqueue:get_type(Q) == quorum,
+        amqqueue:get_type(Q) == ?MODULE,
         %% don't add a member if there is already one on the node
-        not lists:member(Node, amqqueue:get_quorum_nodes(Q)),
+        not lists:member(Node, get_nodes(Q)),
         %% node needs to be running
         lists:member(Node, Running),
-        matches_strategy(Strategy, amqqueue:get_quorum_nodes(Q)),
+        matches_strategy(Strategy, get_nodes(Q)),
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
         is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].
 
@@ -989,13 +991,13 @@ i(garbage_collection, Q) when ?is_amqqueue(Q) ->
             []
     end;
 i(members, Q) when ?is_amqqueue(Q) ->
-    amqqueue:get_quorum_nodes(Q);
+    get_nodes(Q);
 i(online, Q) -> online(Q);
 i(leader, Q) -> leader(Q);
 i(open_files, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
-    Nodes = amqqueue:get_quorum_nodes(Q),
-    {Data, _} = rpc:multicall(Nodes, rabbit_quorum_queue, open_files, [Name]),
+    Nodes = get_nodes(Q),
+    {Data, _} = rpc:multicall(Nodes, ?MODULE, open_files, [Name]),
     lists:flatten(Data);
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
@@ -1047,12 +1049,12 @@ leader(Q) when ?is_amqqueue(Q) ->
     end.
 
 online(Q) when ?is_amqqueue(Q) ->
-    Nodes = amqqueue:get_quorum_nodes(Q),
+    Nodes = get_nodes(Q),
     {Name, _} = amqqueue:get_pid(Q),
     [Node || Node <- Nodes, is_process_alive(Name, Node)].
 
 format(Q) when ?is_amqqueue(Q) ->
-    Nodes = amqqueue:get_quorum_nodes(Q),
+    Nodes = get_nodes(Q),
     [{members, Nodes}, {online, online(Q)}, {leader, leader(Q)}].
 
 is_process_alive(Name, Node) ->
@@ -1144,7 +1146,7 @@ select_quorum_nodes(Size, Rest, Selected) ->
 %% member with the current leader first
 members(Q) when ?amqqueue_is_quorum(Q) ->
     {RaName, LeaderNode} = amqqueue:get_pid(Q),
-    Nodes = lists:delete(LeaderNode, amqqueue:get_quorum_nodes(Q)),
+    Nodes = lists:delete(LeaderNode, get_nodes(Q)),
     [{RaName, N} || N <- [LeaderNode | Nodes]].
 
 make_ra_conf(Q, ServerId, TickTimeout) ->
@@ -1163,3 +1165,10 @@ make_ra_conf(Q, ServerId, TickTimeout) ->
       tick_timeout => TickTimeout,
       machine => RaMachine}.
 
+get_nodes(Q) when ?is_amqqueue(Q) ->
+    #{nodes := Nodes} = amqqueue:get_type_state(Q),
+    Nodes.
+
+update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
+    Ts = amqqueue:get_type_state(Q),
+    amqqueue:set_type_state(Q, Fun(Ts)).

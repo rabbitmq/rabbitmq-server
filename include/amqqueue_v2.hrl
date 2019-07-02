@@ -19,4 +19,4 @@
 -define(amqqueue_v2_field_vhost(Q), element(18, Q)).
 -define(amqqueue_v2_field_options(Q), element(19, Q)).
 -define(amqqueue_v2_field_type(Q), element(20, Q)).
--define(amqqueue_v2_field_quorum_nodes(Q), element(21, Q)).
+-define(amqqueue_v2_field_type_state(Q), element(21, Q)).

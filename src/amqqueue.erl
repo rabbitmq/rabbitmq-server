@@ -57,9 +57,9 @@
          % policy_version
          get_policy_version/1,
          set_policy_version/2,
-         % quorum_nodes
-         get_quorum_nodes/1,
-         set_quorum_nodes/2,
+         % type_state
+         get_type_state/1,
+         set_type_state/2,
          % recoverable_slaves
          get_recoverable_slaves/1,
          set_recoverable_slaves/2,
@@ -91,6 +91,8 @@
          macros/0]).
 
 -define(record_version, amqqueue_v2).
+-define(is_backwards_compat_classic(T),
+        (T =:= classic orelse T =:= ?amqqueue_v1_type)).
 
 -record(amqqueue, {
           name :: rabbit_amqqueue:name() | '_', %% immutable
@@ -118,8 +120,8 @@
           slave_pids_pending_shutdown = [] :: [pid()] | '_',
           vhost :: rabbit_types:vhost() | undefined | '_', %% secondary index
           options = #{} :: map() | '_',
-          type = ?amqqueue_v1_type :: atom() | '_',
-          quorum_nodes = [] :: [node()] | '_'
+          type = ?amqqueue_v1_type :: module() | '_',
+          type_state = #{} :: map() | '_'
          }).
 
 -type amqqueue() :: amqqueue_v1:amqqueue_v1() | amqqueue_v2().
@@ -143,7 +145,7 @@
                           vhost :: rabbit_types:vhost() | undefined,
                           options :: map(),
                           type :: atom(),
-                          quorum_nodes :: [node()]
+                          type_state :: #{}
                          }.
 
 -type ra_server_id() :: {Name :: atom(), Node :: node()}.
@@ -170,7 +172,7 @@
                                   vhost :: '_',
                                   options :: '_',
                                   type :: atom() | '_',
-                                  quorum_nodes :: '_'
+                                  type_state :: '_'
                                  }.
 
 -export_type([amqqueue/0,
@@ -341,7 +343,7 @@ new_with_version(?record_version,
               pid             = Pid,
               vhost           = VHost,
               options         = Options,
-              type            = Type};
+              type            = ensure_type_compat(Type)};
 new_with_version(Version,
                  Name,
                  Pid,
@@ -351,7 +353,8 @@ new_with_version(Version,
                  Args,
                  VHost,
                  Options,
-                 ?amqqueue_v1_type) ->
+                 Type)
+  when ?is_backwards_compat_classic(Type) ->
     amqqueue_v1:new_with_version(
       Version,
       Name,
@@ -451,7 +454,7 @@ set_gm_pids(Queue, GMPids) ->
 
 -spec get_leader(amqqueue_v2()) -> node().
 
-get_leader(#amqqueue{type = quorum, pid = {_, Leader}}) -> Leader.
+get_leader(#amqqueue{type = rabbit_quorum_queue, pid = {_, Leader}}) -> Leader.
 
 % operator_policy
 
@@ -551,18 +554,16 @@ set_recoverable_slaves(#amqqueue{} = Queue, Slaves) ->
 set_recoverable_slaves(Queue, Slaves) ->
     amqqueue_v1:set_recoverable_slaves(Queue, Slaves).
 
-% quorum_nodes (new in v2)
+% type_state (new in v2)
 
--spec get_quorum_nodes(amqqueue()) -> [node()].
+-spec get_type_state(amqqueue()) -> map().
+get_type_state(#amqqueue{type_state = TState}) -> TState;
+get_type_state(_)                               -> [].
 
-get_quorum_nodes(#amqqueue{quorum_nodes = Nodes}) -> Nodes;
-get_quorum_nodes(_)                               -> [].
-
--spec set_quorum_nodes(amqqueue(), [node()]) -> amqqueue().
-
-set_quorum_nodes(#amqqueue{} = Queue, Nodes) ->
-    Queue#amqqueue{quorum_nodes = Nodes};
-set_quorum_nodes(Queue, _Nodes) ->
+-spec set_type_state(amqqueue(), map()) -> amqqueue().
+set_type_state(#amqqueue{} = Queue, TState) ->
+    Queue#amqqueue{type_state = TState};
+set_type_state(Queue, _TState) ->
     Queue.
 
 % slave_pids
@@ -660,7 +661,7 @@ is_classic(Queue) ->
 -spec is_quorum(amqqueue()) -> boolean().
 
 is_quorum(Queue) ->
-    get_type(Queue) =:= quorum.
+    get_type(Queue) =:= rabbit_quorum_queue.
 
 fields() ->
     case record_version_to_use() of
@@ -697,13 +698,16 @@ pattern_match_on_name(Name) ->
 
 pattern_match_on_type(Type) ->
     case record_version_to_use() of
-        ?record_version         -> #amqqueue{type = Type, _ = '_'};
-        _ when Type =:= classic -> amqqueue_v1:pattern_match_all();
+        ?record_version ->
+            #amqqueue{type = Type, _ = '_'};
+        _ when ?is_backwards_compat_classic(Type) ->
+            amqqueue_v1:pattern_match_all();
         %% FIXME: We try a pattern which should never match when the
         %% `quorum_queue` feature flag is not enabled yet. Is there
         %% a better solution?
-        _                       -> amqqueue_v1:pattern_match_on_name(
-                                     rabbit_misc:r(<<0>>, queue, <<0>>))
+        _ ->
+            amqqueue_v1:pattern_match_on_name(
+              rabbit_misc:r(<<0>>, queue, <<0>>))
     end.
 
 -spec reset_mirroring_and_decorators(amqqueue()) -> amqqueue().
@@ -757,3 +761,8 @@ macros([Field | Rest], I) ->
     macros(Rest, I + 1);
 macros([], _) ->
     ok.
+
+ensure_type_compat(classic) ->
+    ?amqqueue_v1_type;
+ensure_type_compat(Type) ->
+    Type.
