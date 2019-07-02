@@ -51,16 +51,16 @@
          (?is_amqqueue_v1(Q) andalso
           ?amqqueue_v1_field_state(Q) =:= State))).
 
--define(amqqueue_v1_type, classic).
+-define(amqqueue_v1_type, rabbit_classic_queue).
 
 -define(amqqueue_is_classic(Q),
         ((?is_amqqueue_v2(Q) andalso
-          ?amqqueue_v2_field_type(Q) =:= classic) orelse
+          ?amqqueue_v2_field_type(Q) =:= rabbit_classic_queue) orelse
          ?is_amqqueue_v1(Q))).
 
 -define(amqqueue_is_quorum(Q),
         (?is_amqqueue_v2(Q) andalso
-         ?amqqueue_v2_field_type(Q) =:= quorum) orelse
+         ?amqqueue_v2_field_type(Q) =:= rabbit_quorum_queue) orelse
         false).
 
 -define(amqqueue_has_valid_pid(Q),

@@ -264,15 +264,15 @@ declare_args(Config) ->
     declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                      {<<"x-max-length">>, long, 2000},
                      {<<"x-max-length-bytes">>, long, 2000}]),
-    assert_queue_type(Server, LQ, quorum),
+    assert_queue_type(Server, LQ, rabbit_quorum_queue),
 
     DQ = <<"classic-declare-args-q">>,
     declare(Ch, DQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
-    assert_queue_type(Server, DQ, classic),
+    assert_queue_type(Server, DQ, rabbit_classic_queue),
 
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
-    assert_queue_type(Server, DQ2, classic).
+    assert_queue_type(Server, DQ2, rabbit_classic_queue).
 
 declare_invalid_properties(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

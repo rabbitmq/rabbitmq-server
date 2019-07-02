@@ -118,7 +118,7 @@
           slave_pids_pending_shutdown = [] :: [pid()] | '_',
           vhost :: rabbit_types:vhost() | undefined | '_', %% secondary index
           options = #{} :: map() | '_',
-          type = ?amqqueue_v1_type :: atom() | '_',
+          type = ?amqqueue_v1_type :: module() | '_',
           quorum_nodes = [] :: [node()] | '_'
          }).
 
@@ -451,7 +451,7 @@ set_gm_pids(Queue, GMPids) ->
 
 -spec get_leader(amqqueue_v2()) -> node().
 
-get_leader(#amqqueue{type = quorum, pid = {_, Leader}}) -> Leader.
+get_leader(#amqqueue{type = rabbit_quorum_queue, pid = {_, Leader}}) -> Leader.
 
 % operator_policy
 
@@ -660,7 +660,7 @@ is_classic(Queue) ->
 -spec is_quorum(amqqueue()) -> boolean().
 
 is_quorum(Queue) ->
-    get_type(Queue) =:= quorum.
+    get_type(Queue) =:= rabbit_quorum_queue.
 
 fields() ->
     case record_version_to_use() of

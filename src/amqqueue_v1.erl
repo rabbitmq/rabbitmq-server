@@ -525,8 +525,9 @@ is_classic(Queue) ->
 
 -spec is_quorum(amqqueue()) -> boolean().
 
-is_quorum(Queue) ->
-    get_type(Queue) =:= quorum.
+is_quorum(Queue) when ?is_amqqueue(Queue) ->
+    false.
+    % get_type(Queue) =:= rabbit_quorum_queue.
 
 fields() -> fields(?record_version).
 

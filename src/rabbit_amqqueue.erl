@@ -274,7 +274,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
     TypeIsAllowed =
-      Type =:= classic orelse
+      Type =:= rabbit_classic_queue orelse
       rabbit_feature_flags:is_enabled(quorum_queue),
     case TypeIsAllowed of
         true ->
@@ -325,9 +325,16 @@ declare_classic_queue(Q, Node) ->
 get_queue_type(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
         undefined ->
-            classic;
+            rabbit_classic_queue;
         {_, V} ->
-            erlang:binary_to_existing_atom(V, utf8)
+            %% TODO: this mapping of "friendly" queue type name to the
+            %% implementing module should be part of some kind of registry
+            case V of
+                <<"quorum">> ->
+                    rabbit_quorum_queue;
+                <<"classic">> ->
+                    rabbit_classic_queue
+            end
     end.
 
 -spec internal_declare(amqqueue:amqqueue(), boolean()) ->
@@ -1555,9 +1562,11 @@ forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
     Type = amqqueue:get_type(Q),
     case {node_permits_offline_promotion(H), Type} of
         {false, _} -> forget_node_for_queue(DeadNode, T, Q);
-        {true, classic} -> Q1 = amqqueue:set_pid(Q, rabbit_misc:node_to_fake_pid(H)),
+        {true, rabbit_classic_queue} ->
+            Q1 = amqqueue:set_pid(Q, rabbit_misc:node_to_fake_pid(H)),
                            ok = mnesia:write(rabbit_durable_queue, Q1, write);
-        {true, quorum} -> ok
+        {true, rabbit_quorum_queue} ->
+            ok
     end.
 
 node_permits_offline_promotion(Node) ->
@@ -1755,7 +1764,7 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                  [],
                  undefined, % VHost,
                  #{user => undefined}, % ActingUser
-                 classic % Type
+                 rabbit_classic_queue % Type
                 ).
 
 -spec immutable(amqqueue:amqqueue()) -> amqqueue:amqqueue().

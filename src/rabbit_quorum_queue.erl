@@ -16,6 +16,8 @@
 
 -module(rabbit_quorum_queue).
 
+-behaviour(rabbit_queue_type).
+
 -export([init_state/2, handle_event/2]).
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
@@ -597,7 +599,7 @@ cleanup_data_dir() ->
                  {Name, _} = amqqueue:get_pid(Q),
                  Name
              end
-             || Q <- rabbit_amqqueue:list_by_type(quorum),
+             || Q <- rabbit_amqqueue:list_by_type(?MODULE),
                 lists:member(node(), amqqueue:get_quorum_nodes(Q))],
     Registered = ra_directory:list_registered(),
     _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
@@ -631,7 +633,8 @@ cluster_state(Name) ->
             end
     end.
 
--spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
+-spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
+    rabbit_types:infos() | {error, term()}.
 status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
@@ -808,7 +811,7 @@ shrink_all(Node) ->
                  {QName, {error, Size, Err}}
          end
      end || Q <- rabbit_amqqueue:list(),
-            amqqueue:get_type(Q) == quorum,
+            amqqueue:get_type(Q) == ?MODULE,
             lists:member(Node, amqqueue:get_quorum_nodes(Q))].
 
 -spec grow(node(), binary(), binary(), all | even) ->
@@ -832,7 +835,7 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
          end
      end
      || Q <- rabbit_amqqueue:list(),
-        amqqueue:get_type(Q) == quorum,
+        amqqueue:get_type(Q) == ?MODULE,
         %% don't add a member if there is already one on the node
         not lists:member(Node, amqqueue:get_quorum_nodes(Q)),
         %% node needs to be running
@@ -991,7 +994,7 @@ i(leader, Q) -> leader(Q);
 i(open_files, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     Nodes = amqqueue:get_quorum_nodes(Q),
-    {Data, _} = rpc:multicall(Nodes, rabbit_quorum_queue, open_files, [Name]),
+    {Data, _} = rpc:multicall(Nodes, ?MODULE, open_files, [Name]),
     lists:flatten(Data);
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
