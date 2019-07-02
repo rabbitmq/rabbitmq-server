@@ -500,7 +500,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                       Limiter0
               end,
     %% Process dictionary is used here because permission cache already uses it. MK.
-    put(permission_cache_enabled, rabbit_access_control:can_use_permission_cache(User)),
+    put(permission_cache_can_expire, rabbit_access_control:permission_cache_can_expire(User)),
     MaxMessageSize = get_max_message_size(),
     ConsumerTimeout = get_consumer_timeout(),
     State = #ch{cfg = #conf{state = starting,
@@ -850,6 +850,10 @@ handle_info({{Ref, Node}, LateAnswer},
     noreply(State);
 
 handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
+    case get(permission_cache_can_expire) of
+      true  -> ok = clear_permission_cache();
+      _     -> ok
+    end,
     QueueStates1 =
         maps:filter(fun(_, QS) ->
                             QName = rabbit_quorum_queue:queue_name(QS),
@@ -986,14 +990,7 @@ return_queue_declare_ok(#resource{name = ActualName},
                                           message_count  = MessageCount,
                                           consumer_count = ConsumerCount}).
 
-%% permission cache must not be used (one of the authz
-%% backends supports credential expiration)
-check_resource_access(User, Resource, Perm, Context, false = _Enabled) ->
-  ok = rabbit_access_control:check_resource_access(
-                  User, Resource, Perm, Context);
-
-%% permission cache enabled
-check_resource_access(User, Resource, Perm, Context, _Enabled) ->
+check_resource_access(User, Resource, Perm, Context) ->
     V = {Resource, Context, Perm},
 
     Cache = case get(permission_cache) of
@@ -1013,19 +1010,19 @@ clear_permission_cache() -> erase(permission_cache),
                             ok.
 
 check_configure_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, configure, Context, get(permission_cache_enabled)).
+    check_resource_access(User, Resource, configure, Context).
 
 check_write_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, write, Context, get(permission_cache_enabled)).
+    check_resource_access(User, Resource, write, Context).
 
 check_read_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, read, Context, get(permission_cache_enabled)).
+    check_resource_access(User, Resource, read, Context).
 
 check_write_permitted_on_topic(Resource, User, ConnPid, RoutingKey, ChSrc) ->
-    check_topic_authorisation(Resource, User, ConnPid, RoutingKey, ChSrc, write, get(permission_cache_enabled)).
+    check_topic_authorisation(Resource, User, ConnPid, RoutingKey, ChSrc, write).
 
 check_read_permitted_on_topic(Resource, User, ConnPid, RoutingKey, ChSrc) ->
-    check_topic_authorisation(Resource, User, ConnPid, RoutingKey, ChSrc, read, get(permission_cache_enabled)).
+    check_topic_authorisation(Resource, User, ConnPid, RoutingKey, ChSrc, read).
 
 check_user_id_header(#'P_basic'{user_id = undefined}, _) ->
     ok;
@@ -1061,29 +1058,20 @@ check_internal_exchange(_) ->
     ok.
 
 check_topic_authorisation(Resource = #exchange{type = topic},
-                          User, none, RoutingKey, _ChSrc, Permission, PermCacheEnabled) ->
+                          User, none, RoutingKey, _ChSrc, Permission) ->
     %% Called from outside the channel by mgmt API
     AmqpParams = [],
-    do_check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission, PermCacheEnabled);
+    check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission);
 check_topic_authorisation(Resource = #exchange{type = topic},
-                          User, ConnPid, RoutingKey, ChSrc, Permission, PermCacheEnabled) when is_pid(ConnPid) ->
+                          User, ConnPid, RoutingKey, ChSrc, Permission) when is_pid(ConnPid) ->
     AmqpParams = get_amqp_params(ConnPid, ChSrc),
-    do_check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission, PermCacheEnabled);
-check_topic_authorisation(_, _, _, _, _, _, _) ->
+    check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission);
+check_topic_authorisation(_, _, _, _, _, _) ->
     ok.
 
-do_check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
+check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
                              User = #user{username = Username},
-                             AmqpParams, RoutingKey, Permission, false = _PermCacheEnabled) ->
-    Resource = Name#resource{kind = topic},
-    VariableMap = build_topic_variable_map(AmqpParams, VHost, Username),
-    Context = #{routing_key  => RoutingKey,
-                variable_map => VariableMap},
-    ok = rabbit_access_control:check_topic_access(
-        User, Resource, Permission, Context);
-do_check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
-                             User = #user{username = Username},
-                             AmqpParams, RoutingKey, Permission, _PermCacheEnabled) ->
+                             AmqpParams, RoutingKey, Permission) ->
     Resource = Name#resource{kind = topic},
     VariableMap = build_topic_variable_map(AmqpParams, VHost, Username),
     Context = #{routing_key  => RoutingKey,

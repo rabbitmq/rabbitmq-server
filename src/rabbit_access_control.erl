@@ -21,7 +21,7 @@
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4]).
 
--export([can_use_permission_cache/1, update_state/2]).
+-export([permission_cache_can_expire/1, update_state/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -248,9 +248,9 @@ update_state(User = #user{authz_backends = Backends0}, NewState) ->
       Else        -> Else
     end.
 
--spec can_use_permission_cache(User :: rabbit_types:user()) -> boolean().
+-spec permission_cache_can_expire(User :: rabbit_types:user()) -> boolean().
 
-%% Returns false if any of the backends support credential expiration,
-%% otherwise returns true.
-can_use_permission_cache(#user{authz_backends = Backends}) ->
-    not lists:any(fun ({Module, _State}) -> Module:state_can_expire() end, Backends).
+%% Returns true if any of the backends support credential expiration,
+%% otherwise returns false.
+permission_cache_can_expire(#user{authz_backends = Backends}) ->
+    lists:any(fun ({Module, _State}) -> Module:state_can_expire() end, Backends).
