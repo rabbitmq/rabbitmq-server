@@ -50,12 +50,20 @@ user_login_authentication(Username0, AuthProps0) ->
         {refused, Err} ->
           {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
-            Username = username_from(Username0, DecodedToken),
-            Tags     = tags_from(DecodedToken),
+            Func = fun() ->
+                        Username = username_from(Username0, DecodedToken),
+                        Tags     = tags_from(DecodedToken),
 
-            {ok, #auth_user{username = Username,
-                            tags = Tags,
-                            impl = DecodedToken}}
+                        {ok, #auth_user{username = Username,
+                                        tags = Tags,
+                                        impl = DecodedToken}}
+                   end,
+            case with_decoded_token(DecodedToken, Func) of
+                {error, Err} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+                Else ->
+                    Else
+            end
     end.
 
 user_login_authorization(Username, AuthProps) ->
