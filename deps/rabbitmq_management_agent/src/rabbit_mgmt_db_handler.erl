@@ -78,7 +78,7 @@ ensure_statistics_enabled() ->
         {_, _} ->
             ok
     end,
-    ok.
+    ok = rabbit:force_event_refresh(erlang:make_ref()).
 
 %%----------------------------------------------------------------------------
 
