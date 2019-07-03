@@ -2608,20 +2608,24 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = qbin_to_resource(StrippedQueueNameBin, VHostPath),
 
-    check_configure_permitted(QueueName, User, extract_authz_context(ConnPid, ChSrc)),
+    check_configure_permitted(QueueName, User,
+                              extract_authz_context(ConnPid, ChSrc)),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) ->
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
                    rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
            end,
-           fun (not_found)            -> {ok, 0};
-               %% TODO delete crashed should clean up fifo states?
-               ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
-                                         {ok, 0};
-               ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
-                                         {ok, 0};
-               ({absent, Q, Reason})  -> rabbit_amqqueue:absent(Q, Reason)
+           fun (not_found) ->
+                   {ok, 0};
+               ({absent, Q, crashed}) ->
+                   _ = rabbit_classic_queue:delete_crashed(Q, Username),
+                   {ok, 0};
+               ({absent, Q, stopped}) ->
+                   _ = rabbit_classic_queue:delete_crashed(Q, Username),
+                   {ok, 0};
+               ({absent, Q, Reason}) ->
+                   rabbit_amqqueue:absent(Q, Reason)
            end) of
         {error, in_use} ->
             precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);

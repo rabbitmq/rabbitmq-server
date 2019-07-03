@@ -19,8 +19,7 @@
 -export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
-         forget_all_durable/1, delete_crashed/1, delete_crashed/2,
-         delete_crashed_internal/2]).
+         forget_all_durable/1]).
 -export([pseudo_queue/2, pseudo_queue/3, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -1123,82 +1122,8 @@ delete_immediately_by_resource(Resources) ->
             qlen() |
             rabbit_types:error('in_use') |
             rabbit_types:error('not_empty').
-
-delete(Q,
-       IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
-    rabbit_quorum_queue:delete(Q, IfUnused, IfEmpty, ActingUser);
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
-    case wait_for_promoted_or_stopped(Q) of
-        {promoted, Q1} ->
-            QPid = amqqueue:get_pid(Q1),
-            delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
-        {stopped, Q1} ->
-            #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q1),
-            case IfEmpty of
-                true ->
-                    rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
-                                     "no mirrors available or eligible for promotion. "
-                                     "The queue may be non-empty. "
-                                     "Refusing to force-delete.",
-                                     [Name, Vhost]),
-                    {error, not_empty};
-                false ->
-                    rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
-                                       "no mirrors available or eligible for promotion. "
-                                       "Forcing queue deletion.",
-                                       [Name, Vhost]),
-                    delete_crashed_internal(Q1, ActingUser),
-                    {ok, 0}
-            end;
-        {error, not_found} ->
-            %% Assume the queue was deleted
-            {ok, 0}
-    end.
-
--spec wait_for_promoted_or_stopped(amqqueue:amqqueue()) ->
-    {promoted, amqqueue:amqqueue()} |
-    {stopped, amqqueue:amqqueue()} |
-    {error, not_found}.
-wait_for_promoted_or_stopped(Q0) ->
-    QName = amqqueue:get_name(Q0),
-    case lookup(QName) of
-        {ok, Q} ->
-            QPid = amqqueue:get_pid(Q),
-            SPids = amqqueue:get_slave_pids(Q),
-            case rabbit_mnesia:is_process_alive(QPid) of
-                true  -> {promoted, Q};
-                false ->
-                    case lists:any(fun(Pid) ->
-                                       rabbit_mnesia:is_process_alive(Pid)
-                                   end, SPids) of
-                        %% There is a live slave. May be promoted
-                        true ->
-                            timer:sleep(100),
-                            wait_for_promoted_or_stopped(Q);
-                        %% All slave pids are stopped.
-                        %% No process left for the queue
-                        false -> {stopped, Q}
-                    end
-            end;
-        {error, not_found} ->
-            {error, not_found}
-    end.
-
--spec delete_crashed(amqqueue:amqqueue()) -> 'ok'.
-
-delete_crashed(Q) ->
-    delete_crashed(Q, ?INTERNAL_USER).
-
-delete_crashed(Q, ActingUser) ->
-    ok = rpc:call(amqqueue:qnode(Q), ?MODULE, delete_crashed_internal, [Q, ActingUser]).
-
--spec delete_crashed_internal(amqqueue:amqqueue(), rabbit_types:username()) -> 'ok'.
-
-delete_crashed_internal(Q, ActingUser) ->
-    QName = amqqueue:get_name(Q),
-    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    BQ:delete_crashed(Q),
-    ok = internal_delete(QName, ActingUser).
+    rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
 
 -spec purge(amqqueue:amqqueue()) -> {ok, qlen()}.
 
@@ -1437,7 +1362,8 @@ notify_sent_queue_down(QPid) ->
 
 -spec resume(pid(), pid()) -> 'ok'.
 
-resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast, [{resume, ChPid}]}).
+resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast,
+                                                        [{resume, ChPid}]}).
 
 internal_delete1(QueueName, OnlyDurable) ->
     internal_delete1(QueueName, OnlyDurable, normal).

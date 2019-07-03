@@ -371,9 +371,7 @@ stop(VHost) ->
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()}.
-
-delete(Q,
-       _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = amqqueue:get_quorum_nodes(Q),

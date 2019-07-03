@@ -4,7 +4,8 @@
          discover/1,
          default/0,
          is_enabled/1,
-         declare/2
+         declare/2,
+         delete/4
          ]).
 
 % copied from rabbit_amqqueue
@@ -18,6 +19,12 @@
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     rabbit_types:channel_exit().
 
+-callback delete(amqqueue:amqqueue(),
+                 boolean(),
+                 boolean(),
+                 rabbit_types:username()) ->
+    rabbit_types:ok(non_neg_integer()) |
+    rabbit_types:error(in_use | not_empty).
 
 %% TODO: this should be controlled by a registry that is populated on boot
 discover(<<"quorum">>) ->
@@ -40,3 +47,12 @@ declare(Q, Node) ->
     Mod = amqqueue:get_type(Q),
     Mod:declare(Q, Node).
 
+-spec delete(amqqueue:amqqueue(),
+                 boolean(),
+                 boolean(),
+                 rabbit_types:username()) ->
+    rabbit_types:ok(non_neg_integer()) |
+    rabbit_types:error(in_use | not_empty).
+delete(Q, IfUnused, IfEmpty, ActingUser) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:delete(Q, IfUnused, IfEmpty, ActingUser).
