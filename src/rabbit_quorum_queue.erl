@@ -18,13 +18,13 @@
 
 -behaviour(rabbit_queue_type).
 
--export([init_state/2, handle_event/2]).
+-export([init/1, handle_event/2]).
 -export([recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
--export([ack/3, reject/4, basic_get/4, basic_consume/10, basic_cancel/4]).
+-export([settle/4, reject/4, basic_get/4, consume/3, cancel/6]).
 -export([credit/4]).
 -export([purge/1]).
--export([stateless_deliver/2, deliver/3]).
+-export([stateless_deliver/2, deliver/3, deliver/2]).
 -export([dead_letter_publish/4]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
@@ -44,6 +44,7 @@
 
 -export([is_enabled/0,
          declare/2]).
+
 
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
@@ -84,15 +85,14 @@ is_enabled() ->
 
 %%----------------------------------------------------------------------------
 
--spec init_state(amqqueue:ra_server_id(), rabbit_amqqueue:name()) ->
-    rabbit_fifo_client:state().
-init_state({Name, _}, QName = #resource{}) ->
+-spec init(amqqueue:amqqueue()) -> rabbit_fifo_client:state().
+init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     %% This lookup could potentially return an {error, not_found}, but we do not
     %% know what to do if the queue has `disappeared`. Let it crash.
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    Leader = amqqueue:get_pid(Q),
+    {Name, _LeaderNode} = Leader = amqqueue:get_pid(Q),
     Nodes = amqqueue:get_quorum_nodes(Q),
+    QName = amqqueue:get_name(Q),
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
@@ -102,9 +102,7 @@ init_state({Name, _}, QName = #resource{}) ->
 
 -spec handle_event({'ra_event', amqqueue:ra_server_id(), any()},
                    rabbit_fifo_client:state()) ->
-    {internal, Correlators :: [term()], rabbit_fifo_client:actions(),
-     rabbit_fifo_client:state()} |
-    {rabbit_fifo:client_msg(), rabbit_fifo_client:state()} |
+    {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
     eol.
 handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
@@ -440,18 +438,16 @@ delete_immediately(Resource, {_Name, _} = QPid) ->
     rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
--spec ack(rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
-                 {'ok', rabbit_fifo_client:state()}.
+settle(CTag, MsgIds, _ChPid, QState) ->
+    {_, S} = rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState),
+    S.
 
-ack(CTag, MsgIds, QState) ->
-    rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState).
-
--spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
-                    {'ok', rabbit_fifo_client:state()}.
-
-reject(true, CTag, MsgIds, QState) ->
+-spec reject(rabbit_types:ctag(), Confirm :: boolean(), [msg_id()],
+             rabbit_fifo_client:state()) ->
+    rabbit_fifo_client:state().
+reject(CTag, true, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, QState);
-reject(false, CTag, MsgIds, QState) ->
+reject(CTag, false, MsgIds, QState) ->
     rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
 
 credit(CTag, Credit, Drain, QState) ->
@@ -462,7 +458,6 @@ credit(CTag, Credit, Drain, QState) ->
     {'ok', 'empty', rabbit_fifo_client:state()} |
     {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
     {error, timeout | term()}.
-
 basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
     Id = amqqueue:get_pid(Q),
@@ -487,16 +482,23 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
             {error, timeout}
     end.
 
--spec basic_consume(amqqueue:amqqueue(), NoAck :: boolean(), ChPid :: pid(),
-                    ConsumerPrefetchCount :: non_neg_integer(),
-                    rabbit_types:ctag(), ExclusiveConsume :: boolean(),
-                    Args :: rabbit_framing:amqp_table(), ActingUser :: binary(),
-                    any(), rabbit_fifo_client:state()) ->
-    {'ok', rabbit_fifo_client:state()}.
-
-basic_consume(Q, NoAck, ChPid,
-              ConsumerPrefetchCount, ConsumerTag0, ExclusiveConsume, Args,
-              ActingUser, OkMsg, QState0) when ?amqqueue_is_quorum(Q) ->
+-spec consume(amqqueue:amqqueue(),
+              rabbit_queue_type:consume_spec(),
+              rabbit_fifo_client:state()) ->
+    {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
+    {error, global_qos_not_supported_for_queue_type}.
+consume(Q, #{limiter_active := true}, _State)
+  when ?amqqueue_is_quorum(Q) ->
+    {error, global_qos_not_supported_for_queue_type};
+consume(Q, Spec, State0) when ?amqqueue_is_quorum(Q) ->
+    #{no_ack := NoAck,
+      channel_pid := ChPid,
+      prefetch_count := ConsumerPrefetchCount,
+      consumer_tag := ConsumerTag0,
+      exclusive_consume := ExclusiveConsume,
+      args := Args,
+      ok_msg := OkMsg,
+      acting_user :=  ActingUser} = Spec,
     %% TODO: validate consumer arguments
     %% currently quorum queues do not support any arguments
     QName = amqqueue:get_name(Q),
@@ -514,12 +516,13 @@ basic_consume(Q, NoAck, ChPid,
                      prefetch => ConsumerPrefetchCount,
                      args => Args,
                      username => ActingUser},
-    {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag,
-                                               Prefetch,
-                                               ConsumerMeta,
-                                               QState0),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
+    {ok, State} = rabbit_fifo_client:checkout(ConsumerTag,
+                                              Prefetch,
+                                              ConsumerMeta,
+                                              State0),
+    {ok, {_, SacResult}, _} = ra:local_query(
+                                QPid,
+                                fun rabbit_fifo:query_single_active_consumer/1),
 
     SingleActiveConsumerOn = single_active_consumer_on(Q),
     {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
@@ -534,16 +537,17 @@ basic_consume(Q, NoAck, ChPid,
     %% TODO: emit as rabbit_fifo effect
     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                          not NoAck, QName,
-                                         ConsumerPrefetchCount, IsSingleActiveConsumer,
+                                         ConsumerPrefetchCount,
+                                         IsSingleActiveConsumer,
                                          ActivityStatus, Args),
-    {ok, QState}.
+    {ok, State, []}.
 
--spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
-                          {'ok', rabbit_fifo_client:state()}.
+% -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
+%                           {'ok', rabbit_fifo_client:state()}.
 
-basic_cancel(ConsumerTag, ChPid, OkMsg, QState0) ->
+cancel(_Q, ChPid, ConsumerTag, OkMsg, _ActingUser, State) ->
     maybe_send_reply(ChPid, OkMsg),
-    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), QState0).
+    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), State).
 
 -spec stateless_deliver(amqqueue:ra_server_id(), rabbit_types:delivery()) -> 'ok'.
 
@@ -560,6 +564,13 @@ deliver(false, Delivery, QState0) ->
 deliver(true, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
                                Delivery#delivery.message, QState0).
+
+deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
+    lists:foldl(
+      fun({Q, S0}, {Qs, Actions}) ->
+              {_, S} = deliver(Confirm, Delivery, S0),
+              {[{Q, S} | Qs], Actions}
+      end, {[], []}, QSs).
 
 -spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
