@@ -23,7 +23,8 @@
 
 -export([description/0, p/1, q/1, join_tags/1]).
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4,
+         state_can_expire/0]).
 
 %% If keepalive connection is closed, retry N times before failing.
 -define(RETRY_ON_KEEPALIVE_CLOSED, 3).
@@ -89,6 +90,8 @@ check_topic_access(#auth_user{username = Username, tags = Tags},
         {name,       Name},
         {permission, Permission},
         {tags, join_tags(Tags)}] ++ OptionsParameters).
+
+state_can_expire() -> false.
 
 %%--------------------------------------------------------------------
 
