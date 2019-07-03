@@ -19,18 +19,28 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  @default_timeout 5_000
+
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/"}, opts)}
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+    {args, Map.merge(%{vhost: "/", timeout: timeout}, opts)}
   end
 
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([name, node] = _args, %{vhost: vhost, node: node_name}) do
+  def run([name, node] = _args, %{vhost: vhost, node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, [
            vhost,
            name,
-           to_atom(node)
+           to_atom(node),
+           timeout
          ]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot add members to a classic queue"}
@@ -62,6 +72,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
   def description, do: "Adds a quorum queue member (replica) for a queue on the given node."
 
   def banner([name, node], _) do
-    "Adding member #{node} to quorum queue #{name} cluster..."
+    [
+      "Adding member #{node} to quorum queue #{name} cluster..."
+    ]
   end
 end
