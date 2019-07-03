@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @default_timeout 15_000
+  @default_timeout 5_000
 
   def merge_defaults(args, opts) do
     timeout =
