@@ -19,7 +19,7 @@
 -behaviour(rabbit_queue_type).
 
 -export([init_state/2, handle_event/2]).
--export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
+-export([recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/10, basic_cancel/4]).
 -export([credit/4]).
@@ -41,6 +41,9 @@
 -export([cleanup_data_dir/0]).
 -export([shrink_all/1,
          grow/4]).
+
+-export([is_enabled/0,
+         declare/2]).
 
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
@@ -73,6 +76,12 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
 
+%%----------- rabbit_queue_type ---------------------------------------------
+
+-spec is_enabled() -> boolean().
+is_enabled() ->
+    rabbit_feature_flags:is_enabled(quorum_queue).
+
 %%----------------------------------------------------------------------------
 
 -spec init_state(amqqueue:ra_server_id(), rabbit_amqqueue:name()) ->
@@ -100,10 +109,9 @@ init_state({Name, _}, QName = #resource{}) ->
 handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
--spec declare(amqqueue:amqqueue()) ->
+-spec declare(amqqueue:amqqueue(), node()) ->
     {new | existing, amqqueue:amqqueue()} | rabbit_types:channel_exit().
-
-declare(Q) when ?amqqueue_is_quorum(Q) ->
+declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),

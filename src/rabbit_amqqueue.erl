@@ -265,18 +265,13 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
               rabbit_types:username(),
               node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-    {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     rabbit_types:channel_exit().
-
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
-    TypeIsAllowed =
-      Type =:= rabbit_classic_queue orelse
-      rabbit_feature_flags:is_enabled(quorum_queue),
-    case TypeIsAllowed of
+    case rabbit_queue_type:is_enabled(Type) of
         true ->
             Q0 = amqqueue:new(QueueName,
                               none,
@@ -289,7 +284,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                               Type),
             Q = rabbit_queue_decorator:set(
                   rabbit_policy:set(Q0)),
-            do_declare(Q, Node);
+            rabbit_queue_type:declare(Q, Node);
         false ->
             rabbit_misc:protocol_error(
               internal_error,
@@ -298,43 +293,12 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
               [rabbit_misc:rs(QueueName), Type, Node])
     end.
 
-do_declare(Q, Node) when ?amqqueue_is_classic(Q) ->
-    declare_classic_queue(Q, Node);
-do_declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
-    rabbit_quorum_queue:declare(Q).
-
-declare_classic_queue(Q, Node) ->
-    QName = amqqueue:get_name(Q),
-    VHost = amqqueue:get_vhost(Q),
-    Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
-              {ok, Node0}  -> Node0;
-              {error, _}   -> Node
-            end,
-    Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
-    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
-        {ok, _} ->
-            gen_server2:call(
-              rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
-              {init, new}, infinity);
-        {error, Error} ->
-            rabbit_misc:protocol_error(internal_error,
-                            "Cannot declare a queue '~s' on node '~s': ~255p",
-                            [rabbit_misc:rs(QName), Node1, Error])
-    end.
-
 get_queue_type(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
         undefined ->
-            rabbit_classic_queue;
+            rabbit_queue_type:default();
         {_, V} ->
-            %% TODO: this mapping of "friendly" queue type name to the
-            %% implementing module should be part of some kind of registry
-            case V of
-                <<"quorum">> ->
-                    rabbit_quorum_queue;
-                <<"classic">> ->
-                    rabbit_classic_queue
-            end
+            rabbit_queue_type:discover(V)
     end.
 
 -spec internal_declare(amqqueue:amqqueue(), boolean()) ->
