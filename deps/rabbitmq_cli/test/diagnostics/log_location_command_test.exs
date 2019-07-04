@@ -58,9 +58,9 @@ defmodule LogLocationCommandTest do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
   end
 
-  test "run: shows a default log location", context do
+  test "run: prints default log location", context do
     {:ok, logfile} = @command.run([], context[:opts])
-    log_message = "checking the default log file"
+    log_message = "default log file"
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [log_message])
     {:ok, log_file_data} = File.read(logfile)
     assert String.match?(log_file_data, Regex.compile!(log_message))
