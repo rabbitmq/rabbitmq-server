@@ -1274,6 +1274,44 @@ handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
     self() ! terminate_connection,
     State;
+handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reason},
+               State = #v1{connection =
+                               #connection{protocol   = Protocol,
+                                           user       = User = #user{username = Username},
+                                           log_name   = ConnName} = Conn,
+                           sock       = Sock}) when ?IS_RUNNING(State) ->
+    rabbit_log_connection:debug(
+        "connection ~p (~s) of user '~s': "
+        "asked to update secret, reason: ~s~n",
+        [self(), dynamic_connection_name(ConnName), Username, Reason]),
+    case rabbit_access_control:update_state(User, NewSecret) of
+      {ok, User1} ->
+        %% User/auth backend state has been updated. Now we can propagate it to channels
+        %% asynchronously and return. All the channels have to do is to update their
+        %% own state.
+        %%
+        %% Any secret update errors coming from the authz backend will be handled in the other branch.
+        %% Therefore we optimistically do no error handling here. MK.
+        lists:foreach(fun(Ch) ->
+          rabbit_log:debug("Updating user/auth backend state for channel ~p", [Ch]),
+          _ = rabbit_channel:update_user_state(Ch, User1)
+        end, all_channels()),
+        ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
+        rabbit_log_connection:info(
+            "connection ~p (~s): "
+            "user '~s' updated secret, reason: ~s~n",
+            [self(), dynamic_connection_name(ConnName), Username, Reason]),
+        State#v1{connection = Conn#connection{user = User1}};
+      {refused, Message} ->
+        rabbit_log_connection:error("Secret update was refused for user '~p': ~p",
+                                    [Username, Message]),
+        rabbit_misc:protocol_error(not_allowed, "New secret was refused by one of the backends", []);
+      {error, Message} ->
+        rabbit_log_connection:error("Secret update for user '~p' failed: ~p",
+                                    [Username, Message]),
+        rabbit_misc:protocol_error(not_allowed,
+                                  "Secret update failed", [])
+    end;
 handle_method0(_Method, State) when ?IS_STOPPING(State) ->
     State;
 handle_method0(_Method, #v1{connection_state = S}) ->
