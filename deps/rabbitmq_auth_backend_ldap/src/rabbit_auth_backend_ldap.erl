@@ -25,7 +25,8 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4,
+         state_can_expire/0]).
 
 -export([get_connections/0]).
 
@@ -146,6 +147,8 @@ check_topic_access(User = #auth_user{username = Username,
     ?L("DECISION: ~s for ~s: ~p",
         [log_resource(Args), log_user(User), log_result(R)]),
     R.
+
+state_can_expire() -> false.
 
 %%--------------------------------------------------------------------
 
@@ -377,7 +380,7 @@ do_match(S1, S2) ->
             R
     end.
 
-%% In some cases when fetching regular expressions, LDAP evalution() 
+%% In some cases when fetching regular expressions, LDAP evalution()
 %% returns a list of strings, so we need to wrap guards around that.
 %% If a list of strings is returned, loop and match versus each element.
 do_match_multi(S1, []) ->
