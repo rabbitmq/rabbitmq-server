@@ -24,6 +24,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
+         state_can_expire/0,
          get/1]).
 
 user_login_authentication(_, AuthProps) ->
@@ -37,15 +38,17 @@ user_login_authorization(_, _) ->
     io:format("login authorization"),
     {ok, does_not_matter}.
 
-check_vhost_access(#auth_user{}, _VHostPath, AuthzData) -> 
+check_vhost_access(#auth_user{}, _VHostPath, AuthzData) ->
     ets:insert(?MODULE, {vhost_access, AuthzData}),
     true.
-check_resource_access(#auth_user{}, #resource{}, _Permission, AuthzContext) -> 
+check_resource_access(#auth_user{}, #resource{}, _Permission, AuthzContext) ->
     ets:insert(?MODULE, {resource_access, AuthzContext}),
     true.
-check_topic_access(#auth_user{}, #resource{}, _Permission, TopicContext) -> 
+check_topic_access(#auth_user{}, #resource{}, _Permission, TopicContext) ->
     ets:insert(?MODULE, {topic_access, TopicContext}),
     true.
+
+state_can_expire() -> false.
 
 get(K) ->
     ets:lookup(?MODULE, K).
