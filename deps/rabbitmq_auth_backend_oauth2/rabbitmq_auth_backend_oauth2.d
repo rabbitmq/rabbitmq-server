@@ -1,2 +1,0 @@
-
-COMPILE_FIRST +=

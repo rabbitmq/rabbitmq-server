@@ -24,7 +24,7 @@
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4,
-         check_topic_access/4]).
+         check_topic_access/4, check_token/1, state_can_expire/0, update_state/2]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 
@@ -43,16 +43,27 @@ user_login_authentication(Username0, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
+        %% avoid logging the token
         {error, _} = E  -> E;
-        {refused, Err}  ->
-            {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+          {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+        {refused, Err} ->
+          {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
-            Username = username_from(Username0, DecodedToken),
-            Tags     = tags_from(DecodedToken),
+            Func = fun() ->
+                        Username = username_from(Username0, DecodedToken),
+                        Tags     = tags_from(DecodedToken),
 
-            {ok, #auth_user{username = Username,
-                            tags = Tags,
-                            impl = DecodedToken}}
+                        {ok, #auth_user{username = Username,
+                                        tags = Tags,
+                                        impl = DecodedToken}}
+                   end,
+            case with_decoded_token(DecodedToken, Func) of
+                {error, Err} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+                Else ->
+                    Else
+            end
     end.
 
 user_login_authorization(Username, AuthProps) ->
@@ -86,6 +97,23 @@ check_topic_access(#auth_user{impl = DecodedToken},
             Scopes = get_scopes(DecodedToken),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
+
+state_can_expire() -> true.
+
+update_state(AuthUser, NewToken) ->
+  case check_token(NewToken) of
+      %% avoid logging the token
+      {error, _} = E  -> E;
+      {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+        {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+      {refused, Err} ->
+        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~p", [Err])};
+      {ok, DecodedToken} ->
+          Tags = tags_from(DecodedToken),
+
+          {ok, AuthUser#auth_user{tags = Tags,
+                                  impl = DecodedToken}}
+  end.
 
 %%--------------------------------------------------------------------
 

@@ -8,5 +8,4 @@
 /ebin/
 /logs/
 /plugins/
-
-/rabbitmq_auth_backend_uaa.d
+/rabbitmq_auth_backend_oauth2.d
