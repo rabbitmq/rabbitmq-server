@@ -21,9 +21,10 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4,
+         state_can_expire/0]).
 
-%% Implementation of rabbit_auth_backend
+%% API
 
 user_login_authentication(Username, AuthProps) ->
     with_cache(authn, {user_login_authentication, [Username, AuthProps]},
@@ -67,6 +68,12 @@ check_topic_access(#auth_user{} = AuthUser,
             ({error, _} = Err) -> Err;
             (_)                -> unknown
         end).
+
+state_can_expire() -> false.
+
+%%
+%% Implementation
+%%
 
 with_cache(BackendType, {F, A}, Fun) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
