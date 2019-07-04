@@ -32,7 +32,9 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-          auth_backend_internal_expand_topic_permission,
+          {access_control, [parallel], [
+            auth_backend_internal_expand_topic_permission
+          ]},
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
               invalid_existing_headers,
@@ -892,6 +894,10 @@ listing_plugins_from_multiple_directories(Config) ->
             exit({wrong_plugins_list, Got})
     end,
     ok.
+
+%%
+%% Access Control
+%%
 
 auth_backend_internal_expand_topic_permission(_Config) ->
     ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},

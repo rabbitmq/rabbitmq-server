@@ -33,8 +33,6 @@
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 -export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
 
--deprecated([{force_event_refresh, 1, eventually}]).
-
 -ifdef(TEST).
 
 -export([start_logger/0]).
@@ -1123,17 +1121,16 @@ start_logger() ->
 log_locations() ->
     rabbit_lager:log_locations().
 
-%% This feature was used by the management API up-to and including
-%% RabbitMQ 3.7.x. It is unused in 3.8.x and thus deprecated. We keep it
-%% to support in-place upgrades to 3.8.x (i.e. mixed-version clusters).
-
 -spec force_event_refresh(reference()) -> 'ok'.
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Ref) ->
-    rabbit_direct:force_event_refresh(Ref),
-    rabbit_networking:force_connection_event_refresh(Ref),
-    rabbit_channel:force_event_refresh(Ref),
-    rabbit_amqqueue:force_event_refresh(Ref).
+    ok = rabbit_direct:force_event_refresh(Ref),
+    ok = rabbit_networking:force_connection_event_refresh(Ref),
+    ok = rabbit_channel:force_event_refresh(Ref),
+    ok = rabbit_amqqueue:force_event_refresh(Ref).
 
 %%---------------------------------------------------------------------------
 %% misc
