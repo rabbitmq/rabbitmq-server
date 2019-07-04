@@ -41,11 +41,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Shows the log file location(s) on the target node"
+  def description(), do: "Shows log file location(s) on the target node"
 
   def usage, do: "log_location [--all|-a]"
 
   def banner([], %{node: node_name}) do
-    "Log file location on node #{node_name} ..."
+    "Log file location(s) on node #{node_name} ..."
   end
 end
