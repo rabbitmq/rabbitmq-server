@@ -32,7 +32,7 @@
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
 -export([open_files/1]).
--export([add_member/3]).
+-export([add_member/4]).
 -export([delete_member/3]).
 -export([requeue/3]).
 -export([policy_changed/2]).
@@ -69,6 +69,7 @@
 -define(RPC_TIMEOUT, 1000).
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
+-define(ADD_MEMBER_TIMEOUT, 5000).
 
 %%----------------------------------------------------------------------------
 
@@ -685,7 +686,7 @@ get_sys_status(Proc) ->
     end.
 
 
-add_member(VHost, Name, Node) ->
+add_member(VHost, Name, Node, Timeout) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
@@ -701,14 +702,14 @@ add_member(VHost, Name, Node) ->
                           %% idempotent by design
                           ok;
                         false ->
-                            add_member(Q, Node)
+                            add_member(Q, Node, Timeout)
                     end
             end;
         {error, not_found} = E ->
                     E
     end.
 
-add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
+add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     {RaName, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
@@ -719,7 +720,7 @@ add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
     Conf = make_ra_conf(Q, ServerId, TickTimeout),
     case ra:start_server(Conf) of
         ok ->
-            case ra:add_member(Members, ServerId) of
+            case ra:add_member(Members, ServerId, Timeout) of
                 {ok, _, Leader} ->
                     Fun = fun(Q1) ->
                                   Q2 = amqqueue:set_quorum_nodes(
@@ -731,6 +732,8 @@ add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
                     ok;
                 {timeout, _} ->
+                    _ = ra:force_delete_server(ServerId),
+                    _ = ra:remove_member(Members, ServerId),
                     {error, timeout};
                 E ->
                     _ = ra:force_delete_server(ServerId),
@@ -818,7 +821,7 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
-         case add_member(Q, Node) of
+         case add_member(Q, Node, ?ADD_MEMBER_TIMEOUT) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->
