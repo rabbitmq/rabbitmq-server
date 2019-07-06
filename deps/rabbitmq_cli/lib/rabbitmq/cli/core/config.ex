@@ -96,25 +96,29 @@ defmodule RabbitMQ.CLI.Core.Config do
 
     case Code.ensure_loaded(module_name) do
       {:module, _} -> module_name
-      {:error, :nofile} -> CommandBehaviour.formatter(command)
+      {:error, :nofile} -> CommandBehaviour.formatter(command, default_formatter())
     end
   end
 
   def get_formatter(command, _) do
-    CommandBehaviour.formatter(command)
+    CommandBehaviour.formatter(command, default_formatter())
   end
 
-  def get_printer(%{printer: printer}) do
+  def get_printer(command, %{printer: printer}) do
     module_name = PrinterBehaviour.module_name(printer)
 
     case Code.ensure_loaded(module_name) do
       {:module, _} -> module_name
-      {:error, :nofile} -> default_printer()
+      {:error, :nofile} -> CommandBehaviour.printer(command, default_printer())
     end
   end
 
-  def get_printer(_) do
-    default_printer()
+  def get_printer(command, _) do
+    CommandBehaviour.printer(command, default_printer())
+  end
+
+  def default_formatter() do
+    RabbitMQ.CLI.Formatters.String
   end
 
   def default_printer() do

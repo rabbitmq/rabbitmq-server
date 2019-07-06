@@ -196,7 +196,7 @@ defmodule RabbitMQCtl do
 
   defp process_output(output, command, options) do
     formatter = Config.get_formatter(command, options)
-    printer = Config.get_printer(options)
+    printer = Config.get_printer(command, options)
 
     output
     |> Output.format_output(formatter, options)
@@ -378,6 +378,10 @@ defmodule RabbitMQCtl do
     exit({:shutdown, code})
   end
 
+  defp format_error(:undef, _opts, _module) do
+    {:error, ExitCodes.exit_software(),
+      "Function clause.\nStacktrace:\n" <> Exception.format_stacktrace(System.stacktrace())}
+  end
   defp format_error(:function_clause, _opts, _module) do
     {:error, ExitCodes.exit_software(),
       "Function clause.\nStacktrace:\n" <> Exception.format_stacktrace(System.stacktrace())}
@@ -510,7 +514,7 @@ defmodule RabbitMQCtl do
   defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) do
     {:error, ExitCodes.exit_unavailable(), err}
   end
-  defp format_error({:error, :check_failed}, _, _) do
+  defp format_error({:error, :check_failed, _}, _, _) do
     {:error, ExitCodes.exit_unavailable(), nil}
   end
 

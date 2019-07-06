@@ -34,6 +34,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
               | {:error, RabbitMQ.CLI.Core.ExitCodes.exit_code(), [String.t()]}
 
   @optional_callbacks formatter: 0,
+                      printer: 0,
                       scopes: 0,
                       usage_additional: 0,
                       usage_doc_guides: 0,
@@ -52,6 +53,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback aliases() :: Keyword.t()
 
   @callback formatter() :: atom()
+  @callback printer() :: atom()
   @callback scopes() :: [atom()] | nil
   @callback description() :: String.t()
   @callback help_section() :: String.t()
@@ -149,8 +151,12 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
     Helpers.apply_if_exported(cmd, :usage_doc_guides, [], [])
   end
 
-  def formatter(cmd) do
-    Helpers.apply_if_exported(cmd, :formatter, [], RabbitMQ.CLI.Formatters.String)
+  def formatter(cmd, default) do
+    Helpers.apply_if_exported(cmd, :formatter, [], default)
+  end
+
+  def printer(cmd, default) do
+    Helpers.apply_if_exported(cmd, :printer, [], default)
   end
 
   def switches(cmd) do
