@@ -501,4 +501,26 @@ defmodule TestHelper do
                                ({:error, _, _}) -> false;
                                (_) -> true end)
   end
+
+  def wait_for_log_message(message, file \\ nil, attempts \\ 100) do
+    ## Assume default log is the first one
+    log_file = case file do
+      nil ->
+        [default_log | _] = logs = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+        default_log
+      _ -> file
+    end
+    case File.read(log_file) do
+      {:ok, data} ->
+        case String.match?(data, Regex.compile!(message)) do
+          true -> :ok
+          false ->
+            :timer.sleep(100)
+            wait_for_log_message(message, log_file, attempts - 1)
+        end
+      _ ->
+        :timer.sleep(100)
+            wait_for_log_message(message, log_file, attempts - 1)
+    end
+  end
 end
