@@ -97,7 +97,7 @@ defmodule LogTailStreamCommandTest do
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message2"])
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message3"])
 
-    ## This may take a long time and fail with an exunit timeout
+    # This may take a long time and fail with an ExUnit timeout
     data = Enum.join(stream)
 
     time_after = System.system_time(:second)
@@ -113,7 +113,7 @@ defmodule LogTailStreamCommandTest do
     assert time_spent < 30
   end
 
-  test "run: may return error if there is no log", context do
+  test "run: may return an error if there is no log", context do
     delete_log_files()
     {:error, :enoent} = @command.run([], Map.merge(context[:opts], %{duration: 5}))
   end
@@ -124,7 +124,7 @@ defmodule LogTailStreamCommandTest do
   end
 
   def ensure_file(log, 0) do
-    flunk("timeout trying to ensure the log file #{log}")
+    flunk("timed out trying to ensure the log file #{log}")
   end
   def ensure_file(log, attempts) do
     case File.exists?(log) do
