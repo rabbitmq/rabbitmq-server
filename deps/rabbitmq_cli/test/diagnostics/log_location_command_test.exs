@@ -59,6 +59,9 @@ defmodule LogLocationCommandTest do
   end
 
   test "run: prints default log location", context do
+    # Let Lager's log message rate lapse or else some messages
+    # we assert on might be dropped. MK.
+    Process.sleep(1000)
     {:ok, logfile} = @command.run([], context[:opts])
     log_message = "file location"
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [log_message])
@@ -68,6 +71,9 @@ defmodule LogLocationCommandTest do
   end
 
   test "run: shows all log locations", context do
+    # Let Lager's log message rate lapse or else some messages
+    # we assert on might be dropped. MK.
+    Process.sleep(1000)
     # This assumes default configuration
     [logfile, upgrade_log_file] =
       @command.run([], Map.merge(context[:opts], %{all: true}))
