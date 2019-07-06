@@ -59,6 +59,9 @@ defmodule LogTailCommandTest do
   end
 
   test "run: shows last 50 lines from the log by default", context do
+    # Let Lager's log message rate lapse or else some messages
+    # we assert on might be dropped. MK.
+    Process.sleep(1000)
     clear_log_files()
     log_messages =
       Enum.map(:lists.seq(1, 50),
@@ -78,20 +81,27 @@ defmodule LogTailCommandTest do
   end
 
   test "run: returns N lines", context do
+    # Let Lager's log message rate lapse or else some messages
+    # we assert on might be dropped. MK.
+    Process.sleep(1000)
+
     ## Log a bunch of lines
-    Enum.map(:lists.seq(1, 300),
+    Enum.map(:lists.seq(1, 50),
              fn(n) ->
                message = "More lines #{n}"
                :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [message])
                message
              end)
-    wait_for_log_message("More lines 300")
-    assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 100}))) == 100
-    assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 200}))) == 200
-    assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 245}))) == 245
+    wait_for_log_message("More lines 50")
+    assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 20}))) == 20
+    assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 30}))) == 30
+    assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 40}))) == 40
   end
 
   test "run: may return less than N lines if N is high", context do
+    # Let Lager's log message rate lapse or else some messages
+    # we assert on might be dropped. MK.
+    Process.sleep(1000)
     clear_log_files()
     ## Log a bunch of lines
     Enum.map(:lists.seq(1, 100),
