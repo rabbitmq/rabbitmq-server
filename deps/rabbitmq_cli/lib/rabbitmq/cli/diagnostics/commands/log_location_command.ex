@@ -37,6 +37,25 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
     end
   end
 
+  def run([], %{node: node_name, timeout: timeout, all: all}) do
+    case all do
+      true  -> LogFiles.get_log_locations(node_name, timeout);
+      false -> LogFiles.get_default_log_location(node_name, timeout)
+    end
+  end
+
+  def output({:ok, location}, %{node: node_name, formatter: "json"}) do
+    {:ok, %{
+      "result" => "ok",
+      "paths"  => [location]
+    }}
+  end
+  def output(locations, %{node: node_name, formatter: "json"}) do
+    {:ok, %{
+      "result" => "ok",
+      "paths"  => locations
+    }}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :configuration
