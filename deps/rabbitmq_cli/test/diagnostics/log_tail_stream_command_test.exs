@@ -109,7 +109,7 @@ defmodule LogTailStreamCommandTest do
 
     time_spent = time_after - time_before
     assert time_spent > 5
-    ## This my take longer then duration, but should not take too long
+    # This my take longer then duration, but should not take too long
     assert time_spent < 30
   end
 
