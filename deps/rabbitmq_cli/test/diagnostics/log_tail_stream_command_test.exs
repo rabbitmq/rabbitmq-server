@@ -41,7 +41,7 @@ defmodule LogTailStreamCommandTest do
       }}
   end
 
-  test "merge_defaults: duration is infinity" do
+  test "merge_defaults: duration defaults to infinity" do
     assert @command.merge_defaults([], %{}) == {[], %{duration: :infinity}}
   end
 

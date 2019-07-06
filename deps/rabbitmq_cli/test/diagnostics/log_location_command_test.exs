@@ -62,12 +62,13 @@ defmodule LogLocationCommandTest do
     {:ok, logfile} = @command.run([], context[:opts])
     log_message = "file location"
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [log_message])
+    wait_for_log_message(log_message, logfile)
     {:ok, log_file_data} = File.read(logfile)
     assert String.match?(log_file_data, Regex.compile!(log_message))
   end
 
   test "run: shows all log locations", context do
-    ## Assuming default configuration
+    # This assumes default configuration
     [logfile, upgrade_log_file] =
       @command.run([], Map.merge(context[:opts], %{all: true}))
 

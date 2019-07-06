@@ -63,13 +63,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailStreamCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Streams logs from a running node"
+  def description(), do: "Streams logs from a running node for a period of time"
 
-  def usage, do: "log_tail_stream [--duration|-d <duration_in_seconds>]"
+  def usage, do: "log_tail_stream [--duration|-d <seconds>]"
 
   def usage_additional() do
     [
-      ["<duration_in_seconds>", "duration in seconds to stream log. Default is infinity"]
+      ["<duration_in_seconds>", "duration in seconds to stream log. Defaults to infinity"]
     ]
   end
 
