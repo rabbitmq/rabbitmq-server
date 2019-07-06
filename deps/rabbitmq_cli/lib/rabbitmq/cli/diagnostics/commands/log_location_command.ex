@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogLocationCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Shows log file location(s) on the target node"
+  def description(), do: "Shows log file location(s) on target node"
 
   def usage, do: "log_location [--all|-a]"
 

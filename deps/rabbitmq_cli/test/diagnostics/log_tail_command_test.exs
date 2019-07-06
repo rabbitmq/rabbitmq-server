@@ -37,12 +37,12 @@ defmodule LogTailCommandTest do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 30000,
-        number: 10
+        number: 50
       }}
   end
 
-  test "merge_defaults: number is 10" do
-    assert @command.merge_defaults([], %{}) == {[], %{number: 10}}
+  test "merge_defaults: number is 50" do
+    assert @command.merge_defaults([], %{}) == {[], %{number: 50}}
   end
 
   test "validate: treats positional arguments as a failure" do
@@ -58,18 +58,18 @@ defmodule LogTailCommandTest do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
   end
 
-  test "run: shows last 10 lines from the log", context do
-    cleanup_log_files()
+  test "run: shows last 50 lines from the log by default", context do
+    clear_log_files()
     log_messages =
-      Enum.map(:lists.seq(1, 10),
+      Enum.map(:lists.seq(1, 50),
                fn(n) ->
                  message = "Getting log tail #{n}"
                  :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [message])
                  message
                end)
-    wait_for_log_message("Getting log tail 10")
+    wait_for_log_message("Getting log tail 50")
     lines = @command.run([], context[:opts])
-    assert Enum.count(lines) == 10
+    assert Enum.count(lines) == 50
 
     Enum.map(Enum.zip(log_messages, lines),
              fn({message, line}) ->
@@ -92,7 +92,7 @@ defmodule LogTailCommandTest do
   end
 
   test "run: may return less than N lines if N is high", context do
-    cleanup_log_files()
+    clear_log_files()
     ## Log a bunch of lines
     Enum.map(:lists.seq(1, 100),
              fn(n) ->
@@ -105,7 +105,7 @@ defmodule LogTailCommandTest do
     assert Enum.count(@command.run([], Map.merge(context[:opts], %{number: 200}))) < 200
   end
 
-  def cleanup_log_files() do
+  def clear_log_files() do
     [_|_] = logs = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
     Enum.map(logs, fn(log) ->
       File.write(log, "")

@@ -25,7 +25,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
   def aliases, do: ['N': :number, t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{number: 10}, opts)}
+    {args, Map.merge(%{number: 50}, opts)}
   end
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
@@ -49,11 +49,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
 
   def usage_additional do
     [
-      ["<number>", "number of lines to print. 10 by default"]
+      ["<number>", "number of lines to print. Defaults to 50"]
     ]
   end
 
   def banner([], %{node: node_name, number: n}) do
-    "Last #{n} lines of the log on node #{node_name} ..."
+    "Last #{n} log lines on node #{node_name} ..."
   end
 end
