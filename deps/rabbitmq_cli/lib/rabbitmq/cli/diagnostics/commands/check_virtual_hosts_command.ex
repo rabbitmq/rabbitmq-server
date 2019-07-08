@@ -21,7 +21,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckVirtualHostsCommand do
   """
 
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
-  import RabbitMQ.CLI.Core.Listeners
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -54,7 +53,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckVirtualHostsCommand do
   end
   def output(vhosts, %{node: node_name}) when is_list(vhosts) do
     lines = Enum.join(vhosts, line_separator())
-    {:error, "Some virtual hosts are down:\n#{lines}"}
+    {:error, "Some virtual hosts on node #{node_name} are down:\n#{lines}"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
