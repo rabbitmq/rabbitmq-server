@@ -67,6 +67,7 @@ node_mnesia_dir = $(call node_mnesia_base,$(1))/$(1)
 node_schema_dir = $(call node_tmpdir,$(1))/schema
 node_plugins_expand_dir = $(call node_tmpdir,$(1))/plugins
 node_generated_config_dir = $(call node_tmpdir,$(1))/config
+node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
 # Broker startup variables for the test environment.
@@ -81,6 +82,7 @@ RABBITMQ_MNESIA_DIR ?= $(call node_mnesia_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_SCHEMA_DIR ?= $(call node_schema_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_GENERATED_CONFIG_DIR ?= $(call node_generated_config_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
+RABBITMQ_FEATURE_FLAGS_FILE ?= $(call node_feature_flags_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 
 # erlang.mk adds dependencies' ebin directory to ERL_LIBS. This is
@@ -107,7 +109,8 @@ RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
 RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
 RABBITMQ_SCHEMA_DIR="$(call node_schema_dir,$(2))" \
 RABBITMQ_GENERATED_CONFIG_DIR="$(call node_generated_config_dir,$(2))" \
-RABBITMQ_PLUGINS_DIR="$(RMQ_PLUGINS_DIR)" \
+RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
+RABBITMQ_PLUGINS_DIR="$(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR))" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
 RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
 endef
@@ -147,10 +150,15 @@ ifeq ($(wildcard ebin/test),)
 $(RABBITMQ_ENABLED_PLUGINS_FILE): dist
 endif
 
+ifdef LEAVE_PLUGINS_DISABLED
+$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
+	$(gen_verbose) : >$@
+else
 $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 	$(verbose) rm -f $@
 	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_PLUGINS) enable --all --offline
+endif
 
 # --------------------------------------------------------------------
 # Run a full RabbitMQ.
@@ -164,7 +172,8 @@ define test_rabbitmq_config
 [
   {rabbit, [
 $(if $(RABBITMQ_NODE_PORT),      {listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
-      {loopback_users, []}
+      {loopback_users, []},
+      {log, [{file, [{level, debug}]}]}
     ]},
   {rabbitmq_management, [
 $(if $(RABBITMQ_NODE_PORT),      {listener$(COMMA) [{port$(COMMA) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
@@ -178,6 +187,7 @@ define test_rabbitmq_config_with_tls
 [
   {rabbit, [
       {loopback_users, []},
+      {log, [{file, [{level, debug}]}]},
       {ssl_listeners, [5671]},
       {ssl_options, [
           {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
