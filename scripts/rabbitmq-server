@@ -194,6 +194,7 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -noinput \
     -hidden \
     -s rabbit_prelaunch \
+    ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
     ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
     -conf_advanced "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
     -rabbit feature_flags_file "\"$RABBITMQ_FEATURE_FLAGS_FILE\"" \

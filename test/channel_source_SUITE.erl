@@ -135,8 +135,19 @@ undefined_channel_source(Config) ->
 undefined_channel_source1(_Config) ->
     ExistingChannels = rabbit_channel:list(),
     {_Writer, _Limiter, ServerCh} = rabbit_ct_broker_helpers:test_channel(),
-    [ServerCh] = rabbit_channel:list() -- ExistingChannels,
+    wait_for_server_channel(ExistingChannels, ServerCh, 60),
     [{source, undefined}] = rabbit_channel:info(ServerCh, [source]),
     _ = rabbit_channel:source(ServerCh, ?MODULE),
     [{source, ?MODULE}] = rabbit_channel:info(ServerCh, [source]),
     passed.
+
+wait_for_server_channel(ExistingChannels, ServerCh, 0) ->
+    [ServerCh] = rabbit_channel:list() -- ExistingChannels;
+wait_for_server_channel(ExistingChannels, ServerCh, Attempts) ->
+    case rabbit_channel:list() -- ExistingChannels of
+        [ServerCh] ->
+            ok;
+        _ ->
+            timer:sleep(1000),
+            wait_for_server_channel(ExistingChannels, ServerCh, Attempts - 1)
+    end.

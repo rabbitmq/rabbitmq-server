@@ -1615,6 +1615,9 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                                      run_message_queue(true, State1)
       end);
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 handle_cast({force_event_refresh, Ref},
             State = #q{consumers       = Consumers,
                        active_consumer = Holder}) ->

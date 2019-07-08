@@ -31,9 +31,6 @@
 %% SASL PLAIN, as used by the Qpid Java client and our clients. Also,
 %% apparently, by OpenAMQ.
 
-%% TODO: reimplement this using the binary module? - that makes use of
-%% BIFs to do binary matching and will thus be much faster.
-
 description() ->
     [{description, <<"SASL PLAIN authentication mechanism">>}].
 

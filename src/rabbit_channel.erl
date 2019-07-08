@@ -63,14 +63,12 @@
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
--export([source/2]).
+-export([source/2, update_user_state/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
          prioritise_call/4, prioritise_cast/3, prioritise_info/3,
          format_message_queue/2]).
-
--deprecated([{force_event_refresh, 1, eventually}]).
 
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
@@ -452,6 +450,9 @@ ready_for_close(Pid) ->
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
@@ -459,11 +460,21 @@ force_event_refresh(Ref) ->
 list_queue_states(Pid) ->
     gen_server2:call(Pid, list_queue_states).
 
--spec source(pid(), any()) -> any().
+-spec source(pid(), any()) -> 'ok' | {error, channel_terminated}.
 
 source(Pid, Source) when is_pid(Pid) ->
     case erlang:is_process_alive(Pid) of
-        true  -> Pid ! {channel_source, Source};
+        true  -> Pid ! {channel_source, Source},
+                 ok;
+        false -> {error, channel_terminated}
+    end.
+
+-spec update_user_state(pid(), rabbit_types:auth_user()) -> 'ok' | {error, channel_terminated}.
+
+update_user_state(Pid, UserState) when is_pid(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true  -> Pid ! {update_user_state, UserState},
+                 ok;
         false -> {error, channel_terminated}
     end.
 
@@ -489,6 +500,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                   _ ->
                       Limiter0
               end,
+    %% Process dictionary is used here because permission cache already uses it. MK.
+    put(permission_cache_can_expire, rabbit_access_control:permission_cache_can_expire(User)),
     MaxMessageSize = get_max_message_size(),
     ConsumerTimeout = get_consumer_timeout(),
     State = #ch{cfg = #conf{state = starting,
@@ -691,6 +704,9 @@ handle_cast({send_drained, CTagCredit},
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
+% Note: https://www.pivotaltracker.com/story/show/166962656
+% This event is necessary for the stats timer to be initialized with
+% the correct values once the management agent has started
 handle_cast({force_event_refresh, Ref}, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
                         Ref),
@@ -838,6 +854,10 @@ handle_info({{Ref, Node}, LateAnswer},
     noreply(State);
 
 handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
+    case get(permission_cache_can_expire) of
+      true  -> ok = clear_permission_cache();
+      _     -> ok
+    end,
     QueueStates1 =
         maps:filter(fun(_, QS) ->
                             QName = rabbit_quorum_queue:queue_name(QS),
@@ -850,7 +870,10 @@ handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
             Return
     end;
 handle_info({channel_source, Source}, State = #ch{cfg = Cfg}) ->
-    noreply(State#ch{cfg = Cfg#conf{source = Source}}).
+    noreply(State#ch{cfg = Cfg#conf{source = Source}});
+handle_info({update_user_state, User}, State = #ch{cfg = Cfg}) ->
+    noreply(State#ch{cfg = Cfg#conf{user = User}}).
+
 
 handle_pre_hibernate(State0) ->
     ok = clear_permission_cache(),
@@ -973,7 +996,7 @@ return_queue_declare_ok(#resource{name = ActualName},
 
 check_resource_access(User, Resource, Perm, Context) ->
     V = {Resource, Context, Perm},
-    
+
     Cache = case get(permission_cache) of
                 undefined -> [];
                 Other     -> Other
@@ -1051,8 +1074,8 @@ check_topic_authorisation(_, _, _, _, _, _) ->
     ok.
 
 check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
-                          User = #user{username = Username},
-                          AmqpParams, RoutingKey, Permission) ->
+                             User = #user{username = Username},
+                             AmqpParams, RoutingKey, Permission) ->
     Resource = Name#resource{kind = topic},
     VariableMap = build_topic_variable_map(AmqpParams, VHost, Username),
     Context = #{routing_key  => RoutingKey,
