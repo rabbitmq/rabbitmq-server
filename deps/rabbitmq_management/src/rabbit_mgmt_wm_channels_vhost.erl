@@ -51,7 +51,7 @@ to_json(ReqData, Context) ->
                     rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
             end;
         true ->
-            rabbit_mgmt_util:bad_request(<<"Management stats disabled">>, ReqData, Context)
+            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>, ReqData, Context)
     end.
 
 is_authorized(ReqData, Context) ->

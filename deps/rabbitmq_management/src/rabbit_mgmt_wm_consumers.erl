@@ -54,7 +54,7 @@ to_json(ReqData, Context = #context{user = User}) ->
             rabbit_mgmt_util:reply_list(
               filter_user(Formatted, User), ReqData, Context);
         true ->
-            rabbit_mgmt_util:bad_request(<<"Management stats disabled">>, ReqData, Context)
+            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>, ReqData, Context)
     end.
 
 is_authorized(ReqData, Context) ->
