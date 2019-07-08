@@ -15,9 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
-
-  alias RabbitMQ.CLI.Core.Helpers
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 

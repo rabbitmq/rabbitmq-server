@@ -13,8 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Formatters.FormatterHelpers
-
 defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
@@ -28,7 +26,7 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   defrecord :paragraph, extract(:paragraph,
     from_lib: "stdout_formatter/include/stdout_formatter.hrl")
 
-  def format_stream(stream, options) do
+  def format_stream(stream, _opts) do
     # Flatten for list_consumers
     entries_with_keys = Stream.flat_map(stream,
       fn([first | _] = element) ->
@@ -68,7 +66,7 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
     end
   end
 
-  def format_output(output, options) do
+  def format_output(output, _opts) do
     format = case is_binary(output) do
       true  -> "~s"
       false -> "~p"
