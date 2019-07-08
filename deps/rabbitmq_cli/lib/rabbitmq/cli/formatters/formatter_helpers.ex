@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
     end
   end
 
-  def proplist?([{key, _value} | rest]), do: proplist?(rest)
+  def proplist?([{_key, _value} | rest]), do: proplist?(rest)
   def proplist?([]), do: true
   def proplist?(_other), do: false
 

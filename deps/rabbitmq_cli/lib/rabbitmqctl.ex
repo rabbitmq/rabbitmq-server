@@ -174,10 +174,10 @@ defmodule RabbitMQCtl do
     IO.puts("Stack trace: \n")
     IO.puts(Exception.format(:error, error, stacktrace))
   end
-  def maybe_print_stacktrace(_error, stacktrace, %{print_stacktrace: false}) do
+  def maybe_print_stacktrace(_error, _stacktrace, %{print_stacktrace: false}) do
     nil
   end
-  def maybe_print_stacktrace(_error, stacktrace, _opts) do
+  def maybe_print_stacktrace(_error, _stacktrace, _opts) do
     nil
   end
 
