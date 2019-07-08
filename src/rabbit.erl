@@ -63,6 +63,12 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({feature_flags,
+                   [{description, "feature flags registry and initial state"},
+                    {mfa,         {rabbit_feature_flags, init, []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {requires,    file_handle_cache},
@@ -314,9 +320,11 @@ start() ->
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = start_logger(),
                      rabbit_hipe:log_hipe_result(HipeResult),
+                     Apps = load_all_apps(),
+                     rabbit_feature_flags:initialize_registry(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
-                     broker_start()
+                     broker_start(Apps)
              end).
 
 boot() ->
@@ -326,13 +334,15 @@ boot() ->
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = start_logger(),
                      rabbit_hipe:log_hipe_result(HipeResult),
+                     Apps = load_all_apps(),
+                     rabbit_feature_flags:initialize_registry(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
                      %% the upgrade, since if we are a secondary node the
                      %% primary node will have forgotten us
                      rabbit_mnesia:check_cluster_consistency(),
-                     broker_start()
+                     broker_start(Apps)
              end).
 
 ensure_config() ->
@@ -347,11 +357,14 @@ ensure_config() ->
         ok -> ok
     end.
 
-
-broker_start() ->
+load_all_apps() ->
     Plugins = rabbit_plugins:setup(),
     ToBeLoaded = Plugins ++ ?APPS,
-    start_apps(ToBeLoaded),
+    app_utils:load_applications(ToBeLoaded),
+    ToBeLoaded.
+
+broker_start(Apps) ->
+    start_loaded_apps(Apps),
     maybe_sd_notify(),
     ok = rabbit_lager:broker_is_started(),
     ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
@@ -533,6 +546,13 @@ start_apps(Apps) ->
 
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
+    ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(Apps),
+    start_loaded_apps(Apps, RestartTypes).
+
+start_loaded_apps(Apps) ->
+    start_loaded_apps(Apps, #{}).
+
+start_loaded_apps(Apps, RestartTypes) ->
     ensure_sysmon_handler_app_config(),
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->

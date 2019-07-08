@@ -433,7 +433,8 @@ is_version_supported(VersionFull, ExpectedVersions) ->
     %% therefore preview part should be removed
     Version = remove_version_preview_part(VersionFull),
     case lists:any(fun(ExpectedVersion) ->
-                       rabbit_misc:version_minor_equivalent(ExpectedVersion, Version)
+                       rabbit_misc:strict_version_minor_equivalent(ExpectedVersion,
+                                                                   Version)
                        andalso
                        rabbit_misc:version_compare(ExpectedVersion, Version, lte)
                    end,
@@ -697,4 +698,6 @@ remove_plugins(Plugins) ->
 maybe_report_plugin_loading_problems([]) ->
     ok;
 maybe_report_plugin_loading_problems(Problems) ->
-    rabbit_log:warning("Problem reading some plugins: ~p~n", [Problems]).
+    io:format(standard_error,
+              "Problem reading some plugins: ~p~n",
+              [Problems]).
