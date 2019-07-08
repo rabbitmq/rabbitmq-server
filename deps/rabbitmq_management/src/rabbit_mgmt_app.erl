@@ -33,13 +33,11 @@
 start(_Type, _StartArgs) ->
     case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
         false ->
-            %% Modern TCP listener uses management.tcp.*.
-            %% Legacy TCP (or TLS) listener uses management.listener.*.
-            %% Modern TLS listener uses management.ssl.*
-            start_configured_listener([], true),
-            rabbit_mgmt_sup_sup:start_link();
+            start();
         true ->
-            {error, "Metrics collection disabled in management agent"}
+            rabbit_log:warning("Metrics collection disabled in management agent, "
+                               "management only interface started", []),
+            start()
     end.
 
 stop(_State) ->
@@ -170,3 +168,10 @@ is_tls(Listener) ->
         false     -> false;
         _         -> true
     end.
+
+start() ->
+    %% Modern TCP listener uses management.tcp.*.
+    %% Legacy TCP (or TLS) listener uses management.listener.*.
+    %% Modern TLS listener uses management.ssl.*
+    start_configured_listener([], true),
+    rabbit_mgmt_sup_sup:start_link().

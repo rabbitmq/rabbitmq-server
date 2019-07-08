@@ -55,24 +55,47 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {rabbitmq_version,          version(rabbit)},
                  {cluster_name,              rabbit_nodes:cluster_name()},
                  {erlang_version,            erlang_version()},
-                 {erlang_full_version,       erlang_full_version()}],
+                 {erlang_full_version,       erlang_full_version()},
+                 {disable_stats,             rabbit_mgmt_util:disable_stats(ReqData)}],
     try
-        Range = rabbit_mgmt_util:range(ReqData),
-        Overview =
-            case rabbit_mgmt_util:is_monitor(Tags) of
-                true ->
-                    Overview0 ++
-                        [{K, maybe_map(V)} ||
-                            {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
-                        [{node,               node()},
-                         {listeners,          listeners()},
-                         {contexts,           web_contexts(ReqData)}];
-                _ ->
-                    Overview0 ++
-                        [{K, maybe_map(V)} ||
-                            {K, V} <- rabbit_mgmt_db:get_overview(User, Range)]
-            end,
-        rabbit_mgmt_util:reply(Overview, ReqData, Context)
+        case rabbit_mgmt_util:disable_stats(ReqData) of
+            false ->
+                Range = rabbit_mgmt_util:range(ReqData),
+                Overview =
+                    case rabbit_mgmt_util:is_monitor(Tags) of
+                        true ->
+                            Overview0 ++
+                                [{K, maybe_map(V)} ||
+                                    {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
+                                [{node,               node()},
+                                 {listeners,          listeners()},
+                                 {contexts,           web_contexts(ReqData)}];
+                        _ ->
+                            Overview0 ++
+                                [{K, maybe_map(V)} ||
+                                    {K, V} <- rabbit_mgmt_db:get_overview(User, Range)]
+                    end,
+                rabbit_mgmt_util:reply(Overview, ReqData, Context);
+            true ->
+                VHosts = case rabbit_mgmt_util:is_monitor(Tags) of
+                             true -> rabbit_vhost:list();
+                             _   -> rabbit_mgmt_util:list_visible_vhosts(User)
+                         end,
+
+                ObjectTotals = case rabbit_mgmt_util:is_monitor(Tags) of
+                                   true ->
+                                       [{queues, rabbit_amqqueue:count()},
+                                        {exchanges, rabbit_exchange:count()},
+                                        {connections, rabbit_connection_tracking:count()}];
+                                   _   ->
+                                       [{queues, length([Q || V <- VHosts, Q <- rabbit_amqqueue:list(V)])},
+                                        {exchanges, length([X || V <- VHosts, X <- rabbit_exchange:list(V)])}]
+                               end,
+                Overview = Overview0 ++
+                    [{node, node()},
+                     {object_totals, ObjectTotals}],
+                rabbit_mgmt_util:reply(Overview, ReqData, Context)
+        end
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)

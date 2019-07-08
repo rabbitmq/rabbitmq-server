@@ -9,10 +9,12 @@
  <thead>
   <tr>
     <%= group_heading('queues', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+  <% if(!disable_stats) { %>
     <%= group_heading('queues', 'Messages', []) %>
     <%= group_heading('queues', 'Message bytes', []) %>
 <% if (rates_mode != 'none') { %>
     <%= group_heading('queues', 'Message rates', []) %>
+<% } %>
 <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="queues">+/-</span></th>
   </tr>
@@ -45,6 +47,7 @@
 <% if (show_column('queues', 'state')) { %>
     <th><%= fmt_sort('State',        'state') %></th>
 <% } %>
+  <% if(!disable_stats) { %>
 <% if (show_column('queues', 'msgs-ready')) { %>
     <th><%= fmt_sort('Ready',        'messages_ready') %></th>
 <% } %>
@@ -89,6 +92,7 @@
     <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
   <% } %>
 <% } %>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -115,7 +119,7 @@
    </td>
 <% } %>
 <% if (show_column('queues', 'type')) { %>
-   <td><%= fmt_string(queue.arguments['x-queue-type'], '') %></td>
+   <td><%= fmt_string(queue.type, '') %></td>
 <% } %>
 <% if (show_column('queues', 'features')) { %>
    <td class="c">
@@ -140,6 +144,7 @@
 <% if (show_column('queues', 'state')) { %>
    <td class="c"><%= fmt_object_state(queue) %></td>
 <% } %>
+<% if(!disable_stats) { %>
 <% if (show_column('queues', 'msgs-ready')) { %>
    <td class="r"><%= fmt_num_thousands(queue.messages_ready) %></td>
 <% } %>
@@ -183,6 +188,7 @@
   <% if (show_column('queues', 'rate-ack')) { %>
     <td class="r"><%= fmt_detail_rate(queue.message_stats, 'ack') %></td>
   <% } %>
+<% } %>
 <% } %>
   </tr>
   <% } %>

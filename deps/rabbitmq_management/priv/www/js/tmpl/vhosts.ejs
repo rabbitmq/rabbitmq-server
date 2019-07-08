@@ -10,11 +10,13 @@
   <thead>
   <tr>
     <%= group_heading('vhosts', 'Overview', [true, true, true]) %>
+    <% if (!disable_stats) { %>
     <%= group_heading('vhosts', 'Messages', []) %>
     <%= group_heading('vhosts', 'Network', []) %>
 <% if (rates_mode != 'none') { %>
     <%= group_heading('vhosts', 'Message rates', []) %>
 <% } %>
+    <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="vhosts">+/-</span></th>
   </tr>
     <tr>
@@ -24,6 +26,7 @@
 <% if (show_column('vhosts',           'cluster-state')) { %>
       <th>Cluster state</th>
 <% } %>
+<% if (!disable_stats) { %>
 <% if (show_column('vhosts',           'msgs-ready')) { %>
       <th><%= fmt_sort('Ready',        'messages_ready') %></th>
 <% } %>
@@ -46,6 +49,7 @@
   <% if (show_column('vhosts',         'rate-deliver')) { %>
       <th><%= fmt_sort('deliver / get','message_stats.deliver_get_details.rate') %></th>
   <% } %>
+<% } %>
 <% } %>
     </tr>
   </thead>
@@ -87,6 +91,7 @@
              </table>
          </td>
 <% } %>
+<% if (!disable_stats) { %>
 <% if (show_column('vhosts', 'msgs-ready')) { %>
    <td class="r"><%= fmt_num_thousands(vhost.messages_ready) %></td>
 <% } %>
@@ -109,6 +114,7 @@
   <% if (show_column('vhosts', 'rate-deliver')) { %>
     <td class="r"><%= fmt_detail_rate(vhost.message_stats, 'deliver_get') %></td>
   <% } %>
+<% } %>
 <% } %>
        </tr>
     <% } %>

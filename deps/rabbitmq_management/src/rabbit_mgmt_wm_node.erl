@@ -72,9 +72,13 @@ node_data(Node, ReqData) ->
     Nodes = proplists:get_value(nodes, S),
     Running = proplists:get_value(running_nodes, S),
     Type = find_type(Node, Nodes),
-    rabbit_mgmt_db:augment_nodes(
-      [[{name, Node}, {running, lists:member(Node, Running)}, {type, Type}]],
-      rabbit_mgmt_util:range_ceil(ReqData)).
+    Basic = [[{name, Node}, {running, lists:member(Node, Running)}, {type, Type}]],
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            rabbit_mgmt_db:augment_nodes(Basic, rabbit_mgmt_util:range_ceil(ReqData));
+        true ->
+            Basic
+    end.
 
 find_type(Node, [{Type, Nodes} | Rest]) ->
     case lists:member(Node, Nodes) of

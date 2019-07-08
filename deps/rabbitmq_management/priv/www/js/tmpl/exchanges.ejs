@@ -23,12 +23,14 @@
 <% if (show_column('exchanges', 'policy')) { %>
     <th><%= fmt_sort('Policy','policy') %></th>
 <% } %>
+<% if (!disable_stats) { %>
 <% if (rates_mode != 'none') { %>
 <% if (show_column('exchanges', 'rate-in')) { %>
    <th><%= fmt_sort('Message rate in',   'message_stats.publish_in_details.rate') %></th>
 <% } %>
 <% if (show_column('exchanges', 'rate-out')) { %>
    <th><%= fmt_sort('Message rate out',  'message_stats.publish_out_details.rate') %></th>
+<% } %>
 <% } %>
 <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="exchanges">+/-</span></th>
@@ -61,12 +63,14 @@
      <%= link_policy(exchange.vhost, exchange.policy) %>
    </td>
 <% } %>
+<% if (!disable_stats) { %>
 <% if (rates_mode != 'none') { %>
 <% if (show_column('exchanges', 'rate-in')) { %>
    <td class="r"><%= fmt_detail_rate(exchange.message_stats, 'publish_in') %></td>
 <% } %>
 <% if (show_column('exchanges', 'rate-out')) { %>
    <td class="r"><%= fmt_detail_rate(exchange.message_stats, 'publish_out') %></td>
+<% } %>
 <% } %>
 <% } %>
   </tr>
