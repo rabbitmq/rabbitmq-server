@@ -45,8 +45,9 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Admin':
                     [{'Users':         ['#/users',              "administrator"],
                       'Virtual Hosts': ['#/vhosts',             "administrator"],
+                      'Feature Flags': ['#/feature-flags',      "administrator"],
                       'Policies':      ['#/policies',           "management"],
-                      'Limits':        ['#/limits',   "management"],
+                      'Limits':        ['#/limits',             "management"],
                       'Cluster':       ['#/cluster-name',       "administrator"]},
                      "management"]
                  };
