@@ -96,35 +96,37 @@
             <div class="multifield" id="definition"></div>
             <table class="argument-links">
               <tr>
-                <td>HA</td>
+                  <td>Queues [All types]</td>
+                <td>
+                  <span class="argument-link" field="definition" key="max-length" type="number">Max length</span> |
+                  <span class="argument-link" field="definition" key="max-length-bytes" type="number">Max length bytes</span> |
+                  <span class="argument-link" field="definition" key="overflow" type="string">Overflow behaviour</span>
+                  <span class="help" id="queue-overflow"></span> </br>
+                  <span class="argument-link" field="definition" key="dead-letter-exchange" type="string">Dead letter exchange</span> |
+                  <span class="argument-link" field="definition" key="dead-letter-routing-key" type="string">Dead letter routing key</span><br />
+                </td>
+              <tr>
+                <td>Queues [Classic]</td>
                 <td>
                   <span class="argument-link" field="definition" key="ha-mode" type="string">HA mode</span> <span class="help" id="policy-ha-mode"></span> |
                   <span class="argument-link" field="definition" key="ha-params" type="number">HA params</span> <span class="help" id="policy-ha-params"></span> |
-                  <span class="argument-link" field="definition" key="ha-sync-mode" type="string">HA sync mode</span> <span class="help" id="policy-ha-sync-mode"></span> |
-                  <span class="argument-link" field="definition" key="ha-promote-on-shutdown" type="string" value="">HA mirror promotion on shutdown</span> <span class="help" id="policy-ha-promote-on-shutdown"></span>
+                  <span class="argument-link" field="definition" key="ha-sync-mode" type="string">HA sync mode</span> <span class="help" id="policy-ha-sync-mode"></span> </br>
+                  <span class="argument-link" field="definition" key="ha-promote-on-shutdown" type="string" value="">HA mirror promotion on shutdown</span> <span class="help" id="policy-ha-promote-on-shutdown"></span> |
                   <span class="argument-link" field="definition" key="ha-promote-on-failure" type="string" value="">HA mirror promotion on failure</span> <span class="help" id="policy-ha-promote-on-failure"></span>
-                </td>
-              </tr>
-              <tr>
-                <td>Federation</td>
-                <td>
-                  <span class="argument-link" field="definition" key="federation-upstream-set" type="string">Federation upstream set</span> <span class="help" id="policy-federation-upstream-set"></span> |
-                  <span class="argument-link" field="definition" key="federation-upstream" type="string">Federation upstream</span>
-                  <span class="help" id="policy-federation-upstream"></span>
-                </td>
-              </tr>
-              <tr>
-                <td>Queues</td>
-                <td>
+                  </br>
                   <span class="argument-link" field="definition" key="message-ttl" type="number">Message TTL</span> |
                   <span class="argument-link" field="definition" key="expires" type="number">Auto expire</span> |
-                  <span class="argument-link" field="definition" key="max-length" type="number">Max length</span> |
-                  <span class="argument-link" field="definition" key="max-length-bytes" type="number">Max length bytes</span> |
-                  <span class="argument-link" field="definition" key="overflow" type="string">Overflow behaviour</span><br/>
-                  <span class="argument-link" field="definition" key="dead-letter-exchange" type="string">Dead letter exchange</span> |
-                  <span class="argument-link" field="definition" key="dead-letter-routing-key" type="string">Dead letter routing key</span><br />
                   <span class="argument-link" field="definition" key="queue-mode" type="string" value="lazy">Lazy mode</span> |
                   <span class="argument-link" field="definition" key="queue-master-locator" type="string">Master Locator</span></br>
+                </td>
+              </tr>
+              <tr>
+                <td>Queues [Quorum]</td>
+                <td>
+                  <span class="argument-link" field="definition" key="max-in-memory-length" type="number">Max in memory length</span>
+                  <span class="help" id="queue-max-in-memory-length"></span> |
+                  <span class="argument-link" field="definition" key="max-in-memory-bytes" type="number">Max in memory bytes</span>
+                  <span class="help" id="queue-max-in-memory-bytes"></span> |
                   <span class="argument-link" field="definition" key="delivery-limit" type="number">Delivery limit</span>
                   <span class="help" id="delivery-limit"></span>
                 </td>
@@ -134,6 +136,14 @@
                 <td>
                   <span class="argument-link" field="definition" key="alternate-exchange" type="string">Alternate exchange</span>
                   <span class="help" id="exchange-alternate"></span>
+                </td>
+              </tr>
+              <tr>
+                <td>Federation</td>
+                <td>
+                  <span class="argument-link" field="definition" key="federation-upstream-set" type="string">Federation upstream set</span> <span class="help" id="policy-federation-upstream-set"></span> |
+                  <span class="argument-link" field="definition" key="federation-upstream" type="string">Federation upstream</span>
+                  <span class="help" id="policy-federation-upstream"></span>
                 </td>
               </tr>
             </table>
@@ -247,13 +257,28 @@
             <div class="multifield" id="definitionop"></div>
             <table class="argument-links">
               <tr>
-                <td>Queues</td>
+                <td>Queues [All types]</td>
                 <td>
-                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span> |
-                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span> |
                   <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
                   <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
-                  <span class="argument-link" field="definitionop" key="overflow" type="string">Overflow behaviour</span><br/>
+                  <span class="argument-link" field="definitionop" key="overflow" type="string">Overflow behaviour</span>
+                  <span class="help" id="queue-overflow"></span>
+                </td>
+              </tr>
+              <tr>
+                <td>Queues [Classic]</td>
+                <td>
+                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span> |
+                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span>
+                </td>
+              </tr>
+              <tr>
+                <td>Queues [Quorum]</td>
+                <td>
+                  <span class="argument-link" field="definitionop" key="max-in-memory-length" type="number">Max in memory length</span>
+                  <span class="help" id="queue-max-in-memory-length"></span> |
+                  <span class="argument-link" field="definitionop" key="max-in-memory-bytes" type="number">Max in memory bytes</span>
+                  <span class="help" id="queue-max-in-memory-bytes"></span> |
                   <span class="argument-link" field="definitionop" key="delivery-limit" type="string">Delivery limit</span>
                   <span class="help" id="delivery-limit"></span>
                 </td>
