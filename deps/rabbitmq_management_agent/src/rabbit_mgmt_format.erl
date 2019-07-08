@@ -68,6 +68,8 @@ format_queue_stats({leader, Leader}) ->
     [{node, Leader}];
 format_queue_stats({synchronised_slave_pids, ''}) ->
     [];
+format_queue_stats({effective_policy_definition, []}) ->
+    [{effective_policy_definition, #{}}];
 format_queue_stats({synchronised_slave_pids, Pids}) ->
     [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
 format_queue_stats({backing_queue_status, Value}) ->
