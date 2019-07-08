@@ -64,6 +64,14 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :info_all, [])
   end
 
+  def enable_feature_flag(feature_flag) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_feature_flags, :enable, [feature_flag])
+  end
+
+  def list_feature_flags(arg) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_feature_flags, :list, [arg])
+  end
+
   def add_user(name, password) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :add_user,
       [name, password, "acting-user"])
@@ -506,7 +514,7 @@ defmodule TestHelper do
     ## Assume default log is the first one
     log_file = case file do
       nil ->
-        [default_log | _] = logs = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+        [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
         default_log
       _ -> file
     end

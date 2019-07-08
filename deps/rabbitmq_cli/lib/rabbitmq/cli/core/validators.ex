@@ -64,6 +64,13 @@ defmodule RabbitMQ.CLI.Core.Validators do
     end
   end
 
+  def feature_flags_file_is_set(_, opts) do
+    case require_feature_flags_file(opts) do
+      :ok -> :ok
+      {:error, err} -> {:validation_failure, err}
+    end
+  end
+
   def rabbit_is_loaded(_, opts) do
     case require_rabbit(opts) do
       :ok -> :ok

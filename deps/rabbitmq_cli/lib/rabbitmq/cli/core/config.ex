@@ -64,6 +64,7 @@ defmodule RabbitMQ.CLI.Core.Config do
       :mnesia_dir -> "RABBITMQ_MNESIA_DIR"
       :plugins_dir -> "RABBITMQ_PLUGINS_DIR"
       :plugins_expand_dir -> "RABBITMQ_PLUGINS_EXPAND_DIR"
+      :feature_flags_file -> "RABBITMQ_FEATURE_FLAGS_FILE"
       :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE"
       :node -> "RABBITMQ_NODENAME"
       :aliases_file -> "RABBITMQ_CLI_ALIASES_FILE"

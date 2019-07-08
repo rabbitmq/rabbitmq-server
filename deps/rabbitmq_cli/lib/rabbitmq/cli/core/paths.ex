@@ -48,4 +48,17 @@ defmodule RabbitMQ.CLI.Core.Paths do
         :ok
     end
   end
+
+  def require_feature_flags_file(opts) do
+    case Application.get_env(:rabbit, :feature_flags_file) do
+      nil ->
+        case Config.get_option(:feature_flags_file, opts) do
+          nil -> {:error, :feature_flags_file_not_found}
+          val -> Application.put_env(:rabbit, :feature_flags_file, to_charlist(val))
+        end
+
+      _ ->
+        :ok
+    end
+  end
 end
