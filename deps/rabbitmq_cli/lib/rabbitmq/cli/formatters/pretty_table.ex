@@ -12,11 +12,11 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
-alias RabbitMQ.CLI.Formatters.FormatterHelpers
-
 
 defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
+
+  alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
   require Record
   import Record
