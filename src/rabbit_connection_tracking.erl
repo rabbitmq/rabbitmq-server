@@ -39,7 +39,9 @@
          list/0, list/1, list_on_node/1, list_on_node/2, list_of_user/1,
          tracked_connection_from_connection_created/1,
          tracked_connection_from_connection_state/1,
-         count_connections_in/1]).
+         count_connections_in/1,
+         lookup/1,
+         count/0]).
 
 -include_lib("rabbit.hrl").
 
@@ -287,6 +289,20 @@ unregister_connection(ConnId = {Node, _Name}) when Node =:= node() ->
             mnesia:dirty_delete(TableName, ConnId)
     end.
 
+-spec lookup(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
+
+lookup(Name) ->
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    lookup(Name, Nodes).
+
+lookup(_, []) ->
+    not_found;
+lookup(Name, [Node | Nodes]) ->
+    TableName = tracked_connection_table_name_for(Node),
+    case mnesia:dirty_read(TableName, {Node, Name}) of
+        [] -> lookup(Name, Nodes);
+        [Row] -> Row
+    end.
 
 -spec list() -> [rabbit_types:tracked_connection()].
 
@@ -297,6 +313,14 @@ list() ->
               Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
       end, [], rabbit_mnesia:cluster_nodes(running)).
 
+-spec count() -> non_neg_integer().
+
+count() ->
+    lists:foldl(
+      fun (Node, Acc) ->
+              Tab = tracked_connection_table_name_for(Node),
+              Acc + mnesia:table_info(Tab, size)
+      end, 0, rabbit_mnesia:cluster_nodes(running)).
 
 -spec list(rabbit_types:vhost()) -> [rabbit_types:tracked_connection()].
 
