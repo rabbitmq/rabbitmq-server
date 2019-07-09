@@ -7,8 +7,8 @@ WebSockets.
 
 The most recent version of this plugin requires RabbitMQ `3.7.0` or later.
 
-Since version `3.7.0` this plugin does not support SockJS anymore.
-SockJS URL path was removed.
+Since version `3.7.0` this plugin no longer supports WebSocket emulation with SockJS.
+The SockJS endpoint is no longer available.
 
 ## Installation and Binary Builds
 
@@ -32,6 +32,6 @@ will build the plugin and put build artifacts under the `./plugins` directory.
 
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-2017
+(c) Pivotal Software Inc, 2007-2019
 
 Released under the MPL, the same license as RabbitMQ.
