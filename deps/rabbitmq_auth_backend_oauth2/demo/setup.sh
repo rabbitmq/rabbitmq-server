@@ -23,7 +23,7 @@ uaac user add rabbit_super -p rabbit_super --email rabbit_super@example.com
 uaac user add rabbit_nosuper -p rabbit_nosuper --email rabbit_nosuper@example.com
 
 # Create permissions
-# Uaa groups will become scopes, which should define RabbitMQ permissions.
+# Uaa groups will become scopes, which should define RabbitMQ permissions and tags.
 uaac group add "rabbitmq.read:*/*"
 uaac group add "rabbitmq.write:*/*"
 uaac group add "rabbitmq.configure:*/*"
@@ -31,11 +31,15 @@ uaac group add "rabbitmq.configure:*/*"
 uaac group add "rabbitmq.write:uaa_vhost/*"
 uaac group add "rabbitmq.read:uaa_vhost/some*"
 
+uaac group add "rabbitmq.tag:administrator"
+
 # Assigning groups to users.
 # rabbit_super will be able to read,write and configure any resources.
+# They will be able to connect to the management plugin as well.
 uaac member add "rabbitmq.read:*/*" rabbit_super
 uaac member add "rabbitmq.write:*/*" rabbit_super
 uaac member add "rabbitmq.configure:*/*" rabbit_super
+uaac member add "rabbitmq.tag:administrator" rabbit_super
 
 # rabbit_nosuper will be able to read uaa_vhost resources starting with some
 # and write to any uaa_vhost resources

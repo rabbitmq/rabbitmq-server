@@ -179,6 +179,15 @@ in order to authenticate with RabbitMQ.
 
 To learn more about UAA/OAuth 2.0 clients see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
 
+### Scope and Tags
+
+Users in RabbitMQ can have [tags associated with them](https://www.rabbitmq.com/access-control.html#user-tags).
+Tags are used to [control access to the management plugin](https://www.rabbitmq.com/management.html#permissions).
+
+
+In the OAuth context, tags can be added as part of the scope, using a format like `<resource_server_id>.tag:<tag>`. For
+example, if `resource_server_id` is "my_rabbit", a scope to grant access to the management plugin with
+the `monitoring` tag will be `my_rabbit.tag:monitoring`.
 
 ### Examples
 
