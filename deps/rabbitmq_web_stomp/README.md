@@ -12,8 +12,13 @@ The SockJS endpoint is no longer available.
 
 ## Installation and Binary Builds
 
-This plugin is now available from the [RabbitMQ community plugins page](https://www.rabbitmq.com/community-plugins.html).
-Please consult the docs on [how to install RabbitMQ plugins](https://www.rabbitmq.com/plugins.html#installing-plugins).
+This plugin ships with modern versions of RabbitMQ.
+Like all plugins, it [must be enabled](https://www.rabbitmq.com/plugins.html) before it can be used:
+
+``` bash
+# this might require sudo
+rabbitmq-plugins enable rabbitmq_web_stomp
+```
 
 ## Documentation
 
