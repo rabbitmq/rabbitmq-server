@@ -1,7 +1,6 @@
 # RabbitMQ Web STOMP plugin
 
-This project is a minimalistic bridge between the [RabbitMQ STOMP plugin](http://rabbitmq.com/stomp.html) and
-WebSockets.
+This plugin provides support for STOMP-over-WebSockets to RabbitMQ.
 
 ## RabbitMQ Version Requirements
 
@@ -10,7 +9,7 @@ The most recent version of this plugin requires RabbitMQ `3.7.0` or later.
 Since version `3.7.0` this plugin no longer supports WebSocket emulation with SockJS.
 The SockJS endpoint is no longer available.
 
-## Installation and Binary Builds
+## Installation
 
 This plugin ships with modern versions of RabbitMQ.
 Like all plugins, it [must be enabled](https://www.rabbitmq.com/plugins.html) before it can be used:
