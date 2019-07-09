@@ -2,11 +2,6 @@
 
 This plugin provides support for MQTT-over-WebSockets to RabbitMQ.
 
-## Supported RabbitMQ Versions
-
-This plugin supports RabbitMQ `3.6.x` and later releases starting with `3.6.1`.
-
-
 ## Installation
 
 This plugin ships with modern versions of RabbitMQ.
