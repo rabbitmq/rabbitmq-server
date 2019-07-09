@@ -121,14 +121,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
     partitions_section = [
       "\n#{bright("Network Partitions")}\n"
-    ] ++ case Map.size(m[:partitions]) do
+    ] ++ case map_size(m[:partitions]) do
            0 -> ["(none)"]
            _ -> partition_lines(m[:partitions])
          end
 
     listeners_section = [
       "\n#{bright("Listeners")}\n"
-    ] ++ case Map.size(m[:listeners]) do
+    ] ++ case map_size(m[:listeners]) do
            0 -> ["(none)"]
            _ -> Enum.reduce(m[:listeners], [], fn {node, listeners}, acc ->
                                                  acc ++ listener_lines(listeners, node)
