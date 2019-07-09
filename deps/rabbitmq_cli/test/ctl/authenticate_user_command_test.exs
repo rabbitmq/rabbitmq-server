@@ -25,7 +25,6 @@ defmodule AuthenticateUserCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
@@ -35,14 +34,26 @@ defmodule AuthenticateUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
-  test "validate: invalid number of arguments returns a validation failure" do
+  test "validate: no positional arguments fails" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["user"], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: too many positional arguments fails" do
     assert @command.validate(["user", "password", "extra"], %{}) ==
       {:validation_failure, :too_many_args}
   end
-  test "validate: correct arguments return :ok" do
+
+  test "validate: one argument in non-interactive mode fails" do
+    assert match?({:validation_failure, {:not_enough_args, _}},
+                  @command.validate(["user"], %{interactive: false}))
+  end
+
+  test "validate: two arguments passes" do
     assert @command.validate(["user", "password"], %{}) == :ok
+  end
+
+  test "validate: one argument in interactive mode passes" do
+    assert @command.validate(["user"], %{interactive: true}) == :ok
   end
 
   @tag user: @user, password: @password
