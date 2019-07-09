@@ -1,9 +1,6 @@
 # RabbitMQ Web MQTT plugin
 
-
-This plugin provides a support for MQTT-over-WebSockets to
-RabbitMQ.
-
+This plugin provides support for MQTT-over-WebSockets to RabbitMQ.
 
 ## Supported RabbitMQ Versions
 
@@ -12,11 +9,20 @@ This plugin supports RabbitMQ `3.6.x` and later releases starting with `3.6.1`.
 
 ## Installation
 
-### Binary Builds
+This plugin ships with modern versions of RabbitMQ.
+Like all plugins, it [must be enabled](https://www.rabbitmq.com/plugins.html) before it can be used:
 
-Binary build is available from the [RabbitMQ Community Plugins page](https://www.rabbitmq.com/community-plugins.html).
+``` bash
+# this might require sudo
+rabbitmq-plugins enable rabbitmq_web_stomp
+```
 
-### From Source
+## Documentation
+
+Please refer to the [RabbitMQ Web MQTT guide](https://www.rabbitmq.com/web-mqtt.html).
+
+
+## Building From Source
 
  * [Generic plugin build instructions](https://www.rabbitmq.com/plugin-development.html)
  * Instructions on [how to install a plugin into RabbitMQ broker](https://www.rabbitmq.com/plugins.html#installing-plugins)
@@ -25,13 +31,8 @@ Note that release branches (`stable` vs. `master`) and target RabbitMQ version n
 when building plugins from source.
 
 
-## Documentation
-
-Please refer to the [RabbitMQ Web MQTT guide](https://www.rabbitmq.com/web-mqtt.html).
-
-
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-2017.
+(c) Pivotal Software Inc, 2007-2019.
 
 Released under the same license as RabbitMQ. See LICENSE for details.
