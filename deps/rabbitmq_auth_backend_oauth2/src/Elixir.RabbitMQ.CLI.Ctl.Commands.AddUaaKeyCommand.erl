@@ -124,7 +124,7 @@ run([Name], #{node := Node} = Options) ->
         {error, Err} -> {error, Err}
     end.
 
-output(E, Opts) ->
+output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
 
 formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Erlang'.
