@@ -14,34 +14,50 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers, Input}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
+  def switches, do: [interactive: :boolean]
+  def aliases, do: [i: :interactive]
 
-  def validate(args, _) when length(args) < 2 do
-    {:validation_failure, :not_enough_args}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{interactive: true}, opts)}
   end
 
-  def validate(args, _) when length(args) > 2 do
-    {:validation_failure, :too_many_args}
+  def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
+  def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
+  def validate([_], %{interactive: false}) do
+    {:validation_failure, {:not_enough_args, "password must be provided as an argument in non-interactive mode"}}
   end
-
+  def validate([_], _), do: :ok
   def validate(["", _], _) do
-    {:validation_failure, {:bad_argument, "user cannot be empty string."}}
+    {:validation_failure, {:bad_argument, "user cannot be an empty string"}}
   end
-
   def validate([_, _], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_, _] = args, %{node: node_name}) do
+  def run([username], %{node: node_name} = opts) do
+    # note: blank passwords are currently allowed, they make sense
+    # e.g. when a user only authenticates using X.509 certificates.
+    # Credential validators can be used to require passwords of a certain length
+    # or following a certain pattern. This is a core server responsibility. MK.
+    password = Input.infer_password("Password: ", opts)
+
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_auth_backend_internal,
       :add_user,
-      args ++ [Helpers.cli_acting_user()]
+      [username, password, Helpers.cli_acting_user()]
+    )
+  end
+  def run([username, password], %{node: node_name}) do
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_auth_backend_internal,
+      :add_user,
+      [username, password, Helpers.cli_acting_user()]
     )
   end
 
@@ -50,7 +66,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   def usage_additional() do
     [
       ["<username>", "Self-explanatory"],
-      ["<password>", "Password this user will authenticate with. Use a blank string to disable password-based authentication."]
+      ["<password>", "Password this user will authenticate with. Use a blank string to disable password-based authentication."],
+      ["--interactive", "Indicates that password might be provided via stdin. This is the default."],
+      ["--no-interactive", "Indicates that password must not be read from stdin."]
     ]
   end
 
@@ -64,7 +82,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def description(), do: "Creates a new user in the internal database"
 
-  def banner([username, _password], _), do: "Adding user \"#{username}\" ..."
+  def banner([username | _], _), do: "Adding user \"#{username}\" ..."
 
   def output({:error, {:user_already_exists, username}}, _) do
     {:error, ExitCodes.exit_software(), "User \"#{username}\" already exists"}

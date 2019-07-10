@@ -145,7 +145,7 @@ defmodule RabbitMQCtlTest do
       error_check(command2, exit_usage())
     end) =~ ~r/too many arguments./
 
-    command3 = ["--node", "rabbit", "add_user", "quack"]
+    command3 = ["--node", "rabbit", "add_user"]
     assert capture_io(:stderr, fn ->
       error_check(command3, exit_usage())
     end) =~ ~r/not enough arguments./
