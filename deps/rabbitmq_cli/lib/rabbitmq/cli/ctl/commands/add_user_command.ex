@@ -18,18 +18,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches, do: [interactive: :boolean]
-  def aliases, do: [i: :interactive]
-
-  def merge_defaults(args, opts) do
-    {args, Map.merge(%{interactive: true}, opts)}
-  end
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
-  def validate([_], %{interactive: false}) do
-    {:validation_failure, {:not_enough_args, "password must be provided as an argument in non-interactive mode"}}
-  end
   def validate([_], _), do: :ok
   def validate(["", _], _) do
     {:validation_failure, {:bad_argument, "user cannot be an empty string"}}
@@ -43,14 +35,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
     # e.g. when a user only authenticates using X.509 certificates.
     # Credential validators can be used to require passwords of a certain length
     # or following a certain pattern. This is a core server responsibility. MK.
-    password = Input.infer_password("Password: ", opts)
-
-    :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_auth_backend_internal,
-      :add_user,
-      [username, password, Helpers.cli_acting_user()]
-    )
+    case Input.infer_password("Password: ", opts) do
+      :eof     -> {:error, :not_enough_args}
+      password -> :rabbit_misc.rpc_call(
+                    node_name,
+                    :rabbit_auth_backend_internal,
+                    :add_user,
+                    [username, password, Helpers.cli_acting_user()]
+                  )
+    end
   end
   def run([username, password], %{node: node_name}) do
     :rabbit_misc.rpc_call(
@@ -66,9 +59,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   def usage_additional() do
     [
       ["<username>", "Self-explanatory"],
-      ["<password>", "Password this user will authenticate with. Use a blank string to disable password-based authentication."],
-      ["--interactive", "Indicates that password might be provided via stdin. This is the default."],
-      ["--no-interactive", "Indicates that password must not be read from stdin."]
+      ["<password>", "Password this user will authenticate with. Use a blank string to disable password-based authentication."]
     ]
   end
 
@@ -84,6 +75,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def banner([username | _], _), do: "Adding user \"#{username}\" ..."
 
+  def output({:error, :not_enough_args}, _) do
+    {:error, ExitCodes.exit_software(), "Password is not provided via argument or stdin"}
+  end
   def output({:error, {:user_already_exists, username}}, _) do
     {:error, ExitCodes.exit_software(), "User \"#{username}\" already exists"}
   end

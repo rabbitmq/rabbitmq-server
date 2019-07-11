@@ -43,17 +43,12 @@ defmodule AuthenticateUserCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "validate: one argument in non-interactive mode fails" do
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate(["user"], %{interactive: false}))
+  test "validate: one argument passes" do
+    assert @command.validate(["user"], %{}) == :ok
   end
 
   test "validate: two arguments passes" do
     assert @command.validate(["user", "password"], %{}) == :ok
-  end
-
-  test "validate: one argument in interactive mode passes" do
-    assert @command.validate(["user"], %{interactive: true}) == :ok
   end
 
   @tag user: @user, password: @password

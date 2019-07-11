@@ -17,9 +17,14 @@ defmodule RabbitMQ.CLI.Core.Input do
   alias RabbitMQ.CLI.Core.Config
 
   def infer_password(prompt, opts) do
-    case Config.output_less?(opts) do
+    val = case Config.output_less?(opts) do
       true  -> IO.gets("")
       false -> IO.gets(prompt)
-    end |> String.trim()
+    end
+
+    case val do
+      :eof -> :eof
+      s    -> String.trim(s)
+    end
   end
 end
