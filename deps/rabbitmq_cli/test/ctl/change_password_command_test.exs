@@ -22,9 +22,6 @@ defmodule ChangePasswordCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
-
-
     :ok
   end
 
@@ -34,12 +31,21 @@ defmodule ChangePasswordCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
-  test "validate: argument count validation" do
-    assert @command.validate(["user", "password"], %{}) == :ok
+  test "validate: no positional arguments fails" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["user"], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: too many positional arguments fails" do
     assert @command.validate(["user", "password", "extra"], %{}) ==
       {:validation_failure, :too_many_args}
+  end
+
+  test "validate: two arguments passes" do
+    assert @command.validate(["user", "password"], %{}) == :ok
+  end
+
+  test "validate: one argument passes" do
+    assert @command.validate(["user"], %{}) == :ok
   end
 
   @tag user: @user, password: "new_password"

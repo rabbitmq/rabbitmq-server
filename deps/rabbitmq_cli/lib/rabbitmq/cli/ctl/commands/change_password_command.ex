@@ -14,26 +14,47 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers, Input}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-  def merge_defaults(args, opts), do: {args, opts}
 
-  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
-  def validate([_ | _] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+
+  def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
+  def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
+  def validate([_, _], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_user, _] = args, %{node: node_name}) do
+  def run([username], %{node: node_name} = opts) do
+    # note: blank passwords are currently allowed, they make sense
+    # e.g. when a user only authenticates using X.509 certificates.
+    # Credential validators can be used to require passwords of a certain length
+    # or following a certain pattern. This is a core server responsibility. MK.
+    case Input.infer_password("Password: ", opts) do
+      :eof     -> {:error, :not_enough_args}
+      password -> :rabbit_misc.rpc_call(
+                    node_name,
+                    :rabbit_auth_backend_internal,
+                    :change_password,
+                    [username, password, Helpers.cli_acting_user()]
+                  )
+    end
+  end
+  def run([username, password], %{node: node_name}) do
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_auth_backend_internal,
       :change_password,
-      args ++ [Helpers.cli_acting_user()]
+      [username, password, Helpers.cli_acting_user()]
     )
   end
+
+  def output({:error, :not_enough_args}, _) do
+    {:error, ExitCodes.exit_software(), "Password is not provided via argument or stdin"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "change_password <username> <password>"
 
