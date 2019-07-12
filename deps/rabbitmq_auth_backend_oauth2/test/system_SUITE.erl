@@ -38,6 +38,7 @@ groups() ->
      {happy_path, [], [
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
+                       test_successful_connection_with_simple_strings_for_aud_and_scope,
                        test_successful_token_refresh
                       ]},
      {unhappy_path, [], [
@@ -86,7 +87,8 @@ end_per_group(_Group, Config) ->
     Config.
 
 
-init_per_testcase(test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost = Testcase, Config) ->
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse 
+                                         Testcase =:= test_successful_token_refresh ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
@@ -100,11 +102,6 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
-
-end_per_testcase(test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost = Testcase, Config) ->
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_case1 orelse
                                         Testcase =:= test_failed_token_refresh_case2 ->
@@ -133,11 +130,18 @@ generate_valid_token(Config) ->
     generate_valid_token(Config, ?UTIL_MOD:full_permission_scopes()).
 
 generate_valid_token(Config, Scopes) ->
+    generate_valid_token(Config, Scopes, undefined).
+
+generate_valid_token(Config, Scopes, Audience) ->
     Jwk = case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
               undefined -> ?UTIL_MOD:fixture_jwk();
               Value     -> Value
           end,
-    ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token_with_scopes(Scopes), Jwk).
+    Token = case Audience of
+        undefined -> ?UTIL_MOD:fixture_token_with_scopes(Scopes);
+        DefinedAudience -> maps:put(<<"aud">>, DefinedAudience, ?UTIL_MOD:fixture_token_with_scopes(Scopes))
+    end,
+    ?UTIL_MOD:sign_token_hs(Token, Jwk).
 
 generate_expired_token(Config) ->
     generate_expired_token(Config, ?UTIL_MOD:full_permission_scopes()).
@@ -181,6 +185,18 @@ test_successful_connection_with_a_full_permission_token_and_explicitly_configure
                                                    <<"rabbitmq.write:vhost1/*">>,
                                                    <<"rabbitmq.read:vhost1/*">>]),
     Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
+    {_Algo, Token} = generate_valid_token(
+        Config,
+        <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+        <<"hare rabbitmq">>
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),

@@ -26,6 +26,9 @@
          check_vhost_access/3, check_resource_access/4,
          check_topic_access/4, check_token/1, state_can_expire/0, update_state/2]).
 
+% for testing
+-export([post_process_payload/1]).
+
 -import(rabbit_data_coercion, [to_map/1]).
 
 -ifdef(TEST).
@@ -42,6 +45,7 @@ description() ->
 user_login_authentication(Username0, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
+    io:format("~p~n", [check_token(Token)]),
     case check_token(Token) of
         %% avoid logging the token
         {error, _} = E  -> E;
@@ -137,9 +141,22 @@ validate_token_expiry(#{}) -> ok.
 check_token(Token) ->
     case uaa_jwt:decode_and_verify(Token) of
         {error, Reason} -> {refused, {error, Reason}};
-        {true, Payload} -> validate_payload(Payload);
+        {true, Payload} -> validate_payload(post_process_payload(Payload));
         {false, _}      -> {refused, signature_invalid}
     end.
+
+post_process_payload(Payload) when is_map(Payload) ->
+    maps:map(fun(K, V) ->
+                case K of
+                    <<"aud">> when is_binary(V) ->
+                        binary:split(V, <<" ">>, [global]);
+                    <<"scope">> when is_binary(V) ->
+                        binary:split(V, <<" ">>, [global]);
+                    _ -> V
+                end
+            end,
+            Payload
+    ).
 
 validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = DecodedToken) ->
     ResourceServerEnv = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<>>),

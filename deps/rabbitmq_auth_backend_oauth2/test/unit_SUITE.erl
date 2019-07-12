@@ -19,7 +19,8 @@ all() ->
         test_command_json,
         test_command_pem,
         test_command_pem_no_kid,
-        test_token_expiration
+        test_token_expiration,
+        test_post_process_token_payload
     ].
 
 init_per_suite(Config) ->
@@ -43,6 +44,29 @@ end_per_suite(Config) ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+
+test_post_process_token_payload(_) ->
+    ArgumentsExpections = [
+        {{[<<"rabbitmq">>, <<"hare">>], [<<"read">>, <<"write">>, <<"configure">>]},
+         {[<<"rabbitmq">>, <<"hare">>], [<<"read">>, <<"write">>, <<"configure">>]}},
+        {{<<"rabbitmq hare">>, <<"read write configure">>},
+         {[<<"rabbitmq">>, <<"hare">>], [<<"read">>, <<"write">>, <<"configure">>]}},
+        {{<<"rabbitmq">>, <<"read">>},
+         {[<<"rabbitmq">>], [<<"read">>]}}
+    ],
+    lists:foreach(
+        fun({{Aud, Scope}, {ExpectedAud, ExpectedScope}}) ->
+            Payload = post_process_token_payload(Aud, Scope),
+            ?assertEqual(ExpectedAud, maps:get(<<"aud">>, Payload)),
+            ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
+        end, ArgumentsExpections).
+
+post_process_token_payload(Audience, Scopes) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    Token = maps:put(<<"aud">>, Audience, ?UTIL_MOD:fixture_token_with_scopes(Scopes)),
+    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
+    {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
+    rabbit_auth_backend_oauth2:post_process_payload(Payload).
 
 test_successful_access_with_a_token(_) ->
     %% Generate a token with JOSE
