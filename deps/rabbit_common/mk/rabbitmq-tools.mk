@@ -208,33 +208,43 @@ else \
 	erlang_app=$(PROJECT); \
 	repository=$(call rmq_cmp_repo_name,$(PROJECT)); \
 fi; \
-case "$(SINCE_TAG)" in \
-last-release) \
-	ref=$$(git $$git_dir describe --abbrev=0 --tags \
-		--exclude "*-beta*" \
-		--exclude "*_milestone*" \
-		--exclude "*[-_]rc*"); \
-	;; \
-last-prerelease) \
-	ref=$$(git $$git_dir describe --abbrev=0 --tags); \
-	;; \
-*) \
-	git $$git_dir rev-parse "$(SINCE_TAG)" -- >/dev/null; \
-	ref=$(SINCE_TAG); \
-	;; \
-esac; \
-commits_count=$$(git $$git_dir log --oneline "$$ref.." | wc -l); \
-if test "$$commits_count" -gt 0; then \
+tags_count=$$(git $$git_dir tag -l 2>/dev/null | wc -l); \
+if test "$$tags_count" -gt 0; then \
+	case "$(SINCE_TAG)" in \
+	last-release) \
+		ref=$$(git $$git_dir describe --abbrev=0 --tags \
+			--exclude "*-beta*" \
+			--exclude "*_milestone*" \
+			--exclude "*[-_]rc*"); \
+		;; \
+	last-prerelease) \
+		ref=$$(git $$git_dir describe --abbrev=0 --tags); \
+		;; \
+	*) \
+		git $$git_dir rev-parse "$(SINCE_TAG)" -- >/dev/null; \
+		ref=$(SINCE_TAG); \
+		;; \
+	esac; \
+	commits_count=$$(git $$git_dir log --oneline "$$ref.." | wc -l); \
+	if test "$$commits_count" -gt 0; then \
+		if test "$(MARKDOWN)" = yes; then \
+			printf "\n## [\`$$repository\`](https://github.com/rabbitmq/$$repository)\n\nCommits since \`$$ref\`:\n\n"; \
+			git $$git_dir --no-pager log $(COMMITS_LOG_OPTS) \
+				--format="format:* %s ([\`%h\`](https://github.com/rabbitmq/$$repository/commit/%H))" \
+				"$$ref.."; \
+			echo; \
+		else \
+			echo; \
+			echo "# $$repository - Commits since $$ref"; \
+			git $$git_dir log $(COMMITS_LOG_OPTS) "$$ref.."; \
+		fi; \
+	fi; \
+else \
 	if test "$(MARKDOWN)" = yes; then \
-		printf "\n## [\`$$repository\`](https://github.com/rabbitmq/$$repository)\n\nCommits since \`$$ref\`:\n\n"; \
-		git $$git_dir --no-pager log $(COMMITS_LOG_OPTS) \
-			--format="format:* %s ([\`%h\`](https://github.com/rabbitmq/$$repository/commit/%H))" \
-			"$$ref.."; \
-		echo; \
+		printf "\n## [\`$$repository\`](https://github.com/rabbitmq/$$repository)\n\n**New** since the last release!\n"; \
 	else \
 		echo; \
-		echo "# $$repository - Commits since $$ref"; \
-		git $$git_dir log $(COMMITS_LOG_OPTS) "$$ref.."; \
+		echo "# $$repository - New since the last release!"; \
 	fi; \
 fi
 endef
