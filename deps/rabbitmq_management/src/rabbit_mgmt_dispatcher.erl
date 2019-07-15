@@ -172,5 +172,6 @@ dispatcher() ->
      {"/healthchecks/node",                                    rabbit_mgmt_wm_healthchecks, []},
      {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []},
      {"/reset",                                                rabbit_mgmt_wm_reset, []},
-     {"/reset/:node",                                          rabbit_mgmt_wm_reset, []}
+     {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
+     {"/auth",                                                 rabbit_mgmt_wm_auth, []}
     ].

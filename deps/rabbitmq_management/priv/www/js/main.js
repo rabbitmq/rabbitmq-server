@@ -1,6 +1,17 @@
 $(document).ready(function() {
-    replace_content('outer', format('login', {}));
-    start_app_login();
+    if (enable_uaa) {
+        get(uaa_location + "/info", "application/json", function(req) {
+            if (req.status !== 200) {
+                replace_content('outer', format('login_uaa', {}));
+                replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="uaa_login_window()">Click here to log in</button>');
+            } else {
+                replace_content('outer', format('login_uaa', {}));
+            }
+        });
+    } else {
+        replace_content('outer', format('login', {}));
+        start_app_login();
+    }
 });
 
 function dispatcher_add(fun) {
@@ -58,6 +69,15 @@ function login_route_with_path() {
     window.location.replace(location);
 }
 
+function getParameterByName(name) {
+    var match = RegExp('[#&]' + name + '=([^&]*)').exec(window.location.hash);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function getAccessToken() {
+    return getParameterByName('access_token');
+}
+
 function start_app_login() {
     app = new Sammy.Application(function () {
         this.get('#/', function() {});
@@ -70,10 +90,42 @@ function start_app_login() {
         this.get('#/login/:username/:password', login_route);
         this.get(/\#\/login\/(.*)/, login_route_with_path);
     });
-    app.run();
-    if (get_cookie_value('auth') != null) {
-        check_login();
+    if (enable_uaa) {
+        var token = getAccessToken();
+        if (token != null) {
+            set_auth_pref(uaa_client_id + ':' + token);
+            check_login();
+        } else if(has_auth_cookie_value()) {
+            check_login();
+        };
+    } else {
+        app.run();
+        if (get_cookie_value('auth') != null) {
+            check_login();
+        }
     }
+}
+
+
+function uaa_logout_window() {
+    uaa_invalid = true;
+    uaa_login_window();
+}
+
+function uaa_login_window() {
+    var redirect;
+    if (window.location.hash != "") {
+        redirect = window.location.href.split(window.location.hash)[0];
+    } else {
+        redirect = window.location.href
+    };
+    var loginRedirectUrl;
+    if (uaa_invalid) {
+        loginRedirectUrl = Singular.properties.uaaLocation + '/logout.do?client_id=' + Singular.properties.clientId + '&redirect=' + redirect;
+    } else {
+        loginRedirectUrl = Singular.properties.uaaLocation + '/oauth/authorize?response_type=token&client_id=' + Singular.properties.clientId + '&redirect_uri=' + redirect;
+    };
+    window.open(loginRedirectUrl, "LOGIN_WINDOW");
 }
 
 function check_login() {
@@ -82,7 +134,12 @@ function check_login() {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
-        replace_content('login-status', '<p>Login failed</p>');
+        if (enable_uaa) {
+            uaa_invalid = true;
+            replace_content('login-status', '<button id="loginWindow" onclick="uaa_login_window()">Click here to log out</button>');
+        } else {
+            replace_content('login-status', '<p>Login failed</p>');
+        }
     }
     else {
         hide_popup_warn();
@@ -137,13 +194,21 @@ function start_app() {
     // updated to the version  0.7.6 this _interval = null is fixed
     // just leave the history here.
     //Sammy.HashLocationProxy._interval = null;
-
-
+    
     app = new Sammy.Application(dispatcher);
     app.run();
+
     var url = this.location.toString();
+    var hash = this.location.hash;
+    var pathname = this.location.pathname;
     if (url.indexOf('#') == -1) {
         this.location = url + '#/';
+    } else if (hash.indexOf('#token_type') != - 1 && pathname == '/') {
+        // This is equivalent to previous `if` clause when uaa authorisation is used.
+        // Tokens are passed in the url hash, so the url always contains a #.
+        // We need to check the current path is `/` and token is present,
+        // so we can redirect to `/#/`
+        this.location = url.replace(/#token_type.+/gi, "#/");
     }
 }
 
@@ -1147,6 +1212,19 @@ function with_req(method, path, body, fun) {
     };
     outstanding_reqs.push(req);
     req.send(body);
+}
+
+function get(url, accept, callback) {
+  var req = new XMLHttpRequest();
+  req.open("GET", url);
+  req.setRequestHeader("Accept", accept);
+  req.send();
+
+  req.onreadystatechange = function() {
+    if (req.readyState == XMLHttpRequest.DONE) {
+      callback(req);
+    }
+  };
 }
 
 function sync_get(path) {
