@@ -23,7 +23,8 @@
          deliver/2,
          settle/4,
          reject/4,
-         credit/4
+         credit/4,
+         dequeue/4
          ]).
 
 -export([delete_crashed/1,
@@ -171,6 +172,20 @@ deliver(Qs, #delivery{flow = Flow,
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
     %% TODO: monitors
     {Qs, Actions}.
+
+
+-spec dequeue(NoAck :: boolean(), LimiterPid :: pid(),
+              rabbit_types:ctag(), state()) ->
+    {ok, Count :: non_neg_integer(), empty | rabbit_amqqueue:qmsg(), state()}.
+dequeue(NoAck, LimiterPid, _CTag, State) ->
+    QPid = State#?STATE.pid,
+    case delegate:invoke(QPid, {gen_server2, call,
+                           [{basic_get, self(), NoAck, LimiterPid}, infinity]}) of
+        empty ->
+            {empty, State};
+        {ok, Count, Msg} ->
+            {ok, Count, Msg, State}
+    end.
 
 qpids(Qs) ->
     lists:foldl(fun ({Q, _}, {MPidAcc, SPidAcc, Actions0}) ->

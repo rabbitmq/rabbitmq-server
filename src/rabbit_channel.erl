@@ -1351,12 +1351,11 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
            %% Use the delivery tag as consumer tag for quorum queues
-           fun (Q) -> rabbit_amqqueue:basic_get(
-                        Q, self(), NoAck, rabbit_limiter:pid(Limiter),
-                        DeliveryTag, QueueStates0)
+           fun (Q) ->
+                   rabbit_amqqueue:basic_get(
+                     Q, NoAck, rabbit_limiter:pid(Limiter),
+                     DeliveryTag, QueueStates0)
            end) of
-        {ok, MessageCount, Msg} ->
-            handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg, State);
         {ok, MessageCount, Msg, QueueStates} ->
             handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg,
                              State#ch{queue_states = QueueStates});
@@ -1955,18 +1954,20 @@ reject(DeliveryTag, Requeue, Multiple,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply, case Tx of
-                  none         -> internal_reject(Requeue, Acked, State1#ch.limiter, State1);
-                  {Msgs, Acks} -> Acks1 = ack_cons(Requeue, Acked, Acks),
-                                  State1#ch{tx = {Msgs, Acks1}}
+                  none ->
+                      internal_reject(Requeue, Acked, State1#ch.limiter, State1);
+                  {Msgs, Acks} ->
+                      Acks1 = ack_cons(Requeue, Acked, Acks),
+                      State1#ch{tx = {Msgs, Acks1}}
               end}.
 
 %% NB: Acked is in youngest-first order
 internal_reject(Requeue, Acked, Limiter,
                 State = #ch{queue_states = QueueStates0}) ->
     QueueStates = foreach_per_queue(
-                    fun({QPid, CTag}, MsgIds, Acc0) ->
-                            rabbit_amqqueue:reject(QPid, Requeue, {CTag, MsgIds},
-                                                   Acc0)
+                    fun({QRef, CTag}, MsgIds, Acc0) ->
+                            rabbit_queue_type:reject(QRef, CTag, Requeue,
+                                                     MsgIds, Acc0)
                     end, Acked, QueueStates0),
     ok = notify_limiter(Limiter, Acked),
     State#ch{queue_states = QueueStates}.

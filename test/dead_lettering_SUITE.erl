@@ -1068,9 +1068,11 @@ dead_letter_headers_BCC(Config) ->
     ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
 
 
-%% Three top-level headers are added for the very first dead-lettering event. They are
+%% Three top-level headers are added for the very first dead-lettering event.
+%% They are
 %% x-first-death-reason, x-first-death-queue, x-first-death-exchange
-%% They have the same values as the reason, queue, and exchange fields of the original
+%% They have the same values as the reason, queue, and exchange fields of the
+%% original
 %% dead lettering event. Once added, these headers are never modified.
 dead_letter_headers_first_death(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),

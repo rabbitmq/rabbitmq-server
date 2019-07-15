@@ -35,7 +35,7 @@
 -export([list_by_type/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/6, basic_consume/12, basic_cancel/6, notify_decorators/1]).
+-export([basic_get/5, basic_consume/12, basic_cancel/6, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
@@ -1214,40 +1214,42 @@ credit(Q, CTag, Credit, Drain, QStates) ->
 %       end,
 %       QStates).
 
--spec basic_get(amqqueue:amqqueue(), pid(), boolean(), pid(), rabbit_types:ctag(),
+-spec basic_get(amqqueue:amqqueue(), boolean(), pid(), rabbit_types:ctag(),
                 #{Name :: atom() => rabbit_fifo_client:state()}) ->
           {'ok', non_neg_integer(), qmsg(), quorum_states()} |
           {'empty', quorum_states()} |
           rabbit_types:channel_exit().
+basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
+    rabbit_queue_type:dequeue(Q, NoAck, LimiterPid, CTag, QStates0).
 
-basic_get(Q, ChPid, NoAck, LimiterPid, _CTag, _)
-  when ?amqqueue_is_classic(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call,
-                           [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
-basic_get(Q, _ChPid, NoAck, _LimiterPid, CTag, QStates0)
-  when ?amqqueue_is_quorum(Q) ->
-    case rabbit_queue_type:with(
-           Q,
-           fun(S0) ->
-                   case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, S0) of
-                       {ok, empty, S} ->
-                           {empty, S};
-                       {ok, Count, Msg, S} ->
-                           {{ok, Count, Msg}, S};
-                       {error, Reason} ->
-                           QName = rabbit_quorum_queue:queue_name(S0),
-                           rabbit_misc:protocol_error(internal_error,
-                                                      "Cannot get a message from quorum queue '~s': ~p",
-                                                      [rabbit_misc:rs(QName), Reason])
-                   end
-           end,
-           QStates0) of
-        {empty, QStates} ->
-            {empty, QStates};
-        {{ok, Count, Msg}, QStates} ->
-            {ok, Count, Msg, QStates}
-    end.
+% basic_get(Q, ChPid, NoAck, LimiterPid, _CTag, _)
+%   when ?amqqueue_is_classic(Q) ->
+%     QPid = amqqueue:get_pid(Q),
+%     delegate:invoke(QPid, {gen_server2, call,
+%                            [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
+% basic_get(Q, _ChPid, NoAck, _LimiterPid, CTag, QStates0)
+%   when ?amqqueue_is_quorum(Q) ->
+%     case rabbit_queue_type:with(
+%            Q,
+%            fun(S0) ->
+%                    case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, S0) of
+%                        {ok, empty, S} ->
+%                            {empty, S};
+%                        {ok, Count, Msg, S} ->
+%                            {{ok, Count, Msg}, S};
+%                        {error, Reason} ->
+%                            QName = rabbit_quorum_queue:queue_name(S0),
+%                            rabbit_misc:protocol_error(internal_error,
+%                                                       "Cannot get a message from quorum queue '~s': ~p",
+%                                                       [rabbit_misc:rs(QName), Reason])
+%                    end
+%            end,
+%            QStates0) of
+%         {empty, QStates} ->
+%             {empty, QStates};
+%         {{ok, Count, Msg}, QStates} ->
+%             {ok, Count, Msg, QStates}
+%     end.
 
 -type queue_ref() :: pid() | atom().  %% pid or registered name
 

@@ -184,11 +184,12 @@ enqueue(Msg, State) ->
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
--spec dequeue(rabbit_fifo:consumer_tag(),
-              Settlement :: settled | unsettled, state()) ->
-    {ok, {rabbit_fifo:delivery_msg(), non_neg_integer()}
-     | empty, state()} | {error | timeout, term()}.
-dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
+% -spec dequeue(rabbit_fifo:consumer_tag(),
+%               Settlement :: settled | unsettled, state()) ->
+%     {ok, {rabbit_fifo:delivery_msg(), non_neg_integer()}
+%      | empty, state()} | {error | timeout, term()}.
+dequeue(ConsumerTag, Settlement, #state{timeout = Timeout,
+                                        cluster_name = QName} = State0) ->
     Node = pick_node(State0),
     ConsumerId = consumer_id(ConsumerTag),
     case ra:process_command(Node,
@@ -197,9 +198,15 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
                                                       #{}),
                             Timeout) of
         {ok, {dequeue, empty}, Leader} ->
-            {ok, empty, State0#state{leader = Leader}};
-        {ok, {dequeue, Msg, NumReady}, Leader} ->
-            {ok, {Msg, NumReady}, State0#state{leader = Leader}};
+            {empty, State0#state{leader = Leader}};
+        {ok, {dequeue, {MsgId, {MsgHeader, Msg0}}, MsgsReady}, Leader} ->
+            Count = maps:get(delivery_count, MsgHeader, 0),
+            IsDelivered = Count > 0,
+            Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count,
+                                          Msg0),
+            {ok, MsgsReady, {QName, Leader, MsgId, IsDelivered, Msg},
+             State0#state{leader = Leader}};
+            % {ok, {Msg, NumReady}, State0#state{leader = Leader}};
         Err ->
             Err
     end.

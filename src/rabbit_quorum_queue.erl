@@ -21,7 +21,7 @@
 -export([init/1, handle_event/2]).
 -export([recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
--export([settle/4, reject/4, basic_get/4, consume/3, cancel/6]).
+-export([settle/4, reject/4, dequeue/4, consume/3, cancel/6]).
 -export([credit/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3, deliver/2]).
@@ -453,14 +453,12 @@ reject(CTag, false, MsgIds, QState) ->
 credit(CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
 
--spec basic_get(amqqueue:amqqueue(), NoAck :: boolean(), rabbit_types:ctag(),
-                rabbit_fifo_client:state()) ->
-    {'ok', 'empty', rabbit_fifo_client:state()} |
-    {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
+-spec dequeue(NoAck :: boolean(), pid(),
+              rabbit_types:ctag(), rabbit_fifo_client:state()) ->
+    {empty, rabbit_fifo_client:state()} |
+    {ok, QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
     {error, timeout | term()}.
-basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
-    QName = amqqueue:get_name(Q),
-    Id = amqqueue:get_pid(Q),
+dequeue(NoAck, _LimiterPid, CTag0, QState0) ->
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
                      true ->
@@ -468,19 +466,19 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
                      false ->
                          unsettled
                  end,
-    case rabbit_fifo_client:dequeue(CTag, Settlement, QState0) of
-        {ok, empty, QState} ->
-            {ok, empty, QState};
-        {ok, {{MsgId, {MsgHeader, Msg0}}, MsgsReady}, QState} ->
-            Count = maps:get(delivery_count, MsgHeader, 0),
-            IsDelivered = Count > 0,
-            Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
-            {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
-        {error, _} = Err ->
-            Err;
-        {timeout, _} ->
-            {error, timeout}
-    end.
+    rabbit_fifo_client:dequeue(CTag, Settlement, QState0).
+        % {ok, empty, QState} ->
+        %     {ok, empty, QState};
+        % {ok, {{MsgId, {MsgHeader, Msg0}}, MsgsReady}, QState} ->
+        %     Count = maps:get(delivery_count, MsgHeader, 0),
+        %     IsDelivered = Count > 0,
+        %     Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
+        %     {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
+        % {error, _} = Err ->
+        %     Err;
+        % {timeout, _} ->
+        %     {error, timeout}
+    % end.
 
 -spec consume(amqqueue:amqqueue(),
               rabbit_queue_type:consume_spec(),

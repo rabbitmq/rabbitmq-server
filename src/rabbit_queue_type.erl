@@ -16,6 +16,7 @@
          settle/5,
          reject/5,
          credit/5,
+         dequeue/5,
 
          name/2
          ]).
@@ -112,6 +113,11 @@
                  non_neg_integer(), Drain :: boolean(), queue_state()) ->
     queue_state().
 
+-callback dequeue(NoAck :: boolean(), LimiterPid :: pid(),
+                  rabbit_types:ctag(), queue_state()) ->
+    {ok, Count :: non_neg_integer(), empty | rabbit_amqqueue:qmsg(),
+     queue_state()}.
+
 %% TODO: this should be controlled by a registry that is populated on boot
 discover(<<"quorum">>) ->
     rabbit_quorum_queue;
@@ -190,13 +196,19 @@ cancel(Q, ChPid, Tag, OkMsg, ActiveUser, Ctxs) ->
 -spec handle_event(queue_ref(), term(), ctxs()) ->
     {ok, ctxs(), actions()} | {error, term()}.
 handle_event(QRef, Evt, Ctxs) ->
-    #ctx{module = Mod,
-         state = State0} = Ctx = get_ctx(QRef, Ctxs),
-    case Mod:handle_event(Evt, State0) of
-        {ok, State, Actions} ->
-            {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
-        Err ->
-            Err
+    %% events can arrive after a queue state has been cleared up
+    %% so need to be defensive here
+    case get_ctx(QRef, Ctxs) of
+        #ctx{module = Mod,
+             state = State0} = Ctx  ->
+            case Mod:handle_event(Evt, State0) of
+                {ok, State, Actions} ->
+                    {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
+                Err ->
+                    Err
+            end;
+        undefined ->
+            {ok, Ctxs, []}
     end.
 
 
@@ -241,6 +253,16 @@ credit(Q, CTag, Credit, Drain, Ctxs) ->
     State = Mod:settle(CTag, Credit, Drain, State0),
     set_ctx(Q, Ctx#ctx{state = State}, Ctxs).
 
+dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
+    #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
+    Mod = amqqueue:get_type(Q),
+    case Mod:dequeue(NoAck, LimiterPid, CTag, State0) of
+        {ok, Num, Msg, State} ->
+            {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
+        {empty, State} ->
+            {empty, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)}
+    end.
+
 name(QRef, Ctxs) ->
     case Ctxs of
         #{QRef := Ctx} ->
@@ -272,7 +294,7 @@ get_ctx(Q, Contexts) when ?is_amqqueue(Q) ->
 get_ctx(QPid, Contexts) when is_map(Contexts) ->
     Ref = qref(QPid),
     %% if we use a QPid it should always be initialised
-    maps:get(Ref, Contexts).
+    maps:get(Ref, Contexts, undefined).
 
 set_ctx(Q, Ctx, Contexts)
   when ?is_amqqueue(Q) andalso is_map(Contexts) ->
