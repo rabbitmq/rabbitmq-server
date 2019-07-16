@@ -161,14 +161,12 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
         end,
     ErrorFun =
         fun(E) ->
+            rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
             rabbit_mgmt_util:bad_request(E, ReqData, Context)
         end,
     ProgressFun =
         fun(Message) ->
-            ok = cowboy_req:inform(102,
-                                   #{<<"x-rabbitmq-import-progress">> =>
-                                         rabbit_data_coercion:to_binary(Message)},
-                                   ReqData)
+            rabbit_log:info("Definition import progress: ~s", [Message])
         end,
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
