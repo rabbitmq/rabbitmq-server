@@ -990,15 +990,15 @@ is_virgin_node() ->
             true;
         {ok, []} ->
             true;
-        {ok, [File1, File2, File3]} ->
-            lists:usort([filename:join(dir(), File1),
-                         filename:join(dir(), File2),
-                         filename:join(dir(), File3)]) =:=
-                lists:usort([rabbit_node_monitor:cluster_status_filename(),
-                             rabbit_node_monitor:running_nodes_filename(),
-                             rabbit_node_monitor:quorum_filename()]);
-        {ok, _} ->
-            false
+        {ok, List0} ->
+            IgnoredFiles0 =
+            [rabbit_node_monitor:cluster_status_filename(),
+             rabbit_node_monitor:running_nodes_filename(),
+             rabbit_node_monitor:quorum_filename(),
+             rabbit_feature_flags:enabled_feature_flags_list_file()],
+            IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
+            List = List0 -- IgnoredFiles,
+            List =:= []
     end.
 
 find_reachable_peer_to_cluster_with([]) ->
