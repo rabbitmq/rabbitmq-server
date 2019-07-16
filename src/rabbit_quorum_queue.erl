@@ -20,7 +20,7 @@
 
 -export([init/1, handle_event/2]).
 -export([recover/1, stop/1, delete/4, delete_immediately/2]).
--export([info/1, info/2, stat/1, infos/1]).
+-export([state_info/1, info/2, stat/1, infos/1]).
 -export([settle/4, reject/4, dequeue/4, consume/3, cancel/6]).
 -export([credit/4]).
 -export([purge/1]).
@@ -570,14 +570,21 @@ deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
               {[{Q, S} | Qs], Actions}
       end, {[], []}, QSs).
 
--spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
-info(Q) ->
+-spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+info(Q, all_keys) ->
     info(Q, [name, durable, auto_delete, arguments, pid, state, messages,
-             messages_ready, messages_unacknowledged]).
+             messages_ready, messages_unacknowledged]);
+info(Q, Items) ->
+    [{Item, i(Item, Q)} || Item <- Items].
+
+state_info(S) ->
+    #{pending_raft_commands => rabbit_fifo_client:pending_size(S)}.
+
+
 
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
-
 infos(QName) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
@@ -586,10 +593,7 @@ infos(QName) ->
             []
     end.
 
--spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
 
-info(Q, Items) ->
-    [{Item, i(Item, Q)} || Item <- Items].
 
 -spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 

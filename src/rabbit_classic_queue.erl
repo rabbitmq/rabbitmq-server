@@ -24,7 +24,9 @@
          settle/4,
          reject/4,
          credit/4,
-         dequeue/4
+         dequeue/4,
+         info/2,
+         state_info/1
          ]).
 
 -export([delete_crashed/1,
@@ -185,6 +187,26 @@ dequeue(NoAck, LimiterPid, _CTag, State) ->
             {empty, State};
         {ok, Count, Msg} ->
             {ok, Count, Msg, State}
+    end.
+
+-spec state_info(state()) -> #{atom() := term()}.
+state_info(_State) ->
+    #{}.
+
+%% general queue info
+-spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+info(Q, Items) ->
+    QPid = amqqueue:get_pid(Q),
+    Req = case Items of
+              all_keys -> info;
+              _ -> {info, Items}
+          end,
+    case delegate:invoke(QPid, {gen_server2, call, [Req, infinity]}) of
+        {ok, Result} ->
+            Result;
+        {error, _Err} ->
+            []
     end.
 
 qpids(Qs) ->

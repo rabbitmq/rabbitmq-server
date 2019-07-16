@@ -244,6 +244,8 @@ remove_msg_ref(Confirm, MsgId, QueueName, QueueRef,
         #msg_status{refs = #{QueueRef := ?SET_VALUE} = Refs,
                     queue_status = QStatus,
                     exchange = XName} = MsgStatus ->
+            rabbit_log:info("~w QStatus ~w Confirm ~w", [?FUNCTION_NAME,
+                                                         QStatus, Confirm]),
             QStatus1 = case {Confirm, QueueName} of
                             {no_confirm, _} -> QStatus;
                             {_, ignore}     -> QStatus;

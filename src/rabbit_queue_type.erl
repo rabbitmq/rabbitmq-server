@@ -8,6 +8,11 @@
          declare/2,
          delete/4,
          stat/1,
+         name/2,
+         info/2,
+         state_info/1,
+         info_down/3,
+         %% stateful client API
          new/2,
          consume/3,
          cancel/6,
@@ -16,9 +21,8 @@
          settle/5,
          reject/5,
          credit/5,
-         dequeue/5,
+         dequeue/5
 
-         name/2
          ]).
 
 %% temporary
@@ -118,6 +122,14 @@
     {ok, Count :: non_neg_integer(), empty | rabbit_amqqueue:qmsg(),
      queue_state()}.
 
+%% return a map of state summary information
+-callback state_info(queue_state()) ->
+    #{atom() := term()}.
+
+%% general queue info
+-callback info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+
 %% TODO: this should be controlled by a registry that is populated on boot
 discover(<<"quorum">>) ->
     rabbit_quorum_queue;
@@ -153,6 +165,49 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
 stat(Q) ->
     Mod = amqqueue:get_type(Q),
     Mod:stat(Q).
+
+-spec name(queue_ref(), ctxs()) ->
+    undefined | queue_name().
+name(QRef, Ctxs) ->
+    case Ctxs of
+        #{QRef := Ctx} ->
+            Ctx#ctx.name;
+        _ ->
+            undefined
+    end.
+
+-spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+info(Q, Items) when ?amqqueue_state_is(Q, crashed) ->
+    info_down(Q, Items, crashed);
+info(Q, Items) when ?amqqueue_state_is(Q, stopped) ->
+    info_down(Q, Items, stopped);
+info(Q, Items) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:info(Q, Items).
+
+state_info(#ctx{state = S,
+                module = Mod}) ->
+    Mod:state_info(S).
+
+info_down(Q, all_keys, DownReason) ->
+    info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason);
+info_down(Q, Items, DownReason) ->
+    [{Item, i_down(Item, Q, DownReason)} || Item <- Items].
+
+i_down(name,               Q, _) -> amqqueue:get_name(Q);
+i_down(durable,            Q, _) -> amqqueue:is_durable(Q);
+i_down(auto_delete,        Q, _) -> amqqueue:is_auto_delete(Q);
+i_down(arguments,          Q, _) -> amqqueue:get_arguments(Q);
+i_down(pid,                Q, _) -> amqqueue:get_pid(Q);
+i_down(recoverable_slaves, Q, _) -> amqqueue:get_recoverable_slaves(Q);
+i_down(type,               Q, _) -> amqqueue:get_type(Q);
+i_down(state, _Q, DownReason)    -> DownReason;
+i_down(K, _Q, _DownReason) ->
+    case lists:member(K, rabbit_amqqueue_process:info_keys()) of
+        true  -> '';
+        false -> throw({bad_argument, K})
+    end.
 
 -spec new(amqqueue:amqqueue(), ctxs()) -> ctxs().
 new(Q, Ctxs) when ?is_amqqueue(Q) ->
@@ -261,14 +316,6 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
             {empty, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)}
-    end.
-
-name(QRef, Ctxs) ->
-    case Ctxs of
-        #{QRef := Ctx} ->
-            Ctx#ctx.name;
-        _ ->
-            undefined
     end.
 
 %% temporary

@@ -913,28 +913,14 @@ format(_) -> [].
 
 -spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
-info(Q) when ?amqqueue_is_quorum(Q) -> rabbit_quorum_queue:info(Q);
-info(Q) when ?amqqueue_state_is(Q, crashed) -> info_down(Q, crashed);
-info(Q) when ?amqqueue_state_is(Q, stopped) -> info_down(Q, stopped);
-info(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call, [info, infinity]}).
+info(Q) when ?is_amqqueue(Q) -> rabbit_queue_type:info(Q, all_keys).
+
 
 -spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) ->
           rabbit_types:infos().
 
-info(Q, Items) when ?amqqueue_is_quorum(Q) ->
-    rabbit_quorum_queue:info(Q, Items);
-info(Q, Items) when ?amqqueue_state_is(Q, crashed) ->
-    info_down(Q, Items, crashed);
-info(Q, Items) when ?amqqueue_state_is(Q, stopped) ->
-    info_down(Q, Items, stopped);
-info(Q, Items) ->
-    QPid = amqqueue:get_pid(Q),
-    case delegate:invoke(QPid, {gen_server2, call, [{info, Items}, infinity]}) of
-        {ok, Res}      -> Res;
-        {error, Error} -> throw(Error)
-    end.
+info(Q, Items) when ?is_amqqueue(Q) ->
+    rabbit_queue_type:info(Q, Items).
 
 info_down(Q, DownReason) ->
     info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason).

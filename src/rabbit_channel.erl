@@ -133,8 +133,6 @@
              next_tag,
              %% messages pending consumer acknowledgement
              unacked_message_q,
-             %% a map of queue ref to queue name
-             queue_names,
              %% queue processes are monitored to update
              %% queue names
              queue_monitors,
@@ -525,7 +523,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 tx                      = none,
                 next_tag                = 1,
                 unacked_message_q       = ?QUEUE:new(),
-                queue_names             = #{},
                 queue_monitors          = pmon:new(),
                 consumer_mapping        = #{},
                 queue_consumers         = #{},
@@ -790,12 +787,15 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     %% any credit that was deferred will be sent to the rabbit_reader
     %% processs that might be blocked by this particular channel.
     credit_flow:peer_down(QPid),
-    #ch{queue_names = QNames, queue_monitors = QMons} = State4,
-    case maps:find(QPid, QNames) of
-        {ok, QName} -> erase_queue_stats(QName);
-        error       -> ok
+    #ch{queue_states = QStates, queue_monitors = QMons} = State4,
+    case rabbit_queue_type:name(QPid, QStates) of
+        undefined ->
+            ok;
+        QName ->
+            erase_queue_stats(QName)
     end,
-    noreply(State4#ch{queue_names    = maps:remove(QPid, QNames),
+    %% TODO: provide api function for remove from queue states?
+    noreply(State4#ch{queue_states = maps:remove(QPid, QStates),
                       queue_monitors = pmon:erase(QPid, QMons)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -816,11 +816,8 @@ handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
     QueueStates1 =
         maps:filter(fun(QRef, _) ->
                             QName = rabbit_queue_type:name(QRef, QueueStates0),
-                            rabbit_log:info("tick QName ~w", [QName]),
                             [] /= rabbit_amqqueue:lookup([QName])
                     end, QueueStates0),
-    rabbit_log:info("channel tick pre ~w post ~w", [maps:size(QueueStates0),
-                                                    maps:size(QueueStates1)]),
     case evaluate_consumer_timeout(State0#ch{queue_states = QueueStates1}) of
         {noreply, State} ->
             noreply(init_tick_timer(reset_tick_timer(State)));
@@ -1204,7 +1201,6 @@ record_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
 record_confirms([], State) ->
     State;
 record_confirms(MXs, State = #ch{confirmed = C}) ->
-    rabbit_log:info("recording confirms ~w", [MXs]),
     State#ch{confirmed = [MXs | C]}.
 
 handle_method({Method, Content}, State) ->
@@ -1753,13 +1749,12 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
            end) of
         {{ok, QueueStates, Actions}, Q} when ?is_amqqueue(Q) ->
             QPid = amqqueue:get_pid(Q),
-            QName = amqqueue:get_name(Q),
             CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
             State1 = track_delivering_queue(
-                       NoAck, QPid, QName,
+                       NoAck, QPid,
                        State#ch{consumer_mapping = CM1,
                                 queue_states = QueueStates}),
             State2 = handle_queue_actions(Actions, State1),
@@ -1791,12 +1786,12 @@ consumer_monitor(ConsumerTag,
     State#ch{queue_monitors  = maybe_monitor(QRef, QMons),
              queue_consumers = QCons1}.
 
-track_delivering_queue(NoAck, QPid, QName,
-                       State = #ch{queue_names = QNames,
+track_delivering_queue(NoAck, QPid,
+                       State = #ch{
                                    % queue_monitors = QMons,
                                    delivering_queues = DQ}) ->
     QRef = qpid_to_ref(QPid),
-    State#ch{queue_names = maps:put(QRef, QName, QNames),
+    State#ch{
              % queue_monitors = maybe_monitor(QRef, QMons),
              delivering_queues = case NoAck of
                                      true  -> DQ;
@@ -1816,6 +1811,7 @@ handle_publishing_queue_down(QPid, Reason,
                 {true, _} ->
                     {RejectMXs, UC1} =
                         unconfirmed_messages:reject_all_for_queue(QPid, UC),
+
                     record_rejects(RejectMXs, State#ch{unconfirmed = UC1});
                 {false, normal} ->
                     {ConfirmMXs, RejectMXs, UC1} =
@@ -1837,14 +1833,14 @@ handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
 
 handle_consuming_queue_down_or_eol(QRef,
                                    State = #ch{queue_consumers = QCons,
-                                               queue_names = QNames}) ->
+                                               queue_states = QStates}) ->
     ConsumerTags = case maps:find(QRef, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
-              QName = maps:get(QRef, QNames),
+              QName = rabbit_queue_type:name(QRef, QStates),
               case queue_down_consumer_action(CTag, CMap) of
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
@@ -1994,8 +1990,6 @@ record_sent(Type, Tag, AckRequired,
     end,
     DeliveredAt = os:system_time(millisecond),
     rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, TraceState),
-    rabbit_log:info("channel recording sent ~w ~w ~w",
-                    [Tag, DeliveryTag, AckRequired]),
     UAMQ1 = case AckRequired of
                 true  -> ?QUEUE:in({DeliveryTag, Tag, DeliveredAt,
                                     {QPid, MsgId}}, UAMQ);
@@ -2033,23 +2027,24 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     end.
 
 %% NB: Acked is in youngest-first order
-ack(Acked, State = #ch{queue_names = QNames,
-                       queue_states = QueueStates0}) ->
+ack(Acked, State = #ch{queue_states = QueueStates0}) ->
     QueueStates =
         foreach_per_queue(
           fun ({QPid, CTag}, MsgIds, Acc0) ->
                   Acc = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
-                  incr_queue_stats(QPid, QNames, MsgIds, State),
+                  incr_queue_stats(QPid, MsgIds, State),
                   Acc
           end, Acked, QueueStates0),
     ok = notify_limiter(State#ch.limiter, Acked),
     State#ch{queue_states = QueueStates}.
 
-incr_queue_stats(QPid, QNames, MsgIds, State) ->
-    case maps:find(qpid_to_ref(QPid), QNames) of
-        {ok, QName} -> Count = length(MsgIds),
-                       ?INCR_STATS(queue_stats, QName, Count, ack, State);
-        error       -> ok
+incr_queue_stats(QPid, MsgIds, #ch{queue_states = QStates} = State) ->
+    case rabbit_queue_type:name(qpid_to_ref(QPid), QStates) of
+        undefined ->
+            ok;
+        QName ->
+            Count = length(MsgIds),
+            ?INCR_STATS(queue_stats, QName, Count, ack, State)
     end.
 
 %% {Msgs, Acks}
@@ -2130,8 +2125,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                         mandatory  = Mandatory,
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
-                   DelQNames}, State0 = #ch{queue_names  = _QNames,
-                                            queue_monitors = _QMons,
+                   DelQNames}, State0 = #ch{queue_monitors = _QMons,
                                             queue_states = QueueStates0}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
     {QueueStates, Actions} =
@@ -2160,9 +2154,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                     end, [], Qs),
     ok = process_routing_mandatory(Mandatory, AllDeliveredQRefs,
                                    Message, State1),
-    QNames1 = State1#ch.queue_names,
-    AllDeliveredQNames = [QName || QRef <- AllDeliveredQRefs,
-                                   {ok, QName} <- [maps:find(QRef, QNames1)]],
+    AllDeliveredQNames = [rabbit_queue_type:name(QRef, QueueStates)
+                          || QRef <- AllDeliveredQRefs],
     State = process_routing_confirm(Confirm,
                                     AllDeliveredQRefs,
                                     AllDeliveredQNames,
@@ -2171,9 +2164,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     case rabbit_event:stats_level(State1, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
-            [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
-             QRef <- AllDeliveredQRefs,
-             {ok, QName} <- [maps:find(QRef, QNames1)]];
+            [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish)
+             || QName <- AllDeliveredQNames];
         _ ->
             ok
     end,
@@ -2197,7 +2189,6 @@ process_routing_confirm(false, _, _, _, _, State) ->
 process_routing_confirm(true, [], _, MsgSeqNo, XName, State) ->
     record_confirms([{MsgSeqNo, XName}], State);
 process_routing_confirm(true, QRefs, QNames, MsgSeqNo, XName, State) ->
-    rabbit_log:info("recording unconfirmed ~w ~w", [QRefs, MsgSeqNo]),
     State#ch{unconfirmed =
         unconfirmed_messages:insert(MsgSeqNo, QNames, QRefs, XName,
                                     State#ch.unconfirmed)}.
@@ -2213,7 +2204,6 @@ confirm(MsgSeqNos, QRef, State = #ch{queue_states = QStates, unconfirmed = UC}) 
                 N ->
                     N
             end,
-    rabbit_log:info("confirm queue name ~w ~w ~w", [QName, QRef, MsgSeqNos]),
     {ConfirmMXs, RejectMXs, UC1} =
         unconfirmed_messages:confirm_multiple_msg_ref(MsgSeqNos, QName, QRef, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
@@ -2221,10 +2211,8 @@ confirm(MsgSeqNos, QRef, State = #ch{queue_states = QStates, unconfirmed = UC}) 
     record_rejects(RejectMXs, State1).
 
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
-    rabbit_log:info("sending no confirms ~n", []),
     State;
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = C, rejected = R}) ->
-    rabbit_log:info("sending confirms ~w", [C]),
     case rabbit_node_monitor:pause_partition_guard() of
         ok      ->
             Confirms = lists:append(C),
@@ -2366,7 +2354,12 @@ i(Item, _) ->
 
 pending_raft_commands(QStates) ->
     maps:fold(fun (_, V, Acc) ->
-                      Acc + rabbit_fifo_client:pending_size(V)
+                      case rabbit_queue_type:state_info(V) of
+                          #{pending_raft_commands := P} ->
+                              Acc + P;
+                          _ ->
+                              Acc
+                      end
               end, 0, QStates).
 
 name(#ch{cfg = #conf{conn_name = ConnName, channel = Channel}}) ->
@@ -2683,7 +2676,7 @@ handle_deliver0(ConsumerTag, AckRequired,
     record_sent(deliver, ConsumerTag, AckRequired, Msg, State).
 
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
-                 Msg = {QName, QPid, _MsgId, Redelivered,
+                 Msg = {_QName, QPid, _MsgId, Redelivered,
                         #basic_message{exchange_name = ExchangeName,
                                        routing_keys  = [RoutingKey | _CcRoutes],
                                        content       = Content}}, State) ->
@@ -2695,7 +2688,7 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                            routing_key   = RoutingKey,
                            message_count = MessageCount},
            Content),
-    State1 = track_delivering_queue(NoAck, QPid, QName, State),
+    State1 = track_delivering_queue(NoAck, QPid, State),
     {noreply, record_sent(get, DeliveryTag, not(NoAck), Msg, State1)}.
 
 init_tick_timer(State = #ch{tick_timer = undefined}) ->
