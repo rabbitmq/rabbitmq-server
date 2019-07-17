@@ -528,7 +528,7 @@ function show_popup(type, text, _mode) {
     hide();
     $('#outer').after(format('popup', {'type': type, 'text': text}));
     $(cssClass).fadeIn(100);
-    $(cssClass + ' span').click(function () {
+    $(cssClass + ' span').on('click', function () {
         $('.popup-owner').removeClass('popup-owner');
         hide();
     });
