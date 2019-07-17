@@ -771,7 +771,7 @@ function update_pages_from_ui(sender) {
 }
 
 function postprocess_partial() {
-    $('.pagination_class_input').on('keypress', function() {
+    $('.pagination_class_input').on('keypress', function(e) {
         if (e.keyCode == 13) {
             update_pages_from_ui(this);
         }
