@@ -148,7 +148,7 @@ function start_app() {
 }
 
 function setup_constant_events() {
-    $('#update-every').change(function() {
+    $('#update-every').on('change', function() {
             var interval = $(this).val();
             store_pref('interval', interval);
             if (interval == '')
@@ -157,7 +157,7 @@ function setup_constant_events() {
                 interval = parseInt(interval);
             set_timer_interval(interval);
         });
-    $('#show-vhost').change(function() {
+    $('#show-vhost').on('change', function() {
             current_vhost = $(this).val();
             store_pref('vhost', current_vhost);
             update();
@@ -572,16 +572,16 @@ function submit_import(form) {
 };
 
 function postprocess() {
-    $('form.confirm-queue').submit(function() {
+    $('form.confirm-queue').on('submit', function() {
         return confirm("Are you sure? The queue is going to be deleted. " +
                        "Messages cannot be recovered after deletion.");
         });
 
-    $('form.confirm-purge-queue').submit(function() {
+    $('form.confirm-purge-queue').on('submit', function() {
         return confirm("Are you sure? Messages cannot be recovered after purging.");
         });
 
-    $('form.confirm').submit(function() {
+    $('form.confirm').on('submit', function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
         });
@@ -597,7 +597,7 @@ function postprocess() {
             }
         });
 
-    $('#download-definitions').click(function() {
+    $('#download-definitions').on('click', function() {
             var idx = $("select[name='vhost-download'] option:selected").index();
             var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
             var path = 'api/definitions' + vhost + '?download=' +
@@ -608,7 +608,7 @@ function postprocess() {
             return false;
         });
 
-    $('.update-manual').click(function() {
+    $('.update-manual').on('click', function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
 
@@ -620,7 +620,7 @@ function postprocess() {
             update_multifields();
         });
 
-    $('.controls-appearance').change(function() {
+    $('.controls-appearance').on('change', function() {
         var params = $(this).get(0).options;
         var selected = $(this).val();
 
@@ -656,11 +656,11 @@ function postprocess() {
         update_counter = 0; // If there's interaction, reset the counter.
     });
 
-    $('.tag-link').click(function() {
+    $('.tag-link').on('click', function() {
         $('#tags').val($(this).attr('tag'));
     });
 
-    $('.argument-link').click(function() {
+    $('.argument-link').on('click', function() {
         var field = $(this).attr('field');
         var row = $('#' + field).find('.mf').last();
         var key = row.find('input').first();
@@ -678,7 +678,7 @@ function postprocess() {
 
     $('#filter').on('keyup', debounce(update_filter, 500));
 
-    $('#filter-regex-mode').change(update_filter_regex_mode);
+    $('#filter-regex-mode').on('change', update_filter_regex_mode);
 
     $('#truncate').on('keyup', debounce(update_truncate, 500));
 
@@ -771,17 +771,17 @@ function update_pages_from_ui(sender) {
 }
 
 function postprocess_partial() {
-    $('.pagination_class_input').keypress(function(e) {
+    $('.pagination_class_input').on('keypress', function() {
         if (e.keyCode == 13) {
             update_pages_from_ui(this);
         }
     });
 
-    $('.pagination_class_checkbox').click(function(e) {
+    $('.pagination_class_checkbox').on('click', function(e) {
         update_pages_from_ui(this);
     });
 
-    $('.pagination_class_select').change(function(e) {
+    $('.pagination_class_select').on('change', function(e) {
         update_pages_from_ui(this);
     });
 
@@ -792,7 +792,7 @@ function postprocess_partial() {
             toggle_visibility($(this));
         });
 
-    $('.sort').click(function() {
+    $('.sort').on('click', function() {
             var sort = $(this).attr('sort');
             if (current_sort == sort) {
                 current_sort_reverse = ! current_sort_reverse;
@@ -834,14 +834,14 @@ function update_multifield(multifield, dict) {
         var type = $(this).val();
         var input = $('#' + prefix + '_mfvalue');
         if (type == 'list') {
-            if (input.size() == 1) {
+            if (input.length == 1) {
                 input.replaceWith('<div class="multifield-sub" id="' + prefix +
                                   '"></div>');
             }
             update_multifield($('#' + prefix), false);
         }
         else {
-            if (input.size() == 1) {
+            if (input.length == 1) {
                 var key = dict ? $('#' + prefix + '_mfkey').val() : '';
                 var value = input.val();
                 if (key == '' && value == '') {
@@ -1029,7 +1029,7 @@ function publish_msg0(params) {
         }
     }
     with_req('POST', path, JSON.stringify(params), function(resp) {
-            var result = jQuery.parseJSON(resp.responseText);
+            var result = JSON.parse(resp.responseText);
             if (result.routed) {
                 show_popup('info', 'Message published.');
             } else {
@@ -1041,7 +1041,7 @@ function publish_msg0(params) {
 function get_msgs(params) {
     var path = fill_path_template('/queues/:vhost/:name/get', params);
     with_req('POST', path, JSON.stringify(params), function(resp) {
-            var msgs = jQuery.parseJSON(resp.responseText);
+            var msgs = JSON.parse(resp.responseText);
             if (msgs.length == 0) {
                 show_popup('info', 'Queue is empty');
             } else {
@@ -1056,7 +1056,7 @@ function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
         with_req('GET', reqs[key], null, function(resp) {
-                acc[key] = jQuery.parseJSON(resp.responseText);
+                acc[key] = JSON.parse(resp.responseText);
                 var remainder = {};
                 for (var k in reqs) {
                     if (k != key) remainder[k] = reqs[k];
