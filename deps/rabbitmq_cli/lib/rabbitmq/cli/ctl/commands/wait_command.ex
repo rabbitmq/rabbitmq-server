@@ -55,7 +55,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     Helpers.stream_until_error_parameterised(
       [
         log("Waiting for pid file '#{pid_file}' to appear", quiet),
-        fn _ -> wait_for_pid_file(pid_file, timeout) end,
+        fn _ -> wait_for_pid_file(pid_file, node_name, timeout) end,
         log_param(fn pid -> "pid is #{pid}" end, quiet)
       ] ++
         wait_for_pid_funs(node_name, app_names, timeout, quiet),
@@ -249,7 +249,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     :rabbit_misc.is_os_process_alive(to_charlist(pid))
   end
 
-  defp wait_for_pid_file(pid_file, timeout) do
+  defp wait_for_pid_file(pid_file, node_name, timeout) do
     wait_for(
       timeout,
       fn ->
@@ -259,8 +259,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
               :error ->
                 {:error, {:garbage_in_pid_file, pid_file}}
 
-              {int, _} ->
-                {:ok, int}
+              {pid, _} ->
+                case check_distribution(pid, node_name) do
+                  :ok -> {:ok, pid}
+                  _   -> {:error, :loop}
+                end
             end
 
           {:error, :enoent} ->
