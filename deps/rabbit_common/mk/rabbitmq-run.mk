@@ -287,20 +287,22 @@ REDIRECT_STDIO = > $(RABBITMQ_LOG_BASE)/startup_log \
 		 2> $(RABBITMQ_LOG_BASE)/startup_err
 endif
 
+RMQCTL_WAIT_TIMEOUT ?= 60
+
 start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
 	  $(REDIRECT_STDIO) &
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) kernel
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) kernel
 
 start-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) \
 	  $(REDIRECT_STDIO) &
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) && \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) && \
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) status >/dev/null
 
@@ -310,7 +312,7 @@ start-rabbit-on-node:
 	  eval 'rabbit:start().' | \
 	  sed -E -e '/^ completed with .* plugins\.$$/d' -e '/^ok$$/d'
 	$(verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE)
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE)
 
 stop-rabbit-on-node:
 	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
