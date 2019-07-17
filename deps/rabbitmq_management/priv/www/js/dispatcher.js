@@ -117,7 +117,7 @@ dispatcher_add(function(sammy) {
             else if (this.params['mode'] == 'purge') {
                 if (sync_delete(this, '/queues/:vhost/:name/contents')) {
                     show_popup('info', "Queue purged");
-                    update_partial();
+                    partial_update();
                 }
             }
             return false;
