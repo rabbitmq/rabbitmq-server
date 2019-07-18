@@ -25,10 +25,10 @@ ENV OPENSSL_SOURCE_SHA256="f6fb3079ad15076154eda9413fed42877d668e7069d9b87396d08
 ENV OPENSSL_PGP_KEY_IDS="0x8657ABB260F056B1E5190839D9C4D26D0E604491 0x5B2545DAB21995F4088CEFAA36CEE4DEB00CFE33 0xED230BEC4D4F2518B9D7DF41F0DB4D21C1D35231 0xC1F33DD8CE1D4CC613AF14DA9195C48241FBF7DD 0x7953AC1FBC3DC8B3B292393ED5E9E43F7DF9EE8C 0xE5E52560DD91C556DDBDA5D02064C53641C25E5D"
 
 # Use the latest stable Erlang/OTP release - gmake find_latest_otp - https://github.com/erlang/otp/tags
-ENV OTP_VERSION 22.0.4
+ENV OTP_VERSION 22.0.7
 # TODO add PGP checking when the feature will be added to Erlang/OTP's build system
 # http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
-ENV OTP_SOURCE_SHA256="71b2fe49ed5ac386ebc189dd2e5f4b95b11b4427936be0e3c5695a903ea9ffcd"
+ENV OTP_SOURCE_SHA256="04c090b55ec4a01778e7e1a5b7fdf54012548ca72737965b7aa8c4d7878c92bc"
 
 # Install dependencies required to build Erlang/OTP from source
 # http://erlang.org/doc/installation_guide/INSTALL.html
@@ -150,7 +150,11 @@ RUN set -eux; \
 	make -j "$(getconf _NPROCESSORS_ONLN)" GEN_OPT_FLGS="-O2 -fno-strict-aliasing"; \
 	make install; \
 	cd ..; \
-	rm -rf "$OTP_PATH"* /usr/local/lib/erlang/lib/*/src; \
+	rm -rf \
+		"$OTP_PATH"* \
+		/usr/local/lib/erlang/lib/*/examples \
+		/usr/local/lib/erlang/lib/*/src \
+	; \
 	\
 # reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
 	apt-mark auto '.*' > /dev/null; \
@@ -204,7 +208,7 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-        RABBITMQ_SOURCE_URL="https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/$RABBITMQ_VERSION/rabbitmq-server-generic-unix-${RABBITMQ_VERSION}.tar.xz"; \
+        RABBITMQ_SOURCE_URL="https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/$RABBITMQ_VERSION/rabbitmq-server-generic-unix-latest-toolchain-${RABBITMQ_VERSION}.tar.xz"; \
 	RABBITMQ_PATH="/usr/local/src/rabbitmq-$RABBITMQ_VERSION"; \
 	\
 	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
