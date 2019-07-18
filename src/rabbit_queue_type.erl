@@ -7,6 +7,7 @@
          is_enabled/1,
          declare/2,
          delete/4,
+         purge/1,
          policy_changed/1,
          stat/1,
          name/2,
@@ -87,6 +88,9 @@
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty).
 
+-callback purge(amqqueue:amqqueue()) ->
+    {ok, non_neg_integer()} | {error, term()}.
+
 -callback policy_changed(amqqueue:amqqueue()) -> ok.
 
 -callback consume(amqqueue:amqqueue(),
@@ -166,6 +170,11 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
     Mod = amqqueue:get_type(Q),
     Mod:delete(Q, IfUnused, IfEmpty, ActingUser).
 
+-spec purge(amqqueue:amqqueue()) ->
+    {'ok', non_neg_integer()}.
+purge(Q) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:purge(Q).
 
 -spec policy_changed(amqqueue:amqqueue()) -> 'ok'.
 policy_changed(Q) ->

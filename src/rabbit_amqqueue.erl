@@ -129,7 +129,8 @@ recover_classic_queues(VHost, Queues) ->
         BQ:start(VHost, [amqqueue:get_name(Q) || Q <- Queues]),
     case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
         {ok, _}         ->
-            RecoveredQs = recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)),
+            RecoveredQs = recover_durable_queues(lists:zip(Queues,
+                                                           OrderedRecoveryTerms)),
             RecoveredNames = [amqqueue:get_name(Q) || Q <- RecoveredQs],
             FailedQueues = [Q || Q <- Queues,
                                  not lists:member(amqqueue:get_name(Q), RecoveredNames)],
@@ -1109,12 +1110,8 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
 
 -spec purge(amqqueue:amqqueue()) -> {ok, qlen()}.
 
-purge(Q) when ?amqqueue_is_classic(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call, [purge, infinity]});
-purge(Q) when ?amqqueue_is_quorum(Q) ->
-    NodeId = amqqueue:get_pid(Q),
-    rabbit_quorum_queue:purge(NodeId).
+purge(Q) when ?is_amqqueue(Q) ->
+    rabbit_queue_type:purge(Q).
 
 -spec requeue(pid() | atom(),
               {rabbit_fifo:consumer_tag(), [msg_id()]},

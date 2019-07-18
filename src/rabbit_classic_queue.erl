@@ -15,6 +15,7 @@
          is_enabled/0,
          declare/2,
          delete/4,
+         purge/1,
          policy_changed/1,
          stat/1,
          init/1,
@@ -213,6 +214,12 @@ info(Q, Items) ->
         {error, _Err} ->
             []
     end.
+
+-spec purge(amqqueue:amqqueue()) ->
+    {ok, non_neg_integer()}.
+purge(Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    delegate:invoke(QPid, {gen_server2, call, [purge, infinity]}).
 
 qpids(Qs) ->
     lists:foldl(fun ({Q, _}, {MPidAcc, SPidAcc, Actions0}) ->
