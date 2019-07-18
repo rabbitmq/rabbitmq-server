@@ -1,43 +1,21 @@
-Thank you for using RabbitMQ and for taking the time to report an
-issue.
+Thank you for using RabbitMQ.
 
-## Does This Belong to GitHub or RabbitMQ Mailing List?
+**STOP NOW AND READ THIS** BEFORE OPENING A NEW ISSUE ON GITHUB
 
-*Important:* please first read the `CONTRIBUTING.md` document in the
-root of this repository. It will help you determine whether your
-feedback should be directed to the RabbitMQ mailing list [1] instead.
+Unless you are CERTAIN you have found a reproducible problem in RabbitMQ or
+have a **specific, actionable** suggestion for our team, you must first ask
+your question or discuss your suspected issue on the mailing list:
 
-## Please Help Maintainers and Contributors Help You
+https://groups.google.com/forum/#!forum/rabbitmq-users
 
-In order for the RabbitMQ team to investigate your issue, please provide
-**as much as possible** of the following details:
+Team RabbitMQ does not use GitHub issues for discussions, investigations, root
+cause analysis and so on.
 
-* RabbitMQ version
-* Erlang version
-* RabbitMQ server and client application log files
-* A runnable code sample, terminal transcript or detailed set of
-  instructions that can be used to reproduce the issue
-* RabbitMQ plugin information via `rabbitmq-plugins list`
-* Client library version (for all libraries used)
-* Operating system, version, and patch level
+Please take the time to read the CONTRIBUTING.md document for instructions on
+how to effectively ask a question or report a suspected issue:
 
-Running the `rabbitmq-collect-env` [2] script can provide most of the
-information needed. Please make the archive available via a third-party
-service and note that **the script does not attempt to scrub any
-sensitive data**.
+https://github.com/rabbitmq/rabbitmq-server/blob/master/CONTRIBUTING.md#github-issues
 
-If your issue involves RabbitMQ management UI or HTTP API, please also provide
-the following:
+Following these rules **will save time** for both you and RabbitMQ's maintainers.
 
- * Browser and its version
- * What management UI page was used (if applicable)
- * How the HTTP API requests performed can be reproduced with `curl`
- * Operating system on which you are running your browser, and its version
- * Errors reported in the JavaScript console (if any)
-
-This information **greatly speeds up issue investigation** (or makes it
-possible to investigate it at all).  Please help project maintainers and
-contributors to help you by providing it!
-
-1. https://groups.google.com/forum/#!forum/rabbitmq-users
-2. https://github.com/rabbitmq/support-tools/blob/master/scripts/rabbitmq-collect-env
+Thank you.
