@@ -23,9 +23,13 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
+    start_rabbitmq_app()
+
+    start_rabbitmq_app()
     reset_vm_memory_high_watermark()
 
     on_exit([], fn ->
+      start_rabbitmq_app()
       reset_vm_memory_high_watermark()
     end)
 

@@ -35,6 +35,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :status, [], timeout)
   end

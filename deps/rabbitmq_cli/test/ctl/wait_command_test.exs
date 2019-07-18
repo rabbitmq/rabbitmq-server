@@ -21,6 +21,12 @@ defmodule WaitCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.WaitCommand
 
   setup_all do
+    start_rabbitmq_app()
+
+    on_exit([], fn ->
+      start_rabbitmq_app()
+    end)
+
     RabbitMQ.CLI.Core.Distribution.start()
     rabbitmq_home = :rabbit_misc.rpc_call(get_rabbit_hostname(), :code, :lib_dir, [:rabbit])
 
