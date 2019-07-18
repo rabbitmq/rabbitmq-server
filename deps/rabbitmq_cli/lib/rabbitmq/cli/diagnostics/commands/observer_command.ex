@@ -26,7 +26,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
 
 
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, interval: interval}) do
     case :observer_cli.start(node_name, [{:interval, interval * 1000}]) do
