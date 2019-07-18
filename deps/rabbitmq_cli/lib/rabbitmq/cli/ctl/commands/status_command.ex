@@ -52,6 +52,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   end
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :status, [], timeout)
   end
