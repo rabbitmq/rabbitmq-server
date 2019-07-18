@@ -21,7 +21,7 @@
 -export([init/1, handle_event/2]).
 -export([recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([state_info/1, info/2, stat/1, infos/1]).
--export([settle/4, reject/4, dequeue/4, consume/3, cancel/6]).
+-export([settle/3, reject/4, dequeue/4, consume/3, cancel/5]).
 -export([credit/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3, deliver/2]).
@@ -37,7 +37,7 @@
 -export([add_member/4]).
 -export([delete_member/3]).
 -export([requeue/3]).
--export([policy_changed/2]).
+-export([policy_changed/1]).
 -export([cleanup_data_dir/0]).
 -export([shrink_all/1,
          grow/4]).
@@ -412,7 +412,6 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             end
     end.
 
-
 force_delete_queue(Servers) ->
     [begin
          case catch(ra:force_delete_server(S)) of
@@ -438,9 +437,8 @@ delete_immediately(Resource, {_Name, _} = QPid) ->
     rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
-settle(CTag, MsgIds, _ChPid, QState) ->
-    {_, S} = rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState),
-    S.
+settle(CTag, MsgIds, QState) ->
+    rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState).
 
 -spec reject(rabbit_types:ctag(), Confirm :: boolean(), [msg_id()],
              rabbit_fifo_client:state()) ->
@@ -457,7 +455,7 @@ credit(CTag, Credit, Drain, QState) ->
               rabbit_types:ctag(), rabbit_fifo_client:state()) ->
     {empty, rabbit_fifo_client:state()} |
     {ok, QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
-    {error, timeout | term()}.
+    {error, term()}.
 dequeue(NoAck, _LimiterPid, CTag0, QState0) ->
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
@@ -467,18 +465,6 @@ dequeue(NoAck, _LimiterPid, CTag0, QState0) ->
                          unsettled
                  end,
     rabbit_fifo_client:dequeue(CTag, Settlement, QState0).
-        % {ok, empty, QState} ->
-        %     {ok, empty, QState};
-        % {ok, {{MsgId, {MsgHeader, Msg0}}, MsgsReady}, QState} ->
-        %     Count = maps:get(delivery_count, MsgHeader, 0),
-        %     IsDelivered = Count > 0,
-        %     Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
-        %     {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
-        % {error, _} = Err ->
-        %     Err;
-        % {timeout, _} ->
-        %     {error, timeout}
-    % end.
 
 -spec consume(amqqueue:amqqueue(),
               rabbit_queue_type:consume_spec(),
@@ -543,8 +529,8 @@ consume(Q, Spec, State0) when ?amqqueue_is_quorum(Q) ->
 % -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
 %                           {'ok', rabbit_fifo_client:state()}.
 
-cancel(_Q, ChPid, ConsumerTag, OkMsg, _ActingUser, State) ->
-    maybe_send_reply(ChPid, OkMsg),
+cancel(_Q, ConsumerTag, OkMsg, _ActingUser, State) ->
+    maybe_send_reply(self(), OkMsg),
     rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), State).
 
 -spec stateless_deliver(amqqueue:ra_server_id(), rabbit_types:delivery()) -> 'ok'.
@@ -556,7 +542,6 @@ stateless_deliver(ServerId, Delivery) ->
 -spec deliver(Confirm :: boolean(), rabbit_types:delivery(),
               rabbit_fifo_client:state()) ->
     {ok | slow, rabbit_fifo_client:state()}.
-
 deliver(false, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0);
 deliver(true, Delivery, QState0) ->
@@ -565,7 +550,12 @@ deliver(true, Delivery, QState0) ->
 
 deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
     lists:foldl(
-      fun({Q, S0}, {Qs, Actions}) ->
+      fun({Q, stateless}, {Qs, Actions}) ->
+              QRef = amqqueue:get_pid(Q),
+              ok = rabbit_fifo_client:untracked_enqueue(
+                     [QRef], Delivery#delivery.message),
+              {Qs, Actions};
+         ({Q, S0}, {Qs, Actions}) ->
               {_, S} = deliver(Confirm, Delivery, S0),
               {[{Q, S} | Qs], Actions}
       end, {[], []}, QSs).
@@ -636,9 +626,10 @@ maybe_delete_data_dir(UId) ->
             ok
     end.
 
-policy_changed(QName, Node) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
+policy_changed(Q) ->
+    rabbit_log:info("PLICY CHANGE ~w", [ra_machine_config(Q)]),
+    QPid = amqqueue:get_pid(Q),
+    rabbit_fifo_client:update_machine_state(QPid, ra_machine_config(Q)).
 
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
 
@@ -652,8 +643,8 @@ cluster_state(Name) ->
             end
     end.
 
--spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
-    rabbit_types:infos() | {error, term()}.
+-spec status(rabbit_types:vhost(), Name :: binary()) ->
+    [rabbit_types:infos()] | {error, term()}.
 status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},

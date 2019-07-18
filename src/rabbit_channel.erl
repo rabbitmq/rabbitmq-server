@@ -754,7 +754,7 @@ handle_info({ra_event, From, _} = Evt,
                                      State2#ch{unconfirmed = UC1}),
             erase_queue_stats(rabbit_queue_type:name(QRef, QueueStates0)),
             noreply_coalesce(
-              State3#ch{queue_states = maps:remove(QRef, QueueStates0)})
+              State3#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)})
     end;
 
 handle_info({bump_credit, Msg}, State) ->
@@ -795,7 +795,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
             erase_queue_stats(QName)
     end,
     %% TODO: provide api function for remove from queue states?
-    noreply(State4#ch{queue_states = maps:remove(QPid, QStates),
+    noreply(State4#ch{queue_states = rabbit_queue_type:remove(QPid, QStates),
                       queue_monitors = pmon:erase(QPid, QMons)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -1490,7 +1490,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                    fun () -> {error, not_found} end,
                    fun () ->
                            rabbit_amqqueue:basic_cancel(
-                             Q, self(), ConsumerTag, ok_msg(NoWait, OkMsg),
+                             Q, ConsumerTag, ok_msg(NoWait, OkMsg),
                              Username, QueueStates0)
                    end) of
                 {ok, QueueStates} ->
@@ -1546,8 +1546,7 @@ handle_method(#'basic.recover_async'{requeue = true},
                   rabbit_misc:with_exit_handler(
                     OkFun,
                     fun () ->
-                            rabbit_amqqueue:requeue(QPid, {CTag, MsgIds},
-                                                    self(), Acc0)
+                            rabbit_amqqueue:requeue(QPid, {CTag, MsgIds}, Acc0)
                     end)
           end, lists:reverse(UAMQL), QueueStates0),
     ok = notify_limiter(Limiter, UAMQL),
@@ -1710,8 +1709,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                              queue_states = QStates0}) ->
     case maps:find(CTag, Consumers) of
         {ok, {Q, _CParams}} ->
-            {ok, QStates} = rabbit_amqqueue:credit(
-                              Q, self(), CTag, Credit, Drain, QStates0),
+            QStates = rabbit_amqqueue:credit(Q, CTag, Credit, Drain, QStates0),
             {noreply, State#ch{queue_states = QStates}};
         error -> precondition_failed(
                    "unknown consumer tag '~s'", [CTag])
@@ -2031,7 +2029,7 @@ ack(Acked, State = #ch{queue_states = QueueStates0}) ->
     QueueStates =
         foreach_per_queue(
           fun ({QPid, CTag}, MsgIds, Acc0) ->
-                  Acc = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
+                  Acc = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, Acc0),
                   incr_queue_stats(QPid, MsgIds, State),
                   Acc
           end, Acked, QueueStates0),

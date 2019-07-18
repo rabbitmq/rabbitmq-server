@@ -15,13 +15,14 @@
          is_enabled/0,
          declare/2,
          delete/4,
+         policy_changed/1,
          stat/1,
          init/1,
          consume/3,
-         cancel/6,
+         cancel/5,
          handle_event/2,
          deliver/2,
-         settle/4,
+         settle/3,
          reject/4,
          credit/4,
          dequeue/4,
@@ -84,6 +85,11 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
             {ok, 0}
     end.
 
+-spec policy_changed(amqqueue:amqqueue()) -> ok.
+policy_changed(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    gen_server2:cast(QPid, policy_changed).
+
 stat(Q) ->
     delegate:invoke(amqqueue:get_pid(Q),
                     {gen_server2, call, [stat, infinity]}).
@@ -117,22 +123,21 @@ consume(Q, Spec, State) when ?amqqueue_is_classic(Q) ->
             Err
     end.
 
-cancel(Q, ChPid, ConsumerTag, OkMsg, ActingUser, State) ->
+cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
     QPid = amqqueue:get_pid(Q),
     case delegate:invoke(QPid, {gen_server2, call,
-                                [{basic_cancel, ChPid, ConsumerTag,
+                                [{basic_cancel, self(), ConsumerTag,
                                   OkMsg, ActingUser}, infinity]}) of
         ok ->
             {ok, State};
         Err -> Err
     end.
 
--spec settle(rabbit_types:ctag(), [non_neg_integer()],
-             ChPid :: pid(), state()) ->
+-spec settle(rabbit_types:ctag(), [non_neg_integer()], state()) ->
     state().
-settle(_CTag, MsgIds, ChPid, State) ->
+settle(_CTag, MsgIds, State) ->
     delegate:invoke_no_result(State#?STATE.pid,
-                              {gen_server2, cast, [{ack, MsgIds, ChPid}]}),
+                              {gen_server2, cast, [{ack, MsgIds, self()}]}),
     State.
 
 reject(_CTag, Requeue, MsgIds, State) ->
@@ -153,12 +158,13 @@ handle_event(_Evt, State) ->
     {ok, State, []}.
 
 -spec deliver([{amqqueue:amqqueue(), state()}],
-                  Delivery :: term()) ->
+              Delivery :: term()) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
 deliver(Qs, #delivery{flow = Flow,
                       confirm = _Confirm} = Delivery) ->
     {MPids, SPids, Actions} = qpids(Qs),
     QPids = MPids ++ SPids,
+    rabbit_log:info("classic deliver to ~w", [QPids]),
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
         %% process. We are accessing the rabbit_channel process
@@ -169,16 +175,15 @@ deliver(Qs, #delivery{flow = Flow,
     end,
     MMsg = {deliver, Delivery, false},
     SMsg = {deliver, Delivery, true},
-    rabbit_log:info("rabbit_classic_queue delivery confirm  ~w", [_Confirm, MMsg]),
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
-    %% TODO: monitors
     {Qs, Actions}.
 
 
 -spec dequeue(NoAck :: boolean(), LimiterPid :: pid(),
               rabbit_types:ctag(), state()) ->
-    {ok, Count :: non_neg_integer(), empty | rabbit_amqqueue:qmsg(), state()}.
+    {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), state()} |
+    {empty, state()}.
 dequeue(NoAck, LimiterPid, _CTag, State) ->
     QPid = State#?STATE.pid,
     case delegate:invoke(QPid, {gen_server2, call,

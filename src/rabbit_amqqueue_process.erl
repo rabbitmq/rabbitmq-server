@@ -1545,7 +1545,7 @@ handle_cast({deliver,
     noreply(maybe_deliver_or_enqueue(Delivery, SlaveWhenPublished, State1));
 %% [0] The second ack is since the channel thought we were a slave at
 %% the time it published this message, so it used two credits (see
-%% rabbit_amqqueue:deliver/2).
+%% rabbit_queue_type:deliver/2).
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));

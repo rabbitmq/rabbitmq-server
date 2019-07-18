@@ -24,7 +24,9 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, deliver/3, requeue/4, ack/4, reject/4]).
+         stat/1,
+         % deliver/2, deliver/3,
+         requeue/3, ack/3, reject/4]).
 -export([not_found/1, absent/2]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
@@ -35,7 +37,7 @@
 -export([list_by_type/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/5, basic_consume/12, basic_cancel/6, notify_decorators/1]).
+-export([basic_get/5, basic_consume/12, basic_cancel/5, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
@@ -76,7 +78,8 @@
 -type qpids() :: [pid()].
 -type qlen() :: rabbit_types:ok(non_neg_integer()).
 -type qfun(A) :: fun ((amqqueue:amqqueue()) -> A | no_return()).
--type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(), boolean(), rabbit_types:message()}.
+-type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(), boolean(),
+                 rabbit_types:message()}.
 -type msg_id() :: non_neg_integer().
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
@@ -84,7 +87,6 @@
 -type queue_not_found() :: not_found.
 -type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
 -type not_found_or_absent() :: queue_not_found() | queue_absent().
--type quorum_states() :: #{Name :: atom() => rabbit_fifo_client:state()}.
 
 %%----------------------------------------------------------------------------
 
@@ -407,7 +409,7 @@ policy_changed(Q1, Q2) ->
     [ok = M:policy_changed(Q1, Q2) || M <- lists:usort(D1 ++ D2)],
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
-    notify_policy_changed(Q1).
+    notify_policy_changed(Q2).
 
 -spec lookup
         (name()) ->
@@ -1000,14 +1002,9 @@ force_event_refresh(Ref) ->
     ok.
 
 -spec notify_policy_changed(amqqueue:amqqueue()) -> 'ok'.
+notify_policy_changed(Q) when ?is_amqqueue(Q) ->
 
-notify_policy_changed(Q) when ?amqqueue_is_classic(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    gen_server2:cast(QPid, policy_changed);
-notify_policy_changed(Q) when ?amqqueue_is_quorum(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    QName = amqqueue:get_name(Q),
-    rabbit_quorum_queue:policy_changed(QName, QPid).
+    rabbit_queue_type:policy_changed(Q).
 
 -spec consumers(amqqueue:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
@@ -1121,36 +1118,33 @@ purge(Q) when ?amqqueue_is_quorum(Q) ->
 
 -spec requeue(pid() | atom(),
               {rabbit_fifo:consumer_tag(), [msg_id()]},
-              pid(),
-              quorum_states()) -> ok.
-requeue(QRef, {CTag, MsgIds}, _ChPid, QStates) ->
+              rabbit_queue_type:ctxs()) ->
+    rabbit_queue_type:ctxs().
+requeue(QRef, {CTag, MsgIds}, QStates) ->
     reject(QRef, true, {CTag, MsgIds}, QStates).
 
 -spec ack(pid(),
           {rabbit_fifo:consumer_tag(), [msg_id()]},
-          pid(),
-          quorum_states()) ->
-    quorum_states().
-ack(QPid, {CTag, MsgIds}, ChPid, QueueStates) ->
-    rabbit_queue_type:settle(QPid, CTag, MsgIds, ChPid, QueueStates).
+          rabbit_queue_type:ctxs()) ->
+    rabbit_queue_type:ctxs().
+ack(QPid, {CTag, MsgIds}, QueueStates) ->
+    rabbit_queue_type:settle(QPid, CTag, MsgIds, QueueStates).
 
 
 -spec reject(pid() | atom(),
              boolean(),
              {rabbit_fifo:consumer_tag(), [msg_id()]},
-             quorum_states()) ->
-    quorum_states().
+             rabbit_queue_type:ctxs()) ->
+    rabbit_queue_type:ctxs().
 reject(QRef, Requeue, {CTag, MsgIds}, QStates) ->
     rabbit_queue_type:reject(QRef, CTag, Requeue, MsgIds, QStates).
 
 -spec notify_down_all(qpids(), pid()) -> ok_or_errors().
-
 notify_down_all(QPids, ChPid) ->
     notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).
 
 -spec notify_down_all(qpids(), pid(), non_neg_integer()) ->
           ok_or_errors().
-
 notify_down_all(QPids, ChPid, Timeout) ->
     case rpc:call(node(), delegate, invoke,
                   [QPids, {gen_server2, call, [{notify_down, ChPid}, infinity]}], Timeout) of
@@ -1179,70 +1173,24 @@ activate_limit_all(QRefs, ChPid) ->
              rabbit_types:ctag(),
              non_neg_integer(),
              boolean(),
-             quorum_states()) ->
-    quorum_states().
+             rabbit_queue_type:ctxs()) ->
+    rabbit_queue_type:ctxs().
 credit(Q, CTag, Credit, Drain, QStates) ->
     rabbit_queue_type:credit(Q, CTag, Credit, Drain, QStates).
 
-% credit(Q, ChPid, CTag, Credit, Drain, QStates)
-%   when ?amqqueue_is_classic(Q) ->
-%     QPid = amqqueue:get_pid(Q),
-%     delegate:invoke_no_result(QPid, {gen_server2, cast,
-%                                      [{credit, ChPid, CTag, Credit, Drain}]}),
-%     {ok, QStates};
-% credit(Q, _ChPid, CTag, Credit,
-%        Drain, QStates) when ?amqqueue_is_quorum(Q) ->
-%     {QRef, _} = amqqueue:get_pid(Q),
-%     rabbit_queue_type:with(
-%       QRef,
-%       fun(S) ->
-%               rabbit_quorum_queue:credit(CTag, Credit, Drain, S)
-%       end,
-%       QStates).
-
 -spec basic_get(amqqueue:amqqueue(), boolean(), pid(), rabbit_types:ctag(),
-                #{Name :: atom() => rabbit_fifo_client:state()}) ->
-          {'ok', non_neg_integer(), qmsg(), quorum_states()} |
-          {'empty', quorum_states()} |
+                rabbit_queue_type:ctxs()) ->
+          {'ok', non_neg_integer(), qmsg(), rabbit_queue_type:ctxs()} |
+          {'empty', rabbit_queue_type:ctxs()} |
           rabbit_types:channel_exit().
 basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
     rabbit_queue_type:dequeue(Q, NoAck, LimiterPid, CTag, QStates0).
 
-% basic_get(Q, ChPid, NoAck, LimiterPid, _CTag, _)
-%   when ?amqqueue_is_classic(Q) ->
-%     QPid = amqqueue:get_pid(Q),
-%     delegate:invoke(QPid, {gen_server2, call,
-%                            [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
-% basic_get(Q, _ChPid, NoAck, _LimiterPid, CTag, QStates0)
-%   when ?amqqueue_is_quorum(Q) ->
-%     case rabbit_queue_type:with(
-%            Q,
-%            fun(S0) ->
-%                    case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, S0) of
-%                        {ok, empty, S} ->
-%                            {empty, S};
-%                        {ok, Count, Msg, S} ->
-%                            {{ok, Count, Msg}, S};
-%                        {error, Reason} ->
-%                            QName = rabbit_quorum_queue:queue_name(S0),
-%                            rabbit_misc:protocol_error(internal_error,
-%                                                       "Cannot get a message from quorum queue '~s': ~p",
-%                                                       [rabbit_misc:rs(QName), Reason])
-%                    end
-%            end,
-%            QStates0) of
-%         {empty, QStates} ->
-%             {empty, QStates};
-%         {{ok, Count, Msg}, QStates} ->
-%             {ok, Count, Msg, QStates}
-%     end.
-
--type queue_ref() :: pid() | atom().  %% pid or registered name
 
 -spec basic_consume(amqqueue:amqqueue(), boolean(), pid(), pid(), boolean(),
                     non_neg_integer(), rabbit_types:ctag(), boolean(),
                     rabbit_framing:amqp_table(), any(), rabbit_types:username(),
-                    #{Ref :: queue_ref() => rabbit_queue_type:ctx()}) ->
+                    rabbit_queue_type:ctxs()) ->
     {ok, rabbit_queue_type:ctxs(), rabbit_queue_type:actions()} |
     {error, term()}.
 basic_consume(Q, NoAck, ChPid, LimiterPid,
@@ -1264,88 +1212,13 @@ basic_consume(Q, NoAck, ChPid, LimiterPid,
              acting_user =>  ActingUser},
     rabbit_queue_type:consume(Q, Spec, Contexts).
 
-% get_ctx(Q, Contexts)
-%   when ?is_amqqueue(Q) andalso is_map(Contexts) ->
-%     QPid = amqqueue:get_pid(Q),
-%     Ref = qpid_to_ref(QPid),
-%     case Contexts of
-%         #{Ref := Ctx} ->
-%             Ctx;
-%         _ ->
-%             %% not found - initialize
-%             rabbit_queue_type:init(Q)
-%     end;
-% get_ctx(QPid, Contexts) when is_map(Contexts) ->
-%     Ref = qpid_to_ref(QPid),
-%     %% if we use a QPid it should always be initialised
-%     maps:get(Ref, Contexts).
-
-
-% basic_consume(Q, NoAck, ChPid, LimiterPid,
-%               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-%               ExclusiveConsume, Args, OkMsg, ActingUser, QState)
-%   when ?amqqueue_is_classic(Q) ->
-%     QPid = amqqueue:get_pid(Q),
-%     QName = amqqueue:get_name(Q),
-%     ok = check_consume_arguments(QName, Args),
-%     case delegate:invoke(QPid,
-%                          {gen_server2, call,
-%                           [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-%                             ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-%                             Args, OkMsg, ActingUser}, infinity]}) of
-%         ok ->
-%             {ok, QState};
-%         Err ->
-%             Err
-%     end;
-% basic_consume(Q, _NoAck, _ChPid,
-%               _LimiterPid, true, _ConsumerPrefetchCount, _ConsumerTag,
-%               _ExclusiveConsume, _Args, _OkMsg, _ActingUser, _QStates)
-%   when ?amqqueue_is_quorum(Q) ->
-%     {error, global_qos_not_supported_for_queue_type};
-% basic_consume(Q,
-%               NoAck, ChPid, _LimiterPid, _LimiterActive, ConsumerPrefetchCount,
-%               ConsumerTag, ExclusiveConsume, Args, OkMsg,
-%               ActingUser, QStates)
-%   when ?amqqueue_is_quorum(Q) ->
-%     {Name, _} = Id = amqqueue:get_pid(Q),
-%     QName = amqqueue:get_name(Q),
-%     ok = check_consume_arguments(QName, Args),
-%     QState0 = get_quorum_state(Id, QName, QStates),
-%     {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
-%                                                      ConsumerPrefetchCount,
-%                                                      ConsumerTag,
-%                                                      ExclusiveConsume, Args,
-%                                                      ActingUser,
-%                                                      OkMsg, QState0),
-%     {ok, maps:put(Name, QState, QStates)}.
-
--spec basic_cancel(amqqueue:amqqueue(), pid(), rabbit_types:ctag(), any(),
+-spec basic_cancel(amqqueue:amqqueue(), rabbit_types:ctag(), any(),
                    rabbit_types:username(),
-                   #{Name :: atom() => rabbit_fifo_client:state()}) ->
-    {ok, #{Name :: atom() => rabbit_fifo_client:state()}}.
-basic_cancel(Q, ChPid, ConsumerTag, OkMsg, ActingUser, QStates) ->
-    rabbit_queue_type:cancel(Q, ChPid, ConsumerTag,
+                   rabbit_queue_type:ctxs()) ->
+    {ok, rabbit_queue_type:ctxs()} | {error, term()}.
+basic_cancel(Q, ConsumerTag, OkMsg, ActingUser, QStates) ->
+    rabbit_queue_type:cancel(Q, ConsumerTag,
                              OkMsg, ActingUser, QStates).
-% basic_cancel(Q, ChPid, ConsumerTag, OkMsg, ActingUser,
-%              QState)
-%   when ?amqqueue_is_classic(Q) ->
-%     QPid = amqqueue:get_pid(Q),
-%     case delegate:invoke(QPid, {gen_server2, call,
-%                                 [{basic_cancel, ChPid, ConsumerTag,
-%                                   OkMsg, ActingUser}, infinity]}) of
-%         ok ->
-%             {ok, QState};
-%         Err -> Err
-%     end;
-% basic_cancel(Q, ChPid,
-%              ConsumerTag, OkMsg, _ActingUser, QStates)
-%   when ?amqqueue_is_quorum(Q) ->
-%     {Name, _} = Id = amqqueue:get_pid(Q),
-%     QState0 = get_quorum_state(Id, QStates),
-%     {ok, QState} = rabbit_quorum_queue:basic_cancel(ConsumerTag, ChPid,
-%                                                     OkMsg, QState0),
-%     {ok, maps:put(Name, QState, QStates)}.
 
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 
@@ -1659,105 +1532,3 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
 -spec immutable(amqqueue:amqqueue()) -> amqqueue:amqqueue().
 
 immutable(Q) -> amqqueue:set_immutable(Q).
-
--spec deliver([amqqueue:amqqueue()], rabbit_types:delivery()) -> 'ok'.
-
-deliver(Qs, Delivery) ->
-    deliver(Qs, Delivery, untracked),
-    ok.
-
--spec deliver([amqqueue:amqqueue()],
-              rabbit_types:delivery(),
-              quorum_states() | 'untracked') ->
-    {qpids(),
-     [{amqqueue:ra_server_id(), name()}],
-     quorum_states()}.
-
-deliver([], _Delivery, QueueState) ->
-    %% /dev/null optimisation
-    {[], [], QueueState};
-
-deliver(Qs, Delivery = #delivery{flow = Flow,
-                                 confirm = Confirm}, QueueState0) ->
-    {Quorum, MPids, SPids} = qpids(Qs),
-    QPids = MPids ++ SPids,
-    %% We use up two credits to send to a slave since the message
-    %% arrives at the slave from two directions. We will ack one when
-    %% the slave receives the message direct from the channel, and the
-    %% other when it receives it via GM.
-
-    case Flow of
-        %% Here we are tracking messages sent by the rabbit_channel
-        %% process. We are accessing the rabbit_channel process
-        %% dictionary.
-        flow   -> [credit_flow:send(QPid) || QPid <- QPids],
-                  [credit_flow:send(QPid) || QPid <- SPids];
-        noflow -> ok
-    end,
-
-    %% We let slaves know that they were being addressed as slaves at
-    %% the time - if they receive such a message from the channel
-    %% after they have become master they should mark the message as
-    %% 'delivered' since they do not know what the master may have
-    %% done with it.
-    MMsg = {deliver, Delivery, false},
-    SMsg = {deliver, Delivery, true},
-    delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
-    delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
-    QueueState =
-        case QueueState0 of
-            untracked ->
-                lists:foreach(
-                  fun({Pid, _QName}) ->
-                          rabbit_quorum_queue:stateless_deliver(Pid, Delivery)
-                  end, Quorum),
-                untracked;
-            _ ->
-                lists:foldl(
-                  fun({{QRef, _}, _QName}, S0) ->
-                          rabbit_queue_type:with(
-                            QRef,
-                            fun (S) ->
-                                    rabbit_quorum_queue:deliver(Confirm,
-                                                                Delivery,
-                                                                S)
-                            end, S0)
-                  end, QueueState0, Quorum)
-        end,
-    {QuorumPids, _} = lists:unzip(Quorum),
-    {QPids, QuorumPids, QueueState}.
-
-qpids([]) -> {[], [], []}; %% optimisation
-qpids([Q]) when ?amqqueue_is_quorum(Q) ->
-    QName = amqqueue:get_name(Q),
-    {LocalName, LeaderNode} = amqqueue:get_pid(Q),
-    {[{{LocalName, LeaderNode}, QName}], [], []}; %% opt
-qpids([Q]) ->
-    QPid = amqqueue:get_pid(Q),
-    SPids = amqqueue:get_slave_pids(Q),
-    {[], [QPid], SPids}; %% opt
-qpids(Qs) ->
-    {QuoPids, MPids, SPids} =
-        lists:foldl(fun (Q,
-                         {QuoPidAcc, MPidAcc, SPidAcc})
-                          when ?amqqueue_is_quorum(Q) ->
-                            QPid = amqqueue:get_pid(Q),
-                            QName = amqqueue:get_name(Q),
-                            {[{QPid, QName} | QuoPidAcc], MPidAcc, SPidAcc};
-                        (Q,
-                         {QuoPidAcc, MPidAcc, SPidAcc}) ->
-                            QPid = amqqueue:get_pid(Q),
-                            SPids = amqqueue:get_slave_pids(Q),
-                            {QuoPidAcc, [QPid | MPidAcc], [SPids | SPidAcc]}
-                    end, {[], [], []}, Qs),
-    {QuoPids, MPids, lists:append(SPids)}.
-
-% get_quorum_state({Name, _} = Id, QName, Map) ->
-%     case maps:find(Name, Map) of
-%         {ok, S} -> S;
-%         error ->
-%             rabbit_quorum_queue:init_state(Id, QName)
-%     end.
-
-% get_quorum_state({Name, _}, Map) ->
-%     maps:get(Name, Map).

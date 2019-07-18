@@ -7,18 +7,20 @@
          is_enabled/1,
          declare/2,
          delete/4,
+         policy_changed/1,
          stat/1,
          name/2,
+         remove/2,
          info/2,
          state_info/1,
          info_down/3,
          %% stateful client API
          new/2,
          consume/3,
-         cancel/6,
+         cancel/5,
          handle_event/3,
          deliver/3,
-         settle/5,
+         settle/4,
          reject/5,
          credit/5,
          dequeue/5
@@ -85,12 +87,14 @@
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty).
 
+-callback policy_changed(amqqueue:amqqueue()) -> ok.
+
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
                   queue_state()) ->
     {ok, queue_state(), actions()} | {error, term()}.
 
--callback cancel(amqqueue:amqqueue(), pid(),
+-callback cancel(amqqueue:amqqueue(),
              rabbit_types:ctag(),
              term(),
              rabbit_types:username(),
@@ -105,8 +109,7 @@
                   Delivery :: term()) ->
     {[{amqqueue:amqqueue(), queue_state()}], actions()}.
 
--callback settle(rabbit_types:ctag(), [non_neg_integer()],
-                 ChPid :: pid(), queue_state()) ->
+-callback settle(rabbit_types:ctag(), [non_neg_integer()], queue_state()) ->
     queue_state().
 
 -callback reject(rabbit_types:ctag(), Requeue :: boolean(),
@@ -119,8 +122,12 @@
 
 -callback dequeue(NoAck :: boolean(), LimiterPid :: pid(),
                   rabbit_types:ctag(), queue_state()) ->
-    {ok, Count :: non_neg_integer(), empty | rabbit_amqqueue:qmsg(),
-     queue_state()}.
+    {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
+    {empty, queue_state()} |
+    {error, term()}.
+
+
+
 
 %% return a map of state summary information
 -callback state_info(queue_state()) ->
@@ -160,6 +167,11 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
     Mod:delete(Q, IfUnused, IfEmpty, ActingUser).
 
 
+-spec policy_changed(amqqueue:amqqueue()) -> 'ok'.
+policy_changed(Q) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:policy_changed(Q).
+
 -spec stat(amqqueue:amqqueue()) ->
     {'ok', non_neg_integer(), non_neg_integer()}.
 stat(Q) ->
@@ -175,6 +187,10 @@ name(QRef, Ctxs) ->
         _ ->
             undefined
     end.
+
+-spec remove(queue_ref(), ctxs()) -> ctxs().
+remove(QRef, Ctxs) ->
+    maps:remove(QRef, Ctxs).
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().
@@ -231,16 +247,16 @@ consume(Q, Spec, Ctxs) ->
     end.
 
 %% TODO switch to cancel spec api
--spec cancel(amqqueue:amqqueue(), pid(),
+-spec cancel(amqqueue:amqqueue(),
              rabbit_types:ctag(),
              term(),
              rabbit_types:username(),
              ctxs()) ->
-    {ok, ctxs(), actions()} | {error, term()}.
-cancel(Q, ChPid, Tag, OkMsg, ActiveUser, Ctxs) ->
+    {ok, ctxs()} | {error, term()}.
+cancel(Q, Tag, OkMsg, ActiveUser, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    case Mod:cancel(Q, ChPid, Tag, OkMsg, ActiveUser, State0) of
+    case Mod:cancel(Q, Tag, OkMsg, ActiveUser, State0) of
         {ok, State} ->
             {ok, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         Err ->
@@ -249,7 +265,7 @@ cancel(Q, ChPid, Tag, OkMsg, ActiveUser, Ctxs) ->
 
 %% messages sent from queues
 -spec handle_event(queue_ref(), term(), ctxs()) ->
-    {ok, ctxs(), actions()} | {error, term()}.
+    {ok, ctxs(), actions()} | eol | {error, term()}.
 handle_event(QRef, Evt, Ctxs) ->
     %% events can arrive after a queue state has been cleared up
     %% so need to be defensive here
@@ -267,6 +283,15 @@ handle_event(QRef, Evt, Ctxs) ->
     end.
 
 
+-spec deliver([amqqueue:amqqueue()], Delivery :: term(),
+              stateless | ctxs()) ->
+    {ctxs(), actions()}.
+deliver(Qs, Delivery, stateless) ->
+    _ = lists:map(fun(Q) ->
+                          Mod = amqqueue:get_type(Q),
+                          _ = Mod:deliver([{Q, stateless}], Delivery)
+                  end, Qs),
+    {stateless, []};
 deliver(Qs, Delivery, Ctxs) ->
     %% sort by queue type - then dispatch each group
     ByType = lists:foldl(fun (Q, Acc) ->
@@ -290,24 +315,36 @@ deliver(Qs, Delivery, Ctxs) ->
        end, Ctxs, Xs), Actions}.
 
 
-settle(QRef, CTag, MsgIds, ChPid, Ctxs) ->
+-spec settle(queue_ref(), rabbit_types:ctag(),
+             [non_neg_integer()], ctxs()) -> ctxs().
+settle(QRef, CTag, MsgIds, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QRef, Ctxs),
-    State = Mod:settle(CTag, MsgIds, ChPid, State0),
+    State = Mod:settle(CTag, MsgIds, State0),
     set_ctx(QRef, Ctx#ctx{state = State}, Ctxs).
 
+-spec reject(queue_ref(), rabbit_types:ctag(),
+             boolean(), [non_neg_integer()], ctxs()) -> ctxs().
 reject(QRef, CTag, Requeue, MsgIds, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QRef, Ctxs),
     State = Mod:reject(CTag, Requeue, MsgIds, State0),
     set_ctx(QRef, Ctx#ctx{state = State}, Ctxs).
 
+-spec credit(amqqueue:amqqueue() | queue_ref(),
+             rabbit_types:ctag(), non_neg_integer(),
+             boolean(), ctxs()) -> ctxs().
 credit(Q, CTag, Credit, Drain, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(Q, Ctxs),
-    State = Mod:settle(CTag, Credit, Drain, State0),
+    State = Mod:credit(CTag, Credit, Drain, State0),
     set_ctx(Q, Ctx#ctx{state = State}, Ctxs).
 
+-spec dequeue(amqqueue:amqqueue(), boolean(),
+             pid(), rabbit_types:ctag(),
+             ctxs()) ->
+    {ok, non_neg_integer(), term(), ctxs()}  |
+    {empty, ctxs()}.
 dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
