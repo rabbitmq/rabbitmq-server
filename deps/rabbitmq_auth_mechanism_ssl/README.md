@@ -18,8 +18,8 @@ present a client certificate.
 ## Usage
 
 This mechanism must also be enabled in RabbitMQ's configuration file,
-see [Authentication Mechanisms](http://www.rabbitmq.com/authentication.html) and
-[Configuration](http://www.rabbitmq.com/configure.html) guides for
+see [Authentication Mechanisms](https://www.rabbitmq.com/authentication.html) and
+[Configuration](https://www.rabbitmq.com/configure.html) guides for
 more details.
 
 A couple of examples:
@@ -83,7 +83,7 @@ To use the Common Name instead, set `rabbit.ssl_cert_login_from` to `common_name
 ```
 
 Note that the authenticated user will then be looked up in the
-[configured authentication / authorisation backend(s)](http://www.rabbitmq.com/access-control.html). This will be
+[configured authentication / authorisation backend(s)](https://www.rabbitmq.com/access-control.html). This will be
 the internal node database by default but could include other
 backends if so configured.
 
