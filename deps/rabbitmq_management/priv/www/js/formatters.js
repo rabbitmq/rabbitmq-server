@@ -1,10 +1,12 @@
-UNKNOWN_REPR = '<span class="unknown">?</span>';
-FD_THRESHOLDS=[[0.95, 'red'],
-               [0.8, 'yellow']];
-SOCKETS_THRESHOLDS=[[1.0, 'red'],
-                    [0.8, 'yellow']];
-PROCESS_THRESHOLDS=[[0.75, 'red'],
-                    [0.5, 'yellow']];
+const UNKNOWN_REPR = '<span class="unknown">?</span>';
+const FD_THRESHOLDS = [[0.95, 'red'],
+                       [0.8, 'yellow']];
+const SOCKETS_THRESHOLDS = [[1.0, 'red'],
+                            [0.8, 'yellow']];
+const PROCESS_THRESHOLDS = [[0.75, 'red'],
+                            [0.5, 'yellow']];
+
+const WHITESPACE_HIGHLIGHTER = "\u23B5"
 
 function fmt_string(str, unknown) {
     if (unknown == undefined) {
@@ -682,6 +684,11 @@ function esc(str) {
     return encodeURIComponent(str);
 }
 
+function highlight_extra_whitespace(str) {
+  return str.replace(/^\s+/g, WHITESPACE_HIGHLIGHTER).
+             replace(/\s+$/g, WHITESPACE_HIGHLIGHTER);
+}
+
 function link_conn(name, desc) {
     if (desc == undefined) {
         return _link_to(short_conn(name), '#/connections/' + esc(name));
@@ -697,11 +704,11 @@ function link_channel(name) {
 
 function link_exchange(vhost, name, args) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
-    return _link_to(fmt_exchange0(name), '#/exchanges/' + url, true, args);
+    return _link_to(fmt_exchange0(highlight_extra_whitespace(name), '#/exchanges/' + url, true, args));
 }
 
 function link_queue(vhost, name, args) {
-    return _link_to(name, '#/queues/' + esc(vhost) + '/' + esc(name), true, args);
+    return _link_to(highlight_extra_whitespace(name), '#/queues/' + esc(vhost) + '/' + esc(name), true, args);
 }
 
 function link_vhost(name) {
