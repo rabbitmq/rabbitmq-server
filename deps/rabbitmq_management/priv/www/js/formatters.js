@@ -6,7 +6,8 @@ const SOCKETS_THRESHOLDS = [[1.0, 'red'],
 const PROCESS_THRESHOLDS = [[0.75, 'red'],
                             [0.5, 'yellow']];
 
-const WHITESPACE_HIGHLIGHTER = "\u23B5"
+const TAB_HIGHLIGHTER = "\u2192";
+const WHITESPACE_HIGHLIGHTER = "\u23B5";
 
 function fmt_string(str, unknown) {
     if (unknown == undefined) {
@@ -684,9 +685,47 @@ function esc(str) {
     return encodeURIComponent(str);
 }
 
+// Replaces a sequence of characters matched by a regular expression
+// group with the given character. Replaced group is combined with the stripped
+// original using the provided combine function.
+function replace_char_sequence_individually(input, regex, replacement, combine) {
+  let ms = input.match(regex);
+    if (ms == null) {
+      return input;
+    } else {
+      let n = ms[0].length;
+      return combine(replacement.repeat(n), input.replace(regex, ""));
+    }
+}
+
+// Replaces a leading sequence of characters matched by a regular expression
+// group with the given character.
+function replace_leading_chars(input, regex, replacement) {
+  return replace_char_sequence_individually(input, regex, replacement, function(patch, stripped_input) {
+      return patch + stripped_input;
+  });
+}
+
+// Replaces a trailing sequence of characters matched by a regular expression
+// group with the given character.
+function replace_trailing_chars(input, regex, replacement) {
+    return replace_char_sequence_individually(input, regex, replacement, function(patch, stripped_input) {
+      return stripped_input + patch;
+  });
+}
+
+// Highlights extra (leading and trailing) whitespace and tab characters
+// with suitable Unicode characters for improved visiblity.
+// Note that mid-word whitespace should not be highighted, which makes
+// the implementation trickier than a simple chain of replace/2 calls.
 function highlight_extra_whitespace(str) {
-  return str.replace(/^\s+/g, WHITESPACE_HIGHLIGHTER).
-             replace(/\s+$/g, WHITESPACE_HIGHLIGHTER);
+  // Highlight leading and trailing whitespace individually but all tabs.
+  // This assumes that spaces are reasonable to use in the middle of a name
+  // but tabs are not used intentionally and must be highlighted even in the middle.
+  return [[replace_trailing_chars, /(\s+)$/g, WHITESPACE_HIGHLIGHTER],
+          [replace_leading_chars,  /^(\s+)/g, WHITESPACE_HIGHLIGHTER]].reduce(function(acc, triplet) {
+    return triplet[0](acc, triplet[1], triplet[2]);
+  }, str.replace(/\t/g, TAB_HIGHLIGHTER));
 }
 
 function link_conn(name, desc) {
