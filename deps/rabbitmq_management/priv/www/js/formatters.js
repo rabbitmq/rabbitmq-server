@@ -690,12 +690,12 @@ function esc(str) {
 // original using the provided combine function.
 function replace_char_sequence_individually(input, regex, replacement, combine) {
   let ms = input.match(regex);
-    if (ms == null) {
-      return input;
-    } else {
-      let n = ms[0].length;
-      return combine(replacement.repeat(n), input.replace(regex, ""));
-    }
+  if (ms == null) {
+    return input;
+  } else {
+    let n = ms[0].length;
+    return combine(replacement.repeat(n), input.replace(regex, ""));
+  }
 }
 
 // Replaces a leading sequence of characters matched by a regular expression
