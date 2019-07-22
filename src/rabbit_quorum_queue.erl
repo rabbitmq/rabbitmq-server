@@ -19,7 +19,7 @@
 -behaviour(rabbit_queue_type).
 
 -export([init/1, handle_event/2]).
--export([recover/1, stop/1, delete/4, delete_immediately/2]).
+-export([is_recoverable/1, recover/2, stop/1, delete/4, delete_immediately/2]).
 -export([state_info/1, info/2, stat/1, infos/1]).
 -export([settle/3, reject/4, dequeue/4, consume/3, cancel/5]).
 -export([credit/4]).
@@ -313,51 +313,60 @@ reductions(Name) ->
             0
     end.
 
--spec recover([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
+is_recoverable(Q) ->
+    Node = node(),
+    lists:member(Node, amqqueue:get_quorum_nodes(Q)).
 
-recover(Queues) ->
-    [begin
+-spec recover(binary(), [amqqueue:amqqueue()]) ->
+    {[amqqueue:amqqueue()], [amqqueue:amqqueue()]}.
+recover(_Vhost, Queues) ->
+    lists:foldl(
+      fun (Q0, {R0, F0}) ->
          {Name, _} = amqqueue:get_pid(Q0),
-         case ra:restart_server({Name, node()}) of
-             ok ->
-                 % queue was restarted, good
-                 ok;
-             {error, Err1}
-               when Err1 == not_started orelse
-                    Err1 == name_not_registered ->
-                 % queue was never started on this node
-                 % so needs to be started from scratch.
-                 TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                                   ?TICK_TIMEOUT),
-                 Conf = make_ra_conf(Q0, {Name, node()}, TickTimeout),
-                 case ra:start_server(Conf) of
-                     ok ->
-                         ok;
-                     Err2 ->
-                         rabbit_log:warning("recover: quorum queue ~w could not"
-                                            " be started ~w", [Name, Err2]),
-                         ok
-                 end;
-             {error, {already_started, _}} ->
-                 %% this is fine and can happen if a vhost crashes and performs
-                 %% recovery whilst the ra application and servers are still
-                 %% running
-                 ok;
-             Err ->
-                 %% catch all clause to avoid causing the vhost not to start
-                 rabbit_log:warning("recover: quorum queue ~w could not be "
-                                    "restarted ~w", [Name, Err]),
-                 ok
-         end,
+         Nodes = amqqueue:get_quorum_nodes(Q0),
+         Res = case ra:restart_server({Name, node()}) of
+                   ok ->
+                       % queue was restarted, good
+                       ok;
+                   {error, Err1}
+                     when Err1 == not_started orelse
+                          Err1 == name_not_registered ->
+                       % queue was never started on this node
+                       % so needs to be started from scratch.
+                       Machine = ra_machine(Q0),
+                       RaNodes = [{Name, Node} || Node <- Nodes],
+                       case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
+                           ok -> ok;
+                           Err2 ->
+                               rabbit_log:warning("recover: quorum queue ~w could not"
+                                                  " be started ~w", [Name, Err2]),
+                               fail
+                       end;
+                   {error, {already_started, _}} ->
+                       %% this is fine and can happen if a vhost crashes and performs
+                       %% recovery whilst the ra application and servers are still
+                       %% running
+                       ok;
+                   Err ->
+                       %% catch all clause to avoid causing the vhost not to start
+                       rabbit_log:warning("recover: quorum queue ~w could not be "
+                                          "restarted ~w", [Name, Err]),
+                       fail
+               end,
          %% we have to ensure the  quorum queue is
-         %% present in the rabbit_queue table and not just in rabbit_durable_queue
+         %% present in the rabbit_queue table and not just in
+         %% rabbit_durable_queue
          %% So many code paths are dependent on this.
          {ok, Q} = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Q0),
-         Q
-     end || Q0 <- Queues].
+         case Res of
+             ok ->
+                 {[Q | R0], F0};
+             fail ->
+                 {R0, [Q | F0]}
+         end
+      end, {[], []}, Queues).
 
--spec stop(rabbit_types:vhost()) -> 'ok'.
-
+-spec stop(rabbit_types:vhost()) -> ok.
 stop(VHost) ->
     _ = [begin
              Pid = amqqueue:get_pid(Q),

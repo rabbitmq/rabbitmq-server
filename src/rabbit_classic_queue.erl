@@ -15,6 +15,8 @@
          is_enabled/0,
          declare/2,
          delete/4,
+         is_recoverable/1,
+         recover/2,
          purge/1,
          policy_changed/1,
          stat/1,
@@ -84,6 +86,36 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
         {error, not_found} ->
             %% Assume the queue was deleted
             {ok, 0}
+    end.
+
+is_recoverable(Q) when ?is_amqqueue(Q) ->
+    Node = node(),
+    Node =:= node(amqqueue:get_pid(Q)) andalso
+    %% Terminations on node down will not remove the rabbit_queue
+    %% record if it is a mirrored queue (such info is now obtained from
+    %% the policy). Thus, we must check if the local pid is alive
+    %% - if the record is present - in order to restart.
+    (mnesia:read(rabbit_queue, amqqueue:get_name(Q), read) =:= []
+     orelse not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q))).
+
+recover(VHost, Queues) ->
+    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
+    %% We rely on BQ:start/1 returning the recovery terms in the same
+    %% order as the supplied queue names, so that we can zip them together
+    %% for further processing in recover_durable_queues.
+    {ok, OrderedRecoveryTerms} =
+        BQ:start(VHost, [amqqueue:get_name(Q) || Q <- Queues]),
+    case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
+        {ok, _}         ->
+            RecoveredQs = recover_durable_queues(lists:zip(Queues,
+                                                           OrderedRecoveryTerms)),
+            RecoveredNames = [amqqueue:get_name(Q) || Q <- RecoveredQs],
+            FailedQueues = [Q || Q <- Queues,
+                                 not lists:member(amqqueue:get_name(Q), RecoveredNames)],
+            {RecoveredQs, FailedQueues};
+        {error, Reason} ->
+            rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
+            throw({error, Reason})
     end.
 
 -spec policy_changed(amqqueue:amqqueue()) -> ok.
@@ -165,7 +197,6 @@ deliver(Qs, #delivery{flow = Flow,
                       confirm = _Confirm} = Delivery) ->
     {MPids, SPids, Actions} = qpids(Qs),
     QPids = MPids ++ SPids,
-    rabbit_log:info("classic deliver to ~w", [QPids]),
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
         %% process. We are accessing the rabbit_channel process
@@ -272,3 +303,12 @@ delete_crashed_internal(Q, ActingUser) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     BQ:delete_crashed(Q),
     ok = rabbit_amqqueue:internal_delete(QName, ActingUser).
+
+recover_durable_queues(QueuesAndRecoveryTerms) ->
+    {Results, Failures} =
+        gen_server2:mcall(
+          [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
+            {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
+    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
+                      [Pid, Error]) || {Pid, Error} <- Failures],
+    [Q || {_, {new, Q}} <- Results].

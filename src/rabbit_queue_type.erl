@@ -7,6 +7,8 @@
          is_enabled/1,
          declare/2,
          delete/4,
+         is_recoverable/1,
+         recover/2,
          purge/1,
          policy_changed/1,
          stat/1,
@@ -70,9 +72,6 @@
 % copied from rabbit_amqqueue
 -type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout.
 
-%% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> term().
-
 %% is the queue type feature enabled
 -callback is_enabled() -> boolean().
 
@@ -88,10 +87,22 @@
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty).
 
+-callback recover(rabbit_types:vhost(), [amqqueue:amqqueue()]) ->
+    {Recovered :: [amqqueue:amqqueue()],
+     Failed :: [amqqueue:amqqueue()]}.
+
+%% checks if the queue should be recovered
+-callback is_recoverable(amqqueue:amqqueue()) ->
+    boolean().
+
 -callback purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()} | {error, term()}.
 
 -callback policy_changed(amqqueue:amqqueue()) -> ok.
+
+%% stateful
+%% intitialise and return a queue type specific session context
+-callback init(amqqueue:amqqueue()) -> queue_state().
 
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
@@ -99,12 +110,14 @@
     {ok, queue_state(), actions()} | {error, term()}.
 
 -callback cancel(amqqueue:amqqueue(),
-             rabbit_types:ctag(),
-             term(),
-             rabbit_types:username(),
-             queue_state()) ->
+                 rabbit_types:ctag(),
+                 term(),
+                 rabbit_types:username(),
+                 queue_state()) ->
     {ok, queue_state(), actions()} | {error, term()}.
 
+%% any async events returned from the queue system should be processed through
+%% this
 -callback handle_event(Event :: term(),
                        queue_state()) ->
     {ok, queue_state(), actions()} | {error, term()} | eol.
@@ -129,9 +142,6 @@
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
     {error, term()}.
-
-
-
 
 %% return a map of state summary information
 -callback state_info(queue_state()) ->
@@ -271,6 +281,31 @@ cancel(Q, Tag, OkMsg, ActiveUser, Ctxs) ->
         Err ->
             Err
     end.
+
+-spec is_recoverable(amqqueue:amqqueue()) ->
+    boolean().
+is_recoverable(Q) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:is_recoverable(Q).
+
+
+-spec recover(rabbit_types:vhost(), [amqqueue:amqqueue()]) ->
+    {Recovered :: [amqqueue:amqqueue()],
+     Failed :: [amqqueue:amqqueue()]}.
+recover(VHost, Qs) ->
+   ByType = lists:foldl(
+              fun (Q, Acc) ->
+                      T = amqqueue:get_type(Q),
+                      maps:update_with(T, fun (X) ->
+                                                  [Q | X]
+                                          end, Acc)
+   %% TODO resolve all registered queue types from registry
+              end, #{rabbit_classic_queue => [],
+                     rabbit_quorum_queue => []}, Qs),
+   maps:fold(fun (Mod, Queues, {R0, F0}) ->
+                     {R, F} = Mod:recover(VHost, Queues),
+                     {R0 ++ R, F0 ++ F}
+             end, {[], []}, ByType).
 
 %% messages sent from queues
 -spec handle_event(queue_ref(), term(), ctxs()) ->

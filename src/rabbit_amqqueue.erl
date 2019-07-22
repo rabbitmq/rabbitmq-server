@@ -78,8 +78,8 @@
 -type qpids() :: [pid()].
 -type qlen() :: rabbit_types:ok(non_neg_integer()).
 -type qfun(A) :: fun ((amqqueue:amqqueue()) -> A | no_return()).
--type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(), boolean(),
-                 rabbit_types:message()}.
+-type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(),
+                 boolean(), rabbit_types:message()}.
 -type msg_id() :: non_neg_integer().
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
@@ -110,35 +110,11 @@ warn_file_limit() ->
     end.
 
 -spec recover(rabbit_types:vhost()) ->
-    {RecoveredClassic :: [amqqueue:amqqueue()],
-     FailedClassic :: [amqqueue:amqqueue()],
-     Quorum :: [amqqueue:amqqueue()]}.
-
+    {Recovered :: [amqqueue:amqqueue()],
+     Failed :: [amqqueue:amqqueue()]}.
 recover(VHost) ->
-    AllClassic = find_local_durable_classic_queues(VHost),
-    Quorum = find_local_quorum_queues(VHost),
-    {RecoveredClassic, FailedClassic} = recover_classic_queues(VHost, AllClassic),
-    {RecoveredClassic, FailedClassic, rabbit_quorum_queue:recover(Quorum)}.
-
-recover_classic_queues(VHost, Queues) ->
-    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    %% We rely on BQ:start/1 returning the recovery terms in the same
-    %% order as the supplied queue names, so that we can zip them together
-    %% for further processing in recover_durable_queues.
-    {ok, OrderedRecoveryTerms} =
-        BQ:start(VHost, [amqqueue:get_name(Q) || Q <- Queues]),
-    case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
-        {ok, _}         ->
-            RecoveredQs = recover_durable_queues(lists:zip(Queues,
-                                                           OrderedRecoveryTerms)),
-            RecoveredNames = [amqqueue:get_name(Q) || Q <- RecoveredQs],
-            FailedQueues = [Q || Q <- Queues,
-                                 not lists:member(amqqueue:get_name(Q), RecoveredNames)],
-            {RecoveredQs, FailedQueues};
-        {error, Reason} ->
-            rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
-            throw({error, Reason})
-    end.
+    AllDurable = find_local_durable_queues(VHost),
+    rabbit_queue_type:recover(VHost, AllDurable).
 
 filter_pid_per_type(QPids) ->
     lists:partition(fun(QPid) -> ?IS_CLASSIC(QPid) end, QPids).
@@ -152,7 +128,6 @@ filter_resource_per_type(Resources) ->
     lists:partition(fun({_Resource, QPid}) -> ?IS_CLASSIC(QPid) end, Queues).
 
 -spec stop(rabbit_types:vhost()) -> 'ok'.
-
 stop(VHost) ->
     %% Classic queues
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
@@ -179,66 +154,31 @@ mark_local_durable_queues_stopped(VHost) ->
        do_mark_local_durable_queues_stopped(VHost)).
 
 do_mark_local_durable_queues_stopped(VHost) ->
-    Qs = find_local_durable_classic_queues(VHost),
+    Qs = find_local_durable_queues(VHost),
     rabbit_misc:execute_mnesia_transaction(
         fun() ->
             [ store_queue(amqqueue:set_state(Q, stopped))
-              || Q <- Qs,
+              || Q <- Qs, amqqueue:get_type(Q) =:= rabbit_classic_queue,
                  amqqueue:get_state(Q) =/= stopped ]
         end).
 
-find_local_quorum_queues(VHost) ->
-    Node = node(),
+find_local_durable_queues(VHost) ->
     mnesia:async_dirty(
       fun () ->
-              qlc:e(qlc:q([Q || Q <- mnesia:table(rabbit_durable_queue),
-                                amqqueue:get_vhost(Q) =:= VHost,
-                                amqqueue:is_quorum(Q) andalso
-                                (lists:member(Node, amqqueue:get_quorum_nodes(Q)))]))
-      end).
-
-find_local_durable_classic_queues(VHost) ->
-    Node = node(),
-    mnesia:async_dirty(
-      fun () ->
-              qlc:e(qlc:q([Q || Q <- mnesia:table(rabbit_durable_queue),
-                                amqqueue:get_vhost(Q) =:= VHost,
-                                amqqueue:is_classic(Q) andalso
-                                (is_local_to_node(amqqueue:get_pid(Q), Node) andalso
-                                 %% Terminations on node down will not remove the rabbit_queue
-                                 %% record if it is a mirrored queue (such info is now obtained from
-                                 %% the policy). Thus, we must check if the local pid is alive
-                                 %% - if the record is present - in order to restart.
-                                 (mnesia:read(rabbit_queue, amqqueue:get_name(Q), read) =:= []
-                                  orelse not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q))))
-                          ]))
+              qlc:e(
+                qlc:q(
+                  [Q || Q <- mnesia:table(rabbit_durable_queue),
+                        amqqueue:get_vhost(Q) =:= VHost andalso
+                        rabbit_queue_type:is_recoverable(Q)
+                  ]))
       end).
 
 find_recoverable_queues() ->
-    Node = node(),
     mnesia:async_dirty(
       fun () ->
               qlc:e(qlc:q([Q || Q <- mnesia:table(rabbit_durable_queue),
-                                (amqqueue:is_classic(Q) andalso
-                                      (is_local_to_node(amqqueue:get_pid(Q), Node) andalso
-                                       %% Terminations on node down will not remove the rabbit_queue
-                                       %% record if it is a mirrored queue (such info is now obtained from
-                                       %% the policy). Thus, we must check if the local pid is alive
-                                       %% - if the record is present - in order to restart.
-                                             (mnesia:read(rabbit_queue, amqqueue:get_name(Q), read) =:= []
-                                              orelse not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q)))))
-                                    orelse (amqqueue:is_quorum(Q) andalso lists:member(Node, amqqueue:get_quorum_nodes(Q)))
-                          ]))
+                                rabbit_queue_type:is_recoverable(Q)]))
       end).
-
-recover_durable_queues(QueuesAndRecoveryTerms) ->
-    {Results, Failures} =
-        gen_server2:mcall(
-          [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
-            {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
-    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
-                      [Pid, Error]) || {Pid, Error} <- Failures],
-    [Q || {_, {new, Q}} <- Results].
 
 -spec declare(name(),
               boolean(),
@@ -250,7 +190,6 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     rabbit_types:channel_exit().
-
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
 
@@ -1108,8 +1047,7 @@ delete_immediately_by_resource(Resources) ->
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
 
--spec purge(amqqueue:amqqueue()) -> {ok, qlen()}.
-
+-spec purge(amqqueue:amqqueue()) -> qlen().
 purge(Q) when ?is_amqqueue(Q) ->
     rabbit_queue_type:purge(Q).
 

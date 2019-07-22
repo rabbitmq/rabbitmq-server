@@ -2720,15 +2720,6 @@ maybe_monitor(QPid, QMons) when ?IS_CLASSIC(QPid) ->
 maybe_monitor(_, QMons) ->
     QMons.
 
-% maybe_monitor_all([],     S) -> S;                %% optimisation
-% maybe_monitor_all([Item], S) -> maybe_monitor(Item, S); %% optimisation
-% maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).
-
-% add_delivery_count_header(#{delivery_count := Count}, Msg) ->
-%     rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg);
-% add_delivery_count_header(_, Msg) ->
-%     Msg.
-
 qpid_to_ref(Pid) when is_pid(Pid) -> Pid;
 qpid_to_ref({Name, _}) -> Name;
 %% assume it already is a ref
