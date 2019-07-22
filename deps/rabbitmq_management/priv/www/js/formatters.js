@@ -716,7 +716,7 @@ function link_channel(name) {
 
 function link_exchange(vhost, name, args) {
     var url = esc(vhost) + '/' + (name == '' ? 'amq.default' : esc(name));
-    return _link_to(fmt_exchange0(highlight_extra_whitespace(name), '#/exchanges/' + url, true, args));
+    return _link_to(fmt_exchange0(highlight_extra_whitespace(name)), '#/exchanges/' + url, true, args);
 }
 
 function link_queue(vhost, name, args) {
