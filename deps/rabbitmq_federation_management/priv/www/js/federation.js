@@ -29,7 +29,7 @@ dispatcher_add(function(sammy) {
                 go_to('#/federation-upstreams');
             return false;
     });
-    sammy.del("#/restart-link", function(){
+    sammy.del("#/federation-restart-link", function(){
         if(sync_delete(this, '/federation-links/vhost/:vhost/:id/:node/restart')){
             update();
         }
