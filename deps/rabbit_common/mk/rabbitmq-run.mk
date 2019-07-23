@@ -19,12 +19,7 @@ TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test-instances
 endif
 
 # Location of the scripts controlling the broker.
-ifeq ($(PROJECT),rabbit)
-RABBITMQ_BROKER_DIR ?= $(CURDIR)
-else
-RABBITMQ_BROKER_DIR ?= $(DEPS_DIR)/rabbit
-endif
-RABBITMQ_SCRIPTS_DIR ?= $(RABBITMQ_BROKER_DIR)/scripts
+RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/sbin
 
 ifeq ($(PLATFORM),msys2)
 RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
