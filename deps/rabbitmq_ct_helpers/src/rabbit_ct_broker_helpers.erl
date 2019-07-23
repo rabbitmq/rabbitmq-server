@@ -637,13 +637,25 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     true ->
                         DepsDir = ?config(erlang_mk_depsdir, Config),
                         ErlLibs = os:getenv("ERL_LIBS"),
-                        SecDepsDir = ?config(secondary_erlang_mk_depsdir, Config),
+                        SecDepsDir = ?config(secondary_erlang_mk_depsdir,
+                                             Config),
                         SecErlLibs = lists:flatten(
                                        string:replace(ErlLibs,
                                                       DepsDir,
                                                       SecDepsDir,
                                                       all)),
-                        SecScriptsDir = filename:join([SecDepsDir, "rabbit", "scripts"]),
+                        SecNewScriptsDir = filename:join([SecDepsDir,
+                                                          SrcDir,
+                                                          "sbin"]),
+                        SecOldScriptsDir = filename:join([SecDepsDir,
+                                                          "rabbit",
+                                                          "scripts"]),
+                        SecNewScriptsDirExists = filelib:is_dir(
+                                                   SecNewScriptsDir),
+                        SecScriptsDir = case SecNewScriptsDirExists of
+                                            true  -> SecNewScriptsDir;
+                                            false -> SecOldScriptsDir
+                                        end,
                         [{"DEPS_DIR=~s", [SecDepsDir]},
                          {"REBAR_DEPS_DIR=~s", [SecDepsDir]},
                          {"ERL_LIBS=~s", [SecErlLibs]},

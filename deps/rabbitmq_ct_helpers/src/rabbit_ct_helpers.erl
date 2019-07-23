@@ -349,13 +349,7 @@ ensure_rabbitmqctl_cmd(Config) ->
         undefined ->
             case os:getenv("RABBITMQCTL") of
                 false ->
-                    SrcDir = ?config(rabbit_srcdir, Config),
-                    R = filename:join(SrcDir, "scripts/rabbitmqctl"),
-                    ct:pal(?LOW_IMPORTANCE, "Using rabbitmqctl at ~p~n", [R]),
-                    case filelib:is_file(R) of
-                        true  -> R;
-                        false -> false
-                    end;
+                    find_script(Config, "rabbitmqctl");
                 R ->
                     ct:pal(?LOW_IMPORTANCE,
                       "Using rabbitmqctl from RABBITMQCTL: ~p~n", [R]),
@@ -377,12 +371,33 @@ ensure_rabbitmqctl_cmd(Config) ->
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
                 {error, Code, Reason} ->
-                    ct:pal("Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    ct:pal("Exec failed with exit code ~p: ~p", [Code, Reason]),
                     Error;
                 _ ->
                     Error
             end
     end.
+
+find_script(Config, Script) ->
+    Locations = [File
+                 || File <- [new_script_location(Config, Script),
+                             old_script_location(Config, Script)],
+                    filelib:is_file(File)],
+    case Locations of
+        [Location | _] ->
+            ct:pal(?LOW_IMPORTANCE, "Using ~s at ~p~n", [Script, Location]),
+            Location;
+        [] ->
+            false
+    end.
+
+old_script_location(Config, Script) ->
+    SrcDir = ?config(rabbit_srcdir, Config),
+    filename:join([SrcDir, "scripts", Script]).
+
+new_script_location(Config, Script) ->
+    SrcDir = ?config(current_srcdir, Config),
+    filename:join([SrcDir, "sbin", Script]).
 
 ensure_rabbitmqctl_app(Config) ->
     SrcDir = ?config(rabbitmq_cli_srcdir, Config),
@@ -411,12 +426,7 @@ ensure_rabbitmq_plugins_cmd(Config) ->
         undefined ->
             case os:getenv("RABBITMQ_PLUGINS") of
                 false ->
-                    SrcDir = ?config(rabbit_srcdir, Config),
-                    R = filename:join(SrcDir, "scripts/rabbitmq-plugins"),
-                    case filelib:is_file(R) of
-                        true  -> R;
-                        false -> false
-                    end;
+                    find_script(Config, "rabbitmq-plugins");
                 R ->
                     R
             end;
@@ -440,19 +450,13 @@ ensure_rabbitmq_plugins_cmd(Config) ->
 
 ensure_rabbitmq_queues_cmd(Config) ->
     RabbitmqQueues = case get_config(Config, rabbitmq_queues_cmd) of
-                         undefined ->
-                             SrcDir = ?config(rabbit_srcdir, Config),
-                             R = filename:join(SrcDir, "scripts/rabbitmq-queues"),
-                             ct:pal(?LOW_IMPORTANCE, "Using rabbitmq-queues at ~p~n", [R]),
-                             case filelib:is_file(R) of
-                                 true  -> R;
-                                 false -> false
-                             end;
-                         R ->
-                             ct:pal(?LOW_IMPORTANCE,
-                                    "Using rabbitmq-queues from rabbitmq_queues_cmd: ~p~n", [R]),
-                             R
-                     end,
+        undefined ->
+            find_script(Config, "rabbitmq-queues");
+        R ->
+            ct:pal(?LOW_IMPORTANCE,
+              "Using rabbitmq-queues from rabbitmq_queues_cmd: ~p~n", [R]),
+            R
+    end,
     Error = {skip, "rabbitmq-queues required, " ++
              "please set 'rabbitmq_queues_cmd' in ct config"},
     case RabbitmqQueues of
@@ -466,7 +470,7 @@ ensure_rabbitmq_queues_cmd(Config) ->
                                {rabbitmq_queues_cmd,
                                 RabbitmqQueues});
                 {error, Code, Reason} ->
-                    ct:pal("Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    ct:pal("Exec failed with exit code ~p: ~p", [Code, Reason]),
                     Error;
                 _ ->
                     Error
