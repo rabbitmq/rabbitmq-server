@@ -29,7 +29,7 @@
 -define(DESTINATION, "/amq/queue/TestQueue").
 
 all() ->
-    [{group, list_to_atom("version_" ++ V)} || V <- ?SUPPORTED_VERSIONS].
+    [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS].
 
 groups() ->
     Tests = [
@@ -46,8 +46,14 @@ groups() ->
         blank_destination_in_send
     ],
 
-    [{list_to_atom("version_" ++ V), [sequence], Tests}
+    [{version_to_group_name(V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS].
+
+version_to_group_name(V) ->
+    list_to_atom(re:replace("version_" ++ V,
+                            "\\.",
+                            "_",
+                            [global, {return, list}])).
 
 init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
@@ -61,7 +67,8 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(Group, Config) ->
-    Version = string:sub_string(atom_to_list(Group), 9),
+    Suffix = string:sub_string(atom_to_list(Group), 9),
+    Version = re:replace(Suffix, "_", ".", [global, {return, list}]),
     rabbit_ct_helpers:set_config(Config, [{version, Version}]).
 
 end_per_group(_Group, Config) -> Config.
