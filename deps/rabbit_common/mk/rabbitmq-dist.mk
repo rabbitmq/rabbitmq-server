@@ -1,6 +1,8 @@
-.PHONY: dist test-dist do-dist clean-dist
+.PHONY: dist test-dist do-dist cli-scripts cli-escripts clean-dist
 
 DIST_DIR = plugins
+CLI_SCRIPTS_DIR = sbin
+CLI_ESCRIPTS_DIR = escript
 MIX = echo y | mix
 
 dist_verbose_0 = @echo " DIST  " $@;
@@ -207,12 +209,33 @@ test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
 
 DIST_EZS = $(ERLANGMK_DIST_EZS) $(MIX_DIST_EZS)
 
-do-dist:: $(DIST_EZS)
+do-dist:: $(DIST_EZS) cli-scripts cli-escripts
 	$(verbose) unwanted='$(filter-out $(DIST_EZS) $(EXTRA_DIST_EZS), \
 		$(wildcard $(DIST_DIR)/*.ez))'; \
 	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -f $$unwanted)
 
+test-build:: cli-scripts cli-escripts
+
+ifeq ($(PROJECT),rabbit)
+cli-scripts:
+	$(gen_verbose) rm -rf "$(CLI_SCRIPTS_DIR)"
+	$(verbose) cp -a scripts $(CLI_SCRIPTS_DIR)
+else
+cli-scripts:
+	$(gen_verbose) rm -rf "$(CLI_SCRIPTS_DIR)"
+	$(verbose) cp -a $(DEPS_DIR)/rabbit/scripts $(CLI_SCRIPTS_DIR)
+endif
+
+cli-escripts:
+	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
+	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+		DESTDIR=
+
 clean-dist::
-	$(gen_verbose) rm -rf $(DIST_DIR)
+	$(gen_verbose) rm -rf \
+		"$(DIST_DIR)" \
+		"$(CLI_SCRIPTS_DIR)" \
+		"$(CLI_ESCRIPTS_DIR)"
 
 clean:: clean-dist
