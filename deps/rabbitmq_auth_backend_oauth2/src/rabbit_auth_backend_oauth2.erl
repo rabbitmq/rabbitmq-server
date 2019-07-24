@@ -45,7 +45,6 @@ description() ->
 user_login_authentication(Username0, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
-    io:format("~p~n", [check_token(Token)]),
     case check_token(Token) of
         %% avoid logging the token
         {error, _} = E  -> E;
