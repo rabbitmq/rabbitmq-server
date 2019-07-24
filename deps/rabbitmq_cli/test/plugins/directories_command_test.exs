@@ -80,16 +80,6 @@ defmodule DirectoriesCommandTest do
       {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
 
-  test "validate_execution_environment: when --offline is used, not specifying an enabled_plugins_file fails validation", context do
-    opts = context[:opts] |> Map.merge(%{offline: true}) |> Map.delete(:enabled_plugins_file)
-    assert @command.validate_execution_environment([], opts) == {:validation_failure, :no_plugins_file}
-  end
-
-  test "validate_execution_environment: when --offline is used, not specifying a plugins_dir fails validation", context do
-    opts = context[:opts] |> Map.merge(%{offline: true}) |> Map.delete(:plugins_dir)
-    assert @command.validate_execution_environment([], opts) == {:validation_failure, :no_plugins_dir}
-  end
-
   test "validate_execution_environment: when --offline is used, specifying a non-existent enabled_plugins_file passes validation", context do
     opts = context[:opts] |> Map.merge(%{offline: true, enabled_plugins_file: "none"})
     assert @command.validate_execution_environment([], opts) == :ok
@@ -98,16 +88,6 @@ defmodule DirectoriesCommandTest do
   test "validate_execution_environment: when --offline is used, specifying a non-existent plugins_dir fails validation", context do
     opts = context[:opts] |> Map.merge(%{offline: true, plugins_dir: "none"})
     assert @command.validate_execution_environment([], opts) == {:validation_failure, :plugins_dir_does_not_exist}
-  end
-
-  test "validate_execution_environment: when --online is used, not specifying an enabled_plugins_file passes validation", context do
-    opts = context[:opts] |> Map.merge(%{online: true}) |> Map.delete(:enabled_plugins_file)
-    assert @command.validate_execution_environment([], opts) == :ok
-  end
-
-  test "validate_execution_environment: when --online is used, not specifying a plugins_dir passes validation", context do
-    opts = context[:opts] |> Map.merge(%{online: true}) |> Map.delete(:plugins_dir)
-    assert @command.validate_execution_environment([], opts) == :ok
   end
 
   test "validate_execution_environment: when --online is used, specifying a non-existent enabled_plugins_file passes validation", context do

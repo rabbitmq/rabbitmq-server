@@ -81,16 +81,6 @@ defmodule DisablePluginsCommandTest do
     )
   end
 
-  test "validate_execution_environment: not specifying an enabled_plugins_file is reported as an error", context do
-    assert @command.validate_execution_environment(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
-      {:validation_failure, :no_plugins_file}
-  end
-
-  test "validate_execution_environment: not specifying a plugins_dir is reported as an error", context do
-    assert @command.validate_execution_environment(["a"], Map.delete(context[:opts], :plugins_dir)) ==
-      {:validation_failure, :no_plugins_dir}
-  end
-
   test "validate_execution_environment: specifying a non-existent enabled_plugins_file is fine", context do
     assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
   end
@@ -98,11 +88,6 @@ defmodule DisablePluginsCommandTest do
   test "validate_execution_environment: specifying a non-existent plugins_dir is reported as an error", context do
     assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
       {:validation_failure, :plugins_dir_does_not_exist}
-  end
-
-  test "validate_execution_environment: failure to load the rabbit application is reported as an error", context do
-    assert {:validation_failure, {:unable_to_load_rabbit, _}} =
-      @command.validate_execution_environment(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
   test "node is inaccessible, writes out enabled plugins file and returns implicitly enabled plugin list", context do
