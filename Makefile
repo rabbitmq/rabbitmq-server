@@ -404,23 +404,11 @@ install-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(inst_verbose) cp -r \
 		LICENSE* \
-		$(DEPS_DIR)/rabbit/ebin \
-		$(DEPS_DIR)/rabbit/priv \
 		$(DEPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
 		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/$(notdir $(DIST_DIR))/README
-
-	@# FIXME: Why do we copy headers?
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit/include \
-		$(DESTDIR)$(RMQ_ERLAPP_DIR)
-	@# rabbitmq-common provides headers too: copy them to
-	@# rabbitmq_server/include.
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit_common/include \
-		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 
 CLI_ESCRIPTS_DIR = escript
 
