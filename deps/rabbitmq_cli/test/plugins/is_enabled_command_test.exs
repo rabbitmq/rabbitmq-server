@@ -70,21 +70,6 @@ defmodule PluginIsEnabledCommandTest do
     assert match?({:validation_failure, :not_enough_args}, @command.validate([], opts))
   end
 
-  test "validate_execution_environment: not specifying an enabled_plugins_file is reported as an error", context do
-    opts = context[:opts] |> Map.merge(%{online: false,
-                                         offline: true}) |> Map.delete(:enabled_plugins_file)
-    assert @command.validate_execution_environment(["rabbitmq_stomp"], opts) ==
-      {:validation_failure, :no_plugins_file}
-  end
-
-  test "validate_execution_environment: not specifying a plugins_dir is reported as an error", context do
-    opts = context[:opts] |> Map.merge(%{online: false,
-                                         offline: true}) |> Map.delete(:plugins_dir)
-    assert @command.validate_execution_environment(["rabbitmq_stomp"], opts) ==
-      {:validation_failure, :no_plugins_dir}
-  end
-
-
   test "validate_execution_environment: specifying a non-existent enabled_plugins_file is fine", context do
     assert @command.validate_execution_environment(["rabbitmq_stomp"],
       Map.merge(context[:opts], %{online: false,
@@ -100,14 +85,6 @@ defmodule PluginIsEnabledCommandTest do
     assert @command.validate_execution_environment(["rabbitmq_stomp"], opts) ==
       {:validation_failure, :plugins_dir_does_not_exist}
   end
-
-  test "validate: failure to load the rabbit application is reported as an error", context do
-    opts = context[:opts] |> Map.merge(%{online: false,
-                                         offline: true}) |> Map.delete(:rabbitmq_home)
-    assert {:validation_failure, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}} ==
-      @command.validate_execution_environment(["rabbitmq_stomp"], opts)
-  end
-
 
   test "run: when given a single enabled plugin, reports it as such", context do
     opts = context[:opts] |> Map.merge(%{online: true, offline: false})

@@ -100,9 +100,6 @@ defmodule RabbitMQ.CLI.Core.CodePath do
         {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}}
 
       _ ->
-        path = Path.join(home, "ebin")
-        Code.append_path(path)
-
         case Application.load(:rabbit) do
           :ok ->
             Code.ensure_loaded(:rabbit_plugins)
