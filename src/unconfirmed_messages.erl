@@ -85,29 +85,29 @@ insert(MsgId, QueueNames, QueueRefs, XName,
        #unconfirmed{ordered = Ordered,
                     index   = Index,
                     reverse = Reverse} = UC) ->
-    case maps:get(MsgId, Index, none) of
-        none ->
+    case maps:is_key(MsgId, Index) of
+        false ->
             UC#unconfirmed{
-                ordered      = gb_sets:add(MsgId, Ordered),
-                index        =
-                    Index#{MsgId =>
-                        #msg_status{
-                            refs = maps:from_list([{QR, ?SET_VALUE} || QR <- QueueRefs]),
-                            queue_status = maps:from_list([{QN, rejected} || QN <- QueueNames]),
-                            exchange = XName}},
-                reverse = lists:foldl(
-                              fun
-                                 (Ref, R) ->
-                                    case R of
-                                        #{Ref := MsgIdsSet} ->
-                                            R#{Ref => MsgIdsSet#{MsgId => ?SET_VALUE}};
-                                        _ ->
-                                            R#{Ref => #{MsgId => ?SET_VALUE}}
-                                    end
-                              end,
-                              Reverse, QueueRefs)
-                };
-        _ ->
+              ordered      = gb_sets:add(MsgId, Ordered),
+              index        =
+              Index#{MsgId =>
+                     #msg_status{
+                        refs = maps:from_list([{QR, ?SET_VALUE} || QR <- QueueRefs]),
+                        queue_status = maps:from_list([{QN, rejected} || QN <- QueueNames]),
+                        exchange = XName}},
+              reverse = lists:foldl(
+                          fun
+                              (Ref, R) ->
+                                  case R of
+                                      #{Ref := MsgIdsSet} ->
+                                          R#{Ref => MsgIdsSet#{MsgId => ?SET_VALUE}};
+                                      _ ->
+                                          R#{Ref => #{MsgId => ?SET_VALUE}}
+                                  end
+                          end,
+                          Reverse, QueueRefs)
+             };
+        true ->
             error({message_already_exists, MsgId, QueueNames, QueueRefs, XName, UC})
     end.
 
@@ -244,8 +244,6 @@ remove_msg_ref(Confirm, MsgId, QueueName, QueueRef,
         #msg_status{refs = #{QueueRef := ?SET_VALUE} = Refs,
                     queue_status = QStatus,
                     exchange = XName} = MsgStatus ->
-            rabbit_log:info("~w QStatus ~w Confirm ~w", [?FUNCTION_NAME,
-                                                         QStatus, Confirm]),
             QStatus1 = case {Confirm, QueueName} of
                             {no_confirm, _} -> QStatus;
                             {_, ignore}     -> QStatus;

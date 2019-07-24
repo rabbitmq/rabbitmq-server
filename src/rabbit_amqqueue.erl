@@ -733,10 +733,14 @@ list_by_type(Type) ->
     Qs.
 
 list_local_followers() ->
+    %% TODO: all this shoudl really be beind the queue type interface
     [ amqqueue:get_name(Q)
       || Q <- list(),
          amqqueue:is_quorum(Q),
-         amqqueue:get_state(Q) =/= crashed, amqqueue:get_leader(Q) =/= node(), lists:member(node(), amqqueue:get_quorum_nodes(Q))].
+         amqqueue:get_state(Q) =/= crashed,
+         amqqueue:get_leader(Q) =/= node(),
+         rabbit_quorum_queue:is_recoverable(Q)
+         ].
 
 is_local_to_node(QPid, Node) when ?IS_CLASSIC(QPid) ->
     Node =:= node(QPid);
@@ -943,7 +947,6 @@ force_event_refresh(Ref) ->
 
 -spec notify_policy_changed(amqqueue:amqqueue()) -> 'ok'.
 notify_policy_changed(Q) when ?is_amqqueue(Q) ->
-
     rabbit_queue_type:policy_changed(Q).
 
 -spec consumers(amqqueue:amqqueue()) ->
@@ -1236,10 +1239,9 @@ forget_all_durable(Node) ->
 %% Try to promote a slave while down - it should recover as a
 %% master. We try to take the oldest slave here for best chance of
 %% recovery.
-forget_node_for_queue(DeadNode, Q)
+forget_node_for_queue(_DeadNode, Q)
   when ?amqqueue_is_quorum(Q) ->
-    QN = amqqueue:get_quorum_nodes(Q),
-    forget_node_for_queue(DeadNode, QN, Q);
+    ok;
 forget_node_for_queue(DeadNode, Q) ->
     RS = amqqueue:get_recoverable_slaves(Q),
     forget_node_for_queue(DeadNode, RS, Q).
@@ -1261,7 +1263,7 @@ forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
         {false, _} -> forget_node_for_queue(DeadNode, T, Q);
         {true, rabbit_classic_queue} ->
             Q1 = amqqueue:set_pid(Q, rabbit_misc:node_to_fake_pid(H)),
-                           ok = mnesia:write(rabbit_durable_queue, Q1, write);
+            ok = mnesia:write(rabbit_durable_queue, Q1, write);
         {true, rabbit_quorum_queue} ->
             ok
     end.

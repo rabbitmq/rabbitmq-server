@@ -290,7 +290,7 @@ wait_for_promoted_or_stopped(Q0) ->
             {error, not_found}
     end.
 
--spec delete_crashed(amqqueue:amqqueue()) -> 'ok'.
+-spec delete_crashed(amqqueue:amqqueue()) -> ok.
 delete_crashed(Q) ->
     delete_crashed(Q, ?INTERNAL_USER).
 

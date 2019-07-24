@@ -794,7 +794,6 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
         QName ->
             erase_queue_stats(QName)
     end,
-    %% TODO: provide api function for remove from queue states?
     noreply(State4#ch{queue_states = rabbit_queue_type:remove(QPid, QStates),
                       queue_monitors = pmon:erase(QPid, QMons)});
 
@@ -2128,8 +2127,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     Qs = rabbit_amqqueue:lookup(DelQNames),
     {QueueStates, Actions} =
         rabbit_queue_type:deliver(Qs, Delivery, QueueStates0),
-    State1 = handle_queue_actions(Actions, State0#ch{queue_states = QueueStates}),
-    % AllDeliveredQRefs = DeliveredQPids ++ [N || {N, _} <- DeliveredQQPids],
+    State1 = handle_queue_actions(Actions,
+                                  State0#ch{queue_states = QueueStates}),
     %% The maybe_monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean
@@ -2162,8 +2161,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     case rabbit_event:stats_level(State1, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
-            [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish)
-             || QName <- AllDeliveredQNames];
+            [?INCR_STATS(queue_exchange_stats,
+                         {amqqueue:get_name(Q), XName}, 1, publish)
+             || Q <- Qs];
         _ ->
             ok
     end,

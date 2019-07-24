@@ -57,9 +57,9 @@
          % policy_version
          get_policy_version/1,
          set_policy_version/2,
-         % quorum_nodes
-         get_quorum_nodes/1,
-         set_quorum_nodes/2,
+         % type_state
+         get_type_state/1,
+         set_type_state/2,
          % recoverable_slaves
          get_recoverable_slaves/1,
          set_recoverable_slaves/2,
@@ -449,16 +449,16 @@ get_recoverable_slaves(#amqqueue{recoverable_slaves = Slaves}) ->
 set_recoverable_slaves(#amqqueue{} = Queue, Slaves) ->
     Queue#amqqueue{recoverable_slaves = Slaves}.
 
-% quorum_nodes (new in v2)
+% type_state (new in v2)
 
--spec get_quorum_nodes(amqqueue()) -> no_return().
+-spec get_type_state(amqqueue()) -> no_return().
 
-get_quorum_nodes(_) -> throw({unsupported, ?record_version, get_quorum_nodes}).
+get_type_state(_) -> throw({unsupported, ?record_version, get_type_state}).
 
--spec set_quorum_nodes(amqqueue(), [node()]) -> no_return().
+-spec set_type_state(amqqueue(), [node()]) -> no_return().
 
-set_quorum_nodes(_, _) ->
-    throw({unsupported, ?record_version, set_quorum_nodes}).
+set_type_state(_, _) ->
+    throw({unsupported, ?record_version, set_type_state}).
 
 % slave_pids
 

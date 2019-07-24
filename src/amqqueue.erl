@@ -57,9 +57,9 @@
          % policy_version
          get_policy_version/1,
          set_policy_version/2,
-         % quorum_nodes
-         get_quorum_nodes/1,
-         set_quorum_nodes/2,
+         % type_state
+         get_type_state/1,
+         set_type_state/2,
          % recoverable_slaves
          get_recoverable_slaves/1,
          set_recoverable_slaves/2,
@@ -119,7 +119,7 @@
           vhost :: rabbit_types:vhost() | undefined | '_', %% secondary index
           options = #{} :: map() | '_',
           type = ?amqqueue_v1_type :: module() | '_',
-          quorum_nodes = [] :: [node()] | '_'
+          type_state = #{} :: map() | '_'
          }).
 
 -type amqqueue() :: amqqueue_v1:amqqueue_v1() | amqqueue_v2().
@@ -143,7 +143,7 @@
                           vhost :: rabbit_types:vhost() | undefined,
                           options :: map(),
                           type :: atom(),
-                          quorum_nodes :: [node()]
+                          type_state :: #{}
                          }.
 
 -type ra_server_id() :: {Name :: atom(), Node :: node()}.
@@ -170,7 +170,7 @@
                                   vhost :: '_',
                                   options :: '_',
                                   type :: atom() | '_',
-                                  quorum_nodes :: '_'
+                                  type_state :: '_'
                                  }.
 
 -export_type([amqqueue/0,
@@ -551,18 +551,16 @@ set_recoverable_slaves(#amqqueue{} = Queue, Slaves) ->
 set_recoverable_slaves(Queue, Slaves) ->
     amqqueue_v1:set_recoverable_slaves(Queue, Slaves).
 
-% quorum_nodes (new in v2)
+% type_state (new in v2)
 
--spec get_quorum_nodes(amqqueue()) -> [node()].
+-spec get_type_state(amqqueue()) -> map().
+get_type_state(#amqqueue{type_state = TState}) -> TState;
+get_type_state(_)                               -> [].
 
-get_quorum_nodes(#amqqueue{quorum_nodes = Nodes}) -> Nodes;
-get_quorum_nodes(_)                               -> [].
-
--spec set_quorum_nodes(amqqueue(), [node()]) -> amqqueue().
-
-set_quorum_nodes(#amqqueue{} = Queue, Nodes) ->
-    Queue#amqqueue{quorum_nodes = Nodes};
-set_quorum_nodes(Queue, _Nodes) ->
+-spec set_type_state(amqqueue(), map()) -> amqqueue().
+set_type_state(#amqqueue{} = Queue, TState) ->
+    Queue#amqqueue{type_state = TState};
+set_type_state(Queue, _TState) ->
     Queue.
 
 % slave_pids
