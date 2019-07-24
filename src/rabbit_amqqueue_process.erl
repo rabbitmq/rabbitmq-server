@@ -1271,7 +1271,7 @@ handle_call({init, Recover}, From, State) ->
     end;
 
 handle_call(info, _From, State) ->
-    reply(infos(info_keys(), State), State);
+    reply({ok, infos(info_keys(), State)}, State);
 
 handle_call({info, Items}, _From, State) ->
     try
