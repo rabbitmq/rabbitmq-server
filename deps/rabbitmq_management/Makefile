@@ -12,7 +12,6 @@ define PROJECT_ENV
 
 	    {cors_allow_origins, []},
 	    {cors_max_age, 1800},
-
 	    {content_security_policy, "default-src 'self'"}
 	  ]
 endef

@@ -145,7 +145,8 @@ all_tests() -> [
     vhost_limit_set_test,
     rates_test,
     single_active_consumer_cq_test,
-    single_active_consumer_qq_test].
+    single_active_consumer_qq_test,
+    oauth_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -3025,6 +3026,32 @@ api_redirect_test(Config) ->
 stats_redirect_test(Config) ->
     assert_permanent_redirect(Config, "doc/stats.html", "/api/index.html"),
     passed.
+
+oauth_test(Config) ->
+    Map1 = http_get(Config, "/auth", ?OK),
+    %% Defaults
+    ?assertEqual(false, maps:get(enable_uaa, Map1)),
+    ?assertEqual(<<>>, maps:get(uaa_client_id, Map1)),
+    ?assertEqual(<<>>, maps:get(uaa_location, Map1)),
+    %% Misconfiguration
+    Map2 = http_get(Config, "/auth", ?OK),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, enable_uaa, true]),
+    ?assertEqual(false, maps:get(enable_uaa, Map2)),
+    ?assertEqual(<<>>, maps:get(uaa_client_id, Map2)),
+    ?assertEqual(<<>>, maps:get(uaa_location, Map2)),
+    %% Valid config
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, uaa_client_id, "rabbit_user"]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, uaa_location, "http://localhost:8080/uaa"]),
+    Map3 = http_get(Config, "/auth", ?OK),
+    ?assertEqual(true, maps:get(enable_uaa, Map3)),
+    ?assertEqual(<<"rabbit_user">>, maps:get(uaa_client_id, Map3)),
+    ?assertEqual(<<"http://localhost:8080/uaa">>, maps:get(uaa_location, Map3)),
+    %% cleanup
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, enable_uaa]).
 
 %% -------------------------------------------------------------------
 %% Helpers.
