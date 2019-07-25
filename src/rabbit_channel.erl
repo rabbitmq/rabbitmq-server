@@ -2147,11 +2147,11 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                                      amqqueue:get_pid(Q)),
                                             %% slave pids are always pids and thus refs
                                             SPids = amqqueue:get_slave_pids(Q),
-                                            Acc ++ [QRef | SPids]
+                                            [QRef | SPids] ++ Acc
                                     end, [], Qs),
     ok = process_routing_mandatory(Mandatory, AllDeliveredQRefs,
                                    Message, State1),
-    AllDeliveredQNames = [rabbit_queue_type:name(QRef, QueueStates)
+    AllDeliveredQNames = [rabbit_queue_type:name(QRef, State1#ch.queue_states)
                           || QRef <- AllDeliveredQRefs],
     State = process_routing_confirm(Confirm,
                                     AllDeliveredQRefs,
@@ -2778,6 +2778,15 @@ handle_queue_actions(Actions, #ch{} = State0) ->
               S0#ch{queue_monitors = pmon:monitor(Pid, Mons)};
           ({settled, QRef, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QRef, S0);
+          ({link_names, QRef, QRefs}, S0) ->
+              link_names(QRef, QRefs, S0);
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0)
       end, State0, Actions).
+
+link_names(QRef, QRefs, #ch{queue_states = Qs0} = State) ->
+    %% linking typicaly slave pids to their master process
+    Qs = lists:foldl(fun (R, Acc) ->
+                             rabbit_queue_type:link_name(QRef, R, Acc)
+                     end, Qs0, QRefs),
+    State#ch{queue_states = Qs}.

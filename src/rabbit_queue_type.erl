@@ -13,6 +13,7 @@
          policy_changed/1,
          stat/1,
          name/2,
+         link_name/3,
          remove/2,
          info/2,
          state_info/1,
@@ -37,10 +38,13 @@
 -type queue_name() :: rabbit_types:r(queue).
 -type queue_state() :: term().
 
+-define(QREF(QueueReference),
+    is_pid(QueueReference) orelse is_atom(QueueReference)).
 %% anything that the host process needs to do on behalf of the queue type
 %% session, like knowing when to notify on monitor down
 -type action() ::
     {monitor, Pid :: pid(), queue_ref()} |
+    {link_name, queue_ref(), [queue_ref()]} |
     {deliver, rabbit_type:ctag(), boolean(), [rabbit_amqqueue:qmsg()]}.
 
 -type actions() :: [action()].
@@ -49,7 +53,7 @@
               name :: queue_name(),
               state :: queue_state()}).
 
--opaque ctxs() :: #{queue_ref() => #ctx{}}.
+-opaque ctxs() :: #{queue_ref() => #ctx{} | queue_ref()}.
 
 -type consume_spec() :: #{no_ack := boolean(),
                           channel_pid := pid(),
@@ -201,15 +205,41 @@ stat(Q) ->
     undefined | queue_name().
 name(QRef, Ctxs) ->
     case Ctxs of
-        #{QRef := Ctx} ->
+        #{QRef := #ctx{} = Ctx} ->
             Ctx#ctx.name;
+        #{QRef := Parent} ->
+            name(Parent, Ctxs);
         _ ->
             undefined
     end.
 
+link_name(QRef, QRef, _Ctxs) ->
+    %% should this be lenient?
+    exit({cannot_link_queue_type_name_to_itself, QRef});
+link_name(ParentQRef, QRef, Ctxs) ->
+    case Ctxs of
+        #{QRef := ParentQRef} when ?QREF(ParentQRef) ->
+            %% already registered
+            Ctxs;
+        #{ParentQRef := #ctx{}} ->
+            %% link together
+            Ctxs#{QRef => ParentQRef};
+        _ ->
+            exit(parent_queue_ref_not_found)
+    end.
+
 -spec remove(queue_ref(), ctxs()) -> ctxs().
-remove(QRef, Ctxs) ->
-    maps:remove(QRef, Ctxs).
+remove(QRef, Ctxs0) ->
+    case maps:take(QRef, Ctxs0) of
+        error ->
+            Ctxs0;
+        {_, Ctxs} ->
+            %% remove all linked queue refs
+            maps:filter(fun (_, V) ->
+                                V == QRef
+                        end, Ctxs)
+    end.
+
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().
@@ -338,15 +368,16 @@ deliver(Qs, Delivery, stateless) ->
     {stateless, []};
 deliver(Qs, Delivery, Ctxs) ->
     %% sort by queue type - then dispatch each group
-    ByType = lists:foldl(fun (Q, Acc) ->
-                                 T = amqqueue:get_type(Q),
-                                 Ctx = get_ctx(Q, Ctxs),
-                                 maps:update_with(
-                                   T, fun (A) ->
-                                              Ctx = get_ctx(Q, Ctxs),
-                                              [{Q, Ctx#ctx.state} | A]
-                                      end, [{Q, Ctx#ctx.state}], Acc)
-                         end, #{}, Qs),
+    ByType = lists:foldl(
+               fun (Q, Acc) ->
+                       T = amqqueue:get_type(Q),
+                       Ctx = get_ctx(Q, Ctxs),
+                       maps:update_with(
+                         T, fun (A) ->
+                                    Ctx = get_ctx(Q, Ctxs),
+                                    [{Q, Ctx#ctx.state} | A]
+                            end, [{Q, Ctx#ctx.state}], Acc)
+               end, #{}, Qs),
     %%% dispatch each group to queue type interface?
     {Xs, Actions} = maps:fold(fun(Mod, QSs, {X0, A0}) ->
                                       {X, A} = Mod:deliver(QSs, Delivery),
@@ -409,7 +440,7 @@ with(QRef, Fun, Ctxs) ->
 get_ctx(Q, Contexts) when ?is_amqqueue(Q) ->
     Ref = qref(Q),
     case Contexts of
-        #{Ref := Ctx} ->
+        #{Ref := #ctx{} = Ctx} ->
             Ctx;
         _ ->
             %% not found - initialize
@@ -422,7 +453,14 @@ get_ctx(Q, Contexts) when ?is_amqqueue(Q) ->
 get_ctx(QPid, Contexts) when is_map(Contexts) ->
     Ref = qref(QPid),
     %% if we use a QPid it should always be initialised
-    maps:get(Ref, Contexts, undefined).
+    case maps:get(Ref, Contexts) of
+        #ctx{} = Ctx ->
+            Ctx;
+        R when ?QREF(R) ->
+            exit({cannot_get_linked_context_for, QPid});
+        _ ->
+            exit({queue_type_context_not_found, QPid})
+    end.
 
 set_ctx(Q, Ctx, Contexts)
   when ?is_amqqueue(Q) andalso is_map(Contexts) ->

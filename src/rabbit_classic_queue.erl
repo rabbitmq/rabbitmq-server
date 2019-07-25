@@ -256,7 +256,8 @@ qpids(Qs) ->
     lists:foldl(fun ({Q, _}, {MPidAcc, SPidAcc, Actions0}) ->
                         QPid = amqqueue:get_pid(Q),
                         SPids = amqqueue:get_slave_pids(Q),
-                        Actions = [{monitor, QPid, QPid}
+                        Actions = [{link_names, QPid, SPids},
+                                   {monitor, QPid, QPid}
                                    | [{monitor, P, QPid} || P <- SPids]] ++ Actions0,
                         {[QPid | MPidAcc], SPidAcc ++ SPids, Actions}
                 end, {[], [], []}, Qs).
