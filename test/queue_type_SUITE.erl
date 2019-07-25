@@ -42,7 +42,7 @@ end_per_suite(Config) ->
     ok.
 
 init_per_group(Group, Config) ->
-    ClusterSize = 1,
+    ClusterSize = 3,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, ClusterSize},
                                             {rmq_nodename_suffix, Group},
@@ -53,6 +53,7 @@ init_per_group(Group, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
+    Config3 =
     case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
         ok ->
             ok = rabbit_ct_broker_helpers:rpc(
@@ -70,7 +71,12 @@ init_per_group(Group, Config) ->
         Skip ->
             end_per_group(Group, Config2),
             Skip
-    end.
+    end,
+    rabbit_ct_broker_helpers:set_policy(
+        Config3, 0,
+        <<"ha-policy">>, <<".*">>, <<"queues">>,
+        [{<<"ha-mode">>, <<"all">>}]),
+    Config3.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(

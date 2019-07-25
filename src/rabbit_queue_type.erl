@@ -343,7 +343,7 @@ recover(VHost, Qs) ->
 handle_event(QRef, Evt, Ctxs) ->
     %% events can arrive after a queue state has been cleared up
     %% so need to be defensive here
-    case get_ctx(QRef, Ctxs) of
+    case get_ctx(QRef, Ctxs, undefined) of
         #ctx{module = Mod,
              state = State0} = Ctx  ->
             case Mod:handle_event(Evt, State0) of
@@ -450,16 +450,24 @@ get_ctx(Q, Contexts) when ?is_amqqueue(Q) ->
                  name = Name,
                  state = Mod:init(Q)}
     end;
-get_ctx(QPid, Contexts) when is_map(Contexts) ->
+get_ctx(QPid, Contexts) when ?QREF(QPid) andalso is_map(Contexts) ->
+    case get_ctx(QPid, Contexts, undefined) of
+        undefined ->
+            exit({queue_context_not_found, QPid});
+        Ctx ->
+            Ctx
+    end.
+
+get_ctx(QPid, Contexts, Default) when is_map(Contexts) ->
     Ref = qref(QPid),
     %% if we use a QPid it should always be initialised
-    case maps:get(Ref, Contexts) of
+    case maps:get(Ref, Contexts, undefined) of
         #ctx{} = Ctx ->
             Ctx;
+        undefined ->
+            Default;
         R when ?QREF(R) ->
-            exit({cannot_get_linked_context_for, QPid});
-        _ ->
-            exit({queue_type_context_not_found, QPid})
+            exit({cannot_get_linked_context_for, QPid})
     end.
 
 set_ctx(Q, Ctx, Contexts)
