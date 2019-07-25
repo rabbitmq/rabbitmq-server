@@ -253,7 +253,9 @@ info(Q, Items) ->
 
 state_info(#ctx{state = S,
                 module = Mod}) ->
-    Mod:state_info(S).
+    Mod:state_info(S);
+state_info(_) ->
+    #{}.
 
 info_down(Q, all_keys, DownReason) ->
     info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason);
