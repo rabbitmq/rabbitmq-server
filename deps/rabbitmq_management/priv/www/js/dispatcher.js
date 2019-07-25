@@ -264,18 +264,16 @@ dispatcher_add(function(sammy) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
-        var redirect;
-        if (window.location.hash != "") {
-            redirect = window.location.href.split(window.location.hash)[0];
-        } else {
-            redirect = window.location.href
-        };
         if (uaa_logged_in) {
+            var redirect;
+            if (window.location.hash != "") {
+                redirect = window.location.href.split(window.location.hash)[0];
+            } else {
+                redirect = window.location.href
+            };
             uaa_logged_in = false;
             var logoutRedirectUrl = Singular.properties.uaaLocation + '/logout.do?client_id=' + Singular.properties.clientId + '&redirect=' + redirect;
-            get(logoutRedirectUrl, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", function(req) {
-                console.log(req);
-            });
+            get(logoutRedirectUrl, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", function(req) { });
         }
         location.reload();
     });
