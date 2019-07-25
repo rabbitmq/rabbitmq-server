@@ -394,7 +394,8 @@ deliver(Qs, Delivery, Ctxs) ->
 
 -spec settle(queue_ref(), rabbit_types:ctag(),
              [non_neg_integer()], ctxs()) -> ctxs().
-settle(QRef, CTag, MsgIds, Ctxs) ->
+settle(QRef, CTag, MsgIds, Ctxs)
+  when ?QREF(QRef) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QRef, Ctxs),
     State = Mod:settle(CTag, MsgIds, State0),
@@ -402,7 +403,8 @@ settle(QRef, CTag, MsgIds, Ctxs) ->
 
 -spec reject(queue_ref(), rabbit_types:ctag(),
              boolean(), [non_neg_integer()], ctxs()) -> ctxs().
-reject(QRef, CTag, Requeue, MsgIds, Ctxs) ->
+reject(QRef, CTag, Requeue, MsgIds, Ctxs)
+  when ?QREF(QRef) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QRef, Ctxs),
     State = Mod:reject(CTag, Requeue, MsgIds, State0),

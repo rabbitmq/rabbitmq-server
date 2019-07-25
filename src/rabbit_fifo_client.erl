@@ -204,7 +204,7 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout,
             IsDelivered = Count > 0,
             Msg = add_delivery_count_header(Msg0, Count),
             {ok, MsgsReady,
-             {QName, Leader, MsgId, IsDelivered, Msg},
+             {QName, qref(Leader), MsgId, IsDelivered, Msg},
              State0#state{leader = Leader}};
         Err ->
             Err
@@ -498,7 +498,6 @@ update_machine_state(Node, Conf) ->
 %% with them.</li>
 -spec handle_ra_event(ra_server_id(), ra_server_proc:ra_event_body(), state()) ->
     {ok, state(), actions()}.
-    % {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]} | eol.
 handle_ra_event(From, {applied, Seqs},
                 #state{soft_limit = SftLmt,
                        unblock_handler = UnblockFun} = State0) ->
