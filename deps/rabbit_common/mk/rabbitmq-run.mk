@@ -177,6 +177,12 @@ $(if $(RABBITMQ_NODE_PORT),      {listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(CO
     ]},
   {rabbitmq_management, [
 $(if $(RABBITMQ_NODE_PORT),      {listener$(COMMA) [{port$(COMMA) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
+    ]},
+  {rabbitmq_mqtt, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+    ]},
+  {rabbitmq_stomp, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]}
 ].
 endef
