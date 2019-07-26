@@ -146,7 +146,8 @@ all_tests() -> [
     rates_test,
     single_active_consumer_cq_test,
     single_active_consumer_qq_test,
-    oauth_test].
+    oauth_test,
+    disable_basic_auth_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -235,6 +236,8 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, disable_basic_auth, false]),
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
@@ -3052,6 +3055,19 @@ oauth_test(Config) ->
     %% cleanup
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                  [rabbitmq_management, enable_uaa]).
+
+disable_basic_auth_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, disable_basic_auth, true]),
+    http_get(Config, "/overview", ?NOT_AUTHORISED),
+    http_get(Config, "/nodes", ?NOT_AUTHORISED),
+    http_get(Config, "/vhosts", ?NOT_AUTHORISED),
+    http_get(Config, "/vhost-limits", ?NOT_AUTHORISED),
+    http_put(Config, "/queues/%2F/myqueue", none, ?NOT_AUTHORISED),
+    Policy = [{pattern,    <<".*">>},
+              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+    http_put(Config, "/policies/%2F/HA",  Policy, ?NOT_AUTHORISED),
+    http_delete(Config, "/queues/%2F/myqueue", ?NOT_AUTHORISED).
 
 %% -------------------------------------------------------------------
 %% Helpers.

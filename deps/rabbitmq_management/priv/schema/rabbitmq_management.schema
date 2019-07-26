@@ -354,6 +354,9 @@ fun(Conf) ->
     end
 end}.
 
+
+{mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
+    [{datatype, {enum, [true, false]}}]}.
 %% ===========================================================================
 %% Authorization
 
