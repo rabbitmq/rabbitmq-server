@@ -172,6 +172,10 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             is_authorized(ReqData, Context,
                 Username, Password,
                 ErrorMsg, Fun);
+        {bearer, Token} ->
+            Username = rabbit_data_coercion:to_binary(
+                         application:get_env(rabbitmq_management, uaa_client_id, "")),
+            is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
         _ ->
             {{false, ?AUTH_REALM}, ReqData, Context}
     end.

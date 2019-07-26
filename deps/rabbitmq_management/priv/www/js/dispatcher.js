@@ -265,6 +265,7 @@ dispatcher_add(function(sammy) {
         clear_pref('auth');
         clear_cookie_value('auth');
         if (uaa_logged_in) {
+            clear_pref('uaa_token');
             var redirect;
             if (window.location.hash != "") {
                 redirect = window.location.href.split(window.location.hash)[0];

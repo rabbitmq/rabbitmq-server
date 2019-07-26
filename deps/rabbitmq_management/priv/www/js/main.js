@@ -94,6 +94,7 @@ function start_app_login() {
         var token = getAccessToken();
         if (token != null) {
             set_auth_pref(uaa_client_id + ':' + token);
+            store_pref('uaa_token', token);
             check_login();
         } else if(has_auth_cookie_value()) {
             check_login();
@@ -133,6 +134,7 @@ function check_login() {
     if (user == false) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
+        clear_pref('uaa_token');
         clear_cookie_value('auth');
         if (enable_uaa) {
             uaa_invalid = true;
@@ -1179,10 +1181,14 @@ function has_auth_cookie_value() {
 }
 
 function auth_header() {
-    if(has_auth_cookie_value()) {
-        return "Basic " + decodeURIComponent(get_cookie_value('auth'));
+    if(has_auth_cookie_value() && enable_uaa) {
+        return "Bearer " + decodeURIComponent(get_pref('uaa_token'));
     } else {
-        return null;
+        if(has_auth_cookie_value()) {
+            return "Basic " + decodeURIComponent(get_cookie_value('auth'));
+        } else {
+            return null;
+        }
     }
 }
 
