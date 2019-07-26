@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1561370142014,
+  "iteration": 1564151087401,
   "links": [],
   "panels": [
     {
@@ -729,7 +729,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available memory before the memory alarm gets triggered and publishers are blocked\n\nIf the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "Available memory before the memory alarm gets triggered and publishers are blocked.\n\nIf the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n##### Relevant doc guides\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
         "h": 8,
@@ -877,7 +877,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "When available disk space goes below 0, the disk alarm gets triggered and publishing connections will be blocked.\n\n##### Relevant doc guides\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "gridPos": {
         "h": 8,
@@ -1025,7 +1025,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available file descriptors, used by network sockets and file handles.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "description": "Available file descriptors, used by network sockets and file handles.\n\nWhen this value reaches 0, new connections will fail to establish and persistent messages may fail to write to disk. Quorum Queues are also likely to be affected. CLI tools, such as rabbitmqctl & rabbitmq-plugins will stop working.\n\n##### Relevant doc guides\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
       "fill": 0,
       "gridPos": {
         "h": 4,
@@ -1174,7 +1174,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
+      "description": "Available socket descriptors.\n\nWhen this value reaches 0, new connections will fail to establish.\n\n##### Relevant doc guides\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
       "fill": 0,
       "gridPos": {
         "h": 4,
@@ -1876,7 +1876,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of mandatory messages returned to publishers as unroutable\n\n* [Ensuring Messages are routed](https://www.rabbitmq.com/reliability.html#producer)\n* [Unroutable Messages & Confirms](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
+      "description": "Count of mandatory messages returned to publishers as unroutable\n\n##### Doc guides\n\n* [Publisher Acknowledgements](https://www.rabbitmq.com/publishers.html#data-safety)\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "gridPos": {
         "h": 5,
@@ -4896,5 +4896,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 7
+  "version": 2
 }
