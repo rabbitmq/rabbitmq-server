@@ -733,6 +733,9 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     end;
 
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
+
+    % rabbit_log:info("handle_cast({confirm, ~w ~w",
+    %                 [QPid, MsgSeqNos]),
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
 handle_info({ra_event, From, _} = Evt,
@@ -744,7 +747,8 @@ handle_info({ra_event, From, _} = Evt,
             State = handle_queue_actions(Actions, State1),
             noreply_coalesce(State);
         eol ->
-            State1 = handle_consuming_queue_down_or_eol(QRef, State0),
+            QName = rabbit_queue_type:name(QRef, QueueStates0),
+            State1 = handle_consuming_queue_down_or_eol(QRef, QName, State0),
             State2 = handle_delivering_queue_down(QRef, State1),
             {ConfirmMXs, RejectMXs, UC1} =
                 unconfirmed_messages:forget_ref(QRef, State2#ch.unconfirmed),
@@ -777,9 +781,15 @@ handle_info(emit_stats, State) ->
     %% stats timer.
     {noreply, send_confirms_and_nacks(State1), hibernate};
 
-handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
-    State1 = handle_publishing_queue_down(QPid, Reason, State),
-    State3 = handle_consuming_queue_down_or_eol(QPid, State1),
+handle_info({'DOWN', _MRef, process, QPid, Reason},
+            #ch{queue_states = QStates, queue_monitors = QMons} = State0) ->
+    %% need to remove classic queue type state before handling consuming
+    %% queue down as it may want to recover and thus create a new state
+    QName = rabbit_queue_type:name(QPid, QStates),
+    State = State0#ch{queue_monitors = pmon:erase(QPid, QMons),
+                      queue_states = rabbit_queue_type:remove(QPid, QStates)},
+    State1 = handle_publishing_queue_down(QPid, QName, Reason, State),
+    State3 = handle_consuming_queue_down_or_eol(QPid, QName, State1),
     State4 = handle_delivering_queue_down(QPid, State3),
     %% A rabbit_amqqueue_process has died. If our channel was being
     %% blocked by this process, and no other process is blocking our
@@ -787,15 +797,15 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     %% any credit that was deferred will be sent to the rabbit_reader
     %% processs that might be blocked by this particular channel.
     credit_flow:peer_down(QPid),
-    #ch{queue_states = QStates, queue_monitors = QMons} = State4,
-    case rabbit_queue_type:name(QPid, QStates) of
+    %% check if the queue state has be re-added and only delete queue stats
+    %% if it has
+    case rabbit_queue_type:name(QPid, State4#ch.queue_states) of
         undefined ->
             ok;
-        QName ->
-            erase_queue_stats(QName)
+        QN ->
+            erase_queue_stats(QN)
     end,
-    noreply(State4#ch{queue_states = rabbit_queue_type:remove(QPid, QStates),
-                      queue_monitors = pmon:erase(QPid, QMons)});
+    noreply(State4);
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
@@ -1191,6 +1201,7 @@ maybe_set_fast_reply_to(C, _State) ->
 record_rejects([], State) ->
     State;
 record_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
+    rabbit_log:info("record_rejects ~w", [MXs]),
     Tx1 = case Tx of
         none -> none;
         _    -> failed
@@ -1770,7 +1781,6 @@ maybe_stat(true, _Q) -> {ok, 0, 0}.
 
 consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
-                             queue_monitors   = QMons,
                              queue_consumers  = QCons}) ->
     {Q, _} = maps:get(ConsumerTag, ConsumerMapping),
     QPid = amqqueue:get_pid(Q),
@@ -1780,35 +1790,30 @@ consumer_monitor(ConsumerTag,
                  error -> gb_sets:singleton(ConsumerTag)
              end,
     QCons1 = maps:put(QRef, CTags1, QCons),
-    State#ch{queue_monitors  = maybe_monitor(QRef, QMons),
-             queue_consumers = QCons1}.
+    State#ch{queue_consumers = QCons1}.
 
 track_delivering_queue(NoAck, QPid,
-                       State = #ch{
-                                   % queue_monitors = QMons,
-                                   delivering_queues = DQ}) ->
+                       State = #ch{delivering_queues = DQ}) ->
     QRef = qpid_to_ref(QPid),
-    State#ch{
-             % queue_monitors = maybe_monitor(QRef, QMons),
-             delivering_queues = case NoAck of
+    State#ch{delivering_queues = case NoAck of
                                      true  -> DQ;
                                      false -> sets:add_element(QRef, DQ)
                                  end}.
 
-handle_publishing_queue_down(QPid, Reason,
-                             State = #ch{unconfirmed = UC,
-                                         queue_states = QStates})
+handle_publishing_queue_down(QPid, QName, Reason,
+                             State = #ch{unconfirmed = UC})
   when ?IS_CLASSIC(QPid) ->
-    case rabbit_queue_type:name(QPid, QStates) of
+    case QName of
         %% The queue is unknown, the confirm must have been processed already
         undefined ->
             State;
         _QName ->
+            rabbit_log:info("handle_publishing_queue_down ~w ~w",
+                            [QPid, Reason]),
             case {rabbit_misc:is_abnormal_exit(Reason), Reason} of
                 {true, _} ->
                     {RejectMXs, UC1} =
                         unconfirmed_messages:reject_all_for_queue(QPid, UC),
-
                     record_rejects(RejectMXs, State#ch{unconfirmed = UC1});
                 {false, normal} ->
                     {ConfirmMXs, RejectMXs, UC1} =
@@ -1822,31 +1827,38 @@ handle_publishing_queue_down(QPid, Reason,
                         unconfirmed_messages:forget_ref(QPid, UC),
                     State1 = record_confirms(ConfirmMXs,
                                              State#ch{unconfirmed = UC1}),
+                    rabbit_log:info("confirms / rejects ~w ~w",
+                                    [ConfirmMXs, RejectMXs]),
                     record_rejects(RejectMXs, State1)
             end
     end;
-handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
+handle_publishing_queue_down(QPid, _QName, _Reason, _State)
+  when ?IS_QUORUM(QPid) ->
     error(quorum_queues_should_never_be_monitored).
 
-handle_consuming_queue_down_or_eol(QRef,
-                                   State = #ch{queue_consumers = QCons,
-                                               queue_states = QStates}) ->
+handle_consuming_queue_down_or_eol(_QRef, undefined, State) ->
+    State;
+handle_consuming_queue_down_or_eol(QRef, QName,
+                                   State = #ch{queue_consumers = QCons}) ->
     ConsumerTags = case maps:find(QRef, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
-              QName = rabbit_queue_type:name(QRef, QStates),
               case queue_down_consumer_action(CTag, CMap) of
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
                   {recover, {NoAck, ConsumerPrefetch, Exclusive, Args}} ->
-                      case catch basic_consume( %% [0]
+                      rabbit_log:info("recovering consumer  ~p", [CTag]),
+                      case catch basic_consume(
                                    QName, NoAck, ConsumerPrefetch, CTag,
                                    Exclusive, Args, true, StateN) of
                           {ok, StateN1} -> StateN1;
-                          _             -> cancel_consumer(CTag, QName, StateN)
+                          Err ->
+                              rabbit_log:info("re-consume failed with ~p",
+                                              [Err]),
+                              cancel_consumer(CTag, QName, StateN)
                       end
               end
       end, State#ch{queue_consumers = maps:remove(QRef, QCons)}, ConsumerTags).
@@ -1859,6 +1871,7 @@ handle_consuming_queue_down_or_eol(QRef,
 cancel_consumer(CTag, QName,
                 State = #ch{cfg = #conf{capabilities = Capabilities},
                             consumer_mapping = CMap}) ->
+    rabbit_log:info("cancelling consumer  ~p", [CTag]),
     case rabbit_misc:table_lookup(
            Capabilities, <<"consumer_cancel_notify">>) of
         {bool, true} -> ok = send(#'basic.cancel'{consumer_tag = CTag,
@@ -2062,7 +2075,7 @@ notify_queues(State = #ch{cfg = #conf{state = closing}}) ->
     {ok, State};
 notify_queues(State = #ch{consumer_mapping  = Consumers,
                           cfg = Cfg,
-                          delivering_queues = DQ }) ->
+                          delivering_queues = DQ}) ->
     QRefs0 = sets:to_list(
                sets:union(sets:from_list(consumer_queue_refs(Consumers)), DQ)),
     %% filter to only include pids to avoid trying to notify quorum queues
@@ -2198,6 +2211,8 @@ confirm(MsgSeqNos, QRef, State = #ch{queue_states = QStates, unconfirmed = UC}) 
     % QName = maps:get(QRef, QNames, ignore),
     QName = case rabbit_queue_type:name(QRef, QStates) of
                 undefined ->
+                    rabbit_log:info("confirm( queue not found ~w",
+                                    [QRef, MsgSeqNos]),
                     ignore;
                 N ->
                     N
@@ -2715,10 +2730,10 @@ maybe_cancel_tick_timer(#ch{tick_timer = TRef,
 
 %% only classic queues need monitoring so rather than special casing
 %% everywhere monitors are set up we wrap it here for this module
-maybe_monitor(QPid, QMons) when ?IS_CLASSIC(QPid) ->
-    pmon:monitor(QPid, QMons);
-maybe_monitor(_, QMons) ->
-    QMons.
+% maybe_monitor(QPid, QMons) when ?IS_CLASSIC(QPid) ->
+%     pmon:monitor(QPid, QMons);
+% maybe_monitor(_, QMons) ->
+%     QMons.
 
 qpid_to_ref(Pid) when is_pid(Pid) -> Pid;
 qpid_to_ref({Name, _}) -> Name;
@@ -2775,6 +2790,7 @@ handle_queue_actions(Actions, #ch{} = State0) ->
                                              credit_drained = Credit}),
               S0;
           ({monitor, Pid, _QRef}, #ch{queue_monitors = Mons} = S0) ->
+              % rabbit_log:info("monitoriing ~w", [Pid]),
               S0#ch{queue_monitors = pmon:monitor(Pid, Mons)};
           ({settled, QRef, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QRef, S0);
