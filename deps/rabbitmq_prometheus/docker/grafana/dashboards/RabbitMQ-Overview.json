@@ -17,7 +17,17 @@
   "gnetId": null,
   "graphTooltip": 1,
   "iteration": 1564151087401,
-  "links": [],
+  "links": [
+    {
+      "icon": "doc",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Monitoring with Prometheus & Grafana",
+      "tooltip": "",
+      "type": "link",
+      "url": "https://next.rabbitmq.com/prometheus.html"
+    }
+  ],
   "panels": [
     {
       "cacheTimeout": null,
