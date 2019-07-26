@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1561456770242,
+  "iteration": 1564148441775,
   "links": [
     {
       "icon": "doc",
@@ -35,7 +35,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Rate of Raft operations committed\n\nThis includes all queue operations, including publishes & consumer acknowledgements.\n\nThis tracks the progress of the Raft commit index on all members, including followers.\n\nIf a RabbitMQ node does not run a Raft member, it will not report any entries committed.",
+      "description": "##### Rate of Raft log operations committed\n\nThis includes all queue operations, including publishes & consumer acknowledgements.\n\nThis tracks the progress of the Raft commit index on all members, including followers.\n\nIf a RabbitMQ node does not run a Raft member, it will not report any entries committed.",
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -124,7 +124,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Entries committed / s",
+      "title": "Log entries committed / s",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -169,14 +169,14 @@
         "cardRound": null
       },
       "color": {
-        "cardColor": "rgb(255, 255, 255)",
+        "cardColor": "#FA6400",
         "colorScale": "sqrt",
-        "colorScheme": "interpolateRdYlGn",
-        "exponent": 0.5,
+        "colorScheme": "interpolateCool",
+        "exponent": 0.4,
         "mode": "opacity"
       },
       "dataFormat": "timeseries",
-      "description": "##### Time for an entry to be committed\n\nThis is an indicator of Raft operational overhead. Values will increase with increased load as the system trades latency for throughput.\n\nThis metric samples  the time it takes for an entry to be written to a Raft log and that entry being committed.\n\nBecause quorum queues fsync all operations to disk before committing them, they are not suitable for low-latency workloads.",
+      "description": "##### Time for a log entry to be committed\n\nThis is an indicator of Raft operational overhead. Values will increase with increased load as the system trades latency for throughput.\n\nThis metric samples  the time it takes for a log entry to be written to a Raft log and that entry being committed.\n\nBecause quorum queues fsync all operations to disk before committing them, they are not suitable for low-latency workloads.",
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -205,7 +205,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Entry commit latency",
+      "title": "Log entry commit latency",
       "tooltip": {
         "show": true,
         "showHistogram": true
@@ -235,7 +235,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Pending Raft entries\n\nTracks the number of Raft log entries that have been written but not yet committed.\n\nHigh & growing values may be indicative of a quorum of members not being available so that a queue can make progress.",
+      "description": "##### Pending Raft log entries\n\nTracks the number of Raft log entries that have been written but not yet committed.\n\nHigh & growing values may be indicative of a quorum of members not being available so that a queue can make progress.",
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -327,7 +327,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Uncommitted entries",
+      "title": "Uncommitted log entries",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -371,7 +371,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Rate of Raft elections\n\nTracks the increments of the Raft term.\n\nSustained non-zero rates are indicative of network and/or availability issue. The other reason may be quorum queue declarations. Some declarations are expected. Sustained declarations hint to system design problems.",
+      "description": "##### Rate of Raft leader elections\n\nTracks the increments of the Raft term.\n\nSustained non-zero rates are indicative of network and/or availability issues, or queue churn. The other reason may be quorum queue declarations.\n\nValues above 0 are normal, some leader elections are expected. Sustained high values may be of concern.",
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -457,7 +457,16 @@
           "refId": "A"
         }
       ],
-      "thresholds": [],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 3,
+          "yaxis": "left"
+        }
+      ],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
