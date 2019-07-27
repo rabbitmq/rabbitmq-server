@@ -1132,6 +1132,7 @@ bindings_post_test(Config) ->
     passed.
 
 bindings_null_routing_key_test(Config) ->
+    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
     XArgs = [{type, <<"direct">>}],
     QArgs = #{},
     BArgs = [{routing_key, null}, {arguments, #{}}],
@@ -1150,9 +1151,7 @@ bindings_null_routing_key_test(Config) ->
     PropertiesKey = "null\~" ++ Hash,
 
     ?assertEqual("myqueue/null", pget("location", Headers2)),
-
-    PropertiesKeyBin = list_to_binary(PropertiesKey),
-    Want2 = #{arguments => #{},
+    Want1 = #{arguments => #{},
               destination => <<"myqueue">>,
               destination_type => <<"queue">>,
               properties_key => <<"null">>,
@@ -1160,11 +1159,10 @@ bindings_null_routing_key_test(Config) ->
               source => <<"myexchange">>,
               vhost => <<"/">>},
     URI = "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey,
-    ?assertEqual(Want2, http_get(Config, URI, ?OK)),
+    ?assertEqual(Want1, http_get(Config, URI, ?OK)),
 
     http_get(Config, URI ++ "x", ?NOT_FOUND),
     http_delete(Config, URI, {group, '2xx'}),
-    http_delete(Config, "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey, {group, '2xx'}),
     http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
     passed.
@@ -1817,6 +1815,7 @@ arguments_test(Config) ->
     BArgs = [{routing_key, <<"">>},
              {arguments, [{'x-match', <<"all">>},
                           {foo, <<"bar">>}]}],
+    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
     http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/arguments_test", QArgs, {group, '2xx'}),
     http_post(Config, "/bindings/%2F/e/myexchange/q/arguments_test", BArgs, {group, '2xx'}),
@@ -1851,6 +1850,7 @@ arguments_table_test(Config) ->
                              <<"amqp://localhost/%2F/upstream2">>]},
     XArgs = #{type      => <<"headers">>,
               arguments => Args},
+    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
     http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
     Definitions = http_get(Config, "/definitions", ?OK),
     http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
