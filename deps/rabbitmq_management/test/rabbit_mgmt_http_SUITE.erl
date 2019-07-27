@@ -92,6 +92,7 @@ all_tests() -> [
     queues_well_formed_json_test,
     bindings_test,
     bindings_post_test,
+    bindings_null_routing_key_test,
     bindings_e2e_test,
     permissions_administrator_test,
     permissions_vhost_test,
@@ -1102,13 +1103,13 @@ bindings_post_test(Config) ->
     http_post(Config, "/bindings/%2F/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
 
     Headers1 = http_post(Config, "/bindings/%2F/e/myexchange/q/myqueue", #{}, {group, '2xx'}),
-    Want0 = "myqueue/~",
+    Want0 = "myqueue/\~",
     ?assertEqual(Want0, pget("location", Headers1)),
 
     Headers2 = http_post(Config, "/bindings/%2F/e/myexchange/q/myqueue", BArgs, {group, '2xx'}),
     %% Args hash is calculated from a table, generated from args.
     Hash = table_hash([{<<"foo">>,longstr,<<"bar">>}]),
-    PropertiesKey = "routing~" ++ Hash,
+    PropertiesKey = "routing\~" ++ Hash,
 
     Want1 = "myqueue/" ++ PropertiesKey,
     ?assertEqual(Want1, pget("location", Headers2)),
@@ -1126,6 +1127,44 @@ bindings_post_test(Config) ->
 
     http_get(Config, URI ++ "x", ?NOT_FOUND),
     http_delete(Config, URI, {group, '2xx'}),
+    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
+    passed.
+
+bindings_null_routing_key_test(Config) ->
+    XArgs = [{type, <<"direct">>}],
+    QArgs = #{},
+    BArgs = [{routing_key, null}, {arguments, #{}}],
+    http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/myqueue", QArgs, {group, '2xx'}),
+    http_post(Config, "/bindings/%2F/e/myexchange/q/badqueue", BArgs, ?NOT_FOUND),
+    http_post(Config, "/bindings/%2F/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
+
+    Headers1 = http_post(Config, "/bindings/%2F/e/myexchange/q/myqueue", #{}, {group, '2xx'}),
+    Want0 = "myqueue/\~",
+    ?assertEqual(Want0, pget("location", Headers1)),
+
+    Headers2 = http_post(Config, "/bindings/%2F/e/myexchange/q/myqueue", BArgs, {group, '2xx'}),
+    %% Args hash is calculated from a table, generated from args.
+    Hash = table_hash([]),
+    PropertiesKey = "null\~" ++ Hash,
+
+    ?assertEqual("myqueue/null", pget("location", Headers2)),
+
+    PropertiesKeyBin = list_to_binary(PropertiesKey),
+    Want2 = #{arguments => #{},
+              destination => <<"myqueue">>,
+              destination_type => <<"queue">>,
+              properties_key => <<"null">>,
+              routing_key => null,
+              source => <<"myexchange">>,
+              vhost => <<"/">>},
+    URI = "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey,
+    ?assertEqual(Want2, http_get(Config, URI, ?OK)),
+
+    http_get(Config, URI ++ "x", ?NOT_FOUND),
+    http_delete(Config, URI, {group, '2xx'}),
+    http_delete(Config, "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey, {group, '2xx'}),
     http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
     passed.
