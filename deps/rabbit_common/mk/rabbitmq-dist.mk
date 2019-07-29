@@ -175,8 +175,11 @@ $(ERLANGMK_DIST_EZS):
 		$(MAKE) --no-print-directory -C $(SRC_DIR) prepare-dist \
 		APP=$(APP) VSN=$(VSN) EZ_DIR=$(EZ_DIR)
 	$(verbose) (cd $(DIST_DIR) && \
-		$(ZIP) $(ZIP_V) -r $(notdir $@) $(basename $(notdir $@)))
-	$(verbose) rm -rf $(EZ_DIR)
+		find "$(basename $(notdir $@))" | LC_COLLATE=C sort \
+		> "$(basename $(notdir $@)).manifest" && \
+		$(ZIP) $(ZIP_V) --names-stdin "$(notdir $@)" \
+		< "$(basename $(notdir $@)).manifest")
+	$(verbose) rm -rf $(EZ_DIR) $(EZ_DIR).manifest
 
 $(MIX_DIST_EZS): $(mix_task_archive_deps)
 	$(verbose) cd $(SRC_DIR) && \
