@@ -90,9 +90,16 @@ is_authorized_admin(ReqData, Context, Token) ->
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
 is_authorized_admin(ReqData, Context, Username, Password) ->
-    is_authorized(ReqData, Context, Username, Password,
-                  <<"Not administrator user">>,
-                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
+    case is_basic_auth_disabled() of
+        true ->
+            Msg = "HTTP access denied: basic auth disabled",
+            rabbit_log:warning(Msg),
+            not_authorised(Msg, ReqData, Context);
+        false ->
+            is_authorized(ReqData, Context, Username, Password,
+                          <<"Not administrator user">>,
+                          fun(#user{tags = Tags}) -> is_admin(Tags) end)
+    end.
 
 is_authorized_monitor(ReqData, Context) ->
     is_authorized(ReqData, Context,

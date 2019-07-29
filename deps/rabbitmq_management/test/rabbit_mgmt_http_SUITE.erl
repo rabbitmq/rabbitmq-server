@@ -3067,7 +3067,9 @@ disable_basic_auth_test(Config) ->
     Policy = [{pattern,    <<".*">>},
               {definition, [{<<"ha-mode">>, <<"all">>}]}],
     http_put(Config, "/policies/%2F/HA",  Policy, ?NOT_AUTHORISED),
-    http_delete(Config, "/queues/%2F/myqueue", ?NOT_AUTHORISED).
+    http_delete(Config, "/queues/%2F/myqueue", ?NOT_AUTHORISED),
+    http_get(Config, "/definitions", ?NOT_AUTHORISED),
+    http_post(Config, "/definitions", [], ?NOT_AUTHORISED).
 
 %% -------------------------------------------------------------------
 %% Helpers.
