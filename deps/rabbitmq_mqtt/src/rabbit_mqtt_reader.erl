@@ -298,26 +298,26 @@ process_received_bytes(Bytes,
                                     connection = ConnPid });
                 %% PUBLISH and more
                 {error, unauthorized = Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT connection ~s is closing due to an authorization failure~n", [ConnStr]),
+                    rabbit_log_connection:error("MQTT connection ~s is closing due to an authorization failure~n", [ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 %% CONNECT frames only
                 {error, unauthenticated = Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT connection ~s is closing due to an authentication failure~n", [ConnStr]),
+                    rabbit_log_connection:error("MQTT connection ~s is closing due to an authentication failure~n", [ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 %% CONNECT frames only
                 {error, invalid_client_id = Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT cannot accept connection ~s: client uses an invalid ID~n", [ConnStr]),
+                    rabbit_log_connection:error("MQTT cannot accept connection ~s: client uses an invalid ID~n", [ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 %% CONNECT frames only
                 {error, unsupported_protocol_version = Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT cannot accept connection ~s: incompatible protocol version~n", [ConnStr]),
+                    rabbit_log_connection:error("MQTT cannot accept connection ~s: incompatible protocol version~n", [ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, unavailable = Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT cannot accept connection ~s due to an internal error or unavailable component~n",
+                    rabbit_log_connection:error("MQTT cannot accept connection ~s due to an internal error or unavailable component~n",
                         [ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT protocol error on connection ~s: ~p~n",
+                    rabbit_log_connection:error("MQTT protocol error on connection ~s: ~p~n",
                         [ConnStr, Reason]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Error} ->
