@@ -68,7 +68,7 @@ $$(dist_$(1)_ez): SRC_DIR = $(3)
 $$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
 $$(dist_$(1)_ez): $$(if $$(wildcard $(3)/ebin $(3)/include $(3)/priv),\
-	$$(filter-out %/dep_built,$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*)),)
+	$$(filter-out %/dep_built %/ebin/test,$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*)),)
 
 # If the application's Makefile defines a `list-dist-deps` target, we
 # use it to populate the dependencies list. This is useful when the
@@ -175,6 +175,7 @@ $(ERLANGMK_DIST_EZS):
 	$(verbose) rm -rf $(EZ_DIR) $(EZ)
 	$(verbose) mkdir -p $(EZ_DIR)
 	$(dist_verbose) $(RSYNC) -a $(RSYNC_V) \
+		--exclude '/ebin/test' \
 		--include '/ebin/***' \
 		--include '/include/***' \
 		--include '/priv/***' \
@@ -230,6 +231,7 @@ dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
 		$(MAYBE_APPS_LIST)"; \
 	fi
 
+test-dist:: export TEST_DIR=NON-EXISTENT
 test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
