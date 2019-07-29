@@ -627,7 +627,11 @@ function submit_import(form) {
                 vhost_part = '/' + esc(vhost_name);
             }
 
-            var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
+            if (enable_uaa) {
+                var form_action = "/definitions" + vhost_part + '?token=' + get_pref('uaa_token');
+            } else {
+                var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
+            };
             var fd = new FormData();
             fd.append('file', file);
             with_req('POST', form_action, fd, function(resp) {
@@ -667,9 +671,15 @@ function postprocess() {
     $('#download-definitions').click(function() {
             var idx = $("select[name='vhost-download'] option:selected").index();
             var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
+        if (enable_uaa) {
             var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
-                '&auth=' + get_cookie_value('auth');
+                '&token=' + get_pref('uaa_token');
+            } else {
+                var path = 'api/definitions' + vhost + '?download=' +
+                    esc($('#download-filename').val()) +
+                    '&auth=' + get_cookie_value('auth');
+            };
             window.location = path;
             setTimeout('app.run()');
             return false;
