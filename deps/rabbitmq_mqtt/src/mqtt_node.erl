@@ -47,7 +47,8 @@ start() ->
                   %% This is required when we start a node for the first time.
                   %% Using default timeout because it supposed to reply fast.
                   case Nodes of
-                    [NodeId] ->
+                    [] ->
+                      rabbit_log:info("MQTT: observed no cluster peers that support client ID tracking, assuming we should start a new Raft leader election"),
                       ra:trigger_election(NodeId);
                     _        -> ok
                   end;
