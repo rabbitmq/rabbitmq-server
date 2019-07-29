@@ -296,25 +296,43 @@ process_received_bytes(Bytes,
                       State #state{ parse_state = PS,
                                     proc_state = ProcState1,
                                     connection = ConnPid });
+                %% PUBLISH and more
+                {error, unauthorized = Reason, ProcState1} ->
+                    rabbit_log_connection:info("MQTT connection ~s is closing due to an authorization failure~n", [ConnStr]),
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)};
+                %% CONNECT frames only
+                {error, unauthenticated = Reason, ProcState1} ->
+                    rabbit_log_connection:info("MQTT connection ~s is closing due to an authentication failure~n", [ConnStr]),
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)};
+                %% CONNECT frames only
+                {error, invalid_client_id = Reason, ProcState1} ->
+                    rabbit_log_connection:info("MQTT cannot accept connection ~s: client uses an invalid ID~n", [ConnStr]),
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)};
+                %% CONNECT frames only
+                {error, unsupported_protocol_version = Reason, ProcState1} ->
+                    rabbit_log_connection:info("MQTT cannot accept connection ~s: incompatible protocol version~n", [ConnStr]),
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)};
+                {error, unavailable = Reason, ProcState1} ->
+                    rabbit_log_connection:info("MQTT cannot accept connection ~s due to an internal error or unavailable component~n",
+                        [ConnStr]),
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Reason, ProcState1} ->
-                    rabbit_log_connection:info("MQTT protocol error ~p for connection ~s~n",
-                        [Reason, ConnStr]),
+                    rabbit_log_connection:info("MQTT protocol error on connection ~s: ~p~n",
+                        [ConnStr, Reason]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Error} ->
-                    rabbit_log_connection:error("MQTT detected framing error '~p' for connection ~s~n",
-                        [Error, ConnStr]),
+                    rabbit_log_connection:error("MQTT detected a framing error on connection ~s: ~p~n",
+                        [ConnStr, Error]),
                     {stop, {shutdown, Error}, State};
                 {stop, ProcState1} ->
-                    {stop, normal, pstate(State, ProcState1)};
-                {err, unauthorized = Reason, ProcState1} ->
-                    {stop, {shutdown, Reason}, pstate(State, ProcState1)}
+                    {stop, normal, pstate(State, ProcState1)}
             end;
         {error, {cannot_parse, Error, Stacktrace}} ->
-            rabbit_log_connection:error("MQTT cannot parse frame for connection '~s', unparseable payload: ~p, error: {~p, ~p} ~n",
+            rabbit_log_connection:error("MQTT cannot parse a frame on connection '~s', unparseable payload: ~p, error: {~p, ~p} ~n",
                 [ConnStr, Bytes, Error, Stacktrace]),
             {stop, {shutdown, Error}, State};
         {error, Error} ->
-            rabbit_log_connection:error("MQTT detected framing error '~p' for connection ~s~n",
+            rabbit_log_connection:error("MQTT detected a framing error on connection ~s: ~p~n",
                 [ConnStr, Error]),
             {stop, {shutdown, Error}, State}
     end.
