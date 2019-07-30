@@ -704,8 +704,8 @@ pid_file_and_await_node_startup(Config) ->
     spawn_link(fun() ->
         rabbit_ct_broker_helpers:start_node(Config, Rabbit)
     end),
-    Attempts = 10,
-    Timeout = 500,
+    Attempts = 200,
+    Timeout = 50,
     wait_for_pid_file_to_contain_running_process_pid(RabbitPidFile, Attempts, Timeout),
     {error, _, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
       ["wait", RabbitPidFile]).
@@ -758,7 +758,7 @@ wait_for_pid_file_to_contain_running_process_pid(_, 0, _) ->
     error(timeout_waiting_for_pid_file_to_have_running_pid);
 wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts, Timeout) ->
     Pid = pid_from_file(PidFile),
-    case rabbit_misc:is_os_process_alive(Pid) of
+    case Pid =/= undefined andalso rabbit_misc:is_os_process_alive(Pid) of
         true  -> ok;
         false ->
             ct:sleep(Timeout),
@@ -766,8 +766,12 @@ wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts, Timeout) ->
     end.
 
 pid_from_file(PidFile) ->
-    {ok, Content} = file:read_file(PidFile),
-    string:strip(binary_to_list(Content), both, $\n).
+    case file:read_file(PidFile) of
+        {ok, Content} ->
+            string:strip(binary_to_list(Content), both, $\n);
+        {error, enoent} ->
+            undefined
+    end.
 
 cluster_members(Config) ->
     rabbit_ct_broker_helpers:get_node_configs(Config, nodename).
