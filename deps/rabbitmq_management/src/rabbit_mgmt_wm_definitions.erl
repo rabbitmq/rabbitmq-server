@@ -138,10 +138,10 @@ is_authorized(ReqData, Context) ->
     case rabbit_mgmt_util:qs_val(<<"auth">>, ReqData) of
         undefined ->
             case rabbit_mgmt_util:qs_val(<<"token">>, ReqData) of
-                Token ->
-                    rabbit_mgmt_util:is_authorized_admin(ReqData, Context, Token);
                 undefined ->
-                    rabbit_mgmt_util:is_authorized_admin(ReqData, Context)
+                    rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+                Token ->
+                    rabbit_mgmt_util:is_authorized_admin(ReqData, Context, Token)
             end;
         Auth ->
             is_authorized_qs(ReqData, Context, Auth)
