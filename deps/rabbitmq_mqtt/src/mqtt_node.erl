@@ -34,13 +34,14 @@ start() ->
     Res = case ra_directory:uid_of(Name) of
               undefined ->
                   UId = ra:new_uid(ra_lib:to_binary(Name)),
+                  Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
                   Conf = #{cluster_name => Name,
                            id => NodeId,
                            uid => UId,
                            friendly_name => Name,
                            initial_members => Nodes,
                            log_init_args => #{uid => UId},
-                           tick_timeout => 5000,
+                           tick_timeout => Timeout,
                            machine => {module, mqtt_machine, #{}}},
                   ra:start_server(Conf),
                   %% Trigger an election.
