@@ -34,7 +34,7 @@ start() ->
     Res = case ra_directory:uid_of(Name) of
               undefined ->
                   UId = ra:new_uid(ra_lib:to_binary(Name)),
-                  Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
+                  Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
                   Conf = #{cluster_name => Name,
                            id => NodeId,
                            uid => UId,
@@ -63,11 +63,11 @@ start() ->
         _  -> Res
     end.
 
-join_peers(NodeId, [NodeId]) ->
+join_peers(NodeId, []) ->
     ok;
 join_peers(NodeId, Nodes) ->
     join_peers(NodeId, Nodes, 100).
-join_peers(NodeId, [NodeId], _RetriesLeft) ->
+join_peers(NodeId, [], _RetriesLeft) ->
     ok;
 join_peers(_NodeId, _Nodes, RetriesLeft) when RetriesLeft =:= 0 ->
     rabbit_log:error("MQTT: exhausted all attempts while trying to rejoin cluster peers");
