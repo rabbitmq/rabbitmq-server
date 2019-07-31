@@ -106,7 +106,8 @@ init_per_testcase(Testcase, Config) ->
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
+        {keep_pid_file_on_exit, true}
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -700,13 +701,14 @@ pid_file_and_await_node_startup(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
     %% starting first node fails - it was not the last node to stop
     {error, _} = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
+    PreviousPid = pid_from_file(RabbitPidFile),
     %% start first node in the background
     spawn_link(fun() ->
         rabbit_ct_broker_helpers:start_node(Config, Rabbit)
     end),
     Attempts = 200,
     Timeout = 50,
-    wait_for_pid_file_to_contain_running_process_pid(RabbitPidFile, Attempts, Timeout),
+    wait_for_pid_file_to_change(RabbitPidFile, PreviousPid, Attempts, Timeout),
     {error, _, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
       ["wait", RabbitPidFile]).
 
@@ -754,15 +756,18 @@ await_running_count(Config) ->
 %% Internal utils
 %% ----------------------------------------------------------------------------
 
-wait_for_pid_file_to_contain_running_process_pid(_, 0, _) ->
+wait_for_pid_file_to_change(_, 0, _, _) ->
     error(timeout_waiting_for_pid_file_to_have_running_pid);
-wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts, Timeout) ->
+wait_for_pid_file_to_change(PidFile, PreviousPid, Attempts, Timeout) ->
     Pid = pid_from_file(PidFile),
-    case Pid =/= undefined andalso rabbit_misc:is_os_process_alive(Pid) of
+    case Pid =/= undefined andalso Pid =/= PreviousPid of
         true  -> ok;
         false ->
             ct:sleep(Timeout),
-            wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts - 1, Timeout)
+            wait_for_pid_file_to_change(PidFile,
+                                        PreviousPid,
+                                        Attempts - 1,
+                                        Timeout)
     end.
 
 pid_from_file(PidFile) ->
