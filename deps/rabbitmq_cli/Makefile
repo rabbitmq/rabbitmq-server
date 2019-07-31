@@ -68,9 +68,9 @@ escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues es
 # the source was previously copied in that directory.
 
 ifdef USE_SYMLINKS_IN_ESCRIPTS_DIR
-link_escript = ln -s "$(notdir $(1))" "$(2)"
+link_escript = ln -sf "$(notdir $(1))" "$(2)"
 else
-link_escript = ln "$(dir $(2))$(notdir $(1))" "$(2)"
+link_escript = ln -f "$(dir $(2))$(notdir $(1))" "$(2)"
 endif
 
 app:: $(ESCRIPTS)
@@ -130,10 +130,9 @@ dialyzer:: $(ESCRIPTS)
 install: $(ESCRIPTS)
 ifdef PREFIX
 	$(gen_verbose) mkdir -p "$(DESTDIR)$(PREFIX)"
-	$(verbose) $(foreach script,$(ESCRIPTS), \
-		rm -f "$(DESTDIR)$(PREFIX)/$(notdir $(script))";)
 	$(verbose) $(foreach script,$(ACTUAL_ESCRIPTS), \
-		cp "$(script)" "$(DESTDIR)$(PREFIX)";)
+		cmp -s "$(script)" "$(DESTDIR)$(PREFIX)/$(notdir $(script))" || \
+		cp "$(script)" "$(DESTDIR)$(PREFIX)/$(notdir $(script))";)
 	$(verbose) $(foreach script,$(LINKED_ESCRIPTS), \
 		$(call link_escript,$($(notdir $(script))),$(DESTDIR)$(PREFIX)/$(notdir $(script)));)
 else
