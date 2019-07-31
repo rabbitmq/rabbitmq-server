@@ -63,11 +63,11 @@ start() ->
         _  -> Res
     end.
 
-join_peers(NodeId, []) ->
+join_peers(_NodeId, []) ->
     ok;
 join_peers(NodeId, Nodes) ->
     join_peers(NodeId, Nodes, 100).
-join_peers(NodeId, [], _RetriesLeft) ->
+join_peers(_NodeId, [], _RetriesLeft) ->
     ok;
 join_peers(_NodeId, _Nodes, RetriesLeft) when RetriesLeft =:= 0 ->
     rabbit_log:error("MQTT: exhausted all attempts while trying to rejoin cluster peers");
