@@ -19,6 +19,7 @@ uaac member add "rabbitmq.tag:management" rabbit_user
 uaac member add "rabbitmq.tag:administrator" rabbit_user
 
 # add the client for the management plugin. It has the implicit grant type.
+# add e.g. --access_token_validity 60 --refresh_token_validity 3600 to experiment with token validity
 uaac client add rabbit_user_client \
  --name rabbit_user_client \
  --secret '' \
