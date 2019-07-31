@@ -25,4 +25,4 @@ uaac client add rabbit_user_client \
  --scope 'rabbitmq.* openid' \
  --authorized_grant_types implicit \
  --autoapprove true \
- --redirect_uri 'http://localhost:15672'
+ --redirect_uri 'http://localhost:15672/**'
