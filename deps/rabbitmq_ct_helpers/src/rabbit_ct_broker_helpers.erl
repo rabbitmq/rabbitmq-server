@@ -633,6 +633,12 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      true -> ["LEAVE_PLUGINS_DISABLED=yes" | ExtraArgs1];
                      _    -> ExtraArgs1
                  end,
+    KeepPidFile = rabbit_ct_helpers:get_config(
+                    Config, keep_pid_file_on_exit),
+    ExtraArgs3 = case KeepPidFile of
+                     true -> ["RABBITMQ_KEEP_PID_FILE_ON_EXIT=yes" | ExtraArgs2];
+                     _    -> ExtraArgs2
+                 end,
     ExtraArgs = case UseSecondaryUmbrella of
                     true ->
                         DepsDir = ?config(erlang_mk_depsdir, Config),
@@ -663,9 +669,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                          {"RABBITMQ_SERVER=~s/rabbitmq-server", [SecScriptsDir]},
                          {"RABBITMQCTL=~s/rabbitmqctl", [SecScriptsDir]},
                          {"RABBITMQ_PLUGINS=~s/rabbitmq-plugins", [SecScriptsDir]}
-                         | ExtraArgs2];
+                         | ExtraArgs3];
                     false ->
-                        ExtraArgs2
+                        ExtraArgs3
                 end,
     Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
