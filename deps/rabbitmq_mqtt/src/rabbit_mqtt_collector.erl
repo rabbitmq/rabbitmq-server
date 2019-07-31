@@ -30,8 +30,10 @@ unregister(ClientId, Pid) ->
 list() ->
      NodeId = mqtt_node:node_id(),
      QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
-     {ok, {_, Ids}, _} = ra:leader_query(NodeId, QF),
-     Ids.
+     case ra:leader_query(NodeId, QF) of
+       {ok, {_, Ids}, _} -> Ids;
+       {timeout, _}      -> []
+     end.
 
 leave(NodeBin) ->
     Node = binary_to_atom(NodeBin, utf8),

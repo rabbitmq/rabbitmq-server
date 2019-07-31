@@ -123,10 +123,10 @@ process_request(?CONNECT,
                         rabbit_log_connection:error("MQTT login failed: no credentials provided~n"),
                         {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
-                        rabbit_log_connection:error("MQTT login failed: no user username is provided"),
+                        rabbit_log_connection:error("MQTT login failed: no username is provided"),
                         {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {User, undefined}} when is_list(User) ->
-                        rabbit_log_connection:error("MQTT login failed for ~p: no password provided", [User]),
+                        rabbit_log_connection:error("MQTT login failed for user '~p': no password provided", [User]),
                         {?CONNACK_CREDENTIALS, PState1};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState1) of
@@ -159,29 +159,37 @@ process_request(?CONNECT,
                                   {error, _} = Err ->
                                     rabbit_log_connection:error("MQTT cannot accept a connection: "
                                                                 "client ID tracker is unavailable: ~p", [Err]),
+                                    %% ignore all exceptions, we are shutting down
+                                    catch amqp_connection:close(Conn),
                                     {?CONNACK_SERVER, PState1};
                                   {timeout, _} ->
                                     rabbit_log_connection:error("MQTT cannot accept a connection: "
                                                                 "client ID registration timed out"),
+                                    %% ignore all exceptions, we are shutting down
+                                    catch amqp_connection:close(Conn),
                                     {?CONNACK_SERVER, PState1}
                                 end;
-                            ConnAck ->
-                                {ConnAck, PState1}
+                            ConnAck -> {ConnAck, PState1}
                         end
                 end
         end,
     {ReturnCode, SessionPresent} = case Return of
-                                       {?CONNACK_ACCEPT, _} ->
-                                           Return;
-                                       Return ->
-                                           {Return, false}
+                                       {?CONNACK_ACCEPT, Bool} -> {?CONNACK_ACCEPT, Bool};
+                                       Other                   -> {Other, false}
                                    end,
     SendFun(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?CONNACK},
                         variable = #mqtt_frame_connack{
                                       session_present = SessionPresent,
                                       return_code = ReturnCode}},
             PState5),
-    {ok, PState5};
+    case ReturnCode of
+      ?CONNACK_ACCEPT      -> {ok, PState5};
+      ?CONNACK_CREDENTIALS -> {error, unauthenticated, PState5};
+      ?CONNACK_AUTH        -> {error, unauthorized, PState5};
+      ?CONNACK_SERVER      -> {error, unavailable, PState5};
+      ?CONNACK_INVALID_ID  -> {error, invalid_client_id, PState5};
+      ?CONNACK_PROTO_VER   -> {error, unsupported_protocol_version, PState5}
+    end;
 
 process_request(?PUBACK,
                 #mqtt_frame{
@@ -559,11 +567,11 @@ process_login(UserBin, PassBin, ProtoVersion,
                             ?CONNACK_AUTH
                     end;
                 {error, {auth_failure, Explanation}} ->
-                    rabbit_log_connection:error("MQTT login failed for ~p auth_failure: ~s~n",
+                    rabbit_log_connection:error("MQTT login failed for user '~p' auth_failure: ~s~n",
                         [binary_to_list(UserBin), Explanation]),
                     ?CONNACK_CREDENTIALS;
                 {error, access_refused} ->
-                    rabbit_log_connection:warning("MQTT login failed for ~p access_refused "
+                    rabbit_log_connection:warning("MQTT login failed for user '~p': access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH;
@@ -575,7 +583,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                     ?CONNACK_AUTH
             end;
         false ->
-            rabbit_log_connection:error("MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
+            rabbit_log_connection:error("MQTT login failed for user '~p' auth_failure: vhost ~s does not exist~n",
                 [binary_to_list(UserBin), VHost]),
             ?CONNACK_CREDENTIALS
     end.
@@ -875,19 +883,19 @@ close_connection(PState = #proc_state{ connection = Connection,
         undefined -> ok;
         _         -> ok = rabbit_mqtt_collector:unregister(ClientId, self())
     end,
-    %% ignore noproc or other exceptions to avoid debris
+    %% ignore noproc or other exceptions, we are shutting down
     catch amqp_connection:close(Connection),
     PState #proc_state{ channels   = {undefined, undefined},
                         connection = undefined }.
 
-% NB: check_*: MQTT spec says we should ack normally, ie pretend there
-% was no auth error, but here we are closing the connection with an error. This
-% is what happens anyway if there is an authorization failure at the AMQP level.
+%% NB: check_*: MQTT spec says we should ack normally, ie pretend there
+%% was no auth error, but here we are closing the connection with an error. This
+%% is what happens anyway if there is an authorization failure at the AMQP 0-9-1 client level.
 
 check_publish(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
     ok -> Fn();
-    _ -> {err, unauthorized, PState}
+    _ -> {error, unauthorized, PState}
   end.
 
 check_subscribe([], Fn, _) ->
@@ -896,7 +904,7 @@ check_subscribe([], Fn, _) ->
 check_subscribe([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
   case check_topic_access(TopicName, read, PState) of
     ok -> check_subscribe(Topics, Fn, PState);
-    _ -> {err, unauthorized, PState}
+    _ -> {error, unauthorized, PState}
   end.
 
 check_topic_access(TopicName, Access,

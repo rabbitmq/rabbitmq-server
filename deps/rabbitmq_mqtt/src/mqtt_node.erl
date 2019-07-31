@@ -18,6 +18,7 @@
 -export([start/0, node_id/0, leave/1]).
 
 -define(START_TIMEOUT, 100000).
+-define(RETRY_INTERVAL, 5000).
 
 node_id() ->
     node_id(node()).
@@ -33,39 +34,56 @@ start() ->
     Res = case ra_directory:uid_of(Name) of
               undefined ->
                   UId = ra:new_uid(ra_lib:to_binary(Name)),
+                  Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
                   Conf = #{cluster_name => Name,
                            id => NodeId,
                            uid => UId,
                            friendly_name => Name,
                            initial_members => Nodes,
                            log_init_args => #{uid => UId},
-                           tick_timeout => 5000,
+                           tick_timeout => Timeout,
                            machine => {module, mqtt_machine, #{}}},
-                  ra:start_server(Conf);
+                  ra:start_server(Conf),
+                  %% Trigger an election.
+                  %% This is required when we start a node for the first time.
+                  %% Using default timeout because it supposed to reply fast.
+                  case Nodes of
+                    [] ->
+                      rabbit_log:info("MQTT: observed no cluster peers that support client ID tracking, assuming we should start a new Raft leader election"),
+                      ra:trigger_election(NodeId);
+                    _        -> ok
+                  end;
               _ ->
                   ra:restart_server(NodeId)
           end,
     case Res of
         ok ->
-            case Nodes of
-                [] -> ok;
-                [Member | _] -> ra:add_member(Member, NodeId)
-            end,
-            %% Trigger election.
-            %% This is required when we start a node for the first time.
-            %% Using default timeout because it supposed to reply fast.
-            ra:trigger_election(NodeId),
-            case ra:members(NodeId, ?START_TIMEOUT) of
-                {ok, _, _} ->
-                    ok;
-                {timeout, _} = Err ->
-                    rabbit_log:warning("MQTT: timed out contacting cluster peers"),
-                    Err;
-                Err ->
-                    Err
+          spawn(fun() -> join_peers(NodeId, Nodes) end),
+          ok;
+        _  -> Res
+    end.
+
+join_peers(_NodeId, []) ->
+    ok;
+join_peers(NodeId, Nodes) ->
+    join_peers(NodeId, Nodes, 100).
+join_peers(_NodeId, [], _RetriesLeft) ->
+    ok;
+join_peers(_NodeId, _Nodes, RetriesLeft) when RetriesLeft =:= 0 ->
+    rabbit_log:error("MQTT: exhausted all attempts while trying to rejoin cluster peers");
+join_peers(NodeId, Nodes, RetriesLeft) ->
+    case ra:members(Nodes, ?START_TIMEOUT) of
+        {ok, Members, _} ->
+            case lists:member(NodeId, Members) of
+                true  -> ok;
+                false -> ra:add_member(Members, NodeId)
             end;
-        _ ->
-            Res
+        {timeout, _} ->
+            rabbit_log:debug("MQTT: timed out contacting cluster peers, %s retries left", [RetriesLeft]),
+            timer:sleep(?RETRY_INTERVAL),
+            join_peers(NodeId, Nodes, RetriesLeft - 1);
+        Err ->
+            Err
     end.
 
 -spec leave(node()) -> 'ok' | 'timeout' | 'nodedown'.
