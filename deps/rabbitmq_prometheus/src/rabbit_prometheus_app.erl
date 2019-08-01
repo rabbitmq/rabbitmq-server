@@ -59,12 +59,15 @@ start_configured_listener() ->
 
 -spec add_global_labels() -> ok.
 add_global_labels() ->
+    {ok, RabbitVersion} = application:get_key(rabbit, vsn),
     application:set_env(
         prometheus,
         global_labels,
         [
             {node, node()},
-            {cluster, rabbit_nodes:cluster_name()}
+            {cluster, rabbit_nodes:cluster_name()},
+            {rabbitmq_version, RabbitVersion},
+            {erlang_version, rabbit_misc:otp_release()}
         ]
     ).
 

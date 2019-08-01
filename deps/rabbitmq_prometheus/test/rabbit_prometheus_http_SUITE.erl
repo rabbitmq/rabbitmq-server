@@ -67,7 +67,9 @@ init_per_group(with_metrics, Config0) ->
     ),
     Config2 = rabbit_ct_helpers:merge_app_env(
         Config1,
-        {prometheus, [{global_labels, [{node, node()}, {cluster, "rabbitmq_prometheus_test"}]}]}
+        {prometheus, [{global_labels, [{node, node()}, {cluster, "rabbitmq_prometheus_test"},
+                                       {rabbitmq_version, "3.8.0+beta.5"},
+                                       {erlang_version, "21.3"}]}]}
     ),
     Config3 = init_per_group(with_metrics, Config2, []),
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config3, quorum_queue),
@@ -187,6 +189,14 @@ metrics_global_labels_test(Config) ->
                 _ -> ok
             end,
             case string:str(Line, "cluster=") of
+                0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
+                _ -> ok
+            end,
+            case string:str(Line, "rabbitmq_version=") of
+                0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
+                _ -> ok
+            end,
+            case string:str(Line, "erlang_version=") of
                 0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
                 _ -> ok
             end
