@@ -252,7 +252,9 @@ handle_tick(QName,
                       Infos = [{consumers, C}, {consumer_utilisation, Util},
                                {message_bytes_ready, MsgBytesReady},
                                {message_bytes_unacknowledged, MsgBytesUnack},
-                               {message_bytes, MsgBytesReady + MsgBytesUnack}
+                               {message_bytes, MsgBytesReady + MsgBytesUnack},
+                               {message_bytes_persistent, MsgBytesReady + MsgBytesUnack}
+
                                | infos(QName)],
                       rabbit_core_metrics:queue_stats(QName, Infos),
                       rabbit_event:notify(queue_stats,
@@ -260,6 +262,7 @@ handle_tick(QName,
                                                     {messages, M},
                                                     {messages_ready, MR},
                                                     {messages_unacknowledged, MU},
+                                                    {messages_persistent, M},
                                                     {reductions, R}]),
                       ok = repair_leader_record(QName, Self),
                       ExpectedNodes = rabbit_mnesia:cluster_nodes(all),
