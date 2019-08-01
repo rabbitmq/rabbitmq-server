@@ -67,7 +67,7 @@ groups() ->
 suite() ->
     [
       %% If a test hangs, no need to wait for 30 minutes.
-      {timetrap, {minutes, 5}}
+      {timetrap, {minutes, 15}}
     ].
 
 %% -------------------------------------------------------------------
