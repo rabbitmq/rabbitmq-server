@@ -88,18 +88,19 @@ get_tcp_listener() ->
     application:get_env(rabbitmq_prometheus, tcp_config, []).
 
 start_listener(Listener) ->
-    {Type, ContextName} = case is_tls(Listener) of
-        true  -> {tls, ?TLS_CONTEXT};
-        false -> {tcp, ?TCP_CONTEXT}
+    {Type, ContextName, Protocol} = case is_tls(Listener) of
+        true  -> {tls, ?TLS_CONTEXT, 'https/prometheus'};
+        false -> {tcp, ?TCP_CONTEXT, 'http/prometheus'}
     end,
-    {ok, _} = register_context(ContextName, Listener),
+    {ok, _} = register_context(ContextName, Protocol, Listener),
     log_startup(Type, Listener).
 
-register_context(ContextName, Listener0) ->
+register_context(ContextName, Protocol, Listener0) ->
     M0 = maps:from_list(Listener0),
     %% include default port if it's not provided in the config
     %% as Cowboy won't start if the port is missing
-    M1 = maps:merge(#{port => ?DEFAULT_PORT}, M0),
+    M1 = maps:merge(#{port => ?DEFAULT_PORT,
+                      protocol => Protocol}, M0),
     rabbit_web_dispatch:register_context_handler(
       ContextName, maps:to_list(M1), "",
       rabbit_prometheus_dispatcher:build_dispatcher(),
