@@ -156,10 +156,15 @@ listener_stopped(Listener) ->
     ok.
 
 listener_info(Listener) ->
-    Protocol = case pget(ssl, Listener) of
-        true -> https;
-        _    -> http
-    end,
+    Protocol = case pget(protocol, Listener) of
+                   undefined ->
+                       case pget(ssl, Listener) of
+                           true -> https;
+                           _    -> http
+                       end;
+                   P ->
+                       P
+               end,
     Port = pget(port, Listener),
     [{Protocol, IPAddress, Port}
      || {IPAddress, _Port, _Family}
