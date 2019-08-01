@@ -118,7 +118,7 @@ dep_prometheus = hex 4.2.2
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.0
-dep_observer_cli = git https://github.com/zhongwencool/observer_cli 1.5.0
+dep_observer_cli = hex 1.5.2
 dep_stdout_formatter = hex 0.2.2
 dep_sysmon_handler = hex 1.1.0
 
