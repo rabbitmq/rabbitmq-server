@@ -107,10 +107,11 @@ fix_ssl(Options) ->
         protocol_config(Options)}.
 
 transport_config(Options0) ->
-    Options = proplists:delete(ssl,
+    Options = proplists:delete(protocol,
+        proplists:delete(ssl,
         proplists:delete(ssl_opts,
             proplists:delete(cowboy_opts,
-                Options0))),
+                Options0)))),
     case proplists:get_value(ip, Options) of
         undefined ->
             Options;
