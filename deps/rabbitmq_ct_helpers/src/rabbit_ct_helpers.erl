@@ -367,7 +367,10 @@ ensure_rabbitmqctl_cmd(Config) ->
             Error;
         _ ->
             Cmd = [Rabbitmqctl],
-            case exec(Cmd, [drop_stdout]) of
+            Env = [
+                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqctl)}
+                  ],
+            case exec(Cmd, [drop_stdout, {env, Env}]) of
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
                 {error, Code, Reason} ->
@@ -440,7 +443,10 @@ ensure_rabbitmq_plugins_cmd(Config) ->
             Error;
         _ ->
             Cmd = [Rabbitmqplugins],
-            case exec(Cmd, [drop_stdout]) of
+            Env = [
+                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqplugins)}
+                  ],
+            case exec(Cmd, [drop_stdout, {env, Env}]) of
                 {error, 64, _} ->
                     set_config(Config, {rabbitmq_plugins_cmd, Rabbitmqplugins});
                 _ ->
@@ -464,7 +470,10 @@ ensure_rabbitmq_queues_cmd(Config) ->
             Error;
         _ ->
             Cmd = [RabbitmqQueues],
-            case exec(Cmd, [drop_stdout]) of
+            Env = [
+                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqQueues)}
+                  ],
+            case exec(Cmd, [drop_stdout, {env, Env}]) of
                 {error, 64, _} ->
                     set_config(Config,
                                {rabbitmq_queues_cmd,
