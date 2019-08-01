@@ -99,6 +99,8 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def protocol_label(:"https/web-mqtt"), do: "MQTT over WebSockets and TLS (HTTPS)"
   def protocol_label(:"http/web-stomp"), do: "STOMP over WebSockets"
   def protocol_label(:"https/web-stomp"), do: "STOMP over WebSockets and TLS (HTTPS)"
+  def protocol_label(:"http/prometheus"), do: "Prometheus API"
+  def protocol_label(:"https/prometheus"), do: "Prometheus API over TLS (HTTPS)"
   def protocol_label(:clustering), do: "inter-node and CLI tool communication"
   def protocol_label(other), do: to_string(other)
 
