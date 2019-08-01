@@ -43,7 +43,9 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                               tcp_port_mqtt_tls_extra]}
+                               tcp_port_mqtt_tls_extra]},
+        {rmq_nodes_clustered, true},
+        {rmq_nodes_count, 3}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
