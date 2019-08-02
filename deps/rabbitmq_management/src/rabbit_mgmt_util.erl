@@ -93,9 +93,16 @@ is_authorized_admin(ReqData, Context, Token) ->
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
 is_authorized_admin(ReqData, Context, Username, Password) ->
-    is_authorized(ReqData, Context, Username, Password,
-                  <<"Not administrator user">>,
-                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
+    case is_basic_auth_disabled() of
+        true ->
+            Msg = "HTTP access denied: basic auth disabled",
+            rabbit_log:warning(Msg),
+            not_authorised(Msg, ReqData, Context);
+        false ->
+            is_authorized(ReqData, Context, Username, Password,
+                          <<"Not administrator user">>,
+                          fun(#user{tags = Tags}) -> is_admin(Tags) end)
+    end.
 
 is_authorized_monitor(ReqData, Context) ->
     is_authorized(ReqData, Context,
@@ -178,6 +185,9 @@ is_authorized_global_parameters(ReqData, Context) ->
                            is_policymaker(Tags)
                   end).
 
+is_basic_auth_disabled() ->
+    application:get_env(rabbitmq_management, disable_basic_auth, false).
+
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
         <<"OPTIONS">> -> {true, ReqData, Context};
@@ -187,9 +197,16 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
 is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
         {basic, Username, Password} ->
-            is_authorized(ReqData, Context,
-                Username, Password,
-                ErrorMsg, Fun);
+            case is_basic_auth_disabled() of
+                true ->
+                    Msg = "HTTP access denied: basic auth disabled",
+                    rabbit_log:warning(Msg),
+                    not_authorised(Msg, ReqData, Context);
+                false ->
+                    is_authorized(ReqData, Context,
+                                  Username, Password,
+                                  ErrorMsg, Fun)
+            end;
         {bearer, Token} ->
             Username = rabbit_data_coercion:to_binary(
                          application:get_env(rabbitmq_management, uaa_client_id, "")),

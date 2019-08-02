@@ -354,7 +354,12 @@ fun(Conf) ->
     end
 end}.
 
-%% Management only options  ========================================================
+%% OAuth 2/SSO access only
+
+{mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Management only
 
 {mapping, "management.disable_stats", "rabbitmq_management.disable_management_stats", [
     {datatype, {enum, [true, false]}}
