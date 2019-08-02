@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-486-g2b7e434
+ERLANG_MK_VERSION = 2.0.0-pre.2-493-g40c2b81
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -276,7 +276,9 @@ distclean-kerl:
 # Allow users to select which version of Erlang/OTP to use for a project.
 
 ifneq ($(strip $(LATEST_ERLANG_OTP)),)
-ERLANG_OTP := $(notdir $(lastword $(sort $(filter-out $(KERL_INSTALL_DIR)/OTP_R%,\
+# In some environments it is necessary to filter out master.
+ERLANG_OTP := $(notdir $(lastword $(sort\
+	$(filter-out $(KERL_INSTALL_DIR)/master $(KERL_INSTALL_DIR)/OTP_R%,\
 	$(filter-out %-rc1 %-rc2 %-rc3,$(wildcard $(KERL_INSTALL_DIR)/*[^-native]))))))
 endif
 
@@ -5357,7 +5359,9 @@ endef
 ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES) $(wildcard src/$(PROJECT).app.src)
 	$(eval FILES_TO_COMPILE := $(filter-out src/$(PROJECT).app.src,$?))
 	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_erl,$(FILES_TO_COMPILE)))
-	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
+# Older git versions do not have the --first-parent flag. Do without in that case.
+	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null \
+		|| git describe --dirty --abbrev=7 --tags --always 2>/dev/null || true))
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
@@ -7549,7 +7553,7 @@ ifneq ($(filter shell,$(DEP_TYPES)),)
 $(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_SHELL_DEPS_DIRS)
 endif
 
-ERLANG_MK_RECURSIVE_TMP_LIST := $(abspath $(ERLANG_MK_TMP)/recursive-tmp-deps.log)
+ERLANG_MK_RECURSIVE_TMP_LIST := $(abspath $(ERLANG_MK_TMP)/recursive-tmp-deps-$(shell echo $$PPID).log)
 
 $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
@@ -7558,13 +7562,6 @@ $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): | $(ERLANG_MK_TMP)
 ifeq ($(IS_APP)$(IS_DEP),)
 	$(verbose) rm -f $(ERLANG_MK_RECURSIVE_TMP_LIST)
-endif
-ifndef IS_APP
-	$(verbose) set -e; for dep in $(ALL_APPS_DIRS) ; do \
-		$(MAKE) -C $$dep $@ \
-		 IS_APP=1 \
-		 ERLANG_MK_RECURSIVE_TMP_LIST=$(ERLANG_MK_RECURSIVE_TMP_LIST); \
-	done
 endif
 	$(verbose) set -e; for dep in $^ ; do \
 		if ! grep -qs ^$$dep$$ $(ERLANG_MK_RECURSIVE_TMP_LIST); then \
@@ -7578,7 +7575,11 @@ endif
 		fi \
 	done
 ifeq ($(IS_APP)$(IS_DEP),)
-	$(verbose) sort < $(ERLANG_MK_RECURSIVE_TMP_LIST) | uniq > $@
+	$(verbose) sort < $(ERLANG_MK_RECURSIVE_TMP_LIST) | \
+		uniq > $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted
+	$(verbose) cmp -s $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted $@ \
+		|| mv $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted $@
+	$(verbose) rm -f $(ERLANG_MK_RECURSIVE_TMP_LIST).sorted
 	$(verbose) rm $(ERLANG_MK_RECURSIVE_TMP_LIST)
 endif
 endif # ifneq ($(SKIP_DEPS),)
