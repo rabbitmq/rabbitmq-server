@@ -41,7 +41,7 @@ to_json(ReqData, Context) ->
                    UAALocation = application:get_env(rabbitmq_management, uaa_location, ""),
                    case is_invalid([UAAClientId, UAALocation]) of
                        true ->
-                           rabbit_log:warning("Disabling oauth authorization, missing configuration", []),
+                           rabbit_log:warning("Disabling OAuth 2 authorization, relevant configuration settings are missing", []),
                            [{enable_uaa, false}, {uaa_client_id, <<>>}, {uaa_location, <<>>}];
                        false ->
                            [{enable_uaa, true},

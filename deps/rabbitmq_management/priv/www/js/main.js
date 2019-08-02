@@ -3,7 +3,7 @@ $(document).ready(function() {
         get(uaa_location + "/info", "application/json", function(req) {
             if (req.status !== 200) {
                 replace_content('outer', format('login_uaa', {}));
-                replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="uaa_login_window()">Click here to log in</button>');
+                replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="uaa_login_window()">Single Sign On</button>');
             } else {
                 replace_content('outer', format('login_uaa', {}));
             }
@@ -138,7 +138,7 @@ function check_login() {
         clear_cookie_value('auth');
         if (enable_uaa) {
             uaa_invalid = true;
-            replace_content('login-status', '<button id="loginWindow" onclick="uaa_login_window()">Click here to log out</button>');
+            replace_content('login-status', '<button id="loginWindow" onclick="uaa_login_window()">Log out</button>');
         } else {
             replace_content('login-status', '<p>Login failed</p>');
         }
@@ -196,7 +196,7 @@ function start_app() {
     // updated to the version  0.7.6 this _interval = null is fixed
     // just leave the history here.
     //Sammy.HashLocationProxy._interval = null;
-    
+
     app = new Sammy.Application(dispatcher);
     app.run();
 
