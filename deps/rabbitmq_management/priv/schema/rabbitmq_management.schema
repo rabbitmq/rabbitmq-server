@@ -361,6 +361,18 @@ end}.
 ]}.
 
 %% ===========================================================================
+%% Authorization
+
+{mapping, "management.enable_uaa", "rabbitmq_management.enable_uaa",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.uaa_client_id", "rabbitmq_management.uaa_client_id",
+    [{datatype, string}]}.
+
+{mapping, "management.uaa_location", "rabbitmq_management.uaa_location",
+    [{datatype, string}]}.
+
+%% ===========================================================================
 
 
 %% One of 'basic', 'detailed' or 'none'. See

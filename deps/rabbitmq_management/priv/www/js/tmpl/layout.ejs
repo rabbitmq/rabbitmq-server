@@ -23,9 +23,13 @@
       </select>
     </li>
     <li id="logout">
+    <% if (enable_uaa) { %>
+      <input type="submit" id="loginWindow" onclick="uaa_logout_window()" value="Log out"/>
+    <% } else { %>
       <form action="#/logout" method="put">
         <input type="submit" value="Log out"/>
       </form>
+    <% } %>
     </li>
   </ul>
   <div id="logo">

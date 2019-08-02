@@ -19,7 +19,7 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
-         vhost/1, vhost_from_headers/1]).
+         is_authorized_admin/3, vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_monitor/2, is_authorized_policies/2,
          is_authorized_vhost_visible/2,
@@ -83,6 +83,13 @@ is_authorized(ReqData, Context) ->
 is_authorized_admin(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"Not administrator user">>,
+                  fun(#user{tags = Tags}) -> is_admin(Tags) end).
+
+is_authorized_admin(ReqData, Context, Token) ->
+    is_authorized(ReqData, Context,
+                  rabbit_data_coercion:to_binary(
+                    application:get_env(rabbitmq_management, uaa_client_id, "")),
+                  Token, <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
 is_authorized_admin(ReqData, Context, Username, Password) ->
@@ -183,6 +190,10 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             is_authorized(ReqData, Context,
                 Username, Password,
                 ErrorMsg, Fun);
+        {bearer, Token} ->
+            Username = rabbit_data_coercion:to_binary(
+                         application:get_env(rabbitmq_management, uaa_client_id, "")),
+            is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
         _ ->
             {{false, ?AUTH_REALM}, ReqData, Context}
     end.

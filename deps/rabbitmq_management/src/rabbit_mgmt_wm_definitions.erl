@@ -136,8 +136,15 @@ accept_multipart(ReqData0, Context) ->
 
 is_authorized(ReqData, Context) ->
     case rabbit_mgmt_util:qs_val(<<"auth">>, ReqData) of
-        undefined -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
-        Auth      -> is_authorized_qs(ReqData, Context, Auth)
+        undefined ->
+            case rabbit_mgmt_util:qs_val(<<"token">>, ReqData) of
+                Token ->
+                    rabbit_mgmt_util:is_authorized_admin(ReqData, Context, Token);
+                undefined ->
+                    rabbit_mgmt_util:is_authorized_admin(ReqData, Context)
+            end;
+        Auth ->
+            is_authorized_qs(ReqData, Context, Auth)
     end.
 
 %% Support for the web UI - it can't add a normal "authorization"

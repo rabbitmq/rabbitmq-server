@@ -764,3 +764,7 @@ var chart_data = {};
 // whenever a UI requests a page that doesn't exist
 // because things were deleted between refreshes
 var last_page_out_of_range_error = 0;
+
+var enable_uaa;
+var uaa_client_id;
+var uaa_location;
