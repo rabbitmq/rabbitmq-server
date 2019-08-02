@@ -1,4 +1,8 @@
-<h1>Overview</h1>
+<% if(disable_stats) { %>
+   <h1>Overview: Management only mode</h1>
+<% } else { %>
+   <h1>Overview</h1>
+<% } %>
 <% if (user_monitor) { %>
 <%= format('partition', {'nodes': nodes}) %>
 <% } %>
@@ -30,10 +34,12 @@
 
 <div class="section">
 <h2>Totals</h2>
-<div class="hider updatable">
+<div  class="hider updatable">
+<% if(!disable_stats) { %>
 <%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (rates_mode != 'none') { %>
   <%= message_rates('msg-rates-over', overview.message_stats) %>
+<% } %>
 <% } %>
 
 <% if (overview.object_totals) { %>
@@ -43,9 +49,11 @@
     <li>
       <a href="#/connections" class="button">Connections: <strong><%= overview.object_totals.connections %></strong></a>
     </li>
+<% if(!disable_stats) { %>
     <li>
       <a href="#/channels" class="button">Channels: <strong><%= overview.object_totals.channels %></strong></a>
     </li>
+<% } %>
     <li>
       <a href="#/exchanges" class="button">Exchanges: <strong><%= overview.object_totals.exchanges %></strong></a>
     </li>
@@ -72,6 +80,7 @@
 <table class="list">
   <tr>
     <th>Name</th>
+  <% if(!disable_stats) { %>
   <% if (show_column('overview', 'file_descriptors')) { %>
     <th>File descriptors <span class="help" id="file-descriptors"></span></th>
   <% } %>
@@ -97,12 +106,17 @@
     <th>Reset stats</th>
   <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
+  <% } %>
   </tr>
 <%
    for (var i = 0; i < nodes.length; i++) {
      var node = nodes[i];
-     var colspan = group_count('overview', 'Statistics', []) +
-                   group_count('overview', 'General', []);
+     if(!disable_stats) {
+          var colspan = group_count('overview', 'Statistics', []) +
+                        group_count('overview', 'General', []);
+                        } else {
+          var colspan = [];
+          }
 %>
    <tr<%= alt_rows(i)%>>
      <td>
@@ -111,6 +125,7 @@
          <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
        <% } %>
      </td>
+<% if(!disable_stats) { %>
 <% if (!node.running) { %>
      <td colspan="<%= colspan %>">
        <div class="status-red">
@@ -196,6 +211,7 @@
       </form>
   <% } %>
 <% } %>
+<% } %>
    </tr>
 <% } %>
 </table>
@@ -203,6 +219,7 @@
 </div>
 </div>
 
+<% if(!disable_stats) { %>
 <div class="section-hidden">
 <h2>Churn statistics</h2>
 <div class="hider updatable">
@@ -224,8 +241,9 @@
 
 </div>
 </div>
+<% } %>
 
-
+<% if(!disable_stats) { %>
 <div class="section-hidden">
 <h2>Ports and contexts</h2>
 <div class="hider updatable">
@@ -283,6 +301,7 @@
 </table>
 </div>
 </div>
+<% } %>
 
 <div class="section-hidden administrator-only">
 <h2>Export definitions</h2>

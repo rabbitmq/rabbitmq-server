@@ -64,8 +64,13 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 augment(Basic, ReqData) ->
-    rabbit_mgmt_db:augment_exchanges(Basic, rabbit_mgmt_util:range(ReqData),
-                                     basic).
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            rabbit_mgmt_db:augment_exchanges(Basic, rabbit_mgmt_util:range(ReqData),
+                                             basic);
+        true ->
+            Basic
+    end.
 
 augmented(ReqData, Context) ->
     rabbit_mgmt_db:augment_exchanges(

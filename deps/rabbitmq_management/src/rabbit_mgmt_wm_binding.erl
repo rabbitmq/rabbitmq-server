@@ -109,9 +109,16 @@ binding(ReqData) ->
 
 unpack(Src, Dst, Props) ->
     case rabbit_mgmt_format:tokenise(binary_to_list(Props)) of
-        ["~"]          -> {<<>>, []};
+        ["\~"]         -> {<<>>, []};
+        %% when routing_key is explicitly set to `null` in JSON payload,
+        %% the value would be stored as null the atom. See rabbitmq/rabbitmq-management#723 for details.
+        ["null"]       -> {null, []};
+        ["undefined"]  -> {undefined, []};
         [Key]          -> {unquote(Key), []};
-        ["~", ArgsEnc] -> lookup(<<>>, ArgsEnc, Src, Dst);
+        ["\~", ArgsEnc]        -> lookup(<<>>, ArgsEnc, Src, Dst);
+        %% see above
+        ["null", ArgsEnc]      -> lookup(null, ArgsEnc, Src, Dst);
+        ["undefined", ArgsEnc] -> lookup(undefined, ArgsEnc, Src, Dst);
         [Key, ArgsEnc] -> lookup(unquote(Key), ArgsEnc, Src, Dst);
         _              -> {bad_request, {too_many_tokens, Props}}
     end.

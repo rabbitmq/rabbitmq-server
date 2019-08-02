@@ -42,11 +42,16 @@ resource_exists(ReqData, Context) ->
     {rabbit_vhost:exists(rabbit_mgmt_util:id(vhost, ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    try
-        rabbit_mgmt_util:reply_list(augmented(ReqData, Context), ReqData, Context)
-    catch
-        {error, invalid_range_parameters, Reason} ->
-            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            try
+                rabbit_mgmt_util:reply_list(augmented(ReqData, Context), ReqData, Context)
+            catch
+                {error, invalid_range_parameters, Reason} ->
+                    rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+            end;
+        true ->
+            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>, ReqData, Context)
     end.
 
 is_authorized(ReqData, Context) ->

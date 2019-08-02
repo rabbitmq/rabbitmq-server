@@ -35,24 +35,39 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    case channel(ReqData) of
-        not_found -> {false, ReqData, Context};
-        _Conn     -> {true, ReqData, Context}
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            case channel(ReqData) of
+                not_found -> {false, ReqData, Context};
+                _Conn     -> {true, ReqData, Context}
+            end;
+        true ->
+            {false, ReqData, Context}
     end.
 
 to_json(ReqData, Context) ->
-    Payload = rabbit_mgmt_format:clean_consumer_details(
-                rabbit_mgmt_format:strip_pids(channel(ReqData))),
-    rabbit_mgmt_util:reply(
-      maps:from_list(Payload),
-      ReqData, Context).
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            Payload = rabbit_mgmt_format:clean_consumer_details(
+                        rabbit_mgmt_format:strip_pids(channel(ReqData))),
+            rabbit_mgmt_util:reply(
+              maps:from_list(Payload),
+              ReqData, Context);
+        true ->
+            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>, ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
-    try
-        rabbit_mgmt_util:is_authorized_user(ReqData, Context, channel(ReqData))
-    catch
-        {error, invalid_range_parameters, Reason} ->
-            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            try
+                rabbit_mgmt_util:is_authorized_user(ReqData, Context, channel(ReqData))
+            catch
+                {error, invalid_range_parameters, Reason} ->
+                    rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+            end;
+        true ->
+            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>, ReqData, Context)
     end.
 
 %%--------------------------------------------------------------------

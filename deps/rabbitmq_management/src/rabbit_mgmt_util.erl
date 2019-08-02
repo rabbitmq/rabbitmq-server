@@ -33,6 +33,7 @@
 -export([all_or_one_vhost/2, reply/3, responder_map/1,
          filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
+-export([filter_tracked_conn_list/3]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1, read_complete_body/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
@@ -50,6 +51,8 @@
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
 -export([catch_no_such_user_or_vhost/2]).
+
+-export([disable_stats/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -119,6 +122,14 @@ is_authorized_vhost_visible(ReqData, Context) ->
                   fun(#user{tags = Tags} = User) ->
                           is_admin(Tags) orelse user_matches_vhost_visible(ReqData, User)
                   end).
+
+disable_stats(ReqData) ->
+    MgmtOnly = case qs_val(<<"disable_stats">>, ReqData) of
+                   <<"true">> -> true;
+                   _ -> false
+               end,
+    MgmtOnly orelse application:get_env(rabbitmq_management, disable_management_stats, false)
+        orelse application:get_env(rabbitmq_management_agent, disable_metrics_collector, false).
 
 user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
@@ -980,6 +991,31 @@ filter_conn_ch_list(List, ReqData, Context) ->
             none  -> List;
             VHost -> [I || I <- List, pget(vhost, I) =:= VHost]
         end, ReqData, Context)).
+
+filter_tracked_conn_list(List, ReqData, #context{user = #user{username = FilterUsername, tags = Tags}}) ->
+    %% A bit of duplicated code, but we only go through the list once
+    case {vhost(ReqData), is_monitor(Tags)} of
+        {none, true} ->
+            [[{name, Name},
+              {vhost, VHost},
+              {user, Username},
+              {node, Node}] || #tracked_connection{name = Name, vhost = VHost, username = Username, node = Node} <- List];
+        {FilterVHost, true} ->
+            [[{name, Name},
+              {vhost, VHost},
+              {user, Username},
+              {node, Node}] || #tracked_connection{name = Name, vhost = VHost, username = Username, node = Node} <- List, VHost == FilterVHost];
+        {none, false} ->
+            [[{name, Name},
+              {vhost, VHost},
+              {user, Username},
+              {node, Node}] || #tracked_connection{name = Name, vhost = VHost, username = Username, node = Node} <- List, Username == FilterUsername];
+        {FilterVHost, false} ->
+            [[{name, Name},
+              {vhost, VHost},
+              {user, Username},
+              {node, Node}] || #tracked_connection{name = Name, vhost = VHost, username = Username, node = Node} <- List, VHost == FilterVHost, Username == FilterUsername]
+    end.
 
 set_resp_header(K, V, ReqData) ->
     cowboy_req:set_resp_header(K, strip_crlf(V), ReqData).

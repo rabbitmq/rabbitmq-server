@@ -7,6 +7,7 @@
 </p>
 <% } %>
 
+<% if (!disable_stats) { %>
 <div class="section">
   <h2>Overview</h2>
   <div class="hider updatable">
@@ -44,6 +45,7 @@
     </table>
 </div>
 </div>
+<% } %>
 
 <%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
 

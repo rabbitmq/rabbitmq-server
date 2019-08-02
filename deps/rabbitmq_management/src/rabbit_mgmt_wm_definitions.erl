@@ -21,7 +21,7 @@
 -export([accept_multipart/2]).
 -export([variances/2]).
 
--export([apply_defs/5]).
+-export([apply_defs/4, apply_defs/5]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -168,29 +168,23 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
         end,
     ErrorFun =
         fun(E) ->
+            rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
             rabbit_mgmt_util:bad_request(E, ReqData, Context)
-        end,
-    ProgressFun =
-        fun(Message) ->
-            ok = cowboy_req:inform(102,
-                                   #{<<"x-rabbitmq-import-progress">> =>
-                                         rabbit_data_coercion:to_binary(Message)},
-                                   ReqData)
         end,
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
-            apply_defs(Body, Username, SuccessFun, ErrorFun, ProgressFun);
+            apply_defs(Body, Username, SuccessFun, ErrorFun);
         not_found ->
             rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
                                          ReqData, Context);
         VHost ->
-            apply_defs(Body, Username, SuccessFun, ErrorFun, ProgressFun, VHost)
+            apply_defs(Body, Username, SuccessFun, ErrorFun, VHost)
     end.
 
 disable_idle_timeout(#{pid := Pid, streamid := StreamID}) ->
     Pid ! {{Pid, StreamID}, {set_options, #{idle_timeout => infinity}}}.
 
-apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun) ->
+apply_defs(Body, ActingUser, SuccessFun, ErrorFun) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [rabbit_data_coercion:to_binary(ActingUser)]),
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
@@ -198,7 +192,7 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun) ->
         {ok, _, All} ->
             Version = maps:get(rabbit_version, All, undefined),
             try
-                progress(ProgressFun, "Importing users..."),
+                rabbit_log:info("Importing users..."),
                 for_all(users,              ActingUser, All,
                         fun(User, _Username) ->
                                 rabbit_mgmt_wm_user:put_user(
@@ -206,24 +200,24 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun) ->
                                   Version,
                                   ActingUser)
                         end),
-                progress(ProgressFun, "Importing vhosts..."),
+                rabbit_log:info("Importing vhosts..."),
                 for_all(vhosts,             ActingUser, All, fun add_vhost/2),
                 validate_limits(All),
-                progress(ProgressFun, "Importing user permissions..."),
+                rabbit_log:info("Importing user permissions..."),
                 for_all(permissions,        ActingUser, All, fun add_permission/2),
-                progress(ProgressFun, "Importing topic permissions..."),
+                rabbit_log:info("Importing topic permissions..."),
                 for_all(topic_permissions,  ActingUser, All, fun add_topic_permission/2),
-                progress(ProgressFun, "Importing parameters..."),
+                rabbit_log:info("Importing parameters..."),
                 for_all(parameters,         ActingUser, All, fun add_parameter/2),
-                progress(ProgressFun, "Importing global parameters..."),
+                rabbit_log:info("Importing global parameters..."),
                 for_all(global_parameters,  ActingUser, All, fun add_global_parameter/2),
-                progress(ProgressFun, "Importing policies..."),
+                rabbit_log:info("Importing policies..."),
                 for_all(policies,           ActingUser, All, fun add_policy/2),
-                progress(ProgressFun, "Importing queues..."),
+                rabbit_log:info("Importing queues..."),
                 for_all(queues,             ActingUser, All, fun add_queue/2),
-                progress(ProgressFun, "Importing exchanges..."),
+                rabbit_log:info("Importing exchanges..."),
                 for_all(exchanges,          ActingUser, All, fun add_exchange/2),
-                progress(ProgressFun, "Importing bindings..."),
+                rabbit_log:info("Importing bindings..."),
                 for_all(bindings,           ActingUser, All, fun add_binding/2),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
@@ -231,7 +225,7 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun) ->
             end
     end.
 
-apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun, VHost) ->
+apply_defs(Body, ActingUser, SuccessFun, ErrorFun, VHost) ->
     rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
                     [VHost, ActingUser]),
     case rabbit_mgmt_util:decode([], Body) of
@@ -240,25 +234,21 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun, ProgressFun, VHost) ->
         {ok, _, All} ->
             try
                 validate_limits(All, VHost),
-                progress(ProgressFun, "Importing parameters..."),
+                rabbit_log:info("Importing parameters..."),
                 for_all(parameters,  ActingUser, All, VHost, fun add_parameter/3),
-                progress(ProgressFun, "Importing policies..."),
+                rabbit_log:info("Importing policies..."),
                 for_all(policies,    ActingUser, All, VHost, fun add_policy/3),
-                progress(ProgressFun, "Importing queues..."),
+                rabbit_log:info("Importing queues..."),
                 for_all(queues,      ActingUser, All, VHost, fun add_queue/3),
-                progress(ProgressFun, "Importing exchanges..."),
+                rabbit_log:info("Importing exchanges..."),
                 for_all(exchanges,   ActingUser, All, VHost, fun add_exchange/3),
-                progress(ProgressFun, "Importing bindings..."),
+                rabbit_log:info("Importing bindings..."),
                 for_all(bindings,    ActingUser, All, VHost, fun add_binding/3),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
             end
     end.
-
-progress(ProgressFun, Message) ->
-    rabbit_log:info(Message),
-    ProgressFun(Message).
 
 format(#amqp_error{name = Name, explanation = Explanation}) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));

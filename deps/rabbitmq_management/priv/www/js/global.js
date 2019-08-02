@@ -57,7 +57,7 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
 var CHART_RANGES = {'global': [], 'basic': []};
 var ALL_CHART_RANGES = {};
 
-var COLUMNS =
+var ALL_COLUMNS =
     {'exchanges' :
      {'Overview': [['type',                 'Type',                   true],
                    ['features',             'Features (with policy)', true],
@@ -137,6 +137,27 @@ var COLUMNS =
       'General': [['uptime',    'Uptime',       true],
                   ['info',      'Info',         true],
                   ['reset_stats',     'Reset stats',        true]]}};
+
+var DISABLED_STATS_COLUMNS =
+    {'exchanges' :
+     {'Overview': [['type',                 'Type',                   true],
+                   ['features',             'Features (with policy)', true],
+                   ['features_no_policy',   'Features (no policy)',   false],
+                   ['policy',               'Policy',                 false]]},
+     'queues' :
+     {'Overview': [['type',                 'Type',                   true],
+                   ['features',             'Features (with policy)', true],
+                   ['features_no_policy',   'Features (no policy)',   false],
+                   ['policy',               'Policy',                 false],
+                   ['state',                'State',                  true]]},
+     'connections':
+     {'Overview': [['user',   'User name', true],
+                   ['state',  'State',     true]]},
+
+     'vhosts':
+     {'Overview': [['cluster-state',   'Cluster state',  false]]}};
+
+var COLUMNS;
 
 // All help ? popups
 var HELP = {
@@ -565,6 +586,7 @@ var nodes_interesting;           // ...we are not in a cluster
 var vhosts_interesting;          // ...there is only one vhost
 var queue_type;
 var rabbit_versions_interesting; // ...all cluster nodes run the same version
+var disable_stats;               // ...disable all stats, management only mode
 
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
@@ -628,6 +650,9 @@ function setup_global_vars() {
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;
 
+    disable_stats = overview.disable_stats;
+    COLUMNS = disable_stats?DISABLED_STATS_COLUMNS:ALL_COLUMNS;
+    
     setup_chart_ranges(overview.sample_retention_policies);
 }
 

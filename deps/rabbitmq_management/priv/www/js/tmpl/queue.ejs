@@ -1,5 +1,6 @@
-<h1>Queue <b><%= fmt_string(queue.name) %></b><%= fmt_maybe_vhost(queue.vhost) %></h1>
+<h1>Queue <b><%= fmt_string(highlight_extra_whitespace(queue.name)) %></b><%= fmt_maybe_vhost(queue.vhost) %></h1>
 
+<% if(!disable_stats) { %>
 <div class="section">
   <h2>Overview</h2>
   <div class="hider updatable">
@@ -243,6 +244,8 @@
 <%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
   </div>
 </div>
+
+<% } %>
 
 <div class="section-hidden">
   <h2>Bindings</h2>

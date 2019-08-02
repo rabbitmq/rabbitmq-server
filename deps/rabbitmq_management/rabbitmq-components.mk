@@ -47,6 +47,7 @@ dep_rabbitmq_auth_backend_amqp        = git_rmq rabbitmq-auth-backend-amqp $(cur
 dep_rabbitmq_auth_backend_cache       = git_rmq rabbitmq-auth-backend-cache $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_http        = git_rmq rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_oauth2      = git_rmq rabbitmq-auth-backend-oauth2 $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_aws                      = git_rmq rabbitmq-aws $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
@@ -118,9 +119,9 @@ dep_prometheus = hex 4.4.0
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.0
-dep_observer_cli = hex 1.5.0
+dep_observer_cli = hex 1.5.2
 dep_stdout_formatter = hex 0.2.2
-dep_sysmon_handler = hex 1.1.0
+dep_sysmon_handler = hex 1.2.0
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
@@ -132,6 +133,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_auth_backend_cache \
 		      rabbitmq_auth_backend_http \
 		      rabbitmq_auth_backend_ldap \
+		      rabbitmq_auth_backend_oauth2 \
 		      rabbitmq_auth_mechanism_ssl \
 		      rabbitmq_aws \
 		      rabbitmq_boot_steps_visualiser \

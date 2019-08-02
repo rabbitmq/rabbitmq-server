@@ -531,6 +531,12 @@ class Management:
     def delete(self, path):
         return self.http("DELETE", "%s/api%s" % (self.options.path_prefix, path), "")
 
+    def __initialize_connection(self, hostname, port):
+        if self.options.ssl:
+            return self.__initialize_https_connection(hostname, port)
+        else:
+            return httplib.HTTPConnection(hostname, port, timeout=self.options.request_timeout)
+
     def __initialize_https_connection(self, hostname, port):
         # Python 2.7.9+
         if hasattr(ssl, 'create_default_context'):
@@ -564,13 +570,7 @@ class Management:
         return ssl_ctx
 
     def http(self, method, path, body):
-        if self.options.ssl:
-            conn = self.__initialize_https_connection(self.options.hostname,
-                                                      self.options.port)
-        else:
-            conn = httplib.HTTPConnection(self.options.hostname,
-                                          self.options.port,
-                                          timeout=self.options.request_timeout)
+        conn = self.__initialize_connection(self.options.hostname, self.options.port)
         auth = (self.options.username + ":" + self.options.password)
 
         headers = {"Authorization": "Basic " + b64(auth)}
@@ -605,8 +605,8 @@ class Management:
             self.options.hostname = host
             self.options.port = int(port)
             return self.http(method, url.path + '?' + url.query, body)
-        if resp.status < 200 or resp.status > 400:
-            raise Exception("Received %d %s for path %s\n%s"
+        if resp.status > 400:
+            raise Exception("Received response %d %s for path %s\n%s"
                             % (resp.status, resp.reason, path, resp.read()))
         return resp.read().decode('utf-8')
 
@@ -686,7 +686,7 @@ class Management:
         if self.options.vhost:
             uri += "/%s" % quote_plus(self.options.vhost)
         self.post(uri, definitions)
-        self.verbose("Imported definitions for %s from \"%s\""
+        self.verbose("Uploaded definitions from \"%s\" to %s. The import process may take some time. Consult server logs to track progress."
                      % (self.options.hostname, path))
 
     def invoke_list(self):
