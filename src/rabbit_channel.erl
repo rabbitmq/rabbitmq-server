@@ -1402,6 +1402,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
             handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg,
                              State#ch{queue_states = QueueStates});
         {empty, QueueStates} ->
+            ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
             {reply, #'basic.get_empty'{}, State#ch{queue_states = QueueStates}};
         empty ->
             ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
