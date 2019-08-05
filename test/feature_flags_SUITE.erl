@@ -60,7 +60,7 @@
      }}).
 
 suite() ->
-    [{timetrap, 10 * 60000}].
+    [{timetrap, {minutes, 15}}].
 
 all() ->
     [
