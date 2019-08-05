@@ -74,7 +74,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\", cluster=\"$cluster\"}) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"}) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
