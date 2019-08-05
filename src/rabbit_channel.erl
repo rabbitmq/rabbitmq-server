@@ -1808,8 +1808,6 @@ handle_publishing_queue_down(QPid, QName, Reason,
         undefined ->
             State;
         _QName ->
-            rabbit_log:info("handle_publishing_queue_down ~w ~w",
-                            [QPid, Reason]),
             case {rabbit_misc:is_abnormal_exit(Reason), Reason} of
                 {true, _} ->
                     {RejectMXs, UC1} =
@@ -1827,8 +1825,6 @@ handle_publishing_queue_down(QPid, QName, Reason,
                         unconfirmed_messages:forget_ref(QPid, UC),
                     State1 = record_confirms(ConfirmMXs,
                                              State#ch{unconfirmed = UC1}),
-                    rabbit_log:info("confirms / rejects ~w ~w",
-                                    [ConfirmMXs, RejectMXs]),
                     record_rejects(RejectMXs, State1)
             end
     end;
@@ -2135,8 +2131,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                         mandatory  = Mandatory,
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
-                   DelQNames}, State0 = #ch{queue_monitors = _QMons,
-                                            queue_states = QueueStates0}) ->
+                   DelQNames}, State0 = #ch{queue_states = QueueStates0}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
     {QueueStates, Actions} =
         rabbit_queue_type:deliver(Qs, Delivery, QueueStates0),
@@ -2211,8 +2206,6 @@ confirm(MsgSeqNos, QRef, State = #ch{queue_states = QStates, unconfirmed = UC}) 
     % QName = maps:get(QRef, QNames, ignore),
     QName = case rabbit_queue_type:name(QRef, QStates) of
                 undefined ->
-                    rabbit_log:info("confirm( queue not found ~w",
-                                    [QRef, MsgSeqNos]),
                     ignore;
                 N ->
                     N

@@ -195,6 +195,7 @@ handle_event(_Evt, State) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
 deliver(Qs, #delivery{flow = Flow,
                       confirm = _Confirm} = Delivery) ->
+    %% TODO: record master and slaves for confirm processing
     {MPids, SPids, Actions} = qpids(Qs),
     QPids = MPids ++ SPids,
     case Flow of

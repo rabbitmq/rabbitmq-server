@@ -34,9 +34,11 @@
 %% temporary
 -export([with/3]).
 
--type queue_ref() :: pid() | atom().
+%% gah what is a good identity of a classic queue including all replicas
 -type queue_name() :: rabbit_types:r(queue).
+-type queue_ref() :: pid() | atom().
 -type queue_state() :: term().
+-type msg_tag() :: term().
 
 -define(QREF(QueueReference),
     is_pid(QueueReference) orelse is_atom(QueueReference)).
@@ -44,13 +46,24 @@
 %% session, like knowing when to notify on monitor down
 -type action() ::
     {monitor, Pid :: pid(), queue_ref()} |
-    {link_name, queue_ref(), [queue_ref()]} |
+    %% indicate to the queue type module that a message has been delivered
+    %% fully to the queue
+    {settled, Success :: boolean(), [msg_tag()]} |
     {deliver, rabbit_type:ctag(), boolean(), [rabbit_amqqueue:qmsg()]}.
 
 -type actions() :: [action()].
 
 -record(ctx, {module :: module(),
               name :: queue_name(),
+              %% "publisher confirm queue accounting"
+              %% queue type implementation should emit a:
+              %% {settle, Success :: boolean(), msg_tag()}
+              %% to either settle or reject the delivery of a
+              %% message to the queue instance
+              %% The queue type module will then emit a {confirm | reject, [msg_tag()}
+              %% action to the channel or channel like process when a msg_tag
+              %% has reached its conclusion
+              unsettled = #{} :: #{msg_tag() => [queue_ref()]},
               state :: queue_state()}).
 
 -opaque ctxs() :: #{queue_ref() => #ctx{} | queue_ref()}.
