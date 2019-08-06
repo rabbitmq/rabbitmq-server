@@ -90,6 +90,8 @@
          qnode/1,
          macros/0]).
 
+-dialyzer({nowarn_function, is_quorum/1}).
+
 -define(record_version, ?MODULE).
 
 -record(amqqueue, {

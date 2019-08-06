@@ -2770,7 +2770,6 @@ maybe_monitor(QPid, QMons) when ?IS_CLASSIC(QPid) ->
 maybe_monitor(_, QMons) ->
     QMons.
 
-maybe_monitor_all([],     S) -> S;                %% optimisation
 maybe_monitor_all([Item], S) -> maybe_monitor(Item, S); %% optimisation
 maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).
 

@@ -64,9 +64,7 @@
          make_credit/4,
          make_purge/0,
          make_purge_nodes/1,
-         make_update_config/1,
-
-         from_log/2
+         make_update_config/1
         ]).
 
 %% command records representing all the protocol actions that are supported
@@ -755,24 +753,6 @@ usage(Name) when is_atom(Name) ->
         [] -> 0.0;
         [{_, Use}] -> Use
     end.
-
-from_log(Log, State0) ->
-    lists:foldl(
-      fun ({Idx, Term, {'$usr', Meta0, Cmd, _}}, {S0, Effs}) ->
-              Meta = Meta0#{index => Idx,
-                            term => Term},
-              case apply(Meta, Cmd, S0) of
-                  {S, _, E} when is_list(E) ->
-                      {S, Effs ++ E};
-                  {S, _, E} ->
-                      {S, Effs ++ [E]};
-                  {S, _} ->
-                      {S, Effs}
-              end;
-          (_, Acc) ->
-              Acc
-      end, {State0, []}, Log).
-
 
 %%% Internal
 
