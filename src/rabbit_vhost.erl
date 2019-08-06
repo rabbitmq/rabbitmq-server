@@ -64,7 +64,7 @@ recover() ->
 
 recover(VHost) ->
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
-    rabbit_log:info("Making sure data directory '~s' for vhost '~s' exists~n",
+    rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists~n",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
@@ -295,7 +295,7 @@ dir(Vhost) ->
     rabbit_misc:format("~.36B", [Num]).
 
 msg_store_dir_path(VHost) ->
-    EncodedName = list_to_binary(dir(VHost)),
+    EncodedName = dir(VHost),
     rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(),
                                                 EncodedName])).
 

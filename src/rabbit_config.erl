@@ -143,7 +143,7 @@ generate_config_file(ConfFiles, ConfDir, ScriptDir, SchemaDir, Advanced) ->
     Command = lists:concat(["escript ", "\"", Cuttlefish, "\"",
                             "  -f rabbitmq -s ", "\"", SchemaDir, "\"",
                             " -e ", "\"",  ConfDir, "\"",
-                            [[" -c ", ConfFile] || ConfFile <- ConfFiles],
+                            [[" -c \"", ConfFile, "\""] || ConfFile <- ConfFiles],
                             AdvancedConfigArg]),
     rabbit_log:debug("Generating config file using '~s'", [Command]),
     Result = rabbit_misc:os_cmd(Command),
