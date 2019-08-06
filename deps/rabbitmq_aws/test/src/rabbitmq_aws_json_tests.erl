@@ -54,5 +54,10 @@ parse_test_() ->
       Value = "{\"misc\": [\"foo\", true, 123]\}",
       Expectation = [{"misc", ["foo", true, 123]}],
       ?assertEqual(Expectation, rabbitmq_aws_json:decode(Value))
-                        end}
+     end},
+    {"empty objects", fun() ->
+      Value = "{\"tags\": [{}]}",
+      Expectation = [{"tags", [{}]}],
+      ?assertEqual(Expectation, rabbitmq_aws_json:decode(Value))
+      end}
   ].
