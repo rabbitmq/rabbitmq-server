@@ -79,7 +79,7 @@ init() ->
     ensure_mnesia_dir(),
     case is_virgin_node() of
         true  ->
-            rabbit_log:info("Node database directory at ~s is empty. "
+            rabbit_log:info("Node database directory at ~ts is empty. "
                             "Assuming we need to join an existing cluster or initialise from scratch...~n",
                             [dir()]),
             rabbit_peer_discovery:log_configured_backend(),
