@@ -21,4 +21,4 @@ TEST_DEPS = meck
 current_rmq_ref = master
 
 include rabbitmq-components.mk
-include erlang.mk
+include $(if $(ERLANG_MK_FILENAME),$(ERLANG_MK_FILENAME),erlang.mk)

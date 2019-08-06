@@ -44,6 +44,8 @@ convert_binary_values([{K, V}|T], Accum) when is_list(V) ->
     lists:append(
       Accum,
       [{binary_to_list(K), convert_binary_values(V, [])}]));
+convert_binary_values([{}|T],Accum) ->
+  convert_binary_values(T, lists:append(Accum, [{}]));
 convert_binary_values([{K, V}|T], Accum) when is_binary(V) ->
   convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), binary_to_list(V)}]));
 convert_binary_values([{K, V}|T], Accum) ->
