@@ -55,7 +55,8 @@ groups() ->
     [
      {all_tests_with_prefix, [], all_tests()},
      {all_tests_without_prefix, [], all_tests()},
-     {stats_disabled_on_request, [], [disable_with_disable_stats_parameter_test]}
+     {stats_disabled_on_request, [], [disable_with_disable_stats_parameter_test]},
+     {invalid_config, [], [invalid_config_test]}
     ].
 
 all_tests() -> [
@@ -113,7 +114,9 @@ finish_init(Group, Config) when Group == all_tests_with_prefix ->
 finish_init(Group, Config) when Group == all_tests_without_prefix ->
     finish_init(Group, Config, true);
 finish_init(Group, Config) when Group == stats_disabled_on_request ->
-    finish_init(Group, Config, false).
+    finish_init(Group, Config, false);
+finish_init(Group, Config) when Group == invalid_config_test ->
+    finish_init(Group, Config, true).
 
 finish_init(Group, Config, DisableStats) ->
     rabbit_ct_helpers:log_environment(),
@@ -1432,6 +1435,40 @@ if_empty_unused_test(Config) ->
 
     http_delete(Config, "/queues/%2F/test?if-empty=true", {group, '2xx'}),
     http_delete(Config, "/exchanges/%2F/test?if-unused=true", {group, '2xx'}),
+    passed.
+
+invalid_config_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+
+    timer:sleep(1500),
+
+    %% Check first that stats aren't available (configured on test setup)
+    http_get(Config, "/channels", ?BAD_REQUEST),
+    http_get(Config, "/connections", ?BAD_REQUEST),
+    http_get(Config, "/exchanges", ?BAD_REQUEST),
+
+    %% Now we can set an invalid config, stats are still available (defaults to 'false')
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, disable_management_stats, 50]),
+    http_get(Config, "/channels", ?OK),
+    http_get(Config, "/connections", ?OK),
+    http_get(Config, "/exchanges", ?OK),
+
+    %% Set a valid config again
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, disable_management_stats, true]),
+    http_get(Config, "/channels", ?BAD_REQUEST),
+    http_get(Config, "/connections", ?BAD_REQUEST),
+    http_get(Config, "/exchanges", ?BAD_REQUEST),
+
+    %% Now we can set an invalid config in the agent, stats are still available
+    %% (defaults to 'false')
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management_agent, disable_metrics_collector, "koala"]),
+    http_get(Config, "/channels", ?OK),
+    http_get(Config, "/connections", ?OK),
+    http_get(Config, "/exchanges", ?OK),
+
     passed.
 
 %% -------------------------------------------------------------------
