@@ -3112,7 +3112,11 @@ disable_basic_auth_test(Config) ->
     http_put(Config, "/policies/%2F/HA",  Policy, ?NOT_AUTHORISED),
     http_delete(Config, "/queues/%2F/myqueue", ?NOT_AUTHORISED),
     http_get(Config, "/definitions", ?NOT_AUTHORISED),
-    http_post(Config, "/definitions", [], ?NOT_AUTHORISED).
+    http_post(Config, "/definitions", [], ?NOT_AUTHORISED),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, disable_basic_auth, 50]),
+    %% Defaults to 'false' when config is invalid
+    http_get(Config, "/overview", ?OK).
 
 %% -------------------------------------------------------------------
 %% Helpers.
