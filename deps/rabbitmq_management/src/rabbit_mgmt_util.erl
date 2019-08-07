@@ -128,10 +128,10 @@ disable_stats(ReqData) ->
                    <<"true">> -> true;
                    _ -> false
                end,
-    MgmtOnly orelse get_and_check_bool_env(rabbitmq_management, disable_management_stats, false)
-        orelse get_and_check_bool_env(rabbitmq_management_agent, disable_metrics_collector, false).
+    MgmtOnly orelse get_bool_env(rabbitmq_management, disable_management_stats, false)
+        orelse get_bool_env(rabbitmq_management_agent, disable_metrics_collector, false).
 
-get_and_check_bool_env(Application, Par, Default) ->
+get_bool_env(Application, Par, Default) ->
     case application:get_env(Application, Par, Default) of
         true -> true;
         false -> false;
@@ -196,7 +196,7 @@ is_authorized_global_parameters(ReqData, Context) ->
                   end).
 
 is_basic_auth_disabled() ->
-    get_and_check_bool_env(rabbitmq_management, disable_basic_auth, false).
+    get_bool_env(rabbitmq_management, disable_basic_auth, false).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
