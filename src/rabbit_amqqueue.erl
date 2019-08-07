@@ -44,7 +44,8 @@
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([is_replicated/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
--export([list_local_followers/0]).
+-export([list_local_followers/0,
+         get_quorum_nodes/1]).
 -export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
 -export([delete_immediately_by_resource/1]).
@@ -192,7 +193,7 @@ find_local_quorum_queues(VHost) ->
               qlc:e(qlc:q([Q || Q <- mnesia:table(rabbit_durable_queue),
                                 amqqueue:get_vhost(Q) =:= VHost,
                                 amqqueue:is_quorum(Q) andalso
-                                (lists:member(Node, amqqueue:get_quorum_nodes(Q)))]))
+                                (lists:member(Node, get_quorum_nodes(Q)))]))
       end).
 
 find_local_durable_classic_queues(VHost) ->
@@ -225,7 +226,7 @@ find_recoverable_queues() ->
                                        %% - if the record is present - in order to restart.
                                              (mnesia:read(rabbit_queue, amqqueue:get_name(Q), read) =:= []
                                               orelse not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q)))))
-                                    orelse (amqqueue:is_quorum(Q) andalso lists:member(Node, amqqueue:get_quorum_nodes(Q)))
+                                    orelse (amqqueue:is_quorum(Q) andalso lists:member(Node, get_quorum_nodes(Q)))
                           ]))
       end).
 
@@ -274,7 +275,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
     TypeIsAllowed =
-      Type =:= classic orelse
+      Type =:= rabbit_classic_queue orelse
       rabbit_feature_flags:is_enabled(quorum_queue),
     case TypeIsAllowed of
         true ->
@@ -325,9 +326,16 @@ declare_classic_queue(Q, Node) ->
 get_queue_type(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
         undefined ->
-            classic;
+            rabbit_classic_queue;
         {_, V} ->
-            erlang:binary_to_existing_atom(V, utf8)
+            %% TODO: this mapping of "friendly" queue type name to the
+            %% implementing module should be part of some kind of registry
+            case V of
+                <<"quorum">> ->
+                    rabbit_quorum_queue;
+                <<"classic">> ->
+                    rabbit_classic_queue
+            end
     end.
 
 -spec internal_declare(amqqueue:amqqueue(), boolean()) ->
@@ -824,7 +832,7 @@ list_local_followers() ->
     [ amqqueue:get_name(Q)
       || Q <- list(),
          amqqueue:is_quorum(Q),
-         amqqueue:get_state(Q) =/= crashed, amqqueue:get_leader(Q) =/= node(), lists:member(node(), amqqueue:get_quorum_nodes(Q))].
+         amqqueue:get_state(Q) =/= crashed, amqqueue:get_leader(Q) =/= node(), lists:member(node(), get_quorum_nodes(Q))].
 
 is_local_to_node(QPid, Node) when ?IS_CLASSIC(QPid) ->
     Node =:= node(QPid);
@@ -1534,7 +1542,7 @@ forget_all_durable(Node) ->
 %% recovery.
 forget_node_for_queue(DeadNode, Q)
   when ?amqqueue_is_quorum(Q) ->
-    QN = amqqueue:get_quorum_nodes(Q),
+    QN = get_quorum_nodes(Q),
     forget_node_for_queue(DeadNode, QN, Q);
 forget_node_for_queue(DeadNode, Q) ->
     RS = amqqueue:get_recoverable_slaves(Q),
@@ -1555,9 +1563,11 @@ forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
     Type = amqqueue:get_type(Q),
     case {node_permits_offline_promotion(H), Type} of
         {false, _} -> forget_node_for_queue(DeadNode, T, Q);
-        {true, classic} -> Q1 = amqqueue:set_pid(Q, rabbit_misc:node_to_fake_pid(H)),
+        {true, rabbit_classic_queue} ->
+            Q1 = amqqueue:set_pid(Q, rabbit_misc:node_to_fake_pid(H)),
                            ok = mnesia:write(rabbit_durable_queue, Q1, write);
-        {true, quorum} -> ok
+        {true, rabbit_quorum_queue} ->
+            ok
     end.
 
 node_permits_offline_promotion(Node) ->
@@ -1755,7 +1765,7 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                  [],
                  undefined, % VHost,
                  #{user => undefined}, % ActingUser
-                 classic % Type
+                 rabbit_classic_queue % Type
                 ).
 
 -spec immutable(amqqueue:amqqueue()) -> amqqueue:amqqueue().
@@ -1864,3 +1874,11 @@ get_quorum_state({Name, _} = Id, QName, Map) ->
 
 get_quorum_state({Name, _}, Map) ->
     maps:get(Name, Map).
+
+get_quorum_nodes(Q) when ?is_amqqueue(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} ->
+            Nodes;
+        _ ->
+            []
+    end.
