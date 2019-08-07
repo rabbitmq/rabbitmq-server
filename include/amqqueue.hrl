@@ -39,7 +39,7 @@
         ((?is_amqqueue_v1(Q) andalso
           ?amqqueue_v1_field_state(Q) =:= State))).
 
--define(amqqueue_v1_type, classic).
+-define(amqqueue_v1_type, rabbit_classic_queue).
 
 -define(amqqueue_is_classic(Q),
         (?is_amqqueue_v1(Q))).
