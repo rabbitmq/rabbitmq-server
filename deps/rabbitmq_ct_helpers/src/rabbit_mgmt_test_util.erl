@@ -57,6 +57,12 @@ http_get_no_map(Config, Path) ->
     assert_code(?OK, CodeAct, "GET", Path, ResBody),
     cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody), [])).
 
+http_get_no_auth(Config, Path, CodeExp) ->
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+        req(Config, 0, get, Path, []),
+    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
+    decode(CodeExp, Headers, ResBody).
+
 http_put(Config, Path, List, CodeExp) ->
     http_put_raw(Config, Path, format_for_upload(List), CodeExp).
 
