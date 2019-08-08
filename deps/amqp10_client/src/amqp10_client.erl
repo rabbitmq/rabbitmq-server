@@ -271,7 +271,6 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
                            properties()) ->
     {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties) ->
-    io:format(user, "~nat=~s:~p:~p", [?MODULE_STRING, ?FUNCTION_NAME, ?LINE]),
     AttachArgs = #{name => Name,
                    role => {receiver, #{address => Source,
                                         durable => Durability}, self()},

@@ -656,15 +656,22 @@ make_target(#{role := {sender, #{address := Address} = Target}}) ->
                    durable = {uint, Durable}}.
 
 make_properties(#{properties := Properties}) ->
-    translate_properties(Properties).
+    translate_properties(Properties);
+make_properties(_) ->
+    undefined.
 
 translate_properties(Properties) when is_map(Properties) andalso map_size(Properties) =< 0 ->
     undefined;
 translate_properties(Properties) when is_map(Properties) ->
     {map, maps:fold(fun translate_property/3, [], Properties)}.
 
+translate_property(K, V, Acc) when is_tuple(V) ->
+    io:format(user, "~nat=~s:~p:~p key=~p value=~p", [?MODULE_STRING, ?FUNCTION_NAME, ?LINE, K, V]),
+    [{{symbol, K}, {described, {symbol, K}, V}} | Acc];
 translate_property(K, V, Acc) when is_binary(V) ->
     [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
+translate_property(K, V, Acc) when is_integer(V) ->
+    [{{symbol, K}, {described, {symbol, K}, {long, V}}} | Acc];
 translate_property(K, V, Acc) when is_list(V) ->
     Values = lists:map(fun(Id) -> {utf8, Id} end, V),
     [{{symbol, K}, {described, {symbol, K}, Values}} | Acc].
@@ -748,7 +755,6 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                                        {TargetAddr, false}
                                end,
 
-    io:format(user, "~nat=~s:~p:~p", [?MODULE_STRING, ?FUNCTION_NAME, ?LINE]),
     % create attach performative
     Attach = #'v1_0.attach'{name = {utf8, Name},
                             role = RoleAsBool,
