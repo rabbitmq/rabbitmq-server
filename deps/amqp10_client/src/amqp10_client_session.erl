@@ -666,15 +666,7 @@ translate_properties(Properties) when is_map(Properties) ->
     {map, maps:fold(fun translate_property/3, [], Properties)}.
 
 translate_property(K, V, Acc) when is_tuple(V) ->
-    io:format(user, "~nat=~s:~p:~p key=~p value=~p", [?MODULE_STRING, ?FUNCTION_NAME, ?LINE, K, V]),
-    [{{symbol, K}, {described, {symbol, K}, V}} | Acc];
-translate_property(K, V, Acc) when is_binary(V) ->
-    [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
-translate_property(K, V, Acc) when is_integer(V) ->
-    [{{symbol, K}, {described, {symbol, K}, {long, V}}} | Acc];
-translate_property(K, V, Acc) when is_list(V) ->
-    Values = lists:map(fun(Id) -> {utf8, Id} end, V),
-    [{{symbol, K}, {described, {symbol, K}, Values}} | Acc].
+    [{{symbol, K}, V} | Acc].
 
 translate_terminus_durability(none) -> 0;
 translate_terminus_durability(configuration) -> 1;
