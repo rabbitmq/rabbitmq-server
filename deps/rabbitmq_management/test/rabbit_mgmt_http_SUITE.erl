@@ -26,6 +26,7 @@
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
+                                http_get_no_auth/3,
                                 http_get_no_map/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
@@ -3103,6 +3104,11 @@ disable_basic_auth_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbitmq_management, disable_basic_auth, true]),
     http_get(Config, "/overview", ?NOT_AUTHORISED),
+
+    %% Ensure that a request without auth header does not return a basic auth prompt
+    OverviewResponseHeaders = http_get_no_auth(Config, "/overview", ?NOT_AUTHORISED),
+    ?assertEqual(false, lists:keymember("www-authenticate", 1,  OverviewResponseHeaders)),
+
     http_get(Config, "/nodes", ?NOT_AUTHORISED),
     http_get(Config, "/vhosts", ?NOT_AUTHORISED),
     http_get(Config, "/vhost-limits", ?NOT_AUTHORISED),

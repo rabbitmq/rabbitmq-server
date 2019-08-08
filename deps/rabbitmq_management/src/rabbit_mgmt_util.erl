@@ -222,7 +222,14 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
                          application:get_env(rabbitmq_management, uaa_client_id, "")),
             is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
         _ ->
-            {{false, ?AUTH_REALM}, ReqData, Context}
+            case is_basic_auth_disabled() of
+                true ->
+                    Msg = "HTTP access denied: basic auth disabled",
+                    rabbit_log:warning(Msg),
+                    not_authorised(Msg, ReqData, Context);
+                false ->
+                    {{false, ?AUTH_REALM}, ReqData, Context}
+            end
     end.
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
