@@ -193,11 +193,11 @@ metrics_global_labels_test(Config) ->
                 _ -> ok
             end,
             case string:str(Line, "rabbitmq_version=") of
-                0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
+                0 -> ct:fail("rabbitmq_version label missing from metric '~s'", [Line]);
                 _ -> ok
             end,
             case string:str(Line, "erlang_version=") of
-                0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
+                0 -> ct:fail("erlang_version label missing from metric '~s'", [Line]);
                 _ -> ok
             end
         end
