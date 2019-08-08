@@ -94,7 +94,7 @@
 
 % http://www.amqp.org/specification/1.0/filters
 -type filter() :: #{binary() => binary() | map() | list(binary())}.
--type properties() :: #{binary() => binary() | list(binary())}.
+-type properties() :: #{binary() => tuple()}.
 
 -type attach_args() :: #{name => binary(),
                          role => attach_role(),
