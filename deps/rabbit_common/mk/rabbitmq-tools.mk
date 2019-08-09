@@ -208,7 +208,14 @@ else \
 	erlang_app=$(PROJECT); \
 	repository=$(call rmq_cmp_repo_name,$(PROJECT)); \
 fi; \
-tags_count=$$(git $$git_dir tag -l 2>/dev/null | wc -l); \
+case "$(SINCE_TAG)" in \
+last-release) \
+	tags_count=$$(git $$git_dir tag -l 2>/dev/null | grep -E -v '(-beta|_milestone|[-_]rc)' | wc -l); \
+	;; \
+*) \
+	tags_count=$$(git $$git_dir tag -l 2>/dev/null | wc -l); \
+	;; \
+esac; \
 if test "$$tags_count" -gt 0; then \
 	case "$(SINCE_TAG)" in \
 	last-release) \
@@ -259,24 +266,36 @@ commits-since-release-title:
 	$(verbose) set -e; \
 	case "$(SINCE_TAG)" in \
 	last-release) \
-		ref=$$(git $$git_dir describe --abbrev=0 --tags \
-			--exclude "*-beta*" \
-			--exclude "*_milestone*" \
-			--exclude "*[-_]rc*"); \
-		;; \
-	last-prerelease) \
-		ref=$$(git $$git_dir describe --abbrev=0 --tags); \
+		tags_count=$$(git $$git_dir tag -l 2>/dev/null | grep -E -v '(-beta|_milestone|[-_]rc)' | wc -l); \
 		;; \
 	*) \
-		ref=$(SINCE_TAG); \
+		tags_count=$$(git $$git_dir tag -l 2>/dev/null | wc -l); \
 		;; \
 	esac; \
-	version=$$(echo "$$ref" | sed -E \
-		-e 's/rabbitmq_v([0-9]+)_([0-9]+)_([0-9]+)/v\1.\2.\3/' \
-		-e 's/_milestone/-beta./' \
-		-e 's/_rc/-rc./' \
-		-e 's/^v//'); \
-	echo "# Changes since RabbitMQ $$version"; \
+	if test "$$tags_count" -gt 0; then \
+		case "$(SINCE_TAG)" in \
+		last-release) \
+			ref=$$(git $$git_dir describe --abbrev=0 --tags \
+				--exclude "*-beta*" \
+				--exclude "*_milestone*" \
+				--exclude "*[-_]rc*"); \
+			;; \
+		last-prerelease) \
+			ref=$$(git $$git_dir describe --abbrev=0 --tags); \
+			;; \
+		*) \
+			ref=$(SINCE_TAG); \
+			;; \
+		esac; \
+		version=$$(echo "$$ref" | sed -E \
+			-e 's/rabbitmq_v([0-9]+)_([0-9]+)_([0-9]+)/v\1.\2.\3/' \
+			-e 's/_milestone/-beta./' \
+			-e 's/_rc/-rc./' \
+			-e 's/^v//'); \
+		echo "# Changes since RabbitMQ $$version"; \
+	else \
+		echo "# Changes since the beginning of time"; \
+	fi
 
 %+commits-since-release:
 	$(verbose) $(call show_commits_since_tag,$*)
