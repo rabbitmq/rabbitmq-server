@@ -94,6 +94,7 @@
 
 % http://www.amqp.org/specification/1.0/filters
 -type filter() :: #{binary() => binary() | map() | list(binary())}.
+-type properties() :: #{binary() => tuple()}.
 
 -type attach_args() :: #{name => binary(),
                          role => attach_role(),
@@ -111,6 +112,7 @@
               attach_role/0,
               target_def/0,
               source_def/0,
+              properties/0,
               filter/0]).
 
 -record(link,
@@ -653,6 +655,19 @@ make_target(#{role := {sender, #{address := Address} = Target}}) ->
     #'v1_0.target'{address = {utf8, Address},
                    durable = {uint, Durable}}.
 
+make_properties(#{properties := Properties}) ->
+    translate_properties(Properties);
+make_properties(_) ->
+    undefined.
+
+translate_properties(Properties) when is_map(Properties) andalso map_size(Properties) =< 0 ->
+    undefined;
+translate_properties(Properties) when is_map(Properties) ->
+    {map, maps:fold(fun translate_property/3, [], Properties)}.
+
+translate_property(K, V, Acc) when is_tuple(V) ->
+    [{{symbol, K}, V} | Acc].
+
 translate_terminus_durability(none) -> 0;
 translate_terminus_durability(configuration) -> 1;
 translate_terminus_durability(unsettled_state) -> 2.
@@ -723,6 +738,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
 
     Source = make_source(Args),
     Target = make_target(Args),
+    Properties = make_properties(Args),
 
     {LinkTarget, RoleAsBool} = case Role of
                                    {receiver, _, Pid} ->
@@ -736,6 +752,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                             role = RoleAsBool,
                             handle = {uint, OutHandle},
                             source = Source,
+                            properties = Properties,
                             initial_delivery_count =
                                 {uint, ?INITIAL_DELIVERY_COUNT},
                             snd_settle_mode = snd_settle_mode(Args),
