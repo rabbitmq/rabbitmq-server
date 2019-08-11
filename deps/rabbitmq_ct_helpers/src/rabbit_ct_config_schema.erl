@@ -86,6 +86,7 @@ snippet_id(L) when is_list(L) ->
 test_snippet(Config, Snippet, Expected, _Plugins) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
     {ok, GeneratedFile} = generate_config(Config, ConfFile, AdvancedFile),
+    ct:pal("Generated a config file at ~p for snippet ~p", [GeneratedFile, Snippet]),
     {ok, [Generated]} = file:consult(GeneratedFile),
     Gen = deepsort(Generated),
     Exp = deepsort(Expected),
