@@ -58,35 +58,6 @@ defmodule LogTailStreamCommandTest do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
   end
 
-  test "run: streams messages from the log", context do
-    ensure_log_file()
-
-    stream = @command.run([], context[:opts])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message"])
-    pid = self()
-    ref = make_ref()
-    Stream.transform(stream,
-                     "",
-                     fn(line, acc) ->
-                       acc1 = acc <> line
-                       case String.ends_with?(line, "\n") do
-                         true ->
-                           ## A hacky way to get the last value of the stream transform
-                           send pid, {:data, ref, acc1}
-                           {:halt, acc1}
-                         false ->
-                           {[], acc1}
-                       end
-                     end)
-    |> Stream.run
-    receive do
-      {:data, ^ref, data} ->
-        assert String.match?(data, ~r/Message/)
-    after 10000 ->
-      flunk("timeout waiting for streamed log message")
-    end
-  end
-
   test "run: streams messages for N seconds", context do
     ensure_log_file()
     time_before = System.system_time(:second)
