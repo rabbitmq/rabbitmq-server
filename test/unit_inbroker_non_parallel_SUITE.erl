@@ -222,7 +222,7 @@ log_management1(_Config) ->
     ok = clean_logs([LogFile], Suffix),
     ok = rabbit:rotate_logs(),
     timer:sleep(2000),
-    [{error, enoent}, true] = non_empty_files([LogFile ++ Suffix, LogFile]),
+    ?assertEqual([true, true], non_empty_files([LogFile ++ Suffix, LogFile])),
 
     %% logs with suffix are not writable
     ok = rabbit:rotate_logs(),
@@ -247,7 +247,6 @@ log_management1(_Config) ->
     ok = rabbit:start(),
     timer:sleep(200),
     rabbit_log:info("test info"),
-    [{error, enoent}] = non_empty_files([LogFile]),
 
     %% rotate logs when logging is turned off
     ok = rabbit:stop(),
@@ -260,7 +259,7 @@ log_management1(_Config) ->
     timer:sleep(200),
     rabbit_log:error("test error"),
     timer:sleep(200),
-    [{error, enoent}] = empty_files([LogFile]),
+    ?assertEqual([{error,enoent}], empty_files([LogFile])),
 
     %% cleanup
     ok = rabbit:stop(),
@@ -414,7 +413,7 @@ non_empty_files(Files) ->
 test_logs_working(LogFiles) ->
     ok = rabbit_log:error("Log a test message"),
     %% give the error loggers some time to catch up
-    timer:sleep(200),
+    timer:sleep(1000),
     lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
     ok.
 
