@@ -383,12 +383,18 @@ end}.
     {datatype, {enum, [distinguished_name, common_name]}}
 ]}.
 
-%% SSL handshake timeout, in milliseconds.
+%% TLS handshake timeout, in milliseconds.
 %%
 %% {ssl_handshake_timeout, 5000},
 
 {mapping, "ssl_handshake_timeout", "rabbit.ssl_handshake_timeout", [
     {datatype, integer}
+]}.
+
+%% Cluster name
+
+{mapping, "cluster_name", "rabbit.cluster_name", [
+    {datatype, string}
 ]}.
 
 %% Default worker process pool size. Used to limit maximum concurrency rate

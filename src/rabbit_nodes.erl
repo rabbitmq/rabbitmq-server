@@ -19,17 +19,27 @@
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
-         cluster_name/0, set_cluster_name/2, ensure_epmd/0,
+         cluster_name/0, set_cluster_name/1, set_cluster_name/2, ensure_epmd/0,
          all_running/0, name_type/0, running_count/0,
-         await_running_count/2]).
+         await_running_count/2,
+         boot/0]).
 
 -include_lib("kernel/include/inet.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(SAMPLING_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
-%% Specs
+%% API
 %%----------------------------------------------------------------------------
+
+boot() ->
+  case application:get_env(rabbit, cluster_name) of
+    undefined  -> ok;
+    {ok, Name} ->
+      rabbit_log:info("Setting cluster name to '~s' as configured", [Name]),
+      set_cluster_name(rabbit_data_coercion:to_binary(Name))
+  end.
 
 name_type() ->
     case os:getenv("RABBITMQ_USE_LONGNAME") of
@@ -79,6 +89,11 @@ cluster_name_default() ->
     {ID, _} = parts(node()),
     FQDN = rabbit_net:hostname(),
     list_to_binary(atom_to_list(make({ID, FQDN}))).
+
+-spec set_cluster_name(binary()) -> 'ok'.
+
+set_cluster_name(Name) ->
+    set_cluster_name(Name, ?INTERNAL_USER).
 
 -spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
 

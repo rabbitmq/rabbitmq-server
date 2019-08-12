@@ -226,6 +226,12 @@
                    [{description, "ready to communicate with peers and clients"},
                     {requires,    [core_initialized, recovery, routing_ready]}]}).
 
+-rabbit_boot_step({cluster_name,
+                   [{description, "sets cluster name if configured"},
+                    {mfa,         {rabbit_nodes, boot, []}},
+                    {requires,    pre_flight}
+                    ]}).
+
 -rabbit_boot_step({direct_client,
                    [{description, "direct client"},
                     {mfa,         {rabbit_direct, boot, []}},
