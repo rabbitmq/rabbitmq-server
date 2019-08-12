@@ -200,6 +200,10 @@
 # ssl_handshake_timeout = 5000
 
 
+## Cluster name
+##
+# cluster_name = dev3.eng.megacorp.local
+
 ## Password hashing implementation. Will only affect newly
 ## created users. To recalculate hash for an existing user
 ## it's necessary to update her password.
@@ -512,7 +516,7 @@
 # net_ticktime = 60
 
 ## Inter-node communication port range.
-## The parameters inet_dist_listen_min and inet_dist_listen_max  
+## The parameters inet_dist_listen_min and inet_dist_listen_max
 ## can be configured in the classic config format only.
 ## Related doc guide: https://www.rabbitmq.com/networking.html#epmd-inet-dist-port-range.
 
