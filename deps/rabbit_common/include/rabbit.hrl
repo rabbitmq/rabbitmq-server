@@ -41,21 +41,6 @@
 -record(topic_permission_key, {user_vhost, exchange}).
 -record(topic_permission, {topic_permission_key, permission}).
 
-%% Represents a vhost.
-%%
-%% Historically this record had 2 arguments although the 2nd
-%% was never used (`dummy`, always undefined). This is because
-%% single field records were/are illegal in OTP.
-%%
-%% As of 3.6.x, the second argument is vhost limits,
-%% which is actually used and has the same default.
-%% Nonetheless, this required a migration, see rabbit_upgrade_functions.
--record(vhost, {
-          %% vhost name as a binary
-          virtual_host,
-          %% proplist of limits configured, if any
-          limits}).
-
 %% Client connection, used by rabbit_reader
 %% and related modules.
 -record(connection, {

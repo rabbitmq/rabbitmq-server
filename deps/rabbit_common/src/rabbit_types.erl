@@ -35,6 +35,8 @@
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
+
+%% @deprecated Prefer rabbit_vhost:name()
 -type(vhost() :: binary()).
 -type(ctag() :: binary()).
 
