@@ -38,9 +38,7 @@ all: packages
 	package-rpm-redhat package-rpm-fedora \
 	package-rpm-rhel6 package-rpm-rhel7 package-rpm-rhel8 \
 	package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
-	package-windows package-standalone-macosx \
-	package-standalone-linux-x86_64 \
-	package-standalone-freebsd-x86_64 \
+	package-windows \
 	package-generic-unix
 
 PACKAGES_DIR ?= ../PACKAGES
@@ -110,30 +108,9 @@ package-windows: $(SOURCE_DIST_FILE)
 package-generic-unix: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C generic-unix $(VARS) all $(DO_CLEAN)
 
-ifeq ($(PLATFORM),linux)
-ifeq ($(shell uname -m),x86_64)
-package-standalone-linux-x86_64: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C standalone $(VARS) OS=linux-x86_64 all $(DO_CLEAN)
-endif
-endif
-
-ifeq ($(PLATFORM),freebsd)
-ifeq ($(shell uname -m),amd64)
-package-standalone-freebsd-x86_64: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C standalone $(VARS) OS=freebsd-x86_64 all $(DO_CLEAN)
-endif
-endif
-
-ifeq ($(PLATFORM),darwin)
-packages: package-standalone-macosx
-
-package-standalone-macosx: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C standalone $(VARS) OS=mac all $(DO_CLEAN)
-endif
-
 .PHONY: clean
 
 clean:
-	for subdir in debs/Debian RPMS/Fedora windows windows-exe generic-unix standalone; do \
+	for subdir in debs/Debian RPMS/Fedora windows windows-exe generic-unix; do \
 		$(MAKE) -C "$$subdir" clean; \
 	done

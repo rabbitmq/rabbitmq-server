@@ -332,9 +332,7 @@ clean-unpacked-source-dist:
 
 .PHONY: packages package-deb \
 	package-rpm package-rpm-fedora package-rpm-suse \
-	package-windows package-standalone-macosx \
-	package-standalone-linux-x86_64 \
-	package-standalone-freebsd-x86_64 \
+	package-windows \
 	package-generic-unix
 
 # This variable is exported so sub-make instances know where to find the
@@ -344,9 +342,7 @@ PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 packages package-deb package-rpm \
 package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
 package-rpm-rhel8 package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
-package-windows package-standalone-macosx \
-package-standalone-linux-x86_64 \
-package-standalone-freebsd-x86_64 \
+package-windows \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
