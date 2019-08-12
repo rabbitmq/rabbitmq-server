@@ -1047,8 +1047,11 @@ list_local(VHostPath) ->
 % This event is necessary for the stats timer to be initialized with
 % the correct values once the management agent has started
 force_event_refresh(Ref) ->
+    %% note: quorum queuse emit stats on periodic ticks that run unconditionally,
+    %%       so force_event_refresh is unnecessary (and, in fact, would only produce log noise) for QQs.
+    ClassicQs = list_by_type(rabbit_classic_queue),
     [gen_server2:cast(amqqueue:get_pid(Q),
-                      {force_event_refresh, Ref}) || Q <- list()],
+                      {force_event_refresh, Ref}) || Q <- ClassicQs],
     ok.
 
 -spec notify_policy_changed(amqqueue:amqqueue()) -> 'ok'.
