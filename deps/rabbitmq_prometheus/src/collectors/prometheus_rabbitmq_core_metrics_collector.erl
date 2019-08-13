@@ -79,15 +79,15 @@
     ]},
 
     {connection_coarse_metrics, [
-        {2, connection_bytes_in_total, counter, "Total number of bytes received on a connection"},
-        {3, connection_bytes_out_total, counter, "Total number of bytes sent on a connection"},
+        {2, connection_incoming_bytes_total, counter, "Total number of bytes received on a connection"},
+        {3, connection_outgoing_bytes_total, counter, "Total number of bytes sent on a connection"},
         {4, erlang_process_reductions_total, counter, "Total number of Erlang process reductions"}
     ]},
 
     {connection_metrics, [
-        {2, connection_packets_in_total, counter, "Total number of packets received on a connection", recv_cnt},
-        {2, connection_packets_out_total, counter, "Total number of packets sent on a connection", send_cnt},
-        {2, connection_packets_pending_total, counter, "Total number of packets waiting to be sent on a connection", send_pend},
+        {2, connection_incoming_packets_total, counter, "Total number of packets received on a connection", recv_cnt},
+        {2, connection_outgoing_packets_total, counter, "Total number of packets sent on a connection", send_cnt},
+        {2, connection_pending_packets, gauge, "Number of packets waiting to be sent on a connection", send_pend},
         {2, connection_channels, gauge, "Channels on a connection", channels}
     ]},
 
@@ -102,7 +102,7 @@
         {2, disk_space_available_bytes, gauge, "Disk space available in bytes", disk_free},
         {2, erlang_processes_used, gauge, "Erlang processes used", proc_used},
         {2, erlang_gc_runs_total, counter, "Total number of Erlang garbage collector runs", gc_num},
-        {2, erlang_gc_bytes_reclaimed_total, counter, "Total number of bytes of memory reclaimed by Erlang garbage collector", gc_bytes_reclaimed},
+        {2, erlang_gc_reclaimed_bytes_total, counter, "Total number of bytes of memory reclaimed by Erlang garbage collector", gc_bytes_reclaimed},
         {2, erlang_scheduler_context_switches_total, counter, "Total number of Erlang scheduler context switches", context_switches}
     ]},
 
@@ -175,6 +175,7 @@
 ]).
 
 -define(TOTALS, [
+    %% ordering differs from metrics above, refer to list comprehension
     {connection_created, connections, gauge, "Connections currently running"},
     {channel_created, channels, gauge, "Channels currently running"},
     {consumer_created, consumers, gauge, "Consumers currently connected"},
