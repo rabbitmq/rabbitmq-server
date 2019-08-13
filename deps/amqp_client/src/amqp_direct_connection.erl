@@ -148,7 +148,7 @@ connect(Params = #amqp_params_direct{username     = Username,
                          adapter_info = ensure_adapter_info(Info),
                          connected_at =
                            os:system_time(milli_seconds)},
-    DecryptedPassword = rabbit_credentials_obfuscation:decrypt(Params#amqp_params_direct.password),
+    DecryptedPassword = credentials_obfuscation:decrypt(Password),
     case rpc:call(Node, rabbit_direct, connect,
                   [{Username, DecryptedPassword}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of

@@ -164,9 +164,9 @@ start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     AmqpParams0 =
         case AmqpParams of
             #amqp_params_direct{password = Password} ->
-                AmqpParams#amqp_params_direct{password = rabbit_credentials_obfuscation:encrypt(Password)};
+                AmqpParams#amqp_params_direct{password = credentials_obfuscation:encrypt(Password)};
             #amqp_params_network{password = Password} ->
-                AmqpParams#amqp_params_network{password = rabbit_credentials_obfuscation:encrypt(Password)}
+                AmqpParams#amqp_params_network{password = credentials_obfuscation:encrypt(Password)}
         end,
     AmqpParams1 =
         case AmqpParams0 of
@@ -204,7 +204,7 @@ set_connection_name(ConnName,
 %% application which is making this call.
 ensure_started() ->
     [ensure_started(App) || App <- [syntax_tools, compiler, xmerl,
-                                    rabbit_common, amqp_client]].
+                                    rabbit_common, amqp_client, credentials_obfuscation]].
 
 ensure_started(App) ->
     case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
