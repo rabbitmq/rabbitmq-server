@@ -89,7 +89,7 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 # a sane default, but we prefer to rely on the .ez archives in the
 # `plugins` directory so the plugin code is executed. The `plugins`
 # directory is added to ERL_LIBS by rabbitmq-env.
-DIST_ERL_LIBS = $(shell echo "$(filter-out $(DEPS_DIR),$(subst :, ,$(ERL_LIBS)))" | tr ' ' :)
+DIST_ERL_LIBS = $(patsubst :%,%,$(patsubst %:,%,$(subst :$(APPS_DIR):,:,$(subst :$(DEPS_DIR):,:,:$(ERL_LIBS):))))
 
 ifdef PLUGINS_FROM_DEPS_DIR
 RMQ_PLUGINS_DIR=$(DEPS_DIR)
