@@ -1175,7 +1175,7 @@ print_banner() ->
     {ok, Version} = application:get_key(vsn),
     {LogFmt, LogLocations} = case log_locations() of
         [_ | Tail] = LL ->
-            LF = lists:flatten(["~n                    ~s"
+            LF = lists:flatten(["~n                    ~ts"
                                 || _ <- lists:seq(1, length(Tail))]),
             {LF, LL};
         [] ->
@@ -1185,7 +1185,7 @@ print_banner() ->
               "~n  ##  ##      ~s ~s. ~s"
               "~n  ##########  ~s"
               "~n  ######  ##"
-              "~n  ##########  Logs: ~s" ++
+              "~n  ##########  Logs: ~ts" ++
               LogFmt ++
               "~n~n              Starting broker..."
               "~n",
@@ -1209,7 +1209,7 @@ log_banner() ->
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(
-                       " ~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n", [K, V])
+                       " ~-" ++ integer_to_list(DescrLen) ++ "s: ~ts~n", [K, V])
              end,
     Banner = string:strip(lists:flatten(
                [case S of
@@ -1220,7 +1220,7 @@ log_banner() ->
                     {K, V} ->
                         Format(K, V)
                 end || S <- Settings]), right, $\n),
-    rabbit_log:info("~n~s", [Banner]).
+    rabbit_log:info("~n~ts", [Banner]).
 
 warn_if_kernel_config_dubious() ->
     case os:type() of

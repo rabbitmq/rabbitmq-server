@@ -12,7 +12,7 @@ REM SCRIPT_DIR=`dirname $SCRIPT_PATH`
 REM RABBITMQ_HOME="${SCRIPT_DIR}/.."
 set SCRIPT_DIR=%TDP0%
 set SCRIPT_NAME=%1
-for /f "delims=" %%F in ("%SCRIPT_DIR%..") do set RABBITMQ_HOME=%%~dpsF%%~nF%%~xF
+for /f "delims=" %%F in ("%SCRIPT_DIR%..") do set RABBITMQ_HOME=%%~dpF%%~nF%%~xF
 
 REM If ERLANG_HOME is not defined, check if "erl.exe" is available in
 REM the path and use that.
@@ -20,7 +20,7 @@ if not defined ERLANG_HOME (
     for /f "delims=" %%F in ('where.exe erl.exe') do @set ERL_PATH=%%F
     if exist "!ERL_PATH!" (
         for /f "delims=" %%F in ("!ERL_PATH!") do set ERL_DIRNAME=%%~dpF
-        for /f "delims=" %%F in ("!ERL_DIRNAME!\..") do @set ERLANG_HOME=%%~dpsF%%~nF%%~xF
+        for /f "delims=" %%F in ("!ERL_DIRNAME!\..") do @set ERLANG_HOME=%%~dpF%%~nF%%~xF
     )
     set ERL_PATH=
     set ERL_DIRNAME=
@@ -30,7 +30,9 @@ REM ## Set defaults
 call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
 
 if "!RABBITMQ_CONF_ENV_FILE!"=="" (
-    set RABBITMQ_CONF_ENV_FILE=!CONF_ENV_FILE!
+    set RABBITMQ_CONF_ENV_FILE=!CONF_ENV_FILE:"=!
+) else (
+    set RABBITMQ_CONF_ENV_FILE=!RABBITMQ_CONF_ENV_FILE:"=!
 )
 
 if exist "!RABBITMQ_CONF_ENV_FILE!" (
@@ -71,12 +73,6 @@ if "!RABBITMQ_MAX_NUMBER_OF_ATOMS!"=="" (
 
 REM Common defaults
 set SERVER_ERL_ARGS=+P !RABBITMQ_MAX_NUMBER_OF_PROCESSES! +t !RABBITMQ_MAX_NUMBER_OF_ATOMS! +stbt !RABBITMQ_SCHEDULER_BIND_TYPE! +zdbbl !RABBITMQ_DISTRIBUTION_BUFFER_SIZE!
-
-REM Make sure $RABBITMQ_BASE contains no non-ASCII characters.
-if not exist "!RABBITMQ_BASE!" (
-    mkdir "!RABBITMQ_BASE!"
-)
-for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
 
 REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="true" (
@@ -119,16 +115,6 @@ REM [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP
 REM [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
 REM [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_IP_ADDRESS=${DEFAULT_NODE_IP_ADDRESS}
 REM [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${DEFAULT_NODE_PORT}
-
-REM if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
-REM    if not "!RABBITMQ_NODE_PORT!"=="" (
-REM       set RABBITMQ_NODE_IP_ADDRESS=auto
-REM    )
-REM ) else (
-REM    if "!RABBITMQ_NODE_PORT!"=="" (
-REM       set RABBITMQ_NODE_PORT=5672
-REM    )
-REM )
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
     if not "!NODE_IP_ADDRESS!"=="" (
@@ -174,38 +160,44 @@ if "!RABBITMQ_SERVER_ERL_ARGS!"=="" (
 )
 
 REM [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
-CALL :unquote RABBITMQ_CONFIG_FILE %RABBITMQ_CONFIG_FILE%
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     if "!CONFIG_FILE!"=="" (
         set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
     ) else (
-        set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
+        set RABBITMQ_CONFIG_FILE=!CONFIG_FILE:"=!
     )
+) else (
+    set RABBITMQ_CONFIG_FILE=!RABBITMQ_CONFIG_FILE:"=!
 )
 
 if "!RABBITMQ_GENERATED_CONFIG_DIR!"=="" (
     if "!GENERATED_CONFIG_DIR!"=="" (
         set RABBITMQ_GENERATED_CONFIG_DIR=!RABBITMQ_BASE!\config
     ) else (
-        set RABBITMQ_GENERATED_CONFIG_DIR=!GENERATED_CONFIG_DIR!
+        set RABBITMQ_GENERATED_CONFIG_DIR=!GENERATED_CONFIG_DIR:"=!
     )
+) else (
+    set RABBITMQ_GENERATED_CONFIG_DIR=!RABBITMQ_GENERATED_CONFIG_DIR:"=!
 )
 
-CALL :unquote RABBITMQ_ADVANCED_CONFIG_FILE %RABBITMQ_ADVANCED_CONFIG_FILE%
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!"=="" (
     if "!ADVANCED_CONFIG_FILE!"=="" (
         set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_BASE!\advanced.config
     ) else (
-        set RABBITMQ_ADVANCED_CONFIG_FILE=!ADVANCED_CONFIG_FILE!
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!ADVANCED_CONFIG_FILE:"=!
     )
+) else (
+    set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE:"=!
 )
 
 if "!RABBITMQ_SCHEMA_DIR!" == "" (
     if "!SCHEMA_DIR!"=="" (
         set RABBITMQ_SCHEMA_DIR=!RABBITMQ_HOME!\priv\schema
     ) else (
-        set RABBITMQ_SCHEMA_DIR=!SCHEMA_DIR!
+        set RABBITMQ_SCHEMA_DIR=!SCHEMA_DIR:"=!
     )
+) else (
+    set RABBITMQ_SCHEMA_DIR=!RABBITMQ_SCHEMA_DIR:"=!
 )
 
 REM [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
@@ -213,26 +205,28 @@ if "!RABBITMQ_LOG_BASE!"=="" (
     if "!LOG_BASE!"=="" (
         set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!\log
     ) else (
-        set RABBITMQ_LOG_BASE=!LOG_BASE!
+        set RABBITMQ_LOG_BASE=!LOG_BASE:"=!
     )
+) else (
+    set RABBITMQ_LOG_BASE=!RABBITMQ_LOG_BASE:"=!
 )
 if not exist "!RABBITMQ_LOG_BASE!" (
     mkdir "!RABBITMQ_LOG_BASE!"
 )
-for /f "delims=" %%F in ("!RABBITMQ_LOG_BASE!") do set RABBITMQ_LOG_BASE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 if "!RABBITMQ_MNESIA_BASE!"=="" (
     if "!MNESIA_BASE!"=="" (
         set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!\db
     ) else (
-        set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
+        set RABBITMQ_MNESIA_BASE=!MNESIA_BASE:"=!
     )
+) else (
+    set RABBITMQ_MNESIA_BASE=!RABBITMQ_MNESIA_BASE:"=!
 )
 if not exist "!RABBITMQ_MNESIA_BASE!" (
     mkdir "!RABBITMQ_MNESIA_BASE!"
 )
-for /f "delims=" %%F in ("!RABBITMQ_MNESIA_BASE!") do set RABBITMQ_MNESIA_BASE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
 if "!RABBITMQ_SERVER_START_ARGS!"=="" (
@@ -254,13 +248,14 @@ if "!RABBITMQ_MNESIA_DIR!"=="" (
     if "!MNESIA_DIR!"=="" (
         set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-mnesia
     ) else (
-        set RABBITMQ_MNESIA_DIR=!MNESIA_DIR!
+        set RABBITMQ_MNESIA_DIR=!MNESIA_DIR:"=!
     )
+) else (
+    set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_DIR:"=!
 )
 if not exist "!RABBITMQ_MNESIA_DIR!" (
     mkdir "!RABBITMQ_MNESIA_DIR!"
 )
-for /f "delims=" %%F in ("!RABBITMQ_MNESIA_DIR!") do set RABBITMQ_MNESIA_DIR=%%~sF
 
 REM [ "x" = "x$RABBITMQ_QUORUM_DIR" ] && RABBITMQ_QUORUM_DIR=${RABBITMQ_MNESIA_DIR}/quorum
 if "!RABBITMQ_QUORUM_DIR!"=="" (
@@ -289,8 +284,10 @@ if "!RABBITMQ_FEATURE_FLAGS_FILE!"=="" (
     if "!FEATURE_FLAGS_FILE!"=="" (
         set RABBITMQ_FEATURE_FLAGS_FILE=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-feature_flags
     ) else (
-        set RABBITMQ_FEATURE_FLAGS_FILE=!FEATURE_FLAGS_FILE!
+        set RABBITMQ_FEATURE_FLAGS_FILE=!FEATURE_FLAGS_FILE:"=!
     )
+) else (
+    set RABBITMQ_FEATURE_FLAGS_FILE=!RABBITMQ_FEATURE_FLAGS_FILE:"=!
 )
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
@@ -299,44 +296,42 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
     if "!PLUGINS_EXPAND_DIR!"=="" (
         set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-plugins-expand
     ) else (
-        set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
+        set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR:"=!
     )
+) else (
+    set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_PLUGINS_EXPAND_DIR:"=!
 )
-REM FIXME: RabbitMQ removes and recreates RABBITMQ_PLUGINS_EXPAND_DIR
-REM itself. Therefore we can't create it here in advance and escape the
-REM directory name, and RABBITMQ_PLUGINS_EXPAND_DIR must not contain
-REM non-US-ASCII characters.
 
 REM [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
     if "!ENABLED_PLUGINS_FILE!"=="" (
         set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
     ) else (
-        set RABBITMQ_ENABLED_PLUGINS_FILE=!ENABLED_PLUGINS_FILE!
+        set RABBITMQ_ENABLED_PLUGINS_FILE=!ENABLED_PLUGINS_FILE:"=!
     )
 ) else (
+    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_ENABLED_PLUGINS_FILE:"=!
     set RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 )
 if not exist "!RABBITMQ_ENABLED_PLUGINS_FILE!" (
-    for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do mkdir %%~dpF 2>NUL
+    for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do mkdir "%%~dpF" 2>NUL
     copy /y NUL "!RABBITMQ_ENABLED_PLUGINS_FILE!" >NUL
 )
-for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do set RABBITMQ_ENABLED_PLUGINS_FILE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 if "!RABBITMQ_PLUGINS_DIR!"=="" (
     if "!PLUGINS_DIR!"=="" (
         set RABBITMQ_PLUGINS_DIR=!RABBITMQ_HOME!\plugins
     ) else (
-        set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
+        set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR:"=!
     )
 ) else (
+    set RABBITMQ_PLUGINS_DIR=!RABBITMQ_PLUGINS_DIR:"=!
     set RABBITMQ_PLUGINS_DIR_source=environment
 )
 if not exist "!RABBITMQ_PLUGINS_DIR!" (
     mkdir "!RABBITMQ_PLUGINS_DIR!"
 )
-for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_DIR!") do set RABBITMQ_PLUGINS_DIR=%%~sF
 
 REM ## Log rotation
 REM [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
@@ -345,23 +340,28 @@ if "!RABBITMQ_LOGS!"=="" (
     if "!LOGS!"=="" (
         set RABBITMQ_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
     ) else (
-        set RABBITMQ_LOGS=!LOGS!
+        set RABBITMQ_LOGS=!LOGS:"=!
     )
+) else (
+    set RABBITMQ_LOGS=!RABBITMQ_LOGS:"=!
 )
 if not "!RABBITMQ_LOGS!" == "-" (
     if not exist "!RABBITMQ_LOGS!" (
-        for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do mkdir %%~dpF 2>NUL
+        for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do mkdir "%%~dpF" 2>NUL
         copy /y NUL "!RABBITMQ_LOGS!" >NUL
     )
-    for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do set RABBITMQ_LOGS=%%~sF
 )
 rem [ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
 if "!RABBITMQ_UPGRADE_LOG!" == "" (
     set RABBITMQ_UPGRADE_LOG=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!_upgrade.log
+) else (
+    set RABBITMQ_UPGRADE_LOG=!RABBITMQ_UPGRADE_LOG:"=!
 )
 REM [ "x" = "x$ERL_CRASH_DUMP"] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
 if "!ERL_CRASH_DUMP!"=="" (
     set ERL_CRASH_DUMP=!RABBITMQ_LOG_BASE!\erl_crash.dump
+) else (
+    set ERL_CRASH_DUMP=!ERL_CRASH_DUMP:"=!
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
@@ -388,10 +388,6 @@ if "!RABBITMQ_CTL_DIST_PORT_MAX!"=="" (
 )
 
 REM ADDITIONAL WINDOWS ONLY CONFIG ITEMS
-REM rabbitmq-plugins.bat
-REM if "!RABBITMQ_SERVICENAME!"=="" (
-REM     set RABBITMQ_SERVICENAME=RabbitMQ
-REM )
 
 if "!RABBITMQ_SERVICENAME!"=="" (
     if "!SERVICENAME!"=="" (
@@ -409,21 +405,21 @@ if defined RABBITMQ_DEV_ENV (
         if not "%RABBITMQ_FEATURE_FLAGS_FILE_source%" == "environment" (
             for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, feature_flags_file), io:format(""~s~n"", [P])."') do @set feature_flags_file=%%F
             if exist "!feature_flags_file!" (
-                set RABBITMQ_FEATURE_FLAGS_FILE=!feature_flags_file!
+                set RABBITMQ_FEATURE_FLAGS_FILE=!feature_flags_file:"=!
             )
             REM set feature_flags_file=
         )
         if not "%RABBITMQ_PLUGINS_DIR_source%" == "environment" (
             for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(""~s~n"", [P])."') do @set plugins_dir=%%F
             if exist "!plugins_dir!" (
-                set RABBITMQ_PLUGINS_DIR=!plugins_dir!
+                set RABBITMQ_PLUGINS_DIR=!plugins_dir:"=!
             )
             REM set plugins_dir=
         )
         if not "%RABBITMQ_ENABLED_PLUGINS_FILE_source%" == "environment" (
             for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(""~s~n"", [P])."') do @set enabled_plugins_file=%%F
             if exist "!enabled_plugins_file!" (
-                set RABBITMQ_ENABLED_PLUGINS_FILE=!enabled_plugins_file!
+                set RABBITMQ_ENABLED_PLUGINS_FILE=!enabled_plugins_file:"=!
             )
             REM set enabled_plugins_file=
         )
@@ -441,15 +437,15 @@ if defined RABBITMQ_DEV_ENV (
         if "!DEPS_DIR!" == "" (
             if exist "!RABBITMQ_HOME!\..\..\deps\rabbit_common\erlang.mk" (
                 REM Dependencies in the Umbrella or a plugin.
-                set DEPS_DIR_norm="!RABBITMQ_HOME!\..\..\deps"
+                set DEPS_DIR_norm=!RABBITMQ_HOME!\..\..\deps
             ) else (
                 if exist "!RABBITMQ_HOME!\deps\rabbit_common\erlang.mk" (
                     REM Dependencies in the broker.
-                    set DEPS_DIR_norm="!RABBITMQ_HOME!\deps"
+                    set DEPS_DIR_norm=!RABBITMQ_HOME!\deps
                 )
             )
         ) else (
-            for /f "delims=" %%F in ("!DEPS_DIR!") do @set DEPS_DIR_norm=%%~dpsF%%~nF%%~xF
+            for /f "delims=" %%F in ("!DEPS_DIR!") do @set DEPS_DIR_norm=%%~dpF%%~nF%%~xF
         )
 
         set ERL_LIBS=!DEPS_DIR_norm!;!ERL_LIBS!
@@ -458,12 +454,12 @@ if defined RABBITMQ_DEV_ENV (
     if exist "!RABBITMQ_PLUGINS_DIR!" (
         REM RabbitMQ was started from its install directory. Take
         REM rabbit_common from the plugins directory.
-        set ERL_LIBS=!RABBITMQ_PLUGINS_DIR!;!ERL_LIBS!
+        set ERL_LIBS=!RABBITMQ_PLUGINS_DIR:"=!;!ERL_LIBS:"=!
     )
 )
 
-REM Ensure all paths in ERL_LIBS do not contains non-ASCII characters.
-set ERL_LIBS_orig=%ERL_LIBS%
+REM Ensure ERL_LIBS begins with valid path
+set ERL_LIBS_orig=%ERL_LIBS:"=%
 set ERL_LIBS=
 call :filter_paths "%ERL_LIBS_orig%"
 goto :filter_paths_done
@@ -476,16 +472,15 @@ for /f "tokens=1* delims=;" %%a in ("%paths%") do (
     if not "%%b" == "" call :filter_paths "%%b"
 )
 set paths=
-exit /b
+goto :eof
 
 :filter_path
-REM Ensure ERL_LIBS begins with valid path
 IF "%ERL_LIBS%"=="" (
-    set ERL_LIBS=%~dps1%~n1%~x1
+    set ERL_LIBS=%~dp1%~n1%~x1
 ) else (
-    set ERL_LIBS=%ERL_LIBS%;%~dps1%~n1%~x1
+    set ERL_LIBS=%ERL_LIBS%;%~dp1%~n1%~x1
 )
-exit /b
+goto :eof
 
 :filter_paths_done
 
@@ -505,7 +500,3 @@ REM ##--- End of overridden <var_name> variables
 REM
 REM # Since we source this elsewhere, don't accidentally stop execution
 REM true
-
-:unquote
-set %1=%~2
-EXIT /B 0
