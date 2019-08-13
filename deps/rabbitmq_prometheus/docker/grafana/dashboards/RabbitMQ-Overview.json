@@ -3587,7 +3587,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_declare_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_declared_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3736,7 +3736,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_create_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_created_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3885,7 +3885,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_delete_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_deleted_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4179,7 +4179,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_open_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_opened_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4328,7 +4328,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_close_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_closed_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4622,7 +4622,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_connection_open_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_connection_opened_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -4772,7 +4772,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_connection_close_total{cluster=\"$cluster\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_connection_closed_total{cluster=\"$cluster\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,

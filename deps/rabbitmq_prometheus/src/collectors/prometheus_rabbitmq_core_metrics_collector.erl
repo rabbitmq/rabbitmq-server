@@ -69,13 +69,13 @@
     ]},
 
     {connection_churn_metrics, [
-        {2, connection_open_total, counter, "Total number of connections opened"},
-        {3, connection_close_total, counter, "Total number of connections closed or terminated"},
-        {4, channel_open_total, counter, "Total number of channels opened"},
-        {5, channel_close_total, counter, "Total number of channels closed"},
-        {6, queue_declare_total, counter, "Total number of queues declared"},
-        {7, queue_create_total, counter, "Total number of queues created"},
-        {8, queue_delete_total, counter, "Total number of queues deleted"}
+        {2, connection_opened_total, counter, "Total number of connections opened"},
+        {3, connection_closed_total, counter, "Total number of connections closed or terminated"},
+        {4, channel_opened_total, counter, "Total number of channels opened"},
+        {5, channel_closed_total, counter, "Total number of channels closed"},
+        {6, queue_declared_total, counter, "Total number of queues declared"},
+        {7, queue_created_total, counter, "Total number of queues created"},
+        {8, queue_deleted_total, counter, "Total number of queues deleted"}
     ]},
 
     {connection_coarse_metrics, [
