@@ -166,10 +166,22 @@ sync-gitremote: $(READY_DEPS:%=$(DEPS_DIR)/%+sync-gitremote)
 		git remote set-url --push origin \
 		'$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),$(notdir $*))'
 
+ifeq ($(origin, RMQ_GIT_GLOBAL_USER_NAME),undefined)
 RMQ_GIT_GLOBAL_USER_NAME := $(shell git config --global user.name)
+export RMQ_GIT_GLOBAL_USER_NAME
+endif
+ifeq ($(origin RMQ_GIT_GLOBAL_USER_EMAIL),undefined)
 RMQ_GIT_GLOBAL_USER_EMAIL := $(shell git config --global user.email)
+export RMQ_GIT_GLOBAL_USER_EMAIL
+endif
+ifeq ($(origin RMQ_GIT_USER_NAME),undefined)
 RMQ_GIT_USER_NAME := $(shell git config user.name)
+export RMQ_GIT_USER_NAME
+endif
+ifeq ($(origin RMQ_GIT_USER_EMAIL),undefined)
 RMQ_GIT_USER_EMAIL := $(shell git config user.email)
+export RMQ_GIT_USER_EMAIL
+endif
 
 sync-gituser: $(READY_DEPS:%=$(DEPS_DIR)/%+sync-gituser)
 	@:

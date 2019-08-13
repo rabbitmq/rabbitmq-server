@@ -217,11 +217,14 @@ define test_rabbitmq_config_with_tls
 endef
 
 TEST_CONFIG_FILE ?= $(TEST_TMPDIR)/test.config
-TEST_TLS_CERTS_DIR = $(TEST_TMPDIR)/tls-certs
+TEST_TLS_CERTS_DIR := $(TEST_TMPDIR)/tls-certs
+ifeq ($(origin TEST_TLS_CERTS_DIR_in_config),undefined)
 ifeq ($(PLATFORM),msys2)
-TEST_TLS_CERTS_DIR_in_config = $(shell echo $(TEST_TLS_CERTS_DIR) | sed -E "s,^/([^/]+),\1:,")
+TEST_TLS_CERTS_DIR_in_config := $(shell echo $(TEST_TLS_CERTS_DIR) | sed -E "s,^/([^/]+),\1:,")
 else
-TEST_TLS_CERTS_DIR_in_config = $(TEST_TLS_CERTS_DIR)
+TEST_TLS_CERTS_DIR_in_config := $(TEST_TLS_CERTS_DIR)
+endif
+export TEST_TLS_CERTS_DIR_in_config
 endif
 
 .PHONY: $(TEST_CONFIG_FILE)
