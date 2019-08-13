@@ -119,9 +119,6 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 	$(call basic_script_env_settings,$(RABBITMQ_NODENAME),$(RABBITMQ_NODENAME_FOR_PATHS),$(RABBITMQ_NODE_PORT)) \
 	RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)"
 
-ERL_CALL := $(shell $(ERL) -eval 'io:format("~s~n", [filename:join(code:lib_dir(erl_interface, bin), case os:type() of {win32, _} -> "erl_call.exe"; _ -> "erl_call" end)]), halt().')
-ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
-
 test-tmpdir:
 	$(verbose) mkdir -p $(TEST_TMPDIR)
 
