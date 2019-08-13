@@ -21,7 +21,7 @@ rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TDP0=%~dp0
 set STAR=%*
-set CONF_SCRIPT_DIR="%~dp0"
+set CONF_SCRIPT_DIR=%~dp0
 setlocal enabledelayedexpansion
 setlocal enableextensions
 
@@ -48,8 +48,8 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
-CALL :convert_forward_slashes !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE
-CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
+CALL :convert_forward_slashes "!RABBITMQ_ADVANCED_CONFIG_FILE!" RABBITMQ_ADVANCED_CONFIG_FILE
+CALL :get_noex "!RABBITMQ_ADVANCED_CONFIG_FILE!" RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
     set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config
@@ -60,8 +60,8 @@ if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
     )
 )
 
-CALL :convert_forward_slashes !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE
-CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
+CALL :convert_forward_slashes "!RABBITMQ_CONFIG_FILE!" RABBITMQ_CONFIG_FILE
+CALL :get_noex "!RABBITMQ_CONFIG_FILE!" RABBITMQ_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
     if exist "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
@@ -102,8 +102,8 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE!" (
     )
 )
 
-CALL :convert_forward_slashes !RABBITMQ_CONFIG_ARG_FILE! RABBITMQ_CONFIG_ARG_FILE
-CALL :get_noex !RABBITMQ_CONFIG_ARG_FILE! RABBITMQ_CONFIG_ARG_FILE_NOEX
+CALL :convert_forward_slashes "!RABBITMQ_CONFIG_ARG_FILE!" RABBITMQ_CONFIG_ARG_FILE
+CALL :get_noex "!RABBITMQ_CONFIG_ARG_FILE!" RABBITMQ_CONFIG_ARG_FILE_NOEX
 
 if not "!RABBITMQ_CONFIG_ARG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_ARG_FILE!" (
     if "!RABBITMQ_CONFIG_ARG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE!" (
@@ -135,15 +135,15 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
 
     copy /Y "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
 
-    set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
-                                      -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-                                      -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
-                                      -conf_schema_dir "!RABBITMQ_SCHEMA_DIR!" ^
-                                      -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE:\=/!" ^
+                                      -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR:\=/!" ^
+                                      -conf_script_dir "!CONF_SCRIPT_DIR:\=/!" ^
+                                      -conf_schema_dir "!RABBITMQ_SCHEMA_DIR:\=/!" ^
+                                      -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE:\=/!"
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
-        -pa "!RABBITMQ_EBIN_ROOT!" ^
+        -pa "!RABBITMQ_EBIN_ROOT:\=/!" ^
         -boot !CLEAN_BOOT_FILE! ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
@@ -183,12 +183,10 @@ if ERRORLEVEL 1 (
     set RABBITMQ_DEFAULT_ALLOC_ARGS=
 )
 
-set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
-
 set RABBITMQ_LISTEN_ARG=
 if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    if not "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners [{\""!RABBITMQ_NODE_IP_ADDRESS!"\","!RABBITMQ_NODE_PORT!"}]
+      set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners [{"\"!RABBITMQ_NODE_IP_ADDRESS!\"","!RABBITMQ_NODE_PORT!"}]
    )
 )
 
@@ -201,8 +199,8 @@ if "!RABBITMQ_LOGS!" == "-" (
     set RABBITMQ_LAGER_HANDLER_UPGRADE=tty
 ) else (
     set SASL_ERROR_LOGGER=false
-    set RABBIT_LAGER_HANDLER=\""!RABBITMQ_LOGS:\=/!"\"
-    set RABBITMQ_LAGER_HANDLER_UPGRADE=\""!RABBITMQ_UPGRADE_LOG:\=/!"\"
+    set RABBIT_LAGER_HANDLER="\"!RABBITMQ_LOGS:\=/!\""
+    set RABBITMQ_LAGER_HANDLER_UPGRADE="\"!RABBITMQ_UPGRADE_LOG:\=/!\""
 )
 
 set RABBITMQ_START_RABBIT=
@@ -233,7 +231,7 @@ if "!ENV_OK!"=="false" (
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
--pa "!RABBITMQ_EBIN_ROOT!" ^
+-pa "!RABBITMQ_EBIN_ROOT:\=/!" ^
 -boot start_sasl ^
 !RABBITMQ_START_RABBIT! ^
 !RABBITMQ_CONFIG_ARG! ^
@@ -248,17 +246,17 @@ if "!ENV_OK!"=="false" (
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger !SASL_ERROR_LOGGER! ^
--rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
+-rabbit lager_log_root "\"!RABBITMQ_LOG_BASE:\=/!\"" ^
 -rabbit lager_default_file !RABBIT_LAGER_HANDLER! ^
 -rabbit lager_upgrade_file !RABBITMQ_LAGER_HANDLER_UPGRADE! ^
--rabbit feature_flags_file \""!RABBITMQ_FEATURE_FLAGS_FILE:\=/!"\" ^
--rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
--rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
--rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
+-rabbit feature_flags_file "\"!RABBITMQ_FEATURE_FLAGS_FILE:\=/!\"" ^
+-rabbit enabled_plugins_file "\"!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!\"" ^
+-rabbit plugins_dir "\"!RABBITMQ_PLUGINS_DIR:\=/!\"" ^
+-rabbit plugins_expand_dir "\"!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!\"" ^
+-mnesia dir "\"!RABBITMQ_MNESIA_DIR:\=/!\"" ^
 -os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
--mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !RABBITMQ_DIST_ARG! ^
 !STAR!
