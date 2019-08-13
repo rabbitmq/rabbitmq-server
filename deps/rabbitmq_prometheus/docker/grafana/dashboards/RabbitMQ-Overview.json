@@ -522,7 +522,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(\n  rate(rabbitmq_channel_messages_redelivered{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered_ack{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_get{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_get_ack{cluster=\"$cluster\"}[$__interval])\n)",
+          "expr": "sum(\n  rate(rabbitmq_channel_messages_redelivered_total{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered_total{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_messages_delivered_ack_total{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_get_total{cluster=\"$cluster\"}[$__interval]) +\n  rate(rabbitmq_channel_get_ack_total{cluster=\"$cluster\"}[$__interval])\n)",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2067,7 +2067,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_messages_published{cluster=\"$cluster\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_messages_published_total{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2449,7 +2449,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered{cluster=\"$cluster\"}[$__interval]) + rate(rabbitmq_channel_messages_delivered_ack{cluster=\"$cluster\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_delivered_total{cluster=\"$cluster\"}[$__interval]) + rate(rabbitmq_channel_messages_delivered_ack_total{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2581,7 +2581,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered{cluster=\"$cluster\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_delivered_total{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2677,7 +2677,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_get_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2818,7 +2818,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_redelivered{cluster=\"$cluster\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_redelivered_total{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2967,7 +2967,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered_ack{cluster=\"$cluster\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_delivered_ack_total{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3063,7 +3063,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_ack{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_get_ack_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3204,7 +3204,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_acked{cluster=\"$cluster\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_messages_acked_total{cluster=\"$cluster\"}[$__interval])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3301,7 +3301,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_empty{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_get_empty_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3587,7 +3587,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_declare{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_declare_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3736,7 +3736,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_create{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_create_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3885,7 +3885,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_delete{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_queue_delete_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4179,7 +4179,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_open{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_open_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4328,7 +4328,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_close{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_channel_close_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4622,7 +4622,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_connection_open{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_connection_open_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -4772,7 +4772,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_connection_close{cluster=\"$cluster\"}[1m])) by(node)",
+          "expr": "sum(rate(rabbitmq_connection_close_total{cluster=\"$cluster\"}[1m])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
