@@ -20,7 +20,11 @@ endif
 # The space before `~r//` is apparently required. Otherwise, Elixir
 # complains with "unexpected token "~"".
 
+ifeq ($(origin ELIXIR_LIB_DIR),undefined)
 ELIXIR_LIB_DIR := $(shell elixir -e 'IO.puts(Regex.replace( ~r/^([a-zA-Z]):/, to_string(:code.lib_dir(:elixir)), "/\\1"))')
+export ELIXIR_LIB_DIR
+endif
+
 ifeq ($(ERL_LIBS),)
 ERL_LIBS := $(ELIXIR_LIB_DIR)
 else
