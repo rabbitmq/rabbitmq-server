@@ -1,8 +1,12 @@
 # https://prometheus.io/docs/prometheus/latest/configuration/configuration/
 global:
-  scrape_interval:      5s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
-  scrape_timeout:       5s # Set the scrape timeout to 4 seconds. Default is 10 seconds.
-  # evaluation_interval: 30s # Evaluate rules every 30 seconds. The default is every 1 minute.
+  # This is higher than RabbitMQ's collect_statistics_interval,
+  # but still close enough to capture metrics that were refreshed within this interval
+  # This value determines the range that we use with rate():
+  # https://www.robustperception.io/what-range-should-i-use-with-rate
+  scrape_interval: 15s # Default is every 1 minute.
+  # scrape_timeout: 10s # Default is 10 seconds.
+  # evaluation_interval: 60s # Default is every 1 minute.
 
 # Alertmanager configuration
 alerting:

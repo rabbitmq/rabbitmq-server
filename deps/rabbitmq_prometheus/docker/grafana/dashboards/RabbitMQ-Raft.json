@@ -112,7 +112,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_log_commit_index{cluster=\"$cluster\", node=~\"$node\"}[$__interval])) by(node)",
+          "expr": "sum(rate(rabbitmq_raft_log_commit_index{cluster=\"$cluster\", node=~\"$node\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -449,7 +449,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_term{cluster=\"$cluster\", node=~\"$node\"}[30s])) by(node)",
+          "expr": "sum(rate(rabbitmq_raft_term{cluster=\"$cluster\", node=~\"$node\"}[60s])) by(node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -592,7 +592,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} -rabbitmq_raft_log_snapshot_index{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node) > 5000",
+          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} - rabbitmq_raft_log_snapshot_index{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node) > 5000",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -643,7 +643,7 @@
       }
     }
   ],
-  "refresh": "5s",
+  "refresh": "15s",
   "schemaVersion": 18,
   "style": "dark",
   "tags": [
@@ -668,7 +668,7 @@
         "name": "cluster",
         "options": [],
         "query": "label_values(rabbitmq_raft_term,cluster)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -693,7 +693,7 @@
         "name": "node",
         "options": [],
         "query": "label_values(rabbitmq_raft_term,node)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -711,8 +711,6 @@
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
-      "10s",
       "15s",
       "30s",
       "1m",
@@ -726,13 +724,11 @@
       "6h",
       "12h",
       "24h",
-      "2d",
-      "7d",
-      "30d"
+      "7d"
     ]
   },
   "timezone": "",
   "title": "RabbitMQ-Raft",
   "uid": "f1Mee9nZz",
-  "version": 2
+  "version": 1
 }

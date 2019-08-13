@@ -681,7 +681,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -812,7 +812,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -943,7 +943,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1072,7 +1072,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -1201,7 +1201,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[$__interval]) / rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[60s]) / rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -1332,7 +1332,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[$__interval]) / rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[60s]) / rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} <- {{peer}}",
@@ -2089,7 +2089,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[$__interval])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[60s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{node}} -> {{peer}}",
@@ -2139,7 +2139,7 @@
       }
     }
   ],
-  "refresh": "5s",
+  "refresh": "15s",
   "schemaVersion": 18,
   "style": "dark",
   "tags": [
@@ -2165,7 +2165,7 @@
         "name": "cluster",
         "options": [],
         "query": "label_values(erlang_vm_dist_proc_status,cluster)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -2192,7 +2192,7 @@
         "name": "erlang_vm_dist_proc_type",
         "options": [],
         "query": "label_values(erlang_vm_dist_proc_status,type)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -2205,13 +2205,11 @@
     ]
   },
   "time": {
-    "from": "now-10m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
-      "10s",
       "15s",
       "30s",
       "1m",
@@ -2225,13 +2223,11 @@
       "6h",
       "12h",
       "24h",
-      "2d",
-      "7d",
-      "30d"
+      "7d"
     ]
   },
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 7
+  "version": 1
 }
