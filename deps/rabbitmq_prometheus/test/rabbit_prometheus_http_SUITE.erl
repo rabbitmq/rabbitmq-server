@@ -175,7 +175,8 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_io_read_ops_total{", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_raft_term{", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers{", [{capture, none}])),
+    % There are no consumers on the queue, assert on description, not empty metric
+    ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers ", [{capture, none}])),
     %% Checking the first TOTALS metric
     ?assertEqual(match, re:run(Body, "rabbitmq_connections", [{capture, none}])).
 
