@@ -164,7 +164,7 @@ metrics_test(Config) ->
     %% Checking that we have the first metric from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers{", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_published{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_erlang_process_reductions_total{", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_process_reductions_total{", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_get_ack_total{", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_connection_opened_total{", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_bytes_total{", [{capture, none}])),

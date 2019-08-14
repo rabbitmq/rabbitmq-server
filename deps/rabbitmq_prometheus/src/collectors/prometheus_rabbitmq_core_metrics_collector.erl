@@ -55,7 +55,7 @@
     ]},
 
     {channel_process_metrics, [
-        {2, erlang_process_reductions_total, counter, "Total number of Erlang process reductions"}
+        {2, channel_process_reductions_total, counter, "Total number of channel process reductions"}
     ]},
 
     {channel_queue_metrics, [
@@ -81,7 +81,7 @@
     {connection_coarse_metrics, [
         {2, connection_incoming_bytes_total, counter, "Total number of bytes received on a connection"},
         {3, connection_outgoing_bytes_total, counter, "Total number of bytes sent on a connection"},
-        {4, erlang_process_reductions_total, counter, "Total number of Erlang process reductions"}
+        {4, connection_process_reductions_total, counter, "Total number of connection process reductions"}
     ]},
 
     {connection_metrics, [
@@ -153,7 +153,7 @@
         {2, queue_messages_ready, gauge, "Messages ready to be delivered to consumers"},
         {3, queue_messages_unacked, gauge, "Messages delivered to consumers but not yet acknowledged"},
         {4, queue_messages, gauge, "Sum of ready and unacknowledged messages - total queue depth"},
-        {5, erlang_process_reductions_total, counter, "Total number of Erlang process reductions"}
+        {5, queue_process_reductions_total, counter, "Total number of queue process reductions"}
     ]},
 
     {queue_metrics, [
