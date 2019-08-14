@@ -68,6 +68,7 @@ all_tests() -> [
     memory_test,
     ets_tables_memory_test,
     vhosts_test,
+    vhosts_description_test,
     vhosts_trace_test,
     users_test,
     users_legacy_administrator_test,
@@ -428,6 +429,29 @@ vhosts_test(Config) ->
     %% It's not there
     http_get(Config, "/vhosts/myvhost", ?NOT_FOUND),
     http_delete(Config, "/vhosts/myvhost", ?NOT_FOUND),
+
+    passed.
+
+vhosts_description_test(Config) ->
+    Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+            Config, virtual_host_metadata),
+
+    http_put(Config, "/vhosts/myvhost", [{description, <<"vhost description">>},
+                                         {tags, <<"tag1,tag2">>}], {group, '2xx'}),
+    Expected = case Ret of
+                   {skip, _} ->
+                       #{name => <<"myvhost">>};
+                   _ ->
+                       #{name => <<"myvhost">>,
+                         metadata => #{
+                           description => <<"vhost description">>,
+                           tags => [<<"tag1">>, <<"tag2">>]
+                          }}
+               end,
+    assert_item(Expected, http_get(Config, "/vhosts/myvhost")),
+
+    %% Delete it
+    http_delete(Config, "/vhosts/myvhost", {group, '2xx'}),
 
     passed.
 

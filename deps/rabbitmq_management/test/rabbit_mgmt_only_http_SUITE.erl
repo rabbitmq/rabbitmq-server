@@ -357,7 +357,7 @@ queues_test(Config) ->
     http_get(Config, "/queues/%2F/foo", ?NOT_FOUND),
     http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
     http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
-        
+
     rabbit_ct_broker_helpers:add_vhost(Config, <<"downvhost">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"downvhost">>),
     http_put(Config, "/queues/downvhost/foo", Good, {group, '2xx'}),
@@ -601,7 +601,7 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertLength("/connections", "user", 1),
     AssertLength("/connections", "monitor", 3),
     AssertLength("/connections", "guest", 3),
-    
+
     AssertDisabled("/channels"),
     AssertDisabled("/consumers"),
     AssertDisabled("/consumers/%2F"),
@@ -1438,7 +1438,7 @@ if_empty_unused_test(Config) ->
     passed.
 
 invalid_config_test(Config) ->
-    {Conn, Ch} = open_connection_and_channel(Config),
+    {Conn, _Ch} = open_connection_and_channel(Config),
 
     timer:sleep(1500),
 
@@ -1468,6 +1468,8 @@ invalid_config_test(Config) ->
     http_get(Config, "/channels", ?OK),
     http_get(Config, "/connections", ?OK),
     http_get(Config, "/exchanges", ?OK),
+
+    amqp_connection:close(Conn),
 
     passed.
 

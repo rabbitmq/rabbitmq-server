@@ -120,7 +120,9 @@ var ALL_COLUMNS =
                   ['connected_at', 'Connected at', false]]},
 
      'vhosts':
-     {'Overview': [['cluster-state',   'Cluster state',  false]],
+     {'Overview': [['cluster-state',   'Cluster state',  false],
+                   ['description',   'Description',  false],
+                   ['tags',   'Tags',  false]],
       'Messages': [['msgs-ready',      'Ready',          true],
                    ['msgs-unacked',    'Unacknowledged', true],
                    ['msgs-total',      'Total',          true]],

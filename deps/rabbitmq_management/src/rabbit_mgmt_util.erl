@@ -32,7 +32,8 @@
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, reply/3, responder_map/1,
          filter_vhost/3]).
--export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
+-export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2,
+         list_login_vhosts_names/2]).
 -export([filter_tracked_conn_list/3]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1, read_complete_body/1]).
@@ -40,7 +41,8 @@
          sort_list/2, destination_type/1, reply_list_or_paginate/3
          ]).
 -export([post_respond/1, columns/1, is_monitor/1]).
--export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
+-export([list_visible_vhosts/1, list_visible_vhosts_names/1,
+         b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/1, ceil/2]).
 -export([pagination_params/1,
          maybe_filter_by_keyword/4,
@@ -147,7 +149,7 @@ user_matches_vhost(ReqData, User) ->
         none      -> true;
         V         ->
             AuthzData = get_authz_data(ReqData),
-            lists:member(V, list_login_vhosts(User, AuthzData))
+            lists:member(V, list_login_vhosts_names(User, AuthzData))
     end.
 
 user_matches_vhost_visible(ReqData, User) ->
@@ -156,7 +158,7 @@ user_matches_vhost_visible(ReqData, User) ->
         none      -> true;
         V         ->
             AuthzData = get_authz_data(ReqData),
-            lists:member(V, list_visible_vhosts(User, AuthzData))
+            lists:member(V, list_visible_vhosts_names(User, AuthzData))
     end.
 
 get_authz_data(ReqData) ->
@@ -977,7 +979,7 @@ bad_request_exception(Code, Reason, ReqData, Context) ->
 
 all_or_one_vhost(ReqData, Fun) ->
     case vhost(ReqData) of
-        none      -> lists:append([Fun(V) || V <- rabbit_vhost:list()]);
+        none      -> lists:append([Fun(V) || V <- rabbit_vhost:list_names()]);
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
     end.
@@ -985,8 +987,8 @@ all_or_one_vhost(ReqData, Fun) ->
 filter_vhost(List, ReqData, Context) ->
     User = #user{tags = Tags} = Context#context.user,
     Fn   = case is_admin(Tags) of
-               true  -> fun list_visible_vhosts/2;
-               false -> fun list_login_vhosts/2
+               true  -> fun list_visible_vhosts_names/2;
+               false -> fun list_login_vhosts_names/2
            end,
     AuthzData = get_authz_data(ReqData),
     VHosts = Fn(User, AuthzData),
@@ -1063,18 +1065,31 @@ intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 %% existence of all vhosts, and can always see their contribution to
 %% global stats.
 
+list_visible_vhosts_names(User) ->
+    list_visible_vhosts(User, undefined).
+
+list_visible_vhosts_names(User, AuthzData) ->
+    list_visible_vhosts(User, AuthzData).
+
 list_visible_vhosts(User) ->
     list_visible_vhosts(User, undefined).
 
 list_visible_vhosts(User = #user{tags = Tags}, AuthzData) ->
     case is_monitor(Tags) of
-        true  -> rabbit_vhost:list();
-        false -> list_login_vhosts(User, AuthzData)
+        true  -> rabbit_vhost:list_names();
+        false -> list_login_vhosts_names(User, AuthzData)
     end.
 
-list_login_vhosts(User, AuthzData) ->
-    [V || V <- rabbit_vhost:list(),
+list_login_vhosts_names(User, AuthzData) ->
+    [V || V <- rabbit_vhost:list_names(),
           case catch rabbit_access_control:check_vhost_access(User, V, AuthzData, #{}) of
+              ok -> true;
+              _  -> false
+          end].
+
+list_login_vhosts(User, AuthzData) ->
+    [V || V <- rabbit_vhost:all(),
+          case catch rabbit_access_control:check_vhost_access(User, vhost:get_name(V), AuthzData, #{}) of
               ok -> true;
               _  -> false
           end].

@@ -26,6 +26,12 @@
 <% if (show_column('vhosts',           'cluster-state')) { %>
       <th>Cluster state</th>
 <% } %>
+<% if (show_column('vhosts',           'description')) { %>
+      <th>Description</th>
+<% } %>
+<% if (show_column('vhosts',           'tags')) { %>
+      <th>Tags</th>
+<% } %>
 <% if (!disable_stats) { %>
 <% if (show_column('vhosts',           'msgs-ready')) { %>
       <th><%= fmt_sort('Ready',        'messages_ready') %></th>
@@ -91,6 +97,12 @@
              </table>
          </td>
 <% } %>
+<% if (show_column('vhosts', 'description')) { %>
+   <td class="r"><%= fmt_string(vhost.description) %></td>
+<% } %>
+<% if (show_column('vhosts', 'tags')) { %>
+   <td class="r"><%= fmt_string(vhost.tags) %></td>
+<% } %>
 <% if (!disable_stats) { %>
 <% if (show_column('vhosts', 'msgs-ready')) { %>
    <td class="r"><%= fmt_num_thousands(vhost.messages_ready) %></td>
@@ -135,6 +147,14 @@
         <tr>
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Description:</label></th>
+          <td><input type="text" name="description"/></td>
+        </tr>
+        <tr>
+          <th><label>Tags:</label></th>
+          <td><input type="text" name="tags"/></td>
         </tr>
       </table>
       <input type="submit" value="Add virtual host"/>

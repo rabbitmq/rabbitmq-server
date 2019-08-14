@@ -55,7 +55,7 @@ limits(ReqData, Context) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
             User = Context#context.user,
-            VisibleVhosts = rabbit_mgmt_util:list_visible_vhosts(User),
+            VisibleVhosts = rabbit_mgmt_util:list_visible_vhosts_names(User),
             [ [{vhost, VHost}, {value, Value}]
               || {VHost, Value} <- rabbit_vhost_limit:list(),
                  lists:member(VHost, VisibleVhosts) ];

@@ -19,7 +19,7 @@
 -export([init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, id/1, put_vhost/3]).
+         delete_resource/2, id/1, put_vhost/5]).
 -export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -49,14 +49,15 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
+        Id = id(ReqData),
         case rabbit_mgmt_util:disable_stats(ReqData) of
             false ->
                 rabbit_mgmt_util:reply(
                   hd(rabbit_mgmt_db:augment_vhosts(
-                       [rabbit_vhost:info(id(ReqData))], rabbit_mgmt_util:range(ReqData))),
+                       [rabbit_vhost:info(Id)], rabbit_mgmt_util:range(ReqData))),
                   ReqData, Context);
             true ->
-                rabbit_mgmt_util:reply(rabbit_vhost:info(id(ReqData)), ReqData, Context)
+                rabbit_mgmt_util:reply(rabbit_vhost:info(Id), ReqData, Context)
         end
     catch
         {error, invalid_range_parameters, Reason} ->
@@ -67,16 +68,18 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
     Name = id(ReqData0),
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
-      fun(_, VHost, ReqData) ->
-              Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, VHost, undefined)),
-              case put_vhost(Name, Trace, Username) of
-                  ok                   ->
-                      {true, ReqData, Context};
-                  {error, timeout} = E ->
-                      rabbit_mgmt_util:internal_server_error(
-                        "Timed out while waiting for the vhost to initialise", E,
-                        ReqData0, Context)
-              end
+      fun(_, BodyMap, ReqData) ->
+        Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, BodyMap, undefined)),
+        Description = maps:get(description, BodyMap, <<"">>),
+        Tags = maps:get(tags, BodyMap, <<"">>),
+        case put_vhost(Name, Description, Tags, Trace, Username) of
+            ok ->
+                {true, ReqData, Context};
+            {error, timeout} = E ->
+                rabbit_mgmt_util:internal_server_error(
+                  "Timed out while waiting for the vhost to initialise", E,
+                  ReqData0, Context)
+        end
       end).
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
@@ -94,12 +97,22 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 id(ReqData) ->
-    rabbit_mgmt_util:id(vhost, ReqData).
+    case rabbit_mgmt_util:id(vhost, ReqData) of
+      [Value] -> Value;
+      Value   -> Value
+    end.
 
-put_vhost(Name, Trace, Username) ->
+put_vhost(Name, Description, Tags0, Trace, Username) ->
+    Tags = case Tags0 of
+      undefined   -> <<"">>;
+      null        -> <<"">>;
+      "undefined" -> <<"">>;
+      "null"      -> <<"">>;
+      Other       -> Other
+    end,
     Result = case rabbit_vhost:exists(Name) of
         true  -> ok;
-        false -> rabbit_vhost:add(Name, Username),
+        false -> rabbit_vhost:add(Name, Description, rabbit_vhost:parse_tags(Tags), Username),
                  %% wait for up to 45 seconds for the vhost to initialise
                  %% on all nodes
                  case rabbit_vhost:await_running_on_all_nodes(Name, 45000) of
