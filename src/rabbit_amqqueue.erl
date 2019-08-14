@@ -1074,9 +1074,10 @@ consumers(Q) when ?amqqueue_is_classic(Q) ->
     delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]});
 consumers(Q) when ?amqqueue_is_quorum(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, Result}, _} = ra:local_query(QPid,
-                                          fun rabbit_fifo:query_consumers/1),
-    maps:values(Result).
+    case ra:local_query(QPid, fun rabbit_fifo:query_consumers/1) of
+        {ok, {_, Result}, _} -> maps:values(Result);
+        _                    -> []
+    end.
 
 -spec consumer_info_keys() -> rabbit_types:info_keys().
 
