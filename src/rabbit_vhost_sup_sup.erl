@@ -263,7 +263,7 @@ vhost_restart_strategy() ->
     end.
 
 check() ->
-    VHosts = rabbit_vhost:list(),
+    VHosts = rabbit_vhost:list_names(),
     lists:filter(
       fun(V) ->
               case rabbit_vhost_sup_sup:get_vhost_sup(V) of

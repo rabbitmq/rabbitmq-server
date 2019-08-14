@@ -58,7 +58,7 @@ node_health_check(list_channels) ->
     end;
 
 node_health_check(list_queues) ->
-    health_check_queues(rabbit_vhost:list());
+    health_check_queues(rabbit_vhost:list_names());
 
 node_health_check(rabbit_node_monitor) ->
     case rabbit_node_monitor:partitions() of

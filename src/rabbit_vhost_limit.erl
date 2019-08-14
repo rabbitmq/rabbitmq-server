@@ -79,18 +79,18 @@ query_limits(VHost) ->
     end.
 
 
--spec list() -> [{rabbit_types:vhost(), rabbit_types:infos()}].
+-spec list() -> [{vhost:name(), rabbit_types:infos()}].
 list() ->
     query_limits('_').
 
--spec list(rabbit_types:vhost()) -> rabbit_types:infos().
+-spec list(vhost:name()) -> rabbit_types:infos().
 list(VHost) ->
     case query_limits(VHost) of
         []               -> [];
         [{VHost, Value}] -> Value
     end.
 
--spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
+-spec is_over_connection_limit(vhost:name()) -> {true, non_neg_integer()} | false.
 
 is_over_connection_limit(VirtualHost) ->
     case rabbit_vhost_limit:connection_limit(VirtualHost) of
@@ -112,7 +112,7 @@ is_over_connection_limit(VirtualHost) ->
         {ok, _Limit}                                         -> false
     end.
 
--spec would_exceed_queue_limit(non_neg_integer(), rabbit_types:vhost()) ->
+-spec would_exceed_queue_limit(non_neg_integer(), vhost:name()) ->
     {true, non_neg_integer(), non_neg_integer()} | false.
 
 would_exceed_queue_limit(AdditionalCount, VirtualHost) ->
@@ -140,7 +140,7 @@ would_exceed_queue_limit(AdditionalCount, VirtualHost) ->
             false
     end.
 
--spec is_over_queue_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
+-spec is_over_queue_limit(vhost:name()) -> {true, non_neg_integer()} | false.
 
 is_over_queue_limit(VirtualHost) ->
     case would_exceed_queue_limit(1, VirtualHost) of
