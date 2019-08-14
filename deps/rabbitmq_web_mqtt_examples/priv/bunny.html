@@ -1,7 +1,6 @@
 <!doctype html>
 <html><head>
-    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-    <script src="//cdn.jsdelivr.net/sockjs/1.0.3/sockjs.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
     <script src="mqttws31.js" type="text/javascript"></script>
 
     <style>
@@ -157,7 +156,7 @@ $('#first input').focus(function() {
         $(this).val("");
     }
 });
- 
+
 send = function(data) {
   message = new Paho.MQTT.Message(data);
   message.destinationName = "/topic/bunny";
