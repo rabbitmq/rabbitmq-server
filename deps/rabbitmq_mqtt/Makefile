@@ -39,12 +39,6 @@ dep_emqttc = git https://github.com/rabbitmq/emqttc.git remove-logging
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-ELIXIR_LIB_DIR = $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')
-ifeq ($(ERL_LIBS),)
-	ERL_LIBS = $(ELIXIR_LIB_DIR)
-else
-	ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
-endif
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
