@@ -209,7 +209,7 @@ build_info() ->
     {ok, PrometheusClientVersion} = application:get_key(prometheus, vsn),
     {
         build_info,
-        boolean,
+        untyped,
         "RabbitMQ & Erlang/OTP version info",
         [{
             [
@@ -218,21 +218,21 @@ build_info() ->
                 {prometheus_client_version, PrometheusClientVersion},
                 {erlang_version, rabbit_misc:otp_release()}
             ],
-            true
+            1
         }]
     }.
 
 identity_info() ->
     {
         identity_info,
-        boolean,
+        untyped,
         "Node & cluster identity info",
         [{
             [
                 {node, node()},
                 {cluster, rabbit_nodes:cluster_name()}
             ],
-            true
+            1
         }]
     }.
 
