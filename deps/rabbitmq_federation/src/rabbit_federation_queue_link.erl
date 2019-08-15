@@ -68,7 +68,9 @@ init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     QName = amqqueue:get_name(Queue),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
-            UParams = rabbit_federation_upstream:to_params(Upstream, Queue),
+            DeobfuscatedUpstream = rabbit_federation_util:deobfuscate_upstream(Upstream),
+            DeobfuscatedUParams = rabbit_federation_upstream:to_params(DeobfuscatedUpstream, Queue),
+            UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
             rabbit_federation_status:report(Upstream, UParams, QName, starting),
             join(rabbit_federation_queues),
             join({rabbit_federation_queue, QName}),
@@ -76,8 +78,8 @@ init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
             rabbit_amqqueue:notify_decorators(Q),
             {ok, #not_started{queue           = Queue,
                               run             = false,
-                              upstream        = rabbit_federation_utils:obfuscate_upstream(Upstream),
-                              upstream_params = rabbit_federation_utils:obfuscate_upstream_params(UParams)}};
+                              upstream        = Upstream,
+                              upstream_params = UParams}};
         {error, not_found} ->
             rabbit_federation_link_util:log_warning(QName, "not found, stopping link~n", []),
             {stop, gone}
@@ -165,7 +167,7 @@ handle_info(#'basic.cancel'{},
                            upstream_params = UParams}) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:connection_error(
-      local, basic_cancel, rabbit_federation_utils:deobfuscate_upstream(Upstream), rabbit_federation_utils:deobfuscate_upstream_params(UParams), QName, State);
+      local, basic_cancel, Upstream, UParams, QName, State);
 
 handle_info({'DOWN', _Ref, process, Pid, Reason},
             State = #state{dch             = DCh,

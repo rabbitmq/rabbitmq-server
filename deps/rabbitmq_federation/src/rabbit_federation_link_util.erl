@@ -36,8 +36,12 @@
 
 %%----------------------------------------------------------------------------
 
-start_conn_ch(Fun, Upstream, UParams,
+start_conn_ch(Fun, OUpstream, OUParams,
               XorQName = #resource{virtual_host = DownVHost}, State) ->
+
+    Upstream = rabbit_federation_util:deobfuscate_upstream(OUpstream),
+    UParams = rabbit_federation_util:deobfuscate_upstream_params(OUParams),
+
     ConnName = get_connection_name(Upstream, UParams),
     case open_monitor(#amqp_params_direct{virtual_host = DownVHost}, ConnName) of
         {ok, DConn, DCh} ->
@@ -65,7 +69,7 @@ start_conn_ch(Fun, Upstream, UParams,
                              UParams)]),
                         Name = pget(name, amqp_connection:info(DConn, [name])),
                         rabbit_federation_status:report(
-                          Upstream, UParams, XorQName, {running, Name}),
+                          OUpstream, OUParams, XorQName, {running, Name}),
                         R
                     catch exit:E ->
                             %% terminate/2 will not get this, as we
@@ -73,16 +77,16 @@ start_conn_ch(Fun, Upstream, UParams,
                             ensure_connection_closed(DConn),
                             ensure_connection_closed(Conn),
                             connection_error(remote_start, E,
-                                             Upstream, UParams, XorQName, State)
+                                             OUpstream, OUParams, XorQName, State)
                     end;
                 E ->
                     ensure_connection_closed(DConn),
                     connection_error(remote_start, E,
-                                     Upstream, UParams, XorQName, State)
+                                     OUpstream, OUParams, XorQName, State)
             end;
         E ->
             connection_error(local_start, E,
-                             Upstream, UParams, XorQName, State)
+                             OUpstream, OUParams, XorQName, State)
     end.
 
 get_connection_name(#upstream{name = UpstreamName},
