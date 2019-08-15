@@ -42,7 +42,7 @@ defmodule AddVhostCommandTest do
   test "validate: one argument passes validation" do
     assert @command.validate(["new-vhost"], %{}) == :ok
     assert @command.validate(["new-vhost"], %{description: "Used by team A"}) == :ok
-    assert @command.validate(["new-vhost"], %{description: "Used by team A for QA purposes", tags: "qa team-a"}) == :ok
+    assert @command.validate(["new-vhost"], %{description: "Used by team A for QA purposes", tags: "qa,team-a"}) == :ok
   end
 
   @tag vhost: @vhost

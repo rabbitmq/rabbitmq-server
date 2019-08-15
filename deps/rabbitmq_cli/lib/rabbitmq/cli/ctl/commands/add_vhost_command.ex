@@ -37,13 +37,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "add_vhost <vhost> [--description <description> --tags \"<tag1> <tag2> <...>\"]"
+  def usage, do: "add_vhost <vhost> [--description <description> --tags \"<tag1>,<tag2>,<...>\"]"
 
   def usage_additional() do
     [
       ["<vhost>", "Virtual host name"],
       ["--description <descriptioon>", "Virtual host description"],
-      ["--tags <tags>", "Space separated list of tags"]
+      ["--tags <tags>", "Coommand separated list of tags"]
     ]
   end
 
