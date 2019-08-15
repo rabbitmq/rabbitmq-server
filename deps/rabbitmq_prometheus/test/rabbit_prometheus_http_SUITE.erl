@@ -57,9 +57,9 @@ init_per_group(config_path, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_path, Config1, [{prometheus_path, "/bunnieshop"}]);
 init_per_group(config_port, Config0) ->
-    PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15674}]}]},
+    PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15772}]}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
-    init_per_group(config_port, Config1, [{prometheus_port, 15674}]);
+    init_per_group(config_port, Config1, [{prometheus_port, 15772}]);
 init_per_group(with_metrics, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
         Config0,
