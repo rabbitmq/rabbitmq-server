@@ -18,21 +18,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
+  def switches(), do: [description: :string,
+                       tags: :string]
+  def aliases(), do: [d: :description]
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{description: "", tags: ""}, opts)}
+  end
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
+  def run([vhost], %{node: node_name, description: desc, tags: tags}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, desc, tags, Helpers.cli_acting_user()])
+  end
   def run([vhost], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
   end
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "add_vhost <vhost>"
+  def usage, do: "add_vhost <vhost> [--description <description> --tags \"<tag1> <tag2> <...>\"]"
 
   def usage_additional() do
     [
-      ["<vhost>", "Virtual host name"]
+      ["<vhost>", "Virtual host name"],
+      ["--description <descriptioon>", "Virtual host description"],
+      ["--tags <tags>", "Space separated list of tags"]
     ]
   end
 
