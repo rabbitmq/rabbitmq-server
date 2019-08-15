@@ -200,7 +200,44 @@ collect_mf(_Registry, Callback) ->
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
      end || {Table, Name, Type, Help} <- ?TOTALS],
+    add_metric_family(build_info(), Callback),
+    add_metric_family(identity_info(), Callback),
     ok.
+
+build_info() ->
+    {ok, PrometheusPluginVersion} = application:get_key(rabbitmq_prometheus, vsn),
+    {ok, PrometheusClientVersion} = application:get_key(prometheus, vsn),
+    {
+        build_info,
+        boolean,
+        "RabbitMQ & Erlang/OTP version info",
+        [{
+            [
+                {rabbitmq_version, rabbit_misc:version()},
+                {prometheus_plugin_version, PrometheusPluginVersion},
+                {prometheus_client_version, PrometheusClientVersion},
+                {erlang_version, rabbit_misc:otp_release()}
+            ],
+            true
+        }]
+    }.
+
+identity_info() ->
+    {
+        identity_info,
+        boolean,
+        "Node & cluster identity info",
+        [{
+            [
+                {node, node()},
+                {cluster, rabbit_nodes:cluster_name()}
+            ],
+            true
+        }]
+    }.
+
+add_metric_family({Name, Type, Help, Metrics}, Callback) ->
+  Callback(create_mf(?METRIC_NAME(Name), Help, Type, Metrics)).
 
 mf(Callback, Contents, Data) ->
     [begin
