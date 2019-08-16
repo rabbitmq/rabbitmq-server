@@ -57,7 +57,8 @@ groups() ->
             stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists,
             stop_stats_timer_on_hibernation,
             stop_stats_timer_on_backoff,
-            stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout
+            stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout,
+            gen_server2_stop
         ]}
     ].
 
@@ -235,6 +236,13 @@ stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout(_) ->
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
     5 = StatsCount5.
+
+gen_server2_stop(_) ->
+    {ok, TestServer} = gen_server2_test_server:start_link(),
+    ok = gen_server2:stop(TestServer),
+    false = erlang:is_process_alive(TestServer),
+    {'EXIT',noproc} = (catch gen_server:stop(TestServer)),
+    ok.
 
 parse_mem_limit_relative_exactly_max(_Config) ->
     MemLimit = vm_memory_monitor:parse_mem_limit(1.0),
