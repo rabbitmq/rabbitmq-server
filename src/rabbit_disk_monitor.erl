@@ -292,6 +292,6 @@ enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
             rabbit_log:info("Free disk space monitor encountered an error "
                             "(e.g. failed to parse output from OS tools): ~p, retries left: ~s~n",
                             [Err, Retries]),
-            timer:send_after(Interval, self(), try_enable),
+            erlang:send_after(Interval, self(), try_enable),
             State#state{enabled = false}
     end.
