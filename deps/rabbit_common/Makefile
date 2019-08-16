@@ -15,8 +15,10 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]}
 endef
 
-LOCAL_DEPS = compiler syntax_tools xmerl
-DEPS = lager jsx ranch recon
+LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
+DEPS = lager jsx ranch recon credentials_obfuscation
+
+dep_credentials_obfuscation = git https://github.com/rabbitmq/credentials-obfuscation.git master
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
