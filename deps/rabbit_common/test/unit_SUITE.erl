@@ -95,7 +95,7 @@ stats_timer_is_working(_) ->
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
-    4 = StatsCount.
+    ?assertEqual(4, StatsCount).
 
 stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists(_) ->
     rabbit_core_metrics:init(),
@@ -107,7 +107,7 @@ stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists(_) ->
     timer:sleep(StatsInterval * 4),
 
     %% No messages in the buffer
-    0 = rabbit_core_metrics:get_gen_server2_stats(TestServer),
+    ?assertEqual(0, rabbit_core_metrics:get_gen_server2_stats(TestServer)),
 
     %% Sleep to accumulate messages
     gen_server2:cast(TestServer, {sleep, StatsInterval + 100}),
@@ -119,7 +119,7 @@ stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists(_) ->
     gen_server2:cast(TestServer, ignore),
 
     timer:sleep(StatsInterval + 150),
-    4 = rabbit_core_metrics:get_gen_server2_stats(TestServer).
+    ?assertEqual(4, rabbit_core_metrics:get_gen_server2_stats(TestServer)).
 
 stop_stats_timer_on_hibernation(_) ->
     StatsInterval = 300,
@@ -128,18 +128,18 @@ stop_stats_timer_on_hibernation(_) ->
     %% No backoff configured
     {ok, TestServer} = gen_server2_test_server:start_link(count_stats),
 
-    ok = gen_server2:call(TestServer, hibernate),
+    ?assertEqual(ok, gen_server2:call(TestServer, hibernate)),
 
     timer:sleep(50),
 
-    {current_function,{erlang,hibernate,3}} =
-        erlang:process_info(TestServer, current_function),
+    ?assertEqual({current_function,{erlang, hibernate, 3}},
+                 erlang:process_info(TestServer, current_function)),
 
     timer:sleep(StatsInterval * 6 + 100),
     StatsCount1 = gen_server2_test_server:stats_count(TestServer),
     %% The timer was stopped. No stats collected
     %% The count is 1 because hibernation emits stats
-    1 = StatsCount1,
+    ?assertEqual(1, StatsCount1),
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
@@ -148,9 +148,8 @@ stop_stats_timer_on_hibernation(_) ->
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    5 = StatsCount5,
-
-    ok = gen_server2:call(TestServer, hibernate),
+    ?assertEqual(5, StatsCount5),
+    ?assertEqual(ok, gen_server2:call(TestServer, hibernate)),
 
     timer:sleep(50),
 
@@ -183,26 +182,26 @@ stop_stats_timer_on_backoff(_) ->
     ok = gen_server2:call(TestServer, hibernate),
 
     timer:sleep(Backoff div 2 + 50),
-    {current_function,{gen_server2,process_next_msg,1}} =
-        erlang:process_info(TestServer, current_function),
+    ?assertEqual({current_function,{gen_server2,process_next_msg,1}},
+                 erlang:process_info(TestServer, current_function)),
 
     %% Hibernate after backoff time after last message
     timer:sleep(Backoff div 2),
-    {current_function,{erlang,hibernate,3}} =
-        erlang:process_info(TestServer, current_function),
+    ?assertEqual({current_function,{erlang,hibernate,3}},
+                 erlang:process_info(TestServer, current_function)),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
     %% The timer was stopped. No stats collected
     %% The count is 1 because hibernation emits stats
-    1 = StatsCount,
+    ?assertEqual(1, StatsCount),
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    5 = StatsCount5.
+    ?assertEqual(5, StatsCount5).
 
 stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout(_) ->
     StatsInterval = 300,
@@ -214,34 +213,34 @@ stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout(_) ->
             count_stats,
             {backoff, Backoff, Backoff, 10000}),
 
-    ok = gen_server2:call(TestServer, hibernate),
+    ?assertEqual(ok, gen_server2:call(TestServer, hibernate)),
 
-    {current_function,{gen_server2,process_next_msg,1}} =
-        erlang:process_info(TestServer, current_function),
+    ?assertEqual({current_function, {gen_server2, process_next_msg, 1}},
+        erlang:process_info(TestServer, current_function)),
 
     timer:sleep(Backoff + 50),
 
-    {current_function,{erlang,hibernate,3}} =
-        erlang:process_info(TestServer, current_function),
+    ?assertEqual({current_function, {erlang, hibernate, 3}},
+                 erlang:process_info(TestServer, current_function)),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
     %% The timer was stopped. No stats collected
     %% The count is 1 because hibernation emits stats
-    1 = StatsCount,
+    ?assertEqual(1, StatsCount),
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    5 = StatsCount5.
+    ?assertEqual(5, StatsCount5).
 
 gen_server2_stop(_) ->
     {ok, TestServer} = gen_server2_test_server:start_link(),
-    ok = gen_server2:stop(TestServer),
-    false = erlang:is_process_alive(TestServer),
-    {'EXIT',noproc} = (catch gen_server:stop(TestServer)),
+    ?assertEqual(ok, gen_server2:stop(TestServer)),
+    ?assertEqual(false, erlang:is_process_alive(TestServer)),
+    ?assertEqual({'EXIT', noproc}, (catch gen_server:stop(TestServer))),
     ok.
 
 parse_mem_limit_relative_exactly_max(_Config) ->
