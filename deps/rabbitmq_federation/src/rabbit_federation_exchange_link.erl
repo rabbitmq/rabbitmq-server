@@ -75,7 +75,9 @@ init({Upstream, XName}) ->
     %% before we got here. So check if we still exist.
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            UParams = rabbit_federation_upstream:to_params(Upstream, X),
+            DeobfuscatedUpstream = rabbit_federation_util:deobfuscate_upstream(Upstream),
+            DeobfuscatedUParams = rabbit_federation_upstream:to_params(DeobfuscatedUpstream, X),
+            UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
             rabbit_federation_status:report(Upstream, UParams, XName, starting),
             join(rabbit_federation_exchanges),
             join({rabbit_federation_exchange, XName}),
@@ -527,7 +529,7 @@ ensure_internal_exchange(IntXNameBin,
                                 upstream_params = UParams,
                                 connection      = Conn,
                                 channel         = Ch}) ->
-    #upstream_params{params = Params} = UParams,
+    #upstream_params{params = Params} = rabbit_federation_util:deobfuscate_upstream_params(UParams),
     delete_upstream_exchange(Conn, IntXNameBin),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                durable     = true,
@@ -550,7 +552,8 @@ check_internal_exchange(IntXNameBin,
                          #state{upstream        = #upstream{max_hops = MaxHops},
                                 upstream_params = UParams,
                                 downstream_exchange = XName}) ->
-    #upstream_params{params = Params} = UParams,
+    #upstream_params{params = Params} =
+        rabbit_federation_util:deobfuscate_upstream_params(UParams),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                passive     = true,
                                durable     = true,
