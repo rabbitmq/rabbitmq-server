@@ -27,14 +27,15 @@ plain(none, _, init) ->
     {<<"PLAIN">>, []};
 plain(none, #amqp_params_network{username = Username,
                                  password = Password}, _State) ->
-    {<<0, Username/binary, 0, Password/binary>>, _State}.
+    DecryptedPassword = credentials_obfuscation:decrypt(Password),
+    {<<0, Username/binary, 0, DecryptedPassword/binary>>, _State}.
 
 amqplain(none, _, init) ->
     {<<"AMQPLAIN">>, []};
 amqplain(none, #amqp_params_network{username = Username,
                                     password = Password}, _State) ->
     LoginTable = [{<<"LOGIN">>,    longstr, Username},
-                  {<<"PASSWORD">>, longstr, Password}],
+                  {<<"PASSWORD">>, longstr, credentials_obfuscation:decrypt(Password)}],
     {rabbit_binary_generator:generate_table(LoginTable), _State}.
 
 external(none, _, init) ->
@@ -48,4 +49,5 @@ crdemo(none, #amqp_params_network{username = Username}, 0) ->
     {Username, 1};
 crdemo(<<"Please tell me your password">>,
        #amqp_params_network{password = Password}, 1) ->
-    {<<"My password is ", Password/binary>>, 2}.
+    DecryptedPassword = credentials_obfuscation:decrypt(Password),
+    {<<"My password is ", DecryptedPassword/binary>>, 2}.
