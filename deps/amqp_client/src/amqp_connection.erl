@@ -161,14 +161,21 @@ start(AmqpParams) ->
 %% user specified connection name.
 start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     ensure_started(),
-    AmqpParams1 =
+    AmqpParams0 =
         case AmqpParams of
+            #amqp_params_direct{password = Password} ->
+                AmqpParams#amqp_params_direct{password = credentials_obfuscation:encrypt(Password)};
+            #amqp_params_network{password = Password} ->
+                AmqpParams#amqp_params_network{password = credentials_obfuscation:encrypt(Password)}
+        end,
+    AmqpParams1 =
+        case AmqpParams0 of
             #amqp_params_network{port = undefined, ssl_options = none} ->
-                AmqpParams#amqp_params_network{port = ?PROTOCOL_PORT};
+                AmqpParams0#amqp_params_network{port = ?PROTOCOL_PORT};
             #amqp_params_network{port = undefined, ssl_options = _} ->
-                AmqpParams#amqp_params_network{port = ?PROTOCOL_SSL_PORT};
+                AmqpParams0#amqp_params_network{port = ?PROTOCOL_SSL_PORT};
             _ ->
-                AmqpParams
+                AmqpParams0
         end,
     AmqpParams2 = set_connection_name(ConnName, AmqpParams1),
     AmqpParams3 = amqp_ssl:maybe_enhance_ssl_options(AmqpParams2),
@@ -197,7 +204,7 @@ set_connection_name(ConnName,
 %% application which is making this call.
 ensure_started() ->
     [ensure_started(App) || App <- [syntax_tools, compiler, xmerl,
-                                    rabbit_common, amqp_client]].
+                                    rabbit_common, amqp_client, credentials_obfuscation]].
 
 ensure_started(App) ->
     case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
