@@ -76,7 +76,7 @@ restart(Sup, Upstream) ->
     ok.
 
 start(Sup, Upstream, XorQ) ->
-    {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, XorQ)),
+    {ok, _Pid} = supervisor2:start_child(Sup, spec(rabbit_federation_util:obfuscate_upstream(Upstream), XorQ)),
     ok.
 
 stop(Sup, Upstream, XorQ) ->
@@ -101,7 +101,8 @@ init(XorQ) ->
     {ok, {{one_for_one, 1, ?MAX_WAIT}, specs(XorQ)}}.
 
 specs(XorQ) ->
-    [spec(Upstream, XorQ) || Upstream <- rabbit_federation_upstream:for(XorQ)].
+    [spec(rabbit_federation_util:obfuscate_upstream(Upstream), XorQ)
+     || Upstream <- rabbit_federation_upstream:for(XorQ)].
 
 spec(U = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {U, {rabbit_federation_exchange_link, start_link, [{U, XName}]},

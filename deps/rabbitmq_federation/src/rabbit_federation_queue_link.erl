@@ -66,7 +66,9 @@ federation_up() ->
 init({Upstream, Queue = #amqqueue{name = QName}}) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
-            UParams = rabbit_federation_upstream:to_params(Upstream, Queue),
+            DeobfuscatedUpstream = rabbit_federation_util:deobfuscate_upstream(Upstream),
+            DeobfuscatedUParams = rabbit_federation_upstream:to_params(DeobfuscatedUpstream, Queue),
+            UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
             rabbit_federation_status:report(Upstream, UParams, QName, starting),
             join(rabbit_federation_queues),
             join({rabbit_federation_queue, QName}),

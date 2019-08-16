@@ -74,7 +74,8 @@ handle_call({remove, Upstream, XorQName}, _From, State) ->
 
 handle_call({lookup, Id}, _From, State) ->
     Link = case ets:match_object(?ETS_NAME, match_id(Id)) of
-               [Entry] -> [{key, Entry#entry.key},
+               [Entry] ->
+                   [{key, Entry#entry.key},
                            {uri, Entry#entry.uri},
                            {status, Entry#entry.status},
                            {timestamp, Entry#entry.timestamp},
