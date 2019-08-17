@@ -102,14 +102,17 @@ handle_call({fetch, FetchFun, FunArgs}, _From,
             #state{data = CachedData, args = Args,
                    multiplier = Mult, timer_ref = Ref} = State) when
      CachedData =:= none orelse Args =/= FunArgs ->
-    _ = timer:cancel(Ref),
+    case Ref of
+        R when is_reference(R) -> _ = erlang:cancel_timer(R);
+        _ -> ok
+    end,
 
     try timer:tc(FetchFun, FunArgs) of
         {Time, Data} ->
             case trunc(Time / 1000 * Mult) of
                 0 -> {reply, {ok, Data}, ?RESET_STATE(State)}; % no need to cache that
                 T ->
-                    {ok, TimerRef} = timer:send_after(T, self(), purge_cache),
+                    TimerRef = erlang:send_after(T, self(), purge_cache),
                     {reply, {ok, Data}, State#state{data = Data,
                                                     timer_ref = TimerRef,
                                                     args = FunArgs}}
