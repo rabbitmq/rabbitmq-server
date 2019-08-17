@@ -285,9 +285,9 @@ defer_heartbeat_timer(State =
   when is_number(T) andalso T > 0 ->
     _ = case TRef of
             undefined -> ok;
-            _ -> {ok, cancel} = timer:cancel(TRef)
+            _ -> _ = erlang:cancel_timer(TRef)
         end,
-    {ok, NewTRef} = timer:send_after(T * 2, self(), heartbeat),
+    NewTRef = erlang:send_after(T * 2, self(), heartbeat),
     State#state{heartbeat_timer_ref = NewTRef};
 defer_heartbeat_timer(State) -> State.
 
