@@ -50,14 +50,17 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
         undefined -> Sock;
         _         -> ProxySocket
     end,
-    {ok, ChannelPid} =
-        supervisor2:start_child(
-          SupPid,
-          {channel, {rabbit_amqp1_0_session_process, start_link,
-                     [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                       adapter_info(SocketForAdapterInfo), Collector}]},
-           intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}),
-    {ok, SupPid, ChannelPid}.
+    case supervisor2:start_child(
+           SupPid,
+           {channel, {rabbit_amqp1_0_session_process, start_link,
+                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
+                        adapter_info(SocketForAdapterInfo), Collector}]},
+            intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}) of
+        {ok, ChannelPid} ->
+            {ok, SupPid, ChannelPid};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%----------------------------------------------------------------------------
 
