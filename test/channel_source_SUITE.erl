@@ -103,9 +103,6 @@ network_arbitrary_channel_source1(Config) ->
                  rabbit_ct_broker_helpers:user(<<"guest">>), <<"/">>, [],
                  Collector, Limiter),
     _ = rabbit_channel:source(Ch, ?MODULE),
-    [{amqp_params, #amqp_params_network{username = <<"guest">>,
-        password = <<"guest">>, host = "localhost", virtual_host = <<"/">>}}] =
-            rabbit_amqp_connection:amqp_params(Conn, 1000),
     [{source, ?MODULE}] = rabbit_channel:info(Ch, [source]),
     [exit(P, normal) || P <- [Writer, Limiter, Collector, Ch]],
     amqp_connection:close(Conn),
