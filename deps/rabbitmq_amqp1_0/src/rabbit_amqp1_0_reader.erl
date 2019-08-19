@@ -687,21 +687,27 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                                     hostname  = Hostname,
                                     user      = User},
         proxy_socket = ProxySocket} = State,
-    {ok, ChSupPid, ChFrPid} =
-        %% Note: the equivalent, start_channel is in channel_sup_sup
-        rabbit_amqp1_0_session_sup_sup:start_session(
-          %% NB subtract fixed frame header size
-          ChanSupSup, {amqp10_framing, Sock, Channel,
-                       case FrameMax of
-                           unlimited -> unlimited;
-                           _         -> FrameMax - 8
-                       end,
-                       self(), User, vhost(Hostname), Collector, ProxySocket}),
-    erlang:monitor(process, ChFrPid),
-    put({channel, Channel}, {ch_fr_pid, ChFrPid}),
-    put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
-    put({ch_fr_pid, ChFrPid}, {channel, Channel}),
-    ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame).
+    %% Note: the equivalent, start_channel is in channel_sup_sup
+    case rabbit_amqp1_0_session_sup_sup:start_session(
+           %% NB subtract fixed frame header size
+           ChanSupSup, {amqp10_framing, Sock, Channel,
+                        case FrameMax of
+                            unlimited -> unlimited;
+                            _         -> FrameMax - 8
+                        end,
+                        self(), User, vhost(Hostname), Collector, ProxySocket}) of
+        {ok, ChSupPid, ChFrPid} ->
+            erlang:monitor(process, ChFrPid),
+            put({channel, Channel}, {ch_fr_pid, ChFrPid}),
+            put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
+            put({ch_fr_pid, ChFrPid}, {channel, Channel}),
+            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
+        {error, {not_allowed, _}} ->
+            %% Let's skip the supervisor trace, this is an expected error
+            throw({error, {not_allowed, User#user.username}});
+        {error, _} = E ->
+            throw(E)
+    end.
 
 vhost({utf8, <<"vhost:", VHost/binary>>}) ->
     VHost;

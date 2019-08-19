@@ -45,6 +45,7 @@ groups() ->
           invalid_routes,
           auth_failure,
           access_failure,
+          access_failure_not_allowed,
           access_failure_send
         ]},
       {java, [], [
@@ -203,6 +204,11 @@ access_failure(Config) ->
                                              <<"^banana.*">>  %% read
                                             ),
     run(Config, [ {dotnet, "access_failure"} ]).
+
+access_failure_not_allowed(Config) ->
+    User = <<"access_failure_not_allowed">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
+    run(Config, [ {dotnet, "access_failure_not_allowed"} ]).
 
 access_failure_send(Config) ->
     User = <<"access_failure_send">>,
