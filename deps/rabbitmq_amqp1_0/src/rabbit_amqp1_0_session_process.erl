@@ -49,20 +49,32 @@ info(Pid) ->
 init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
       FrameMax, AdapterInfo, _Collector}) ->
     process_flag(trap_exit, true),
-    {ok, Conn} = amqp_connection:start(
-                   #amqp_params_direct{username     = Username,
-                                       virtual_host = VHost,
-                                       adapter_info = AdapterInfo}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    monitor(process, Ch),
-    {ok, #state{backing_connection = Conn,
-                backing_channel    = Ch,
-                reader_pid         = ReaderPid,
-                writer_pid         = WriterPid,
-                frame_max          = FrameMax,
-                buffer             = queue:new(),
-                session            = rabbit_amqp1_0_session:init(Channel)
-               }}.
+    case amqp_connection:start(
+           #amqp_params_direct{username     = Username,
+                               virtual_host = VHost,
+                               adapter_info = AdapterInfo}) of
+        {ok, Conn}  ->
+            case amqp_connection:open_channel(Conn) of
+                {ok, Ch} ->
+                    monitor(process, Ch),
+                    {ok, #state{backing_connection = Conn,
+                                backing_channel    = Ch,
+                                reader_pid         = ReaderPid,
+                                writer_pid         = WriterPid,
+                                frame_max          = FrameMax,
+                                buffer             = queue:new(),
+                                session            = rabbit_amqp1_0_session:init(Channel)
+                               }};
+                {error, Reason} ->
+                    rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                                       [ReaderPid, Reason]),
+                    {stop, Reason}
+            end;
+        {error, Reason} ->
+            rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                               [ReaderPid, Reason]),
+            {stop, Reason}
+    end.
 
 terminate(_Reason, _State = #state{backing_connection = Conn}) ->
     rabbit_misc:with_exit_handler(fun () -> ok end,
