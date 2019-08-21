@@ -39,6 +39,7 @@ groups() ->
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
+                       test_successful_connection_with_keycloak_token,
                        test_successful_token_refresh
                       ]},
      {unhappy_path, [], [
@@ -143,6 +144,14 @@ generate_valid_token(Config, Scopes, Audience) ->
     end,
     ?UTIL_MOD:sign_token_hs(Token, Jwk).
 
+generate_valid_token_with_extra_fields(Config, ExtraFields) ->
+    Jwk = case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
+              undefined -> ?UTIL_MOD:fixture_jwk();
+              Value     -> Value
+          end,
+    Token = maps:merge(?UTIL_MOD:fixture_token_with_scopes([]), ExtraFields),
+    ?UTIL_MOD:sign_token_hs(Token, Jwk).
+
 generate_expired_token(Config) ->
     generate_expired_token(Config, ?UTIL_MOD:full_permission_scopes()).
 
@@ -195,6 +204,30 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
         Config,
         <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
         <<"hare rabbitmq">>
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_keycloak_token(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"authorization">> => #{<<"permissions">> =>
+                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+                   <<"rsname">> => <<"allvhost">>,
+                   <<"scopes">> => [<<"rabbitmq.configure:*/*">>]},
+                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+                   <<"rsname">> => <<"vhost1">>,
+                   <<"scopes">> => [<<"rabbitmq.write:*/*">>]},
+                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+                   <<"rsname">> => <<"Default Resource">>,
+                   <<"scopes">> => [<<"rabbitmq.read:*/*">>]},
+                   %% this one won't be used because of the resource id
+                 #{<<"rsid">> => <<"bee8fac6-c3ec-11e9-aa8c-2a2ae2dbcce4">>,
+                   <<"rsname">> => <<"Default Resource">>,
+                   <<"scopes">> => [<<"rabbitmq-resource-read">>]}]}}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),

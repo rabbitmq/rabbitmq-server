@@ -20,7 +20,8 @@ all() ->
         test_command_pem,
         test_command_pem_no_kid,
         test_token_expiration,
-        test_post_process_token_payload
+        test_post_process_token_payload,
+        test_post_process_token_payload_keycloak
     ].
 
 init_per_suite(Config) ->
@@ -64,6 +65,58 @@ test_post_process_token_payload(_) ->
 post_process_token_payload(Audience, Scopes) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     Token = maps:put(<<"aud">>, Audience, ?UTIL_MOD:fixture_token_with_scopes(Scopes)),
+    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
+    {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
+    rabbit_auth_backend_oauth2:post_process_payload(Payload).
+
+test_post_process_token_payload_keycloak(_) ->
+    AuthorizationArgumentExpectedScope = [
+        %% common case
+        {#{<<"permissions">> =>
+                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+                   <<"rsname">> => <<"allvhost">>,
+                   <<"scopes">> => [<<"rabbitmq-resource.read:*/*">>]},
+                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+                   <<"rsname">> => <<"vhost1">>,
+                   <<"scopes">> => [<<"rabbitmq-resource-read">>]},
+                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+                   <<"rsname">> => <<"Default Resource">>}]},
+        [<<"rabbitmq-resource.read:*/*">>, <<"rabbitmq-resource-read">>]
+        },
+        %% one scopes field with a string instead of an array
+        {#{<<"permissions">> =>
+                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+                   <<"rsname">> => <<"allvhost">>,
+                   <<"scopes">> => <<"rabbitmq-resource.read:*/*">>},
+                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+                   <<"rsname">> => <<"vhost1">>,
+                   <<"scopes">> => [<<"rabbitmq-resource-read">>]},
+                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+                   <<"rsname">> => <<"Default Resource">>}]},
+        [<<"rabbitmq-resource.read:*/*">>, <<"rabbitmq-resource-read">>]
+        },
+        %% no scopes field in permissions
+        {#{<<"permissions">> =>
+                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+                   <<"rsname">> => <<"allvhost">>},
+                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+                   <<"rsname">> => <<"vhost1">>},
+                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+                   <<"rsname">> => <<"Default Resource">>}]},
+        []
+        },
+        {#{<<"permissions">> => []}, []}, %% no permissions
+        {#{}, []} %% no permissions key
+    ],
+    lists:foreach(
+        fun({Authorization, ExpectedScope}) ->
+            Payload = post_process_payload_with_keycloak_authorization(Authorization),
+            ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
+        end, AuthorizationArgumentExpectedScope).
+
+post_process_payload_with_keycloak_authorization(Authorization) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    Token = maps:put(<<"authorization">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
