@@ -11,7 +11,10 @@ This is what it looks like:
 
 This plugin ships with RabbitMQ as of `3.6.3`. Enable it with
 
-    [sudo] rabbitmq-plugins enable rabbitmq_top
+``` bash
+# use sudo as necessary
+rabbitmq-plugins enable rabbitmq_top
+```
 
 ### RabbitMQ 3.5.x
 
