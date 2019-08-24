@@ -1,8 +1,9 @@
 # RabbitMQ Top Plugin
 
 Adds UNIX top-like information on the Erlang VM to the management plugin.
+This is what it looks like:
 
-Screenshots: https://imgur.com/a/BjVOP
+![](https://i.imgur.com/m7cWTLV.pngP)
 
 ## Installation
 
@@ -43,6 +44,12 @@ important as it currently hard-codes returning the top 20 processes.
 
 Individual process details.
 
+## More Screenshots
+
+Individual process metrics are also available:
+
+![](https://i.imgur.com/BYgIqQF.png)
+
 ## Building from Source
 
 You can build and install it like any other plugin (see
@@ -50,6 +57,6 @@ You can build and install it like any other plugin (see
 
 ## License and Copyright
 
-(c) Pivotal Software Inc, 2007—2017
+(c) Pivotal Software Inc, 2007—2019
 
 Released under the same license as RabbitMQ.
