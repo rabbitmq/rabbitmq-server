@@ -1,6 +1,8 @@
 # RabbitMQ Top Plugin
 
-Adds UNIX top-like information on the Erlang VM to the management plugin.
+Adds UNIX top-like information on the Erlang VM to the [management UI](https://www.rabbitmq.com/management.html).
+The closest interactive CLI alternative in recent releases is `rabbitmq-diagnostics observer`.
+
 This is what it looks like:
 
 ![](https://i.imgur.com/m7cWTLV.pngP)
