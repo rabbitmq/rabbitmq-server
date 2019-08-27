@@ -226,11 +226,11 @@ identity_info() ->
     {
         identity_info,
         untyped,
-        "Node & cluster identity info",
+        "RabbitMQ node & cluster identity info",
         [{
             [
-                {node, node()},
-                {cluster, rabbit_nodes:cluster_name()}
+                {rabbitmq_node, node()},
+                {rabbitmq_cluster, rabbit_nodes:cluster_name()}
             ],
             1
         }]

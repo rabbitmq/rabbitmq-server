@@ -185,8 +185,8 @@ build_info_test(Config) ->
 identity_info_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
     ?assertEqual(match, re:run(Body, "rabbitmq_identity_info{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "node=", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "cluster=", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "rabbitmq_node=", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])).
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),

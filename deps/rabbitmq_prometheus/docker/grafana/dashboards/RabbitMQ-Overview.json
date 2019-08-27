@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1565887952772,
+  "iteration": 1566921875611,
   "links": [
     {
       "icon": "doc",
@@ -92,7 +92,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queues * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rabbitmq_queues * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -178,7 +178,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channel_consumers * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rabbitmq_channel_consumers * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -264,7 +264,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_connections * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rabbitmq_connections * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -350,7 +350,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channels * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rabbitmq_channels * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -436,7 +436,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published[60s]) * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rate(rabbitmq_channel_messages_published[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -522,7 +522,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(\n  rate(rabbitmq_channel_messages_redelivered_total{cluster=\"$cluster\"}[60s]) +\n  rate(rabbitmq_channel_messages_delivered_total{cluster=\"$cluster\"}[60s]) +\n  rate(rabbitmq_channel_messages_delivered_ack_total{cluster=\"$cluster\"}[60s]) +\n  rate(rabbitmq_channel_get_total{cluster=\"$cluster\"}[60s]) +\n  rate(rabbitmq_channel_get_ack_total{cluster=\"$cluster\"}[60s])\n)",
+          "expr": "sum(rate(rabbitmq_channel_messages_redelivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) +\nsum(rate(rabbitmq_channel_messages_delivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) +\nsum(rate(rabbitmq_channel_messages_delivered_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) +\nsum(rate(rabbitmq_channel_get_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) +\nsum(rate(rabbitmq_channel_get_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -609,7 +609,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rabbitmq_queue_messages_ready * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -696,7 +696,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked * on(instance) group_left(cluster) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "sum(rabbitmq_queue_messages_unacked * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -814,11 +814,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(rabbitmq_memory_used_limit_bytes * on(instance) group_left(cluster, node) rabbitmq_identity_info{cluster=\"$cluster\"}) -\n(rabbitmq_memory_used_bytes * on(instance) group_left(cluster, node) rabbitmq_identity_info{cluster=\"$cluster\"})",
+          "expr": "(rabbitmq_memory_used_limit_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) -\n(rabbitmq_memory_used_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -962,11 +962,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_disk_space_available_bytes{cluster=\"$cluster\"}",
+          "expr": "rabbitmq_disk_space_available_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -1111,11 +1111,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_file_descriptors_open_limit{cluster=\"$cluster\"} - rabbitmq_file_descriptors_open{cluster=\"$cluster\"}",
+          "expr": "(rabbitmq_file_descriptors_open_limit * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) -\n(rabbitmq_file_descriptors_open * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -1259,11 +1259,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_tcp_sockets_open_limit{cluster=\"$cluster\"} - rabbitmq_tcp_sockets_open{cluster=\"$cluster\"}",
+          "expr": "(rabbitmq_tcp_sockets_open_limit * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) -\n(rabbitmq_tcp_sockets_open * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -4857,14 +4857,14 @@
           "value": ""
         },
         "datasource": "prometheus",
-        "definition": "label_values(rabbitmq_identity_info,cluster)",
+        "definition": "label_values(rabbitmq_identity_info,rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
-        "label": "Cluster",
+        "label": "RabbitMQ Cluster",
         "multi": false,
-        "name": "cluster",
+        "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(rabbitmq_identity_info,cluster)",
+        "query": "label_values(rabbitmq_identity_info,rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
