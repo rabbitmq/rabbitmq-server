@@ -13,7 +13,7 @@ volumes:
 services:
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
-    image: prom/prometheus:v2.11.1
+    image: prom/prometheus:v2.12.0
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -52,7 +52,7 @@ services:
       #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:6.2.5
+    image: grafana/grafana:6.3.3
     ports:
       - "3000:3000"
     networks:
