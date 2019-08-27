@@ -5191,16 +5191,16 @@ $(PROJECT).d:: $(XRL_FILES) $(YRL_FILES)
 define makedep.erl
 	E = ets:new(makedep, [bag]),
 	G = digraph:new([acyclic]),
-	ErlFiles = lists:usort(string:tokens("$(ERL_FILES)", " ")),
-	DepsDir = "$(call core_native_path,$(DEPS_DIR))",
-	AppsDir = "$(call core_native_path,$(APPS_DIR))",
-	DepsDirsSrc = "$(if $(wildcard $(DEPS_DIR)/*/src), $(call core_native_path,$(wildcard $(DEPS_DIR)/*/src)))",
-	DepsDirsInc = "$(if $(wildcard $(DEPS_DIR)/*/include), $(call core_native_path,$(wildcard $(DEPS_DIR)/*/include)))",
-	AppsDirsSrc = "$(if $(wildcard $(APPS_DIR)/*/src), $(call core_native_path,$(wildcard $(APPS_DIR)/*/src)))",
-	AppsDirsInc = "$(if $(wildcard $(APPS_DIR)/*/include), $(call core_native_path,$(wildcard $(APPS_DIR)/*/include)))",
-	DepsDirs = lists:usort(string:tokens(DepsDirsSrc++DepsDirsInc, " ")),
-	AppsDirs = lists:usort(string:tokens(AppsDirsSrc++AppsDirsInc, " ")),
-	Modules = [{list_to_atom(filename:basename(F, ".erl")), F} || F <- ErlFiles],
+	ErlFiles = lists:usort(string:lexemes(<<"$(ERL_FILES)"/utf8>>, " ")),
+	DepsDir = <<"$(call core_native_path,$(DEPS_DIR))"/utf8>>,
+	AppsDir = <<"$(call core_native_path,$(APPS_DIR))"/utf8>>,
+	DepsDirsSrc = <<"$(if $(wildcard $(DEPS_DIR)/*/src), $(call core_native_path,$(wildcard $(DEPS_DIR)/*/src)))"/utf8>>,
+	DepsDirsInc = <<"$(if $(wildcard $(DEPS_DIR)/*/include), $(call core_native_path,$(wildcard $(DEPS_DIR)/*/include)))"/utf8>>,
+	AppsDirsSrc = <<"$(if $(wildcard $(APPS_DIR)/*/src), $(call core_native_path,$(wildcard $(APPS_DIR)/*/src)))"/utf8>>,
+	AppsDirsInc = <<"$(if $(wildcard $(APPS_DIR)/*/include), $(call core_native_path,$(wildcard $(APPS_DIR)/*/include)))"/utf8>>,
+	DepsDirs = lists:usort(string:lexemes(<<DepsDirsSrc/binary, DepsDirsInc/binary>>, " ")),
+	AppsDirs = lists:usort(string:lexemes(<<AppsDirsSrc/binary, AppsDirsInc/binary>>, " ")),
+	Modules = [{list_to_atom(unicode:characters_to_list(filename:basename(F, ".erl"))), F} || F <- ErlFiles],
 	Add = fun (Mod, Dep) ->
 		case lists:keyfind(Dep, 1, Modules) of
 			false -> ok;
@@ -5290,7 +5290,7 @@ define makedep.erl
 			ok
 	end,
 	[begin
-		Mod = list_to_atom(filename:basename(F, ".erl")),
+		Mod = list_to_atom(unicode:characters_to_list(filename:basename(F, ".erl"))),
 		case file:open(F, [read]) of
 			{ok, Fd} -> MakeDepend(MakeDepend, Fd, Mod,0);
 			{error, enoent} -> ok
@@ -5302,7 +5302,7 @@ define makedep.erl
 		case lists:keyfind(Target, 1, Modules) of
 			false -> "";
 			{_, DepFile} ->
-				DirSubname = tl(string:tokens(filename:dirname(DepFile), "/")),
+				DirSubname = tl(string:lexemes(filename:dirname(DepFile), "/")),
 				string:join(DirSubname ++ [atom_to_list(Target)], "/")
 		end
 	end,
