@@ -42,8 +42,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   def usage_additional() do
     [
       ["<vhost>", "Virtual host name"],
-      ["--description <descriptioon>", "Virtual host description"],
-      ["--tags <tags>", "Coommand separated list of tags"]
+      ["--description <description>", "Virtual host description"],
+      ["--tags <tags>", "Command separated list of tags"]
     ]
   end
 
