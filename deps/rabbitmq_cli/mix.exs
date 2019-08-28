@@ -137,6 +137,18 @@ defmodule RabbitMQCtl.MixfileBase do
             override: true
           },
           {
+            :goldrush,
+            path: Path.join(deps_dir, "goldrush"),
+            compile: false,
+            override: true
+          },
+          {
+            :lager,
+            path: Path.join(deps_dir, "lager"),
+            compile: false,
+            override: true
+          },
+          {
             :amqp_client,
             path: Path.join(deps_dir, "amqp_client"),
             compile: false,
