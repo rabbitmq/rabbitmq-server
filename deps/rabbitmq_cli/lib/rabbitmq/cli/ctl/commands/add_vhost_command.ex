@@ -29,7 +29,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([vhost], %{node: node_name, description: desc, tags: tags}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, desc, tags, Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, desc, parse_tags(tags), Helpers.cli_acting_user()])
   end
   def run([vhost], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
@@ -58,4 +58,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   def description(), do: "Creates a virtual host"
 
   def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
+
+  #
+  # Implementation
+  #
+
+  def parse_tags(tags) do
+    String.split(tags, ",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(&String.to_atom/1)
+  end
 end
