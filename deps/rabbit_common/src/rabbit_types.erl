@@ -36,8 +36,7 @@
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 
-%% @deprecated Prefer rabbit_vhost:name()
--type(vhost() :: binary()).
+-type(vhost() :: vhost:name()).
 -type(ctag() :: binary()).
 
 %% TODO: make this more precise by tying specific class_ids to
