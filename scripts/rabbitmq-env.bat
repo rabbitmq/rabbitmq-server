@@ -279,6 +279,7 @@ if "!RABBITMQ_FEATURE_FLAGS_FILE!"=="" (
     )
 ) else (
     set RABBITMQ_FEATURE_FLAGS_FILE=!RABBITMQ_FEATURE_FLAGS_FILE:"=!
+    set RABBITMQ_FEATURE_FLAGS_FILE_source=environment
 )
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
@@ -394,21 +395,21 @@ if defined RABBITMQ_DEV_ENV (
         REM We may need to query the running node for the plugins directory
         REM and the "enabled plugins" file.
         if not "%RABBITMQ_FEATURE_FLAGS_FILE_source%" == "environment" (
-            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, feature_flags_file), io:format(""~s~n"", [P])."') do @set feature_flags_file=%%F
+            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl.bat eval "{ok, P} = application:get_env(rabbit, feature_flags_file), io:format(""~s~n"", [P])."') do @set feature_flags_file=%%F
             if exist "!feature_flags_file!" (
                 set RABBITMQ_FEATURE_FLAGS_FILE=!feature_flags_file:"=!
             )
             REM set feature_flags_file=
         )
         if not "%RABBITMQ_PLUGINS_DIR_source%" == "environment" (
-            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(""~s~n"", [P])."') do @set plugins_dir=%%F
+            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl.bat eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(""~s~n"", [P])."') do @set plugins_dir=%%F
             if exist "!plugins_dir!" (
                 set RABBITMQ_PLUGINS_DIR=!plugins_dir:"=!
             )
             REM set plugins_dir=
         )
         if not "%RABBITMQ_ENABLED_PLUGINS_FILE_source%" == "environment" (
-            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(""~s~n"", [P])."') do @set enabled_plugins_file=%%F
+            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl.bat eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(""~s~n"", [P])."') do @set enabled_plugins_file=%%F
             if exist "!enabled_plugins_file!" (
                 set RABBITMQ_ENABLED_PLUGINS_FILE=!enabled_plugins_file:"=!
             )
