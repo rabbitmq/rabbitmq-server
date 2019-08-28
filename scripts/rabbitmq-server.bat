@@ -230,7 +230,13 @@ if "!ENV_OK!"=="false" (
     EXIT /b 78
 )
 
-"!ERLANG_HOME!\bin\erl.exe" ^
+if "!RABBITMQ_ALLOW_INPUT!"=="" (
+    set ERL_CMD=erl.exe
+) else (
+    set ERL_CMD=werl.exe
+)
+
+"!ERLANG_HOME!\bin\!ERL_CMD!" ^
 -pa "!RABBITMQ_EBIN_ROOT:\=/!" ^
 -boot start_sasl ^
 !RABBITMQ_START_RABBIT! ^
