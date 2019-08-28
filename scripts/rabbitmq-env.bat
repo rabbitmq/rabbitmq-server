@@ -468,9 +468,9 @@ goto :eof
 
 :filter_path
 IF "%ERL_LIBS%"=="" (
-    set ERL_LIBS=%~dp1%~n1%~x1
+    set "ERL_LIBS=%~dp1%~n1%~x1"
 ) else (
-    set ERL_LIBS=%ERL_LIBS%;%~dp1%~n1%~x1
+    set "ERL_LIBS=!ERL_LIBS!;%~dp1%~n1%~x1"
 )
 goto :eof
 
