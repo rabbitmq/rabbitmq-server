@@ -187,8 +187,14 @@ dispatcher_add(function(sammy) {
                    '#/users');
         });
     sammy.put('#/users-add', function() {
-            if (sync_put(this, '/users/:username'))
+            res = sync_put(this, '/users/:username');
+            if (res) {
+                if (res.http_status === 204) {
+                    username = res.req_params.username;
+                    show_popup('warn', "Updated an existing user: '" + username + "'");
+                }
                 update();
+            }
             return false;
         });
     sammy.put('#/users-modify', function() {
