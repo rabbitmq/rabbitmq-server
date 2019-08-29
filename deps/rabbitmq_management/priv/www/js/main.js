@@ -1206,7 +1206,9 @@ function sync_req(type, params0, path_template, options) {
         if (type == 'GET')
             return req.responseText;
         else
-            return true;
+            // rabbitmq/rabbitmq-management#732
+            // https://developer.mozilla.org/en-US/docs/Glossary/Truthy
+            return {result: true, http_status: req.status, req_params: params};
     }
     else {
         return false;
