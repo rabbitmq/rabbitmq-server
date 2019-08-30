@@ -16,7 +16,6 @@
 -module(mqtt_machine).
 -behaviour(ra_machine).
 
--include_lib("ra/include/ra.hrl").
 -include("mqtt_machine.hrl").
 
 -export([init/1,
