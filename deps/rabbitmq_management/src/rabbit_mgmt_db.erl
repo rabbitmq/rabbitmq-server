@@ -298,8 +298,8 @@ id_lookup(Type, List) ->
 
 overview(User, Ranges, Interval) ->
     VHosts = case User of
-                 all -> rabbit_vhost:list();
-                 _   -> rabbit_mgmt_util:list_visible_vhosts(User)
+                 all -> rabbit_vhost:list_names();
+                 _   -> rabbit_mgmt_util:list_visible_vhosts_names(User)
              end,
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, overview_data,
                                       [User, Ranges, VHosts]}),

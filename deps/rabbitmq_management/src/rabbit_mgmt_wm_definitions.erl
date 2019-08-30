@@ -416,7 +416,9 @@ add_policy(VHost, Param, Username) ->
 add_vhost(VHost, ActingUser) ->
     VHostName = maps:get(name, VHost, undefined),
     VHostTrace = maps:get(tracing, VHost, undefined),
-    rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace, ActingUser).
+    VHostDefinition = maps:get(definition, VHost, undefined),
+    VHostTags = maps:get(tags, VHost, undefined),
+    rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostDefinition, VHostTags, VHostTrace, ActingUser).
 
 add_permission(Permission, ActingUser) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),

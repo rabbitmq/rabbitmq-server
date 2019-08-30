@@ -78,8 +78,8 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                 rabbit_mgmt_util:reply(Overview, ReqData, Context);
             true ->
                 VHosts = case rabbit_mgmt_util:is_monitor(Tags) of
-                             true -> rabbit_vhost:list();
-                             _   -> rabbit_mgmt_util:list_visible_vhosts(User)
+                             true -> rabbit_vhost:list_names();
+                             _   -> rabbit_mgmt_util:list_visible_vhosts_names(User)
                          end,
 
                 ObjectTotals = case rabbit_mgmt_util:is_monitor(Tags) of
