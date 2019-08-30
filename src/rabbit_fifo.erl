@@ -22,7 +22,6 @@
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
 
--include_lib("ra/include/ra.hrl").
 -include("rabbit_fifo.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -68,8 +67,8 @@
         ]).
 
 %% command records representing all the protocol actions that are supported
--record(enqueue, {pid :: maybe(pid()),
-                  seq :: maybe(msg_seqno()),
+-record(enqueue, {pid :: option(pid()),
+                  seq :: option(msg_seqno()),
                   msg :: raw_msg()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
@@ -1604,7 +1603,7 @@ is_over_limit(#?MODULE{cfg = #cfg{max_length = MaxLength,
 
     messages_ready(State) > MaxLength orelse (BytesEnq > MaxBytes).
 
--spec make_enqueue(maybe(pid()), maybe(msg_seqno()), raw_msg()) -> protocol().
+-spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) -> protocol().
 make_enqueue(Pid, Seq, Msg) ->
     #enqueue{pid = Pid, seq = Seq, msg = Msg}.
 -spec make_checkout(consumer_id(),

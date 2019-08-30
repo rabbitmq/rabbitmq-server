@@ -1,4 +1,6 @@
 
+-type option(T) :: undefined | T.
+
 -type raw_msg() :: term().
 %% The raw message. It is opaque to rabbit_fifo.
 
@@ -28,7 +30,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type indexed_msg() :: {ra_index(), msg()}.
+-type indexed_msg() :: {ra:index(), msg()}.
 
 -type prefix_msg() :: {'$prefix_msg', msg_header()}.
 
@@ -93,7 +95,7 @@
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
-         pending = [] :: [{msg_seqno(), ra_index(), raw_msg()}],
+         pending = [] :: [{msg_seqno(), ra:index(), raw_msg()}],
          status = up :: up | suspected_down
         }).
 
@@ -101,16 +103,16 @@
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
          release_cursor_interval = ?RELEASE_CURSOR_EVERY :: non_neg_integer(),
-         dead_letter_handler :: maybe(applied_mfa()),
-         become_leader_handler :: maybe(applied_mfa()),
-         max_length :: maybe(non_neg_integer()),
-         max_bytes :: maybe(non_neg_integer()),
+         dead_letter_handler :: option(applied_mfa()),
+         become_leader_handler :: option(applied_mfa()),
+         max_length :: option(non_neg_integer()),
+         max_bytes :: option(non_neg_integer()),
          %% whether single active consumer is on or not for this queue
          consumer_strategy = competing :: consumer_strategy(),
          %% the maximum number of unsuccessful delivery attempts permitted
-         delivery_limit :: maybe(non_neg_integer()),
-         max_in_memory_length :: maybe(non_neg_integer()),
-         max_in_memory_bytes :: maybe(non_neg_integer())
+         delivery_limit :: option(non_neg_integer()),
+         max_in_memory_length :: option(non_neg_integer()),
+         max_in_memory_bytes :: option(non_neg_integer())
         }).
 
 -record(rabbit_fifo,
@@ -119,7 +121,7 @@
          messages = #{} :: #{msg_in_id() => indexed_msg()},
          % defines the lowest message in id available in the messages map
          % that isn't a return
-         low_msg_num :: maybe(msg_in_id()),
+         low_msg_num :: option(msg_in_id()),
          % defines the next message in id to be added to the messages map
          next_msg_num = 1 :: msg_in_id(),
          % list of returned msg_in_ids - when checking out it picks from
@@ -139,7 +141,7 @@
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
-                                                          ra_index(), #rabbit_fifo{}}),
+                                                          ra:index(), #rabbit_fifo{}}),
          % consumers need to reflect consumer state at time of snapshot
          % needs to be part of snapshot
          consumers = #{} :: #{consumer_id() => #consumer{}},
