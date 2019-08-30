@@ -25,6 +25,7 @@
         {rabbitmq_mqtt, [
            {ssl_cert_login,   true},
            {allow_anonymous,  false},
+           {sparkplug_b,      true},
            {tcp_listeners,    []},
            {ssl_listeners,    []}
            ]}).

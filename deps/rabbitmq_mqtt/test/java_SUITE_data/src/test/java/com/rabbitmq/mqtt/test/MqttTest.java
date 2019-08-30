@@ -63,6 +63,7 @@ public class MqttTest implements MqttCallback {
     private final byte[] payload = "payload".getBytes();
     private final String topic = "test-topic";
     private final String retainedTopic = "test-retained-topic";
+    private final String sparkplugBTopicPrefix = "spBv1.0";
     private int testDelay = 2000;
     private Duration timeout = Duration.TEN_SECONDS;
 
@@ -428,6 +429,22 @@ public class MqttTest implements MqttCallback {
         for (MqttMessage m : receivedMessages){
             expected.contains(new String(m.getPayload()));
         }
+        client.disconnect();
+    }
+
+    @Test public void sparkplug_b_topics() throws MqttException, IOException, InterruptedException, TimeoutException {
+        final String amqp_091_topic = sparkplugBTopicPrefix + ".MACLab.DDATA.Opto22.CLX";
+        final String sparkplug_b_topic = sparkplugBTopicPrefix + "/MACLab/+/Opto22/CLX";
+
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe(sparkplug_b_topic);
+
+        setUpAmqp();
+        ch.basicPublish("amq.topic", amqp_091_topic, MessageProperties.MINIMAL_BASIC, payload);
+        tearDownAmqp();
+
+        waitAtMost(timeout).until(receivedMessagesSize(), equalTo(1));
         client.disconnect();
     }
 
