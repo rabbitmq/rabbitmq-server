@@ -59,7 +59,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -extra "%RABBITMQ_HOME%\escript\rabbitmq-queues" !STAR!
 
 if ERRORLEVEL 1 (
-    exit /B 1
+    exit /B %ERRORLEVEL%
 )
 
 endlocal

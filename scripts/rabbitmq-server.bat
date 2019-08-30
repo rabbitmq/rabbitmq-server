@@ -269,7 +269,7 @@ if "!RABBITMQ_ALLOW_INPUT!"=="" (
 !STAR!
 
 if ERRORLEVEL 1 (
-    exit /B 1
+    exit /B %ERRORLEVEL%
 )
 
 EXIT /B 0
