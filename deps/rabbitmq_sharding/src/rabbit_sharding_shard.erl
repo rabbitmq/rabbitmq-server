@@ -38,7 +38,7 @@
 %% We make sure the sharded queues are created when
 %% RabbitMQ starts.
 maybe_shard_exchanges() ->
-    [maybe_shard_exchanges(V) || V <- rabbit_vhost:list()],
+    [maybe_shard_exchanges(V) || V <- rabbit_vhost:list_names()],
     ok.
 
 maybe_shard_exchanges(VHost) ->
