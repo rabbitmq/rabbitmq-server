@@ -527,20 +527,26 @@ get_selection(Config) ->
 
 
 symlink_priv_dir(Config) ->
-    SrcDir = ?config(current_srcdir, Config),
-    PrivDir = ?config(priv_dir, Config),
-    case get_selection(Config) of
-        {ok, Name} ->
-            Target = filename:join([SrcDir, "logs", Name]),
-            case exec(["ln", "-snf", PrivDir, Target]) of
-                {ok, _} -> ok;
-                _ -> ct:pal(?LOW_IMPORTANCE,
-                            "Failed to symlink private_log directory.")
-            end,
+    case os:type() of
+        {win32, _} ->
             Config;
-        not_found ->
-            ct:pal(?LOW_IMPORTANCE, "Failed to symlink private_log directory."),
-            Config
+        _ ->
+            SrcDir = ?config(current_srcdir, Config),
+            PrivDir = ?config(priv_dir, Config),
+            case get_selection(Config) of
+                {ok, Name} ->
+                    Target = filename:join([SrcDir, "logs", Name]),
+                    case exec(["ln", "-snf", PrivDir, Target]) of
+                        {ok, _} -> ok;
+                        _ -> ct:pal(?LOW_IMPORTANCE,
+                                    "Failed to symlink private_log directory.")
+                    end,
+                    Config;
+                not_found ->
+                    ct:pal(?LOW_IMPORTANCE,
+                           "Failed to symlink private_log directory."),
+                    Config
+            end
     end.
 
 %% -------------------------------------------------------------------
