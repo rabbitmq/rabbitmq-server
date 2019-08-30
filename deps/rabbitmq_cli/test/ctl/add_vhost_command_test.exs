@@ -31,9 +31,18 @@ defmodule AddVhostCommandTest do
     :ok
   end
 
-  test "validate: wrong number of arguments results in arg count errors" do
+  test "validate: no arguments fails validation" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: too many arguments fails validation" do
     assert @command.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
+  end
+
+  test "validate: one argument passes validation" do
+    assert @command.validate(["new-vhost"], %{}) == :ok
+    assert @command.validate(["new-vhost"], %{description: "Used by team A"}) == :ok
+    assert @command.validate(["new-vhost"], %{description: "Used by team A for QA purposes", tags: "qa,team-a"}) == :ok
   end
 
   @tag vhost: @vhost

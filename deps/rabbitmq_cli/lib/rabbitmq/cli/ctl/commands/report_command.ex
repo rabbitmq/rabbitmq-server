@@ -51,7 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name} = opts) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :list, []) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :list_names, []) do
       {:badrpc, _} = err ->
         err
 
