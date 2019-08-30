@@ -10,7 +10,6 @@
          map/2
         ]).
 
--include_lib("ra/include/ra.hrl").
 -compile({no_auto_import, [size/1]}).
 
 %% the empty atom is a lot smaller (4 bytes) than e.g. `undefined` (13 bytes).
