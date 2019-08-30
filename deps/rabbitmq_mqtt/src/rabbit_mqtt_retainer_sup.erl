@@ -53,7 +53,7 @@ init([]) ->
   Mod = rabbit_mqtt_retainer:store_module(),
   rabbit_log:info("MQTT retained message store: ~p~n",
     [Mod]),
-  {ok, {{one_for_one, 5, 5}, child_specs(Mod, rabbit_vhost:list())}}.
+  {ok, {{one_for_one, 5, 5}, child_specs(Mod, rabbit_vhost:list_names())}}.
 
 child_specs(Mod, VHosts) ->
   %% see start_child/2
