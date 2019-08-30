@@ -24,7 +24,7 @@ clear_read_cache() ->
     case application:get_env(rabbit, fhc_read_buffering) of
         {ok, true} ->
             file_handle_cache:clear_read_cache(),
-            clear_vhost_read_cache(rabbit_vhost:list());
+            clear_vhost_read_cache(rabbit_vhost:list_names());
         _ -> %% undefined or {ok, false}
             ok
     end.

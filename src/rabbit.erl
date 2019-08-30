@@ -894,7 +894,7 @@ total_queue_count() ->
     lists:foldl(fun (VirtualHost, Acc) ->
                   Acc + rabbit_amqqueue:count(VirtualHost)
                 end,
-                0, rabbit_vhost:list()).
+                0, rabbit_vhost:list_names()).
 
 %% TODO this only determines if the rabbit application has started,
 %% not if it is running, never mind plugins. It would be nice to have
@@ -1098,7 +1098,7 @@ insert_default_data() ->
     DefaultWritePermBin = rabbit_data_coercion:to_binary(DefaultWritePerm),
     DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
 
-    ok = rabbit_vhost:add(DefaultVHostBin, ?INTERNAL_USER),
+    ok = rabbit_vhost:add(DefaultVHostBin, <<"Default virtual host">>, [], ?INTERNAL_USER),
     ok = lager_exchange_backend:maybe_init_exchange(),
     ok = rabbit_auth_backend_internal:add_user(
         DefaultUserBin,
