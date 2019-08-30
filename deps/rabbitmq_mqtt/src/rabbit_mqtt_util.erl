@@ -20,6 +20,7 @@
 
 -export([subcription_queue_name/1,
          mqtt2amqp/1,
+         mqtt2amqp_fun/0,
          amqp2mqtt/1,
          gen_client_id/0,
          env/1,
@@ -41,6 +42,33 @@ mqtt2amqp(Topic) ->
     erlang:iolist_to_binary(
       re:replace(re:replace(Topic, "/", ".", [global]),
                  "[\+]", "*", [global])).
+
+mqtt2amqp_fun() ->
+    {ok, Mp} = re:compile("^sb[AB]v\\d\\.\\d/"),
+    %% > re:run("sbAv1.0/FOO/BAR/BAZ", Mp, [{capture, first}]).
+    %% {match,[{0,8}]}
+    case env(sparkplug_b) of
+        true ->
+            ok;
+        _ ->
+    end.
+    fun(Topic0) ->
+        Opts = case SparkplugB of
+                   true ->
+                       Offset = case re:run(Topic0, Mp, [{capture, first}]) of
+                                    {match, [{_, Idx1}]} ->
+                                        Idx1; % Idx1 is the 1-based offset of the / character
+                                    _ ->
+                                        0
+                                end,
+                       [global, {offset, Offset}];
+                   _ ->
+                       [global]
+               end,
+        Topic1 = re:replace(Topic0, "/", ".", Opts),
+        Topic2 = re:replace(Topic1, "[\+]", "*", [global]),
+        erlang:iolist_to_binary(Topic2)
+    end.
 
 amqp2mqtt(Topic) ->
     erlang:iolist_to_binary(
