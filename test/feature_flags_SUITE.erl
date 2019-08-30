@@ -204,6 +204,7 @@ init_per_testcase(Testcase, Config) ->
                             declare_arbitrary_feature_flag(Config3),
                             Config3;
                         false ->
+                            end_per_testcase(Testcase, Config3),
                             {skip, "Feature flags subsystem unavailable"}
                     end
             end;
@@ -239,6 +240,7 @@ init_per_testcase(Testcase, Config) ->
                             declare_arbitrary_feature_flag(Config3),
                             Config3;
                         false ->
+                            end_per_testcase(Testcase, Config3),
                             {skip, "Feature flags subsystem unavailable"}
                     end
             end
