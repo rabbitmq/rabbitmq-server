@@ -44,30 +44,27 @@ mqtt2amqp(Topic) ->
                  "[\+]", "*", [global])).
 
 mqtt2amqp_fun() ->
-    {ok, Mp} = re:compile("^sb[AB]v\\d\\.\\d/"),
-    %% > re:run("sbAv1.0/FOO/BAR/BAZ", Mp, [{capture, first}]).
-    %% {match,[{0,8}]}
-    case env(sparkplug_b) of
+    SparkplugB = env(sparkplug_b),
+    ToAmqpFun = fun(T0) ->
+                    T1 = string:replace(T0, "/", ".", all),
+                    T2 = string:replace(T1, "+", "*", all),
+                    erlang:iolist_to_binary(T2)
+                end,
+    case SparkplugB of
         true ->
-            ok;
+            fun(T0) ->
+                case {string:prefix(T0, "spAv1.0/"), string:prefix(T0, "spBv1.0/")} of
+                    {nomatch, nomatch} ->
+                        ToAmqpFun(T0);
+                    {_, _} ->
+                        T1 = string:replace(T0, ".", "_", leading),
+                        ToAmqpFun(T1)
+                end
+            end;
         _ ->
-    end.
-    fun(Topic0) ->
-        Opts = case SparkplugB of
-                   true ->
-                       Offset = case re:run(Topic0, Mp, [{capture, first}]) of
-                                    {match, [{_, Idx1}]} ->
-                                        Idx1; % Idx1 is the 1-based offset of the / character
-                                    _ ->
-                                        0
-                                end,
-                       [global, {offset, Offset}];
-                   _ ->
-                       [global]
-               end,
-        Topic1 = re:replace(Topic0, "/", ".", Opts),
-        Topic2 = re:replace(Topic1, "[\+]", "*", [global]),
-        erlang:iolist_to_binary(Topic2)
+            fun(T) ->
+                ToAmqpFun(T)
+            end
     end.
 
 amqp2mqtt(Topic) ->
