@@ -176,8 +176,8 @@
 
 -define(TOTALS, [
     %% ordering differs from metrics above, refer to list comprehension
-    {connection_created, connections, gauge, "Connections currently running"},
-    {channel_created, channels, gauge, "Channels currently running"},
+    {connection_created, connections, gauge, "Connections currently open"},
+    {channel_created, channels, gauge, "Channels currently open"},
     {consumer_created, consumers, gauge, "Consumers currently connected"},
     {queue_metrics, queues, gauge, "Queues available"}
 ]).
