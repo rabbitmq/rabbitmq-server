@@ -184,6 +184,15 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_web_stomp_examples \
 		      rabbitmq_website
 
+# Erlang.mk does not rebuild dependencies by default, once they were
+# compiled once, except for those listed in the `$(FORCE_REBUILD)`
+# variable.
+#
+# We want all RabbitMQ components to always be rebuilt: this eases
+# the work on several components at the same time.
+
+FORCE_REBUILD = $(RABBITMQ_COMPONENTS)
+
 # Several components have a custom erlang.mk/build.config, mainly
 # to disable eunit. Therefore, we can't use the top-level project's
 # erlang.mk copy.
