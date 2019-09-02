@@ -660,7 +660,11 @@ vary: accept, accept-encoding, origin</pre>
         <td class="path">/api/vhosts/<i>name</i></td>
         <td>An individual virtual host. As a virtual host usually only
         has a name, you do not need an HTTP body when PUTing one of
-        these. To enable / disable tracing, provide a body looking like:
+        these. To set metadata on creation, provide a body like the following:
+          <pre>{"description":"virtual host description", "tags":"accounts production"}</pre>
+          <code>tags</code> is a comma-separated list of tags.
+        These metadata fields are optional.
+        To enable / disable tracing, provide a body looking like:
           <pre>{"tracing":true}</pre></td>
       </tr>
       <tr>
