@@ -47,6 +47,7 @@
     merge_app_env/2, merge_app_env_in_erlconf/2,
     get_app_env/4,
     nodename_to_hostname/1,
+    convert_to_unicode_binary/1,
     cover_work_factor/2
   ]).
 
@@ -714,8 +715,10 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
                 Path  -> Path
             end
     end,
-    Cmd1 = string:trim(rabbit_data_coercion:to_list(Cmd0)),
-    Args1 = [format_arg(Arg) || Arg <- Args],
+    Cmd1 = convert_to_unicode_binary(
+	     string:trim(
+	       rabbit_data_coercion:to_list(Cmd0))),
+    Args1 = [convert_to_unicode_binary(format_arg(Arg)) || Arg <- Args],
     {LocalOptions, PortOptions} = lists:partition(
       fun
           ({match_stdout, _}) -> true;
@@ -872,6 +875,11 @@ merge_app_env_in_erlconf(ErlangConfig, []) ->
 nodename_to_hostname(Nodename) when is_atom(Nodename) ->
     [_, Hostname] = string:tokens(atom_to_list(Nodename), "@"),
     Hostname.
+
+convert_to_unicode_binary(Arg) when is_list(Arg) ->
+    unicode:characters_to_binary(Arg);
+convert_to_unicode_binary(Arg) when is_binary(Arg) ->
+    Arg.
 
 %% -------------------------------------------------------------------
 %% Cover-related functions.
