@@ -542,7 +542,8 @@ write_config_file(Config, NodeConfig, _I) ->
     ConfigDir = filename:dirname(ConfigFile),
     Ret1 = file:make_dir(ConfigDir),
     Ret2 = file:write_file(ConfigFile ++ ".config",
-      io_lib:format("% vim:ft=erlang:~n~n~p.~n", [ErlangConfig])),
+      rabbit_ct_helpers:convert_to_unicode_binary(
+	io_lib:format("% vim:ft=erlang:~n~n~p.~n", [ErlangConfig]))),
     case {Ret1, Ret2} of
         {ok, ok} ->
             NodeConfig;
