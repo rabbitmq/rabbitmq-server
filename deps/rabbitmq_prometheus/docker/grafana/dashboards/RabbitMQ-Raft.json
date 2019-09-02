@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1567444143162,
+  "iteration": 1567455894877,
   "links": [
     {
       "icon": "doc",
@@ -458,11 +458,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_term{cluster=\"$cluster\", node=~\"$node\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_raft_term[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -604,11 +604,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} - rabbitmq_raft_log_snapshot_index{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node) > 5000",
-          "format": "time_series",
-          "instant": false,
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} {{queue}}",
+          "expr": "sum(\n  (rabbitmq_raft_log_last_written_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) - \n  (rabbitmq_raft_log_snapshot_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})\n) by(queue, rabbitmq_node) > 5000",
+          "hide": false,
+          "legendFormat": "{{rabbitmq_node}} {{queue}}",
           "refId": "A"
         }
       ],
