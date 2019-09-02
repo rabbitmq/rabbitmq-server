@@ -74,13 +74,15 @@ C:\&gt; curl -i -u guest:guest http://localhost:15672/api/vhosts
 $ curl -i -u guest:guest http://localhost:15672/api/vhosts
 
 HTTP/1.1 200 OK
-Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
-Date: Mon, 16 Sep 2013 12:00:02 GMT
-Content-Type: application/json
-Content-Length: 30
+cache-control: no-cache
+content-length: 196
+content-security-policy: default-src 'self'
+content-type: application/json
+date: Mon, 02 Sep 2019 07:51:49 GMT
+server: Cowboy
+vary: accept, accept-encoding, origin
 
-[{"name":"/","tracing":false}]
-</pre>
+[{"cluster_state":{"rabbit@localhost":"running"},"description":"Default virtual host" <i>... (remainder elided)</i></pre>
       </li>
       <li>
         Get a list of channels, fast publishers first, restricting the info
@@ -92,11 +94,13 @@ C:\&gt; curl -i -u guest:guest "http://localhost:15672/api/channels?sort=message
 $ curl -i -u guest:guest 'http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
 
 HTTP/1.1 200 OK
-Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
-Date: Mon, 16 Sep 2013 12:01:17 GMT
-Content-Type: application/json
-Content-Length: 219
-Cache-Control: no-cache
+cache-control: no-cache
+content-length: 2
+content-security-policy: default-src 'self'
+content-type: application/json
+date: Mon, 02 Sep 2019 07:54:35 GMT
+server: Cowboy
+vary: accept, accept-encoding, origin
 
 [{"message_stats":{"publish_details":{"rate" <i>... (remainder elided)</i></pre>
       </li>
@@ -110,11 +114,12 @@ C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
 $ curl -i -u guest:guest -H "content-type:application/json" \
    -XPUT http://localhost:15672/api/vhosts/foo
 
-HTTP/1.1 204 No Content
-Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
-Date: Mon, 16 Sep 2013 12:03:00 GMT
-Content-Type: application/json
-Content-Length: 0</pre>
+HTTP/1.1 201 Created
+content-length: 0
+content-security-policy: default-src 'self'
+date: Mon, 02 Sep 2019 07:55:24 GMT
+server: Cowboy
+vary: accept, accept-encoding, origin</pre>
         <p>Note: you must specify <code>application/json</code> as the
         mime type.</p>
         <p>Note: the name of the object is not needed in the JSON
@@ -134,11 +139,12 @@ $ curl -i -u guest:guest -H "content-type:application/json" \
     -XPUT -d'{"type":"direct","durable":true}' \
     http://localhost:15672/api/exchanges/%2F/my-new-exchange
 
-HTTP/1.1 204 No Content
-Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
-Date: Mon, 16 Sep 2013 12:04:00 GMT
-Content-Type: application/json
-Content-Length: 0</pre>
+HTTP/1.1 201 Created
+content-length: 0
+content-security-policy: default-src 'self'
+date: Mon, 02 Sep 2019 07:56:06 GMT
+server: Cowboy
+vary: accept, accept-encoding, origin</pre>
         <p>Note: we never return a body in response to a PUT or
         DELETE, unless it fails.</p>
       </li>
@@ -153,10 +159,10 @@ $ curl -i -u guest:guest -H "content-type:application/json" \
     -XDELETE http://localhost:15672/api/exchanges/%2F/my-new-exchange
 
 HTTP/1.1 204 No Content
-Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
-Date: Mon, 16 Sep 2013 12:05:30 GMT
-Content-Type: application/json
-Content-Length: 0</pre>
+content-security-policy: default-src 'self'
+date: Mon, 02 Sep 2019 07:56:59 GMT
+server: Cowboy
+vary: accept, accept-encoding, origin</pre>
       </li>
     </ul>
 
