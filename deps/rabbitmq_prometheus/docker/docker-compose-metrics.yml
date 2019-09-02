@@ -52,7 +52,7 @@ services:
       #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:6.3.3
+    image: grafana/grafana:6.3.5
     ports:
       - "3000:3000"
     networks:
