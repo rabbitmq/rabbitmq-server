@@ -17,7 +17,12 @@
     <th>Auto-delete</th>
   </tr>
   <tr>
+<% if (vhosts_interesting) { %>
+    <th colspan="2"></th>
+<% } %>
+<% if (!vhosts_interesting) { %>
     <th colspan="1"></th>
+<% } %>
     <th>Protocol</th>
     <th>Uri</th>
     <th>Endpoint</th>
