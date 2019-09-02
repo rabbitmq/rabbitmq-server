@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1566924169705,
+  "iteration": 1567443305435,
   "links": [
     {
       "icon": "doc",
@@ -4947,14 +4947,14 @@
           "value": ""
         },
         "datasource": "prometheus",
-        "definition": "label_values(rabbitmq_identity_info,rabbitmq_cluster)",
+        "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
         "label": "RabbitMQ Cluster",
         "multi": false,
         "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(rabbitmq_identity_info,rabbitmq_cluster)",
+        "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
