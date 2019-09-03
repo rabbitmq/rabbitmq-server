@@ -71,7 +71,8 @@ groups() ->
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
                                             consume_in_minority,
-                                            shrink_all
+                                            shrink_all,
+                                            rebalance
                                             ]},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
@@ -667,7 +668,48 @@ shrink_all(Config) ->
                   {_, {error, 1, last_node}}], Result2),
     ok.
 
+rebalance(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Q3 = <<"q3">>,
+    Q4 = <<"q4">>,
+    Q5 = <<"q5">>,
+
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0},
+                 declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    {ok, _, {_, Leader1}} = ra:members({ra_name(Q1), Server0}),
+    publish(Ch, Q1),
+    publish(Ch, Q1),
+    publish(Ch, Q1),
+
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    {ok, _, {_, Leader2}} = ra:members({ra_name(Q2), Server0}),
+    publish(Ch, Q2),
+    publish(Ch, Q2),
+
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0},
+                 declare(Ch, Q3, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', Q4, 0, 0},
+                 declare(Ch, Q4, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', Q5, 0, 0},
+                 declare(Ch, Q5, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(500),
+    {ok, Summary} = rpc:call(Server0, rabbit_quorum_queue, rebalance, [".*", ".*"]),
+
+    %% Q1 and Q2 should not have moved leader, as these are the queues with more
+    %% log entries and we allow up to two queues per node (3 nodes, 5 queues)
+    ?assertMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Q1), Server0})),
+    ?assertMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0})),
+
+    %% Check that we have at most 2 queues per node
+    ?assert(lists:all(fun({_, V}) -> V =< 2 end, Summary)),
+    ok.
 
 subscribe_should_fail_when_global_qos_true(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
