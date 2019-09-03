@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1567457829271,
+  "iteration": 1567503571131,
   "links": [],
   "panels": [
     {
@@ -1498,10 +1498,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_memory_bytes{cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_port_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1594,10 +1594,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_queue_size_bytes{cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_port_queue_size_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1754,10 +1754,10 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} ",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A",
           "units": "none",
           "valueHandler": "Number Threshold"
@@ -1838,10 +1838,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1986,10 +1986,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -2125,10 +2125,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[60s])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -2136,7 +2136,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Process reductions",
+      "title": "Process reductions / s",
       "tooltip": {
         "shared": true,
         "sort": 2,
