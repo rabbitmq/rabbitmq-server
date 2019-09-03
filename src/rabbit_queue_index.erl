@@ -352,7 +352,7 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint
                 false -> ?PUB_TRANS_JPREFIX
             end):?JPREFIX_BITS,
            SeqId:?SEQ_BITS, Bin/binary,
-           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin], PPC],
+           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin] | PPC],
 
     DC1 =
         case IsDelivered of
