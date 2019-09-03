@@ -17,6 +17,12 @@ mix_task_archive_deps = $(MIX_ARCHIVES)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE
 #
 #   $(call get_app_version,/path/to/name.app.src)
 
+ifeq ($(PLATFORM),msys2)
+core_unix_path = $(shell cygpath $1)
+else
+core_unix_path = $1
+endif
+
 define get_app_version
 $(shell awk '
 /{ *vsn *, *"/ {
@@ -161,7 +167,7 @@ $(ERLANGMK_DIST_EZS):
 		--include '/include/***' \
 		--include '/priv/***' \
 		--exclude '*' \
-		$(SRC_DIR)/ $(EZ_DIR)/
+		$(call core_unix_path,$(SRC_DIR))/ $(call core_unix_path,$(EZ_DIR))/
 	@# Give a chance to the application to make any modification it
 	@# wants to the tree before we make an archive.
 	$(verbose) ! (test -f $(SRC_DIR)/rabbitmq-components.mk \
