@@ -31,7 +31,7 @@
 -include("rabbit_log.hrl").
 %%----------------------------------------------------------------------------
 
--type category() :: connection | channel | ldap | mirroring | queue | federation | upgrade | ra.
+-type category() :: channel | connection | federation | ldap | mirroring | prelaunch | queue | ra | shovel | upgrade.
 
 -spec debug(string()) -> 'ok'.
 -spec debug(string(), [any()]) -> 'ok'.
@@ -74,16 +74,17 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
     end,
     lager:log(Sink, Level, self(), Fmt, Args).
 
-make_internal_sink_name(connection) -> rabbit_log_connection_lager_event;
 make_internal_sink_name(channel)    -> rabbit_log_channel_lager_event;
+make_internal_sink_name(connection) -> rabbit_log_connection_lager_event;
+make_internal_sink_name(default)    -> rabbit_log_lager_event;
+make_internal_sink_name(federation) -> rabbit_log_federation_lager_event;
 make_internal_sink_name(ldap)       -> rabbit_log_ldap_lager_event;
 make_internal_sink_name(mirroring)  -> rabbit_log_mirroring_lager_event;
+make_internal_sink_name(prelaunch)  -> rabbit_log_prelaunch_lager_event;
 make_internal_sink_name(queue)      -> rabbit_log_queue_lager_event;
-make_internal_sink_name(federation) -> rabbit_log_federation_lager_event;
+make_internal_sink_name(ra)         -> rabbit_log_ra_lager_event;
 make_internal_sink_name(shovel)     -> rabbit_log_shovel_lager_event;
 make_internal_sink_name(upgrade)    -> rabbit_log_upgrade_lager_event;
-make_internal_sink_name(ra)         -> rabbit_log_ra_lager_event;
-make_internal_sink_name(default)    -> rabbit_log_lager_event;
 make_internal_sink_name(Category)   -> erlang:error({unknown_category, Category}).
 
 debug(Format) -> debug(Format, []).

@@ -677,12 +677,14 @@ get_mnesia_base_dir_from_env(Context) ->
     Dir = get_prefixed_env_var("RABBITMQ_MNESIA_BASE", Default),
     normalize_path(Dir).
 
-get_mnesia_base_dir_from_node(Remote) ->
-    Ret = query_remote(Remote, os, getenv, ["RABBITMQ_MNESIA_BASE"]),
-    case Ret of
-        {ok, Dir} when Dir =/= false -> normalize_path(Dir);
-        {badrpc, nodedown}           -> undefined
-    end.
+get_mnesia_base_dir_from_node(_Remote) ->
+    %% This variable is used to compute other variables but is not
+    %% stored anywhere. Therefore, we can't know what a remote node used
+    %% initially.
+    %%
+    %% That's ok because we don't really need to know that value anyway:
+    %% only the variables based on it are relevant.
+    undefined.
 
 get_default_mnesia_base_dir(#{data_dir := DataDir} = Context) ->
     Basename = case Context of
