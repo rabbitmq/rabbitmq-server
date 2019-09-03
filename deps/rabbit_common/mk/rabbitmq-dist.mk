@@ -138,7 +138,7 @@ $(error DIST_PLUGINS_LIST ($(DIST_PLUGINS_LIST)) is missing)
 endif
 
 $(eval $(foreach path, \
-  $(filter-out %/rabbit %/looking_glass %/lz4, \
+  $(filter-out %/looking_glass %/lz4, \
   $(sort $(shell cat $(DIST_PLUGINS_LIST))) $(CURDIR)), \
   $(call ez_target,$(if $(filter $(path),$(CURDIR)),$(PROJECT),$(notdir $(path))),$(path))))
 endif
