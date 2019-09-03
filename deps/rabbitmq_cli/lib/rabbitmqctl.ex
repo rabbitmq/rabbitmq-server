@@ -380,11 +380,11 @@ defmodule RabbitMQCtl do
 
   defp format_error(:undef, _opts, _module) do
     {:error, ExitCodes.exit_software(),
-      "Function clause.\nStacktrace:\n" <> Exception.format_stacktrace(System.stacktrace())}
+      "Function clause.\nStacktrace:\n" <> Exception.format_stacktrace()}
   end
   defp format_error(:function_clause, _opts, _module) do
     {:error, ExitCodes.exit_software(),
-      Exception.format_stacktrace()}
+      "Function clause.\nStacktrace:\n" <> Exception.format_stacktrace()}
   end
   defp format_error({:error, {:node_name, :hostname_not_allowed}}, _, _) do
     {:error, ExitCodes.exit_dataerr(),
