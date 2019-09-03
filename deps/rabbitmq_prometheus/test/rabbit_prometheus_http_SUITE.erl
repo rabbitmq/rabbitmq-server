@@ -164,15 +164,14 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_bytes_total ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_packets_total ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_published_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open_limit ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_erlang_process_open_fds ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_erlang_process_max_fds ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_io_read_ops_total ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_raft_term ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready ", [{capture, none}])),
-    % There are no consumers on the queue, assert on description, not empty metric
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers ", [{capture, none}])),
     %% Checking the first TOTALS metric
-    ?assertEqual(match, re:run(Body, "rabbitmq_connection", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "rabbitmq_connections ", [{capture, none}])).
 
 build_info_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),

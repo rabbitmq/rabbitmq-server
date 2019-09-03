@@ -96,9 +96,9 @@
     ]},
 
     {node_coarse_metrics, [
-        {2, file_descriptors_open, gauge, "Open file descriptors", fd_used},
-        {2, tcp_sockets_open, gauge, "Open TCP sockets", sockets_used},
-        {2, memory_used_bytes, gauge, "Memory used in bytes", mem_used},
+        {2, erlang_process_open_fds, gauge, "Open file descriptors", fd_used},
+        {2, erlang_process_open_sockets, gauge, "Open TCP sockets", sockets_used},
+        {2, erlang_process_memory_used_bytes, gauge, "Memory used in bytes", mem_used},
         {2, disk_space_available_bytes, gauge, "Disk space available in bytes", disk_free},
         {2, erlang_processes_used, gauge, "Erlang processes used", proc_used},
         {2, erlang_gc_runs_total, counter, "Total number of Erlang garbage collector runs", gc_num},
@@ -107,12 +107,12 @@
     ]},
 
     {node_metrics, [
-        {2, file_descriptors_open_limit, gauge, "Open file descriptors limit", fd_total},
-        {2, tcp_sockets_open_limit, gauge, "Open TCP sockets limit", sockets_total},
+        {2, erlang_process_max_fds, gauge, "Open file descriptors limit", fd_total},
+        {2, erlang_process_max_sockets, gauge, "Open TCP sockets limit", sockets_total},
         {2, memory_used_limit_bytes, gauge, "Memory high watermark in bytes", mem_limit},
         {2, disk_space_available_limit_bytes, gauge, "Free disk space low watermark in bytes", disk_free_limit},
         {2, erlang_processes_limit, gauge, "Erlang processes limit", proc_total},
-        {2, uptime_milliseconds, gauge, "Node uptime in milliseconds", uptime},
+        {2, erlang_uptime_milliseconds, gauge, "Node uptime in milliseconds", uptime},
         {2, erlang_scheduler_run_queue, gauge, "Erlang scheduler run queue", run_queue},
         {2, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval in seconds", net_ticktime}
     ]},
