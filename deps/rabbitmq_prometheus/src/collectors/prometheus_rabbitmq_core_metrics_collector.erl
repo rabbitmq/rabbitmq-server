@@ -38,7 +38,7 @@
 % The relevant files are:
 % * rabbit_common/src/rabbit_core_metrics.erl
 % * rabbit_common/include/rabbit_core_metrics.hrl
--define(METRICS, [
+-define(METRICS_RAW, [
     {channel_metrics, [
         {2, rabbitmq_channel_consumers, gauge, "Consumers on a channel", consumer_count},
         {2, rabbitmq_channel_messages_unacked, gauge, "Delivered but not yet acknowledged messages", messages_unacknowledged},
@@ -114,7 +114,6 @@
         {2, rabbitmq_resident_memory_limit_bytes, gauge, "Memory high watermark in bytes", mem_limit},
         {2, disk_space_available_limit_bytes, gauge, "Free disk space low watermark in bytes", disk_free_limit},
         {2, erlang_processes_limit, gauge, "Erlang processes limit", proc_total},
-        {2, erlang_uptime_milliseconds, gauge, "Node uptime in milliseconds", uptime},
         {2, erlang_scheduler_run_queue, gauge, "Erlang scheduler run queue", run_queue},
         {2, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval in seconds", net_ticktime}
     ]},
@@ -122,16 +121,11 @@
     {node_persister_metrics, [
         {2, rabbitmq_io_read_ops_total, counter, "Total number of I/O read operations", io_read_count},
         {2, rabbitmq_io_read_bytes_total, counter, "Total number of I/O bytes read", io_read_bytes},
-        {2, rabbitmq_io_read_time_microseconds_total, counter, "Total I/O read time", io_read_time},
         {2, rabbitmq_io_write_ops_total, counter, "Total number of I/O write operations", io_write_count},
         {2, rabbitmq_io_write_bytes_total, counter, "Total number of I/O bytes written", io_write_bytes},
-        {2, rabbitmq_io_write_time_microseconds_total, gauge, "Total I/O write time", io_write_time},
         {2, rabbitmq_io_sync_ops_total, counter, "Total number of I/O sync operations", io_sync_count},
-        {2, rabbitmq_io_sync_time_microseconds_total, counter, "Total I/O sync time", io_sync_time},
         {2, rabbitmq_io_seek_ops_total, counter, "Total number of I/O seek operations", io_seek_count},
-        {2, rabbitmq_io_seek_time_microseconds_total, counter, "Total I/O seek time", io_seek_time},
         {2, rabbitmq_io_open_attempt_ops_total, counter, "Total number of file open attempts", io_file_handle_open_attempt_count},
-        {2, rabbitmq_io_open_attempt_time_microseconds_total, counter, "Total file open attempts time", io_file_handle_open_attempt_time},
         {2, rabbitmq_io_reopen_ops_total, counter, "Total number of times files have been reopened", io_reopen_count},
         {2, rabbitmq_schema_db_ram_tx_total, counter, "Total number of Schema DB memory transactions", mnesia_ram_tx_count},
         {2, rabbitmq_schema_db_disk_tx_total, counter, "Total number of Schema DB disk transactions", mnesia_disk_tx_count},
@@ -175,6 +169,25 @@
         {2, rabbitmq_queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes}
     ]}
 ]).
+
+% Some metrics require to be converted, mostly those that represent time.
+% It is a Prometheus best practice to use specific base units: https://prometheus.io/docs/practices/naming/#base-units
+% Extra context: https://github.com/prometheus/docs/pull/1414#issuecomment-522337895
+-define(METRICS_REQUIRING_CONVERSIONS, [
+    {node_metrics, [
+        {2, 1000, erlang_uptime_seconds, gauge, "Node uptime", uptime}
+    ]},
+
+    {node_persister_metrics, [
+        {2, 1000000, rabbitmq_io_read_time_seconds_total, counter, "Total I/O read time", io_read_time},
+        {2, 1000000, rabbitmq_io_write_time_seconds_total, counter, "Total I/O write time", io_write_time},
+        {2, 1000000, rabbitmq_io_sync_time_seconds_total, counter, "Total I/O sync time", io_sync_time},
+        {2, 1000000, rabbitmq_io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time},
+        {2, 1000000, rabbitmq_io_open_attempt_time_seconds_total, counter, "Total file open attempts time", io_file_handle_open_attempt_time}
+    ]}
+]).
+
+-define(METRICS, ?METRICS_RAW ++ ?METRICS_REQUIRING_CONVERSIONS).
 
 -define(TOTALS, [
     %% ordering differs from metrics above, refer to list comprehension
@@ -265,7 +278,19 @@ mf(Callback, Contents, Data) ->
                 {Type, Fun, Data}
             )
         )
-    end || {Index, Name, Type, Help, Key} <- Contents].
+    end || {Index, Name, Type, Help, Key} <- Contents],
+    [begin
+        Fun = fun(D) -> proplists:get_value(Key, element(Index, D)) / BaseUnitConversionFactor end,
+        Callback(
+            create_mf(
+                ?METRIC_NAME(Name),
+                Help,
+                catch_boolean(Type),
+                ?MODULE,
+                {Type, Fun, Data}
+            )
+        )
+    end || {Index, BaseUnitConversionFactor, Name, Type, Help, Key} <- Contents].
 
 mf_totals(Callback, Name, Type, Help, Size) ->
     Callback(

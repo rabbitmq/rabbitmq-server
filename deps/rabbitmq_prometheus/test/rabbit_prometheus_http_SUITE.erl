@@ -155,7 +155,7 @@ metrics_test(Config) ->
     ct:pal(Body),
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
-    %% Checking that we have the first metric from each ETS table owned by rabbitmq_metrics
+    %% Checking the first metric from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_published ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_channel_process_reductions_total ", [{capture, none}])),
@@ -170,6 +170,9 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_raft_term ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers ", [{capture, none}])),
+    %% Checking the first metric in each ETS table that requires converting
+    ?assertEqual(match, re:run(Body, "erlang_uptime_seconds ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_io_read_time_seconds_total ", [{capture, none}])),
     %% Checking the first TOTALS metric
     ?assertEqual(match, re:run(Body, "rabbitmq_connections ", [{capture, none}])).
 
