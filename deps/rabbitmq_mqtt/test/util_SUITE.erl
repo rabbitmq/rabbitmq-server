@@ -74,16 +74,16 @@ mqtt_amqp_topic_translation(_) ->
     ?assertEqual(T0_As_Mqtt, Amqp2MqttFun(T0_As_Mqtt)),
 
     T1 = "spAv1.0/foo/bar/+/baz",
-    T1_As_Amqp = <<"spAv1_0.foo.bar.*.baz">>,
+    T1_As_Amqp = <<"spAv1___0.foo.bar.*.baz">>,
     T1_As_Mqtt = <<"spAv1.0/foo/bar/+/baz">>,
     ?assertEqual(T1_As_Amqp, Mqtt2AmqpFun(T1)),
-    ?assertEqual(T1_As_Mqtt, Amqp2MqttFun(T1_As_Mqtt)),
+    ?assertEqual(T1_As_Mqtt, Amqp2MqttFun(T1_As_Amqp)),
 
     T2 = "spBv2.90/foo/bar/+/baz",
-    T2_As_Amqp = <<"spBv2_90.foo.bar.*.baz">>,
+    T2_As_Amqp = <<"spBv2___90.foo.bar.*.baz">>,
     T2_As_Mqtt = <<"spBv2.90/foo/bar/+/baz">>,
     ?assertEqual(T2_As_Amqp, Mqtt2AmqpFun(T2)),
-    ?assertEqual(T2_As_Mqtt, Amqp2MqttFun(T2_As_Mqtt)),
+    ?assertEqual(T2_As_Mqtt, Amqp2MqttFun(T2_As_Amqp)),
 
     ok = application:unset_env(rabbitmq_mqtt, sparkplug_b),
     ok.
