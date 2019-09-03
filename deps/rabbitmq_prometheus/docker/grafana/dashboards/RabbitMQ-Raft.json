@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1564148441775,
+  "iteration": 1567455894877,
   "links": [
     {
       "icon": "doc",
@@ -37,6 +37,7 @@
       "dashes": false,
       "description": "##### Rate of Raft log operations committed\n\nThis includes all queue operations, including publishes & consumer acknowledgements.\n\nThis tracks the progress of the Raft commit index on all members, including followers.\n\nIf a RabbitMQ node does not run a Raft member, it will not report any entries committed.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -60,7 +61,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -112,11 +115,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_log_commit_index{cluster=\"$cluster\", node=~\"$node\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_raft_log_commit_index[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -195,7 +198,7 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "max(rabbitmq_raft_entry_commit_latency{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node)",
+          "expr": "rabbitmq_raft_entry_commit_latency * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -237,6 +240,7 @@
       "dashes": false,
       "description": "##### Pending Raft log entries\n\nTracks the number of Raft log entries that have been written but not yet committed.\n\nHigh & growing values may be indicative of a quorum of members not being available so that a queue can make progress.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -263,7 +267,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -315,11 +321,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} - rabbitmq_raft_log_commit_index{cluster=\"$cluster\", node=~\"$node\"}) by(node)",
+          "expr": "sum(\n  (rabbitmq_raft_log_last_written_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) -\n  (rabbitmq_raft_log_commit_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})\n) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -373,6 +379,7 @@
       "dashes": false,
       "description": "##### Rate of Raft leader elections\n\nTracks the increments of the Raft term.\n\nSustained non-zero rates are indicative of network and/or availability issues, or queue churn. The other reason may be quorum queue declarations.\n\nValues above 0 are normal, some leader elections are expected. Sustained high values may be of concern.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -397,7 +404,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -449,11 +458,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_term{cluster=\"$cluster\", node=~\"$node\"}[60s])) by(node)",
+          "expr": "sum(rate(rabbitmq_raft_term[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{node}}",
+          "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
         }
       ],
@@ -516,6 +525,7 @@
       "dashes": false,
       "description": "##### Number of entries in the Raft log\n\nTracks the number of Raft log entries since the last snapshot.\n\nLarge values can either be indicative of large quorum queue backlogs or availability problems. If the uncommitted entries metric is large as well, there is a genuine availability problem in the system.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 13,
         "w": 24,
@@ -540,7 +550,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null as zero",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -592,11 +604,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_raft_log_last_written_index{cluster=\"$cluster\", node=~\"$node\"} - rabbitmq_raft_log_snapshot_index{cluster=\"$cluster\", node=~\"$node\"}) by(queue, node) > 5000",
-          "format": "time_series",
-          "instant": false,
-          "intervalFactor": 1,
-          "legendFormat": "{{node}} {{queue}}",
+          "expr": "sum(\n  (rabbitmq_raft_log_last_written_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) - \n  (rabbitmq_raft_log_snapshot_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})\n) by(queue, rabbitmq_node) > 5000",
+          "hide": false,
+          "legendFormat": "{{rabbitmq_node}} {{queue}}",
           "refId": "A"
         }
       ],
@@ -644,7 +654,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 18,
+  "schemaVersion": 19,
   "style": "dark",
   "tags": [
     "pivotal",
@@ -660,43 +670,18 @@
           "value": ""
         },
         "datasource": "prometheus",
-        "definition": "label_values(rabbitmq_raft_term,cluster)",
+        "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
-        "label": "Cluster",
+        "label": "RabbitMQ Cluster",
         "multi": false,
-        "name": "cluster",
+        "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(rabbitmq_raft_term,cluster)",
+        "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
-        "tagValuesQuery": "",
-        "tags": [],
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
-      },
-      {
-        "allValue": null,
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": "prometheus",
-        "definition": "label_values(rabbitmq_raft_term,node)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Node",
-        "multi": false,
-        "name": "node",
-        "options": [],
-        "query": "label_values(rabbitmq_raft_term,node)",
-        "refresh": 2,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",

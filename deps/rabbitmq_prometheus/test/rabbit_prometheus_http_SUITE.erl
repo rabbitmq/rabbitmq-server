@@ -36,7 +36,7 @@ groups() ->
      {default_config, [], all_tests()},
      {config_path, [], all_tests()},
      {config_port, [], all_tests()},
-     {with_metrics, [], [metrics_test, metrics_global_labels_test]}
+     {with_metrics, [], [metrics_test, build_info_test, identity_info_test]}
     ].
 
 all_tests() ->
@@ -57,25 +57,19 @@ init_per_group(config_path, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_path, Config1, [{prometheus_path, "/bunnieshop"}]);
 init_per_group(config_port, Config0) ->
-    PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15674}]}]},
+    PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15772}]}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
-    init_per_group(config_port, Config1, [{prometheus_port, 15674}]);
+    init_per_group(config_port, Config1, [{prometheus_port, 15772}]);
 init_per_group(with_metrics, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
         Config0,
         [{rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]}]
     ),
-    Config2 = rabbit_ct_helpers:merge_app_env(
-        Config1,
-        {prometheus, [{global_labels, [{node, node()}, {cluster, "rabbitmq_prometheus_test"},
-                                       {rabbitmq_version, "3.8.0+beta.5"},
-                                       {erlang_version, "21.3"}]}]}
-    ),
-    Config3 = init_per_group(with_metrics, Config2, []),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config3, quorum_queue),
+    Config2 = init_per_group(with_metrics, Config1, []),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue),
 
-    A = rabbit_ct_broker_helpers:get_node_config(Config3, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config3, A),
+    A = rabbit_ct_broker_helpers:get_node_config(Config2, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config2, A),
 
     Q = <<"prometheus_test_queue">>,
     amqp_channel:call(Ch,
@@ -90,7 +84,7 @@ init_per_group(with_metrics, Config0) ->
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
     timer:sleep(10000),
 
-    Config3 ++ [{channel_pid, Ch}, {queue_name, Q}].
+    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}].
 
 init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:log_environment(),
@@ -162,51 +156,36 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
     %% Checking that we have the first metric from each ETS table owned by rabbitmq_metrics
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_published{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_process_reductions_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_get_ack_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_connection_opened_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_bytes_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_packets_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_published_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_file_descriptors_open_limit{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_io_read_ops_total{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_raft_term{", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready{", [{capture, none}])),
-    % There are no consumers on the queue, assert on description, not empty metric
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_published ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_process_reductions_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_channel_get_ack_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_connections_opened_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_bytes_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_packets_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_published_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "process_open_fds ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "process_max_fds ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_io_read_ops_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_raft_term ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers ", [{capture, none}])),
     %% Checking the first TOTALS metric
-    ?assertEqual(match, re:run(Body, "rabbitmq_connections", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "rabbitmq_connections ", [{capture, none}])).
 
-metrics_global_labels_test(Config) ->
+build_info_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
-    Lines = string:split(Body, "\n", all),
-    [
-        begin
-            case string:str(Line, "node=") of
-                0 -> ct:fail("node label missing from metric '~s'", [Line]);
-                _ -> ok
-            end,
-            case string:str(Line, "cluster=") of
-                0 -> ct:fail("cluster label missing from metric '~s'", [Line]);
-                _ -> ok
-            end,
-            case string:str(Line, "rabbitmq_version=") of
-                0 -> ct:fail("rabbitmq_version label missing from metric '~s'", [Line]);
-                _ -> ok
-            end,
-            case string:str(Line, "erlang_version=") of
-                0 -> ct:fail("erlang_version label missing from metric '~s'", [Line]);
-                _ -> ok
-            end
-        end
-        ||
-        Line <- Lines,
-        lists:prefix("#", Line) == false,
-        Line /= ""
-    ].
+    ?assertEqual(match, re:run(Body, "rabbitmq_build_info{", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_version=\"", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "prometheus_plugin_version=\"", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "prometheus_client_version=\"", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "erlang_version=\"", [{capture, none}])).
+
+identity_info_test(Config) ->
+    {_Headers, Body} = http_get(Config, [], 200),
+    ?assertEqual(match, re:run(Body, "rabbitmq_identity_info{", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_node=", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])).
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),

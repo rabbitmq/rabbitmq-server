@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1561396389555,
+  "iteration": 1567503571131,
   "links": [],
   "panels": [
     {
@@ -74,7 +74,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"}) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -158,7 +158,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 3) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} == 3) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -242,7 +242,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 1) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} == 1) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -326,7 +326,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state{cluster=\"$cluster\"} == 2) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} == 2) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -420,10 +420,10 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_node_state{cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A",
           "units": "none",
           "valueHandler": "Number Threshold"
@@ -457,6 +457,7 @@
       "dashes": false,
       "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the 64MB threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -478,7 +479,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -530,10 +533,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_node_queue_size{cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_node_queue_size * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -608,6 +611,7 @@
       "dashes": false,
       "description": "",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -629,7 +633,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -681,10 +687,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[60s])",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -737,6 +743,7 @@
       "dashes": false,
       "description": "",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -760,7 +767,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -812,10 +821,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[60s])",
+          "expr": "rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} <- {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
           "refId": "A"
         }
       ],
@@ -868,6 +877,7 @@
       "dashes": false,
       "description": "Number of inet packets sent to the distribution link port.\n\nIf too few messages are sent and data sits in the port driver buffer, increasing the `inet_dist_connect_options` as well as `inet_dist_listen_options` buffer values will result in more stable throughput.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -891,7 +901,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -943,10 +955,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[60s])",
+          "expr": "rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -999,6 +1011,7 @@
       "dashes": false,
       "description": "Number of inet packets received from the distribution link port.\n\nIf too many messages are received, increasing the `inet_dist_connect_options` as well as `inet_dist_listen_options` buffer values will result in more stable throughput.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1020,7 +1033,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1072,10 +1087,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[60s])",
+          "expr": "rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} <- {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
           "refId": "A"
         }
       ],
@@ -1128,6 +1143,7 @@
       "dashes": false,
       "description": "Corresponds to the average size of the argument passed to `gen_tcp:send/2` or equivalent.\n\nTypically corresponds to TCP window size.\n\nIf TLS is used for inter-node communication, the `inet` packet size will be varied so that the system as a whole is both secure and performant.\n\n`inet` packets larger than the TCP window will be split into TCP packets by the system kernel.\n\n`inet` packets smaller than the TCP window _may_ be joined into TCP packets by the system kernel.\n\n* [`inet` packet](http://erlang.org/doc/man/inet.html#packet)",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1149,7 +1165,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1201,10 +1219,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes{cluster=\"$cluster\"}[60s]) / rate(erlang_vm_dist_send_cnt{cluster=\"$cluster\"}[60s])",
+          "expr": "(rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) / \n(rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1257,6 +1275,7 @@
       "dashes": false,
       "description": "Corresponds to the average size of the argument received from `gen_tcp:recv/2` or equivalent.\n\nTypically corresponds to TCP window size.\n\nIf TLS is used for inter-node communication, the `inet` packet size will be varied so that the system as a whole is both secure and performant.\n\n* [`inet` packet](http://erlang.org/doc/man/inet.html#packet)",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1280,7 +1299,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1332,10 +1353,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes{cluster=\"$cluster\"}[60s]) / rate(erlang_vm_dist_recv_cnt{cluster=\"$cluster\"}[60s])",
+          "expr": "(rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) / \n(rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} <- {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
           "refId": "A"
         }
       ],
@@ -1401,6 +1422,7 @@
       "dashes": false,
       "description": "The total number of bytes allocated for this port by the runtime system. The port itself can have allocated memory that is not included.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1422,7 +1444,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1474,10 +1498,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_memory_bytes{cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_port_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1530,6 +1554,7 @@
       "dashes": false,
       "description": "The total number of bytes queued by the port using the ERTS driver queue implementation\n\nAny values above a few KBs hint to an overloaded distribution",
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1551,7 +1576,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1567,10 +1594,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_queue_size_bytes{cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_port_queue_size_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1727,10 +1754,10 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} ",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A",
           "units": "none",
           "valueHandler": "Number Threshold"
@@ -1764,6 +1791,7 @@
       "dashes": false,
       "description": "The number of messages currently in the message queue of the process\n\nAny values above 0 hint to an overloaded distribution",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1785,7 +1813,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1808,10 +1838,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -1873,6 +1903,7 @@
       "dashes": false,
       "description": "The size in bytes of process memory. This includes call stack, heap, and internal structures.",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -1894,7 +1925,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -1953,10 +1986,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -2009,6 +2042,7 @@
       "dashes": false,
       "description": "The number of reductions executed by the process",
       "fill": 0,
+      "fillGradient": 0,
       "gridPos": {
         "h": 5,
         "w": 12,
@@ -2030,7 +2064,9 @@
       "linewidth": 1,
       "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -2089,10 +2125,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\", cluster=\"$cluster\"}[60s])",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{node}} -> {{peer}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -2100,7 +2136,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Process reductions",
+      "title": "Process reductions / s",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2140,7 +2176,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 18,
+  "schemaVersion": 19,
   "style": "dark",
   "tags": [
     "erlang",
@@ -2157,14 +2193,14 @@
           "value": "rabbitmq-qq"
         },
         "datasource": "prometheus",
-        "definition": "label_values(erlang_vm_dist_proc_status,cluster)",
+        "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
-        "label": "Cluster",
+        "label": "RabbitMQ Cluster",
         "multi": false,
-        "name": "cluster",
+        "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(erlang_vm_dist_proc_status,cluster)",
+        "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -2184,14 +2220,14 @@
           ]
         },
         "datasource": "prometheus",
-        "definition": "label_values(erlang_vm_dist_proc_status,type)",
+        "definition": "label_values(erlang_vm_dist_proc_status, type)",
         "hide": 0,
         "includeAll": true,
         "label": "Process type",
         "multi": true,
         "name": "erlang_vm_dist_proc_type",
         "options": [],
-        "query": "label_values(erlang_vm_dist_proc_status,type)",
+        "query": "label_values(erlang_vm_dist_proc_status, type)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
