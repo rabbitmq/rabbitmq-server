@@ -21,17 +21,19 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, util_tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
+      {util_tests, [parallel], [
                                 coerce_exchange,
                                 coerce_vhost,
                                 coerce_default_user,
-                                coerce_default_pass
-                               ]}
+                                coerce_default_pass,
+                                mqtt_amqp_topic_translation
+                               ]
+      }
     ].
 
 suite() ->
@@ -59,3 +61,29 @@ coerce_default_user(_) ->
 
 coerce_default_pass(_) ->
     ?assertEqual(<<"guest_pass">>, rabbit_mqtt_util:env(default_pass)).
+
+mqtt_amqp_topic_translation(_) ->
+    ok = application:set_env(rabbitmq_mqtt, sparkplug_b, true),
+    {ok, {mqtt2amqp_fun, Mqtt2AmqpFun}, {amqp2mqtt_fun, Amqp2MqttFun}} =
+        rabbit_mqtt_util:get_topic_translation_funs(),
+
+    T0 = "/foo/bar/+/baz",
+    T0_As_Amqp = <<".foo.bar.*.baz">>,
+    T0_As_Mqtt = <<"/foo/bar/+/baz">>,
+    ?assertEqual(T0_As_Amqp, Mqtt2AmqpFun(T0)),
+    ?assertEqual(T0_As_Mqtt, Amqp2MqttFun(T0_As_Mqtt)),
+
+    T1 = "spAv1.0/foo/bar/+/baz",
+    T1_As_Amqp = <<"spAv1_0.foo.bar.*.baz">>,
+    T1_As_Mqtt = <<"spAv1.0/foo/bar/+/baz">>,
+    ?assertEqual(T1_As_Amqp, Mqtt2AmqpFun(T1)),
+    ?assertEqual(T1_As_Mqtt, Amqp2MqttFun(T1_As_Mqtt)),
+
+    T2 = "spBv2.90/foo/bar/+/baz",
+    T2_As_Amqp = <<"spBv2_90.foo.bar.*.baz">>,
+    T2_As_Mqtt = <<"spBv2.90/foo/bar/+/baz">>,
+    ?assertEqual(T2_As_Amqp, Mqtt2AmqpFun(T2)),
+    ?assertEqual(T2_As_Mqtt, Amqp2MqttFun(T2_As_Mqtt)),
+
+    ok = application:unset_env(rabbitmq_mqtt, sparkplug_b),
+    ok.

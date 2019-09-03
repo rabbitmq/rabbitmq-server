@@ -20,14 +20,14 @@
 
 -export([subcription_queue_name/1,
          mqtt2amqp/1,
-         mqtt2amqp_fun/0,
          amqp2mqtt/1,
          gen_client_id/0,
          env/1,
          table_lookup/2,
          path_for/2,
          path_for/3,
-         vhost_name_to_table_name/1
+         vhost_name_to_table_name/1,
+         get_topic_translation_funs/0
         ]).
 
 subcription_queue_name(ClientId) ->
@@ -43,29 +43,30 @@ mqtt2amqp(Topic) ->
       re:replace(re:replace(Topic, "/", ".", [global]),
                  "[\+]", "*", [global])).
 
-mqtt2amqp_fun() ->
+get_topic_translation_funs() ->
     SparkplugB = env(sparkplug_b),
     ToAmqpFun = fun(T0) ->
                     T1 = string:replace(T0, "/", ".", all),
                     T2 = string:replace(T1, "+", "*", all),
                     erlang:iolist_to_binary(T2)
                 end,
-    case SparkplugB of
-        true ->
-            fun(T0) ->
-                case {string:prefix(T0, "spAv1.0/"), string:prefix(T0, "spBv1.0/")} of
-                    {nomatch, nomatch} ->
-                        ToAmqpFun(T0);
-                    {_, _} ->
-                        T1 = string:replace(T0, ".", "_", leading),
-                        ToAmqpFun(T1)
-                end
-            end;
-        _ ->
-            fun(T) ->
-                ToAmqpFun(T)
-            end
-    end.
+    Mqtt2AmqpFun = case SparkplugB of
+                       true ->
+                           fun(T0) ->
+                               case {string:prefix(T0, "spAv1.0/"), string:prefix(T0, "spBv1.0/")} of
+                                   {nomatch, nomatch} ->
+                                       ToAmqpFun(T0);
+                                   {_, _} ->
+                                       T1 = string:replace(T0, ".", "_", leading),
+                                       ToAmqpFun(T1)
+                               end
+                           end;
+                       _ ->
+                           fun(T) ->
+                               ToAmqpFun(T)
+                           end
+                   end,
+    {ok, {mqtt2amqp_fun, Mqtt2AmqpFun}, {amqp2mqtt_fun, fun amqp2mqtt/1}}.
 
 amqp2mqtt(Topic) ->
     erlang:iolist_to_binary(
