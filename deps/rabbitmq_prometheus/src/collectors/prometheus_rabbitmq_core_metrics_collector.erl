@@ -175,7 +175,7 @@
 % Extra context: https://github.com/prometheus/docs/pull/1414#issuecomment-522337895
 -define(METRICS_REQUIRING_CONVERSIONS, [
     {node_metrics, [
-        {2, 1000, erlang_uptime_seconds_total, counter, "Total node uptime", uptime}
+        {2, 1000, erlang_uptime_seconds, gauge, "Node uptime", uptime}
     ]},
 
     {node_persister_metrics, [

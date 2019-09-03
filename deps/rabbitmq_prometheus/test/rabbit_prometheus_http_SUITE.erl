@@ -171,7 +171,7 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers ", [{capture, none}])),
     %% Checking the first metric in each ETS table that requires converting
-    ?assertEqual(match, re:run(Body, "erlang_uptime_seconds_total ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "erlang_uptime_seconds ", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_io_read_time_seconds_total ", [{capture, none}])),
     %% Checking the first TOTALS metric
     ?assertEqual(match, re:run(Body, "rabbitmq_connections ", [{capture, none}])).
