@@ -113,7 +113,7 @@
 
     {node_coarse_metrics, [
         {2, process_open_fds, gauge, "Open file descriptors", fd_used},
-        {2, process_open_sockets, gauge, "Open TCP sockets", sockets_used},
+        {2, process_open_tcp_sockets, gauge, "Open TCP sockets", sockets_used},
         {2, process_resident_memory_bytes, gauge, "Memory used in bytes", mem_used},
         {2, disk_space_available_bytes, gauge, "Disk space available in bytes", disk_free},
         {2, erlang_processes_used, gauge, "Erlang processes used", proc_used},
@@ -124,7 +124,7 @@
 
     {node_metrics, [
         {2, process_max_fds, gauge, "Open file descriptors limit", fd_total},
-        {2, process_max_sockets, gauge, "Open TCP sockets limit", sockets_total},
+        {2, process_max_tcp_sockets, gauge, "Open TCP sockets limit", sockets_total},
         {2, resident_memory_limit_bytes, gauge, "Memory high watermark in bytes", mem_limit},
         {2, disk_space_available_limit_bytes, gauge, "Free disk space low watermark in bytes", disk_free_limit},
         {2, erlang_processes_limit, gauge, "Erlang processes limit", proc_total},
