@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1567509971134,
+  "iteration": 1567607527367,
   "links": [
     {
       "icon": "doc",
@@ -739,7 +739,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available memory before the memory alarm gets triggered and publishers are blocked.\n\nIf the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n##### Relevant doc guides\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "If the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -890,7 +890,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "When available disk space goes below 0, the disk alarm gets triggered and publishing connections will be blocked.\n\n##### Relevant doc guides\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "When available disk space goes below 0, the disk alarm gets triggered and publishing connections will be blocked.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1041,7 +1041,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available file descriptors, used by network sockets and file handles.\n\nWhen this value reaches 0, new connections will fail to establish and persistent messages may fail to write to disk. Quorum Queues are also likely to be affected. CLI tools, such as rabbitmqctl & rabbitmq-plugins will stop working.\n\n##### Relevant doc guides\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "description": "When this value reaches 0, new connections will fail to establish and persistent messages may fail to write to disk. Quorum Queues are also likely to be affected. CLI tools, such as rabbitmqctl & rabbitmq-plugins will stop working.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1193,7 +1193,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Available socket descriptors.\n\nWhen this value reaches 0, new connections will fail to establish.\n\n##### Relevant doc guides\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
+      "description": "When this value reaches 0, new connections will fail to establish.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1357,7 +1357,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "##### Number of messages ready to be delivered to consumers\n\nAim to keep this value as low as possible. RabbitMQ behaves best when messages are flowing through it. It's OK for publishers to occasionally outpace consumers, but the expectation is that consumers will eventually process all ready messages and empty the queues.\n\nIf this metric keeps increasing, your system will eventually run out of memory and disk space. Consider using TTL or Queue Length Limit to prevent unbounded message growth.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Queue Length Limit](https://www.rabbitmq.com/maxlength.html)\n* [Time-To-Live and Expiration](https://www.rabbitmq.com/ttl.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1492,7 +1492,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "##### Messages that have been delivered to consumers but remain in the queue, pending explicit acknowledgement\n\nThese are messages that are either in-flight to consumers, currently being processed by consumers or simply waiting for the consumer acknowledgements to be processed by the queue. Until the queue processes the message acknowledgement, the message will remain unacknowledged.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Confirms](https://www.rabbitmq.com/confirms.html)\n* [Consumer Prefetch](https://www.rabbitmq.com/consumer-prefetch.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1640,7 +1640,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "* [Publishers guide](https://www.rabbitmq.com/publishers.html)",
+      "description": "##### Messages incoming on channels\n\nThis is the incoming message count before any routing rules are applied.\n\nIf this value is higher than the number of messages published to queues, then it is safe to assume that the same message is delivered to more than one queue.\n\nIf this value is higher than the number of messages published to queues, messages are unroutable and either dropped or returned to publishers.\n\n* [Publishers](https://www.rabbitmq.com/publishers.html)\n* [AMQP 0-9-1 Model Explained](https://www.rabbitmq.com/tutorials/amqp-concepts.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1775,7 +1775,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "##### Messages published into an exchange and confirmed on the channel\n\nThis requires publishers to wait for confirmation from the broker that it received the message(s).\n\n* [Publisher Confirms](https://www.rabbitmq.com/confirms.html#publisher-confirms)\n* [Publisher Confirms and Data Safety](https://www.rabbitmq.com/publishers.html#data-safety)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1910,7 +1910,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of mandatory messages returned to publishers as unroutable\n\n##### Doc guides\n\n* [Publisher Acknowledgements](https://www.rabbitmq.com/publishers.html#data-safety)\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
+      "description": "##### Mandatory messages returned to publishers as unroutable\n\nValues above 0 should be investigated, they are most likely an anti-pattern.\n\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -2288,7 +2288,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "Count of unroutable non-mandatory messages",
+      "description": "##### Messages published as non-mandatory into an exchange and dropped as unroutable\n\nValues above 0 should be investigated, they are most likely an anti-pattern.\n\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
