@@ -19,8 +19,6 @@
 -include("rabbit_mqtt.hrl").
 
 -export([subcription_queue_name/1,
-         mqtt2amqp/1,
-         amqp2mqtt/1,
          gen_client_id/0,
          env/1,
          table_lookup/2,
@@ -33,11 +31,6 @@
 subcription_queue_name(ClientId) ->
     Base = "mqtt-subscription-" ++ ClientId ++ "qos",
     {list_to_binary(Base ++ "0"), list_to_binary(Base ++ "1")}.
-
-mqtt2amqp(Topic) ->
-    erlang:iolist_to_binary(
-      re:replace(re:replace(Topic, "/", ".", [global]),
-                 "[\+]", "*", [global])).
 
 %% amqp mqtt descr
 %% *    +    match one topic level
@@ -89,11 +82,6 @@ get_topic_translation_funs() ->
             {M2A, A2M}
     end,
     {ok, {mqtt2amqp_fun, M2AFun}, {amqp2mqtt_fun, A2MFun}}.
-
-amqp2mqtt(Topic) ->
-    erlang:iolist_to_binary(
-      re:replace(re:replace(Topic, "[\*]", "+", [global]),
-                 "[\.]", "/", [global])).
 
 gen_client_id() ->
     lists:nthtail(1, rabbit_guid:string(rabbit_guid:gen_secure(), [])).

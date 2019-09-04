@@ -52,7 +52,9 @@
                       retainer_pid,
                       auth_state,
                       send_fun,
-                      peer_addr}).
+                      peer_addr,
+                      mqtt2amqp_fun,
+                      amqp2mqtt_fun }).
 
 -record(auth_state, {username,
                      user,

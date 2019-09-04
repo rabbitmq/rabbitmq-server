@@ -42,6 +42,8 @@ initial_state(Socket, SSLLoginName) ->
 initial_state(Socket, SSLLoginName,
               AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
               SendFun, PeerAddr) ->
+    {ok, {mqtt2amqp_fun, M2A}, {amqp2mqtt_fun, A2M}} =
+        rabbit_mqtt_util:get_topic_translation_funs(),
     %% MQTT connections use exactly one channel. The frame max is not
     %% applicable and there is no way to know what client is used.
     AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info = [
@@ -61,7 +63,9 @@ initial_state(Socket, SSLLoginName,
                  adapter_info   = AdapterInfo,
                  ssl_login_name = SSLLoginName,
                  send_fun       = SendFun,
-                 peer_addr      = PeerAddr }.
+                 peer_addr      = PeerAddr,
+                 mqtt2amqp_fun  = M2A,
+                 amqp2mqtt_fun  = A2M}.
 
 process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState = #proc_state{ connection = undefined } )
@@ -223,7 +227,8 @@ process_request(?PUBLISH,
                   variable = #mqtt_frame_publish{ topic_name = Topic,
                                                   message_id = MessageId },
                   payload = Payload },
-                  PState = #proc_state{retainer_pid = RPid}) ->
+                  PState = #proc_state{retainer_pid = RPid,
+                                       amqp2mqtt_fun = Amqp2MqttFun}) ->
     check_publish(Topic, fun() ->
         Msg = #mqtt_msg{retain     = Retain,
                         qos        = Qos,
@@ -234,7 +239,7 @@ process_request(?PUBLISH,
         Result = amqp_pub(Msg, PState),
         case Retain of
           false -> ok;
-          true  -> hand_off_to_retainer(RPid, Topic, Msg)
+          true  -> hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, Msg)
         end,
         {ok, Result}
     end, PState);
@@ -249,7 +254,8 @@ process_request(?SUBSCRIBE,
                             exchange = Exchange,
                             retainer_pid = RPid,
                             send_fun = SendFun,
-                            message_id  = StateMsgId} = PState0) ->
+                            message_id  = StateMsgId,
+                            mqtt2amqp_fun = Mqtt2AmqpFun} = PState0) ->
     rabbit_log_connection:debug("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
     check_subscribe(Topics, fun() ->
         {QosResponse, PState1} =
@@ -258,11 +264,11 @@ process_request(?SUBSCRIBE,
                            SupportedQos = supported_subs_qos(Qos),
                            {Queue, #proc_state{subscriptions = Subs} = PState1} =
                                ensure_queue(SupportedQos, PState),
+                           RoutingKey = Mqtt2AmqpFun(TopicName),
                            Binding = #'queue.bind'{
                                        queue       = Queue,
                                        exchange    = Exchange,
-                                       routing_key = rabbit_mqtt_util:mqtt2amqp(
-                                                       TopicName)},
+                                       routing_key = RoutingKey},
                            #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
                            SupportedQosList = case maps:find(TopicName, Subs) of
                                {ok, L} -> [SupportedQos|L];
@@ -298,7 +304,8 @@ process_request(?UNSUBSCRIBE,
                                                       exchange      = Exchange,
                                                       client_id     = ClientId,
                                                       subscriptions = Subs0,
-                                                      send_fun      = SendFun } = PState) ->
+                                                      send_fun      = SendFun,
+                                                      mqtt2amqp_fun = Mqtt2AmqpFun } = PState) ->
     rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     Queues = rabbit_mqtt_util:subcription_queue_name(ClientId),
     Subs1 =
@@ -308,14 +315,14 @@ process_request(?UNSUBSCRIBE,
                       {ok, Val} when is_list(Val) -> lists:usort(Val);
                       error                       -> []
                   end,
+        RoutingKey = Mqtt2AmqpFun(TopicName),
         lists:foreach(
           fun (QosSub) ->
                   Queue = element(QosSub + 1, Queues),
                   Binding = #'queue.unbind'{
                               queue       = Queue,
                               exchange    = Exchange,
-                              routing_key =
-                                  rabbit_mqtt_util:mqtt2amqp(TopicName)},
+                              routing_key = RoutingKey},
                   #'queue.unbind_ok'{} = amqp_channel:call(Channel, Binding)
           end, QosSubs),
         maps:remove(TopicName, Subs)
@@ -336,41 +343,45 @@ process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
     rabbit_log_connection:debug("Received a DISCONNECT"),
     {stop, PState}.
 
-hand_off_to_retainer(RetainerPid, Topic, #mqtt_msg{payload = <<"">>}) ->
-  rabbit_mqtt_retainer:clear(RetainerPid, Topic),
-  ok;
-hand_off_to_retainer(RetainerPid, Topic, Msg) ->
-  rabbit_mqtt_retainer:retain(RetainerPid, Topic, Msg),
-  ok.
+hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, #mqtt_msg{payload = <<"">>}) ->
+    Topic1 = Amqp2MqttFun(Topic0),
+    rabbit_mqtt_retainer:clear(RetainerPid, Topic1),
+    ok;
+hand_off_to_retainer(RetainerPid, Amqp2MqttFun, Topic0, Msg) ->
+    Topic1 = Amqp2MqttFun(Topic0),
+    rabbit_mqtt_retainer:retain(RetainerPid, Topic1, Msg),
+    ok.
 
-maybe_send_retained_message(RPid, #mqtt_topic{name = S, qos = SubscribeQos}, MsgId,
-                            #proc_state{ send_fun = SendFun } = PState) ->
-  case rabbit_mqtt_retainer:fetch(RPid, S) of
-    undefined -> false;
-    Msg       ->
-                %% calculate effective QoS as the lower value of SUBSCRIBE frame QoS
-                %% and retained message QoS. The spec isn't super clear on this, we
-                %% do what Mosquitto does, per user feedback.
-                Qos = erlang:min(SubscribeQos, Msg#mqtt_msg.qos),
-                Id = case Qos of
-                  ?QOS_0 -> undefined;
-                  ?QOS_1 -> MsgId
-                end,
-                SendFun(#mqtt_frame{fixed = #mqtt_frame_fixed{
-                    type = ?PUBLISH,
-                    qos  = Qos,
-                    dup  = false,
-                    retain = Msg#mqtt_msg.retain
-                 }, variable = #mqtt_frame_publish{
-                    message_id = Id,
-                    topic_name = rabbit_mqtt_util:amqp2mqtt(S)
-                 },
-                 payload = Msg#mqtt_msg.payload}, PState),
-                 case Qos of
-                   ?QOS_0 -> false;
-                   ?QOS_1 -> {true, 1}
-                 end
-  end.
+maybe_send_retained_message(RPid, #mqtt_topic{name = Topic0, qos = SubscribeQos}, MsgId,
+                            #proc_state{ send_fun = SendFun,
+                                         amqp2mqtt_fun = Amqp2MqttFun } = PState) ->
+    Topic1 = Amqp2MqttFun(Topic0),
+    case rabbit_mqtt_retainer:fetch(RPid, Topic1) of
+        undefined -> false;
+        Msg       ->
+            %% calculate effective QoS as the lower value of SUBSCRIBE frame QoS
+            %% and retained message QoS. The spec isn't super clear on this, we
+            %% do what Mosquitto does, per user feedback.
+            Qos = erlang:min(SubscribeQos, Msg#mqtt_msg.qos),
+            Id = case Qos of
+                ?QOS_0 -> undefined;
+                ?QOS_1 -> MsgId
+            end,
+            SendFun(#mqtt_frame{fixed = #mqtt_frame_fixed{
+                type = ?PUBLISH,
+                qos  = Qos,
+                dup  = false,
+                retain = Msg#mqtt_msg.retain
+            }, variable = #mqtt_frame_publish{
+                message_id = Id,
+                topic_name = Topic1
+            },
+            payload = Msg#mqtt_msg.payload}, PState),
+            case Qos of
+            ?QOS_0 -> false;
+            ?QOS_1 -> {true, 1}
+        end
+    end.
 
 amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag,
@@ -381,7 +392,8 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
               #proc_state{ channels      = {Channel, _},
                            awaiting_ack  = Awaiting,
                            message_id    = MsgId,
-                           send_fun      = SendFun } = PState) ->
+                           send_fun      = SendFun,
+                           amqp2mqtt_fun = Amqp2MqttFun } = PState) ->
     amqp_channel:notify_received(DeliveryCtx),
     case {delivery_dup(Delivery), delivery_qos(ConsumerTag, Headers, PState)} of
         {true, {?QOS_0, ?QOS_1}} ->
@@ -391,6 +403,7 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
         {true, {?QOS_0, ?QOS_0}} ->
             {ok, PState};
         {Dup, {DeliveryQos, _SubQos} = Qos}     ->
+            TopicName = Amqp2MqttFun(RoutingKey),
             SendFun(
               #mqtt_frame{ fixed = #mqtt_frame_fixed{
                                      type = ?PUBLISH,
@@ -402,9 +415,7 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                               ?QOS_0 -> undefined;
                                               ?QOS_1 -> MsgId
                                           end,
-                                        topic_name =
-                                          rabbit_mqtt_util:amqp2mqtt(
-                                            RoutingKey) },
+                                        topic_name = TopicName },
                            payload = Payload}, PState),
               case Qos of
                   {?QOS_0, ?QOS_0} ->
@@ -785,13 +796,15 @@ send_will(PState = #proc_state{will_msg = undefined}) ->
 send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
                                                               topic = Topic},
                                retainer_pid = RPid,
-                               channels = {ChQos0, ChQos1}}) ->
+                               channels = {ChQos0, ChQos1},
+                               amqp2mqtt_fun = Amqp2MqttFun}) ->
     case check_topic_access(Topic, write, PState) of
         ok ->
             amqp_pub(WillMsg, PState),
             case Retain of
                 false -> ok;
-                true  -> hand_off_to_retainer(RPid, Topic, WillMsg)
+                true  ->
+                    hand_off_to_retainer(RPid, Amqp2MqttFun, Topic, WillMsg)
             end;
         Error  ->
             rabbit_log:warning(
@@ -831,10 +844,11 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
          PState = #proc_state{ channels       = {ChQos0, ChQos1},
                                exchange       = Exchange,
                                unacked_pubs   = UnackedPubs,
-                               awaiting_seqno = SeqNo }) ->
+                               awaiting_seqno = SeqNo,
+                               mqtt2amqp_fun  = Mqtt2AmqpFun }) ->
+    RoutingKey = Mqtt2AmqpFun(Topic),
     Method = #'basic.publish'{ exchange    = Exchange,
-                               routing_key =
-                                   rabbit_mqtt_util:mqtt2amqp(Topic)},
+                               routing_key = RoutingKey },
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
                {<<"x-mqtt-dup">>, bool, Dup}],
     Msg = #amqp_msg{ props   = #'P_basic'{ headers       = Headers,
@@ -912,12 +926,13 @@ check_topic_access(TopicName, Access,
                         auth_state = #auth_state{user = User = #user{username = Username},
                                                  vhost = VHost},
                         exchange = Exchange,
-                        client_id = ClientId}) ->
+                        client_id = ClientId,
+                        mqtt2amqp_fun = Mqtt2AmqpFun }) ->
   Resource = #resource{virtual_host = VHost,
                        kind = topic,
                        name = Exchange},
-
-  Context = #{routing_key  => rabbit_mqtt_util:mqtt2amqp(TopicName),
+  RoutingKey = Mqtt2AmqpFun(TopicName),
+  Context = #{routing_key  => RoutingKey,
               variable_map => #{
                   <<"username">>  => Username,
                   <<"vhost">>     => VHost,
