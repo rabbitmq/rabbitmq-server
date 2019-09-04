@@ -458,7 +458,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_raft_term[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_raft_term_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
