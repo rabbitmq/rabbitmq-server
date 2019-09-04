@@ -131,7 +131,7 @@ content_type_test(Config) ->
     ?assertEqual(match, re:run(proplists:get_value("content-type", Headers),
                                "text/plain", [{capture, none}])),
     %% Let's check that the body looks like a valid response
-    ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
 
     http_get(Config, [{"accept", "text/plain, text/html"}], 200),
     http_get(Config, [{"accept", "*/*"}], 200),
@@ -141,44 +141,46 @@ content_type_test(Config) ->
 encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "deflate"}], 200),
     ?assertMatch("identity", proplists:get_value("content-encoding", Headers)),
-    ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])).
 
 gzip_encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "gzip"}], 200),
     ?assertMatch("gzip", proplists:get_value("content-encoding", Headers)),
     %% If the body is not gzip, zlib:gunzip will crash
-    ?assertEqual(match, re:run(zlib:gunzip(Body), "TYPE", [{capture, none}])).
+    ?assertEqual(match, re:run(zlib:gunzip(Body), "^# TYPE", [{capture, none}, multiline])).
 
 metrics_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
     %% Checking that the body looks like a valid response
     ct:pal(Body),
-    ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
-    %% Checking the first metric from each ETS table owned by rabbitmq_metrics
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_consumers ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_messages_published_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_process_reductions_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_channel_get_ack_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_connections_opened_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_bytes_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_connection_incoming_packets_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_published_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "process_open_fds ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "process_max_fds ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_io_read_ops_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_raft_term_total ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_messages_ready ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_queue_consumers ", [{capture, none}])),
-    %% Checking the first metric in each ETS table that requires converting
-    ?assertEqual(match, re:run(Body, "erlang_uptime_seconds ", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_io_read_time_seconds_total ", [{capture, none}])),
-    %% Checking the first TOTALS metric
-    ?assertEqual(match, re:run(Body, "rabbitmq_connections ", [{capture, none}])).
+    %% Checking the first metric value from each ETS table owned by rabbitmq_metrics
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_process_reductions_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_get_ack_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections_opened_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_bytes_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_packets_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_published_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
+    %% This metric has no value, we are checking just that it is defined
+    ?assertEqual(match, re:run(Body, " rabbitmq_queue_consumers ", [{capture, none}])),
+    %% Checking the first metric value in each ETS table that requires converting
+    ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
+    %% Checking the first TOTALS metric value
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
 
 build_info_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
-    ?assertEqual(match, re:run(Body, "rabbitmq_build_info{", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_build_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_plugin_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_client_version=\"", [{capture, none}])),
@@ -186,7 +188,7 @@ build_info_test(Config) ->
 
 identity_info_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
-    ?assertEqual(match, re:run(Body, "rabbitmq_identity_info{", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_identity_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_node=", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])).
 

@@ -237,7 +237,7 @@ build_info() ->
     {ok, PrometheusPluginVersion} = application:get_key(rabbitmq_prometheus, vsn),
     {ok, PrometheusClientVersion} = application:get_key(prometheus, vsn),
     {
-        rabbitmq_build_info,
+        build_info,
         untyped,
         "RabbitMQ & Erlang/OTP version info",
         [{
@@ -253,7 +253,7 @@ build_info() ->
 
 identity_info() ->
     {
-        rabbitmq_identity_info,
+        identity_info,
         untyped,
         "RabbitMQ node & cluster identity info",
         [{
