@@ -1,6 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.857
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.859
 DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
@@ -78,7 +78,7 @@ dir: docker_image_run
 docker_image_version_bump:
 	@sed -i '' \
 	  -e 's|$(DOCKER_IMAGE_NAME):.*|$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)|g' \
-	  -e 's|pivotalrabbitmq/perf-test:.*|pivotalrabbitmq/perf-test:dev-2019.07.18|g' \
+	  -e 's|pivotalrabbitmq/perf-test:.*|pivotalrabbitmq/perf-test:dev-2019.09.04|g' \
 	  docker/docker-compose-{overview,dist-tls,qq}.yml
 .PHONY: divb
 divb: docker_image_version_bump
