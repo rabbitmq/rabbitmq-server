@@ -349,11 +349,11 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint
                 DC
         end,
 
-    add_to_journal(SeqId, {IsPersistent, Bin, MsgBin},
-                   maybe_flush_pre_publish_cache(
+    State2 = add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1),
+    maybe_flush_pre_publish_cache(
                      JournalSizeHint,
-                     State1#qistate{pre_publish_cache = PPC1,
-                                    delivered_cache   = DC1})).
+                     State2#qistate{pre_publish_cache = PPC1,
+                                    delivered_cache   = DC1}).
 
 %% pre_publish_cache is the entry with most elements when compared to
 %% delivered_cache so we only check the former in the guard.
