@@ -244,6 +244,7 @@ log_management1(_Config) ->
 
     %% logging directed to tty (first, remove handlers)
     ok = rabbit:stop(),
+    ok = make_files_writable([LogFile ++ Suffix]),
     ok = clean_logs([LogFile], Suffix),
     ok = application:set_env(rabbit, lager_default_file, tty),
     application:unset_env(rabbit, log),
@@ -443,6 +444,11 @@ delete_file(File) ->
         {error, enoent} -> ok;
         Error           -> Error
     end.
+
+make_files_writable(Files) ->
+    [ok = file:write_file_info(File, #file_info{mode=8#644}) ||
+        File <- Files],
+    ok.
 
 make_files_non_writable(Files) ->
     [ok = file:write_file_info(File, #file_info{mode=8#444}) ||
