@@ -326,8 +326,12 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
     %% write permissions
     ok = rabbit:stop(),
 
+    NonWritableDir = case os:type() of
+			     {win32, _} -> "C:/Windows";
+			     _          -> "/var/empty"
+		     end,
     Run1 = fun() ->
-      NoPermission1 = "/var/empty/test.log",
+      NoPermission1 = filename:join(NonWritableDir, "test.log"),
       delete_file(NoPermission1),
       delete_file(filename:dirname(NoPermission1)),
       ok = rabbit:stop(),
@@ -347,7 +351,7 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
-    NoPermission2 = "/var/empty/non-existent/test.log",
+    NoPermission2 = filename:join(NonWritableDir, "non-existent/test.log"),
 
     Run2 = fun() ->
       delete_file(NoPermission2),
