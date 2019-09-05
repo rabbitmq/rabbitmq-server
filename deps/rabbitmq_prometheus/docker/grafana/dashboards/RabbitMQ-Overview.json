@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1567698099144,
+  "iteration": 1567699822878,
   "links": [
     {
       "icon": "doc",
@@ -1357,7 +1357,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Number of messages ready to be delivered to consumers\n\nAim to keep this value as low as possible. RabbitMQ behaves best when messages are flowing through it. It's OK for publishers to occasionally outpace consumers, but the expectation is that consumers will eventually process all ready messages and empty the queues.\n\nIf this metric keeps increasing, your system will eventually run out of memory and disk space. Consider using TTL or Queue Length Limit to prevent unbounded message growth.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Queue Length Limit](https://www.rabbitmq.com/maxlength.html)\n* [Time-To-Live and Expiration](https://www.rabbitmq.com/ttl.html)",
+      "description": "Aim to keep this value as low as possible. RabbitMQ behaves best when messages are flowing through it. It's OK for publishers to occasionally outpace consumers, but the expectation is that consumers will eventually process all ready messages and empty the queues.\n\nIf this metric keeps increasing, your system will eventually run out of memory and/or disk space. Consider using TTL or Queue Length Limit to prevent unbounded message growth.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Queue Length Limit](https://www.rabbitmq.com/maxlength.html)\n* [Time-To-Live and Expiration](https://www.rabbitmq.com/ttl.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1448,7 +1448,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Messages ready to be delivered",
+      "title": "Messages ready to be delivered to consumers",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1492,7 +1492,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Messages that have been delivered to consumers but remain in the queue, pending explicit acknowledgement\n\nThese are messages that are either in-flight to consumers, currently being processed by consumers or simply waiting for the consumer acknowledgements to be processed by the queue. Until the queue processes the message acknowledgement, the message will remain unacknowledged.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Confirms](https://www.rabbitmq.com/confirms.html)\n* [Consumer Prefetch](https://www.rabbitmq.com/consumer-prefetch.html)",
+      "description": "These are messages that are either in-flight to consumers, currently being processed by consumers or simply waiting for the consumer acknowledgements to be processed by the queue. Until the queue processes the message acknowledgement, the message will remain unacknowledged and will not be marked for deletion.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Confirms and Acknowledgements](https://www.rabbitmq.com/confirms.html)\n* [Consumer Prefetch](https://www.rabbitmq.com/consumer-prefetch.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1583,7 +1583,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Messages unacknowledged by consumers",
+      "title": "Messages pending consumer acknowledgement",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -1640,7 +1640,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Messages incoming on channels\n\nThis is the incoming message count before any routing rules are applied.\n\nIf this value is higher than the number of messages published to queues, then it is safe to assume that the same message is delivered to more than one queue.\n\nIf this value is higher than the number of messages published to queues, messages are unroutable and either dropped or returned to publishers.\n\n* [Publishers](https://www.rabbitmq.com/publishers.html)\n* [AMQP 0-9-1 Model Explained](https://www.rabbitmq.com/tutorials/amqp-concepts.html)",
+      "description": "This is the incoming message count before any routing rules are applied.\n\nIf this value is lower than the number of messages published to queues, then it is safe to assume that the same message is delivered to more than one queue.\n\nIf this value is higher than the number of messages published to queues, messages cannot be routed and will either dropped or returned to publishers.\n\n* [Publishers](https://www.rabbitmq.com/publishers.html)\n* [AMQP 0-9-1 Model Explained](https://www.rabbitmq.com/tutorials/amqp-concepts.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1775,7 +1775,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Messages published into an exchange and confirmed on the channel\n\nThis requires publishers to wait for confirmation from the broker that it received the message(s).\n\n* [Publisher Confirms](https://www.rabbitmq.com/confirms.html#publisher-confirms)\n* [Publisher Confirms and Data Safety](https://www.rabbitmq.com/publishers.html#data-safety)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
+      "description": "Messages confirmed by the broker to publishers. Publishers must opt-in to receive message confirmations.\n\nIf this metric is consistently at 0 it may suggest that publisher confirms are not used by clients or plugins such as `rabbitmq_shovel`. The safety of published messages is likely to be at risk.\n\n* [Publisher Confirms](https://www.rabbitmq.com/confirms.html#publisher-confirms)\n* [Publisher Confirms and Data Safety](https://www.rabbitmq.com/publishers.html#data-safety)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -1910,7 +1910,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Mandatory messages returned to publishers as unroutable\n\nValues above 0 should be investigated, they are most likely an anti-pattern.\n\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
+      "description": "Values above 0 means that some messages are not routed and they are returned back to publishers. \n\nSustained values above 0 may indicate a routing problem on the publisher end.\n\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -2018,7 +2018,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "These are messages received from publishers and successfully routed to the master queue replicas.\n\n* [Queues](https://www.rabbitmq.com/queues.html)\n* [Publishers](https://www.rabbitmq.com/publishers.html)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -2109,7 +2109,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Messages published to queues / s",
+      "title": "Messages routed to queues / s",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2153,7 +2153,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "",
+      "description": "These are messages received from publishers that have publisher confirms enabled and the broker has not confirmed yet. To learn when the broker confirms published messages, see the guides below.\n\n* [Publishers](https://www.rabbitmq.com/publishers.html)\n* [Confirms and Acknowledgements](https://www.rabbitmq.com/confirms.html)\n* [When Will Published Messages Be Confirmed by the Broker?](https://www.rabbitmq.com/confirms.html#when-publishes-are-confirmed)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
@@ -2288,7 +2288,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "##### Messages published as non-mandatory into an exchange and dropped as unroutable\n\nValues above 0 should be investigated, they are most likely an anti-pattern.\n\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)",
+      "description": "Values above 0 means that some messages are not routed and dropped. \n\nAny value above 0 means message loss and likely suggests a routing problem on the publisher end.\n\n* [Unroutable Message Handling](https://www.rabbitmq.com/publishers.html#unroutable)",
       "fill": 10,
       "fillGradient": 0,
       "gridPos": {
