@@ -16,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1567607527367,
+  "iteration": 1567698099144,
   "links": [
     {
       "icon": "doc",
@@ -739,7 +739,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "If the value is negative, this means that the host on which RabbitMQ runs has more memory available than RabbitMQ is allowed to use. The memory alarm will be triggered, all publishers will be blocked, RabbitMQ will try to release as much memory as possible.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "If the value is 0 or less, the memory alarm should be triggered and all publishing connections across all cluster nodes will be blocked.\n\nThis value can temporarily go negative because the memory alarm is triggered with a slight delay.\n\nThe kernel's view of the amount of memory used by the node can differ from what the node itself can observe. This means that this value can be negative for a sustained period of time.\n\nBy default nodes use resident set size (RSS) to compute how much memory they use. This strategy can be changed (see the guides below).\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Memory Alarms](https://www.rabbitmq.com/memory.html)\n* [Reasoning About Memory Use](https://www.rabbitmq.com/memory-use.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -890,7 +890,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "When available disk space goes below 0, the disk alarm gets triggered and publishing connections will be blocked.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
+      "description": "This metric is reported for the partition where the RabbitMQ data directory is stored.\n\nIf the value is 0 or less, the disk alarm will be triggered and all publishing connections across all cluster nodes will be blocked.\n\nThis value can temporarily go negative because the free disk space alarm is triggered with a slight delay.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Disk Space Alarms](https://www.rabbitmq.com/disk-alarms.html)\n* [Disk Space](https://www.rabbitmq.com/production-checklist.html#resource-limits-disk-space)\n* [Persistence Configuration](https://www.rabbitmq.com/persistence-conf.html)\n* [Blocked Connection Notifications](https://www.rabbitmq.com/connection-blocked.html)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1041,7 +1041,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "When this value reaches 0, new connections will fail to establish and persistent messages may fail to write to disk. Quorum Queues are also likely to be affected. CLI tools, such as rabbitmqctl & rabbitmq-plugins will stop working.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
+      "description": "When this value reaches 0, new connections will not be accepted and disk write operations may fail.\n\nClient libraries, peer nodes and CLI tools will not be able to connect when the node runs out of available file descriptors.\n\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1193,7 +1193,7 @@
       "cacheTimeout": null,
       "dashLength": 10,
       "dashes": false,
-      "description": "When this value reaches 0, new connections will fail to establish.\n\n* [Alarms](https://www.rabbitmq.com/alarms.html)\n* [Open File Handles Limit](https://www.rabbitmq.com/production-checklist.html#resource-limits-file-handle-limit)\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
+      "description": "When this value reaches 0, new connections will not be accepted.\n\nClient libraries, peer nodes and CLI tools will not be able to connect when the node runs out of available file descriptors.\n\n* [Networking and RabbitMQ](https://www.rabbitmq.com/networking.html)",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
