@@ -19,14 +19,13 @@
 -include("rabbit_mqtt.hrl").
 
 -export([subcription_queue_name/1,
-         mqtt2amqp/1,
-         amqp2mqtt/1,
          gen_client_id/0,
          env/1,
          table_lookup/2,
          path_for/2,
          path_for/3,
-         vhost_name_to_table_name/1
+         vhost_name_to_table_name/1,
+         get_topic_translation_funs/0
         ]).
 
 subcription_queue_name(ClientId) ->
@@ -37,15 +36,52 @@ subcription_queue_name(ClientId) ->
 %% *    +    match one topic level
 %% #    #    match multiple topic levels
 %% .    /    topic level separator
-mqtt2amqp(Topic) ->
-    erlang:iolist_to_binary(
-      re:replace(re:replace(Topic, "/", ".", [global]),
-                 "[\+]", "*", [global])).
-
-amqp2mqtt(Topic) ->
-    erlang:iolist_to_binary(
-      re:replace(re:replace(Topic, "[\*]", "+", [global]),
-                 "[\.]", "/", [global])).
+get_topic_translation_funs() ->
+    SparkplugB = env(sparkplug),
+    ToAmqpFun = fun(T0) ->
+                    T1 = string:replace(T0, "/", ".", all),
+                    T2 = string:replace(T1, "+", "*", all),
+                    erlang:iolist_to_binary(T2)
+                end,
+    ToMqttFun = fun(T0) ->
+                    T1 = string:replace(T0, "*", "+", all),
+                    T2 = string:replace(T1, ".", "/", all),
+                    erlang:iolist_to_binary(T2)
+                end,
+    {M2AFun, A2MFun} = case SparkplugB of
+        true ->
+            {ok, M2A_SpRe} = re:compile("^sp[AB]v\\d+\\.\\d+/"),
+            {ok, A2M_SpRe} = re:compile("^sp[AB]v\\d+___\\d+\\."),
+            M2A = fun(T0) ->
+                case re:run(T0, M2A_SpRe) of
+                    nomatch ->
+                        ToAmqpFun(T0);
+                    {match, _} ->
+                        T1 = string:replace(T0, ".", "___", leading),
+                        ToAmqpFun(T1)
+                end
+            end,
+            A2M = fun(T0) ->
+                case re:run(T0, A2M_SpRe) of
+                    nomatch ->
+                        ToMqttFun(T0);
+                    {match, _} ->
+                        T1 = ToMqttFun(T0),
+                        T2 = string:replace(T1, "___", ".", leading),
+                        erlang:iolist_to_binary(T2)
+                end
+            end,
+            {M2A, A2M};
+        _ ->
+            M2A = fun(T) ->
+                ToAmqpFun(T)
+            end,
+            A2M = fun(T) ->
+                ToMqttFun(T)
+            end,
+            {M2A, A2M}
+    end,
+    {ok, {mqtt2amqp_fun, M2AFun}, {amqp2mqtt_fun, A2MFun}}.
 
 gen_client_id() ->
     lists:nthtail(1, rabbit_guid:string(rabbit_guid:gen_secure(), [])).

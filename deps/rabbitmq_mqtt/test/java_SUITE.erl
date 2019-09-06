@@ -25,6 +25,7 @@
         {rabbitmq_mqtt, [
            {ssl_cert_login,   true},
            {allow_anonymous,  false},
+           {sparkplug,        true},
            {tcp_listeners,    []},
            {ssl_listeners,    []}
            ]}).
@@ -92,8 +93,8 @@ init_per_testcase(Testcase, Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0,
         ["set_topic_permissions",  "-p", "/", "guest", "amq.topic",
-            "test-topic|test-retained-topic|.*mid.*|.*topic.*|{username}.{client_id}.a",
-            "test-topic|test-retained-topic|.*mid.*|.*topic.*|last-will|{username}.{client_id}.a"]),
+            "test-topic|test-retained-topic|.*mid.*|.*topic.*|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+",
+            "test-topic|test-retained-topic|.*mid.*|.*topic.*|last-will|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+"]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
