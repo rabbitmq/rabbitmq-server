@@ -91,8 +91,8 @@ end}.
 %% Enable "Sparkplug B" namespace recognition so that the dot in the
 %% namespace is not translated to a slash
 %%
-%% {sparkplug_b, true},
-{mapping, "mqtt.sparkplug_b", "rabbitmq_mqtt.sparkplug_b",
+%% {sparkplug, true},
+{mapping, "mqtt.sparkplug", "rabbitmq_mqtt.sparkplug",
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",

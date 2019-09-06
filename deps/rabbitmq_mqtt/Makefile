@@ -23,7 +23,7 @@ define PROJECT_ENV
 	    {tcp_listen_options, [{backlog,   128},
 	                          {nodelay,   true}]},
 	    {proxy_protocol, false},
-	    {sparkplug_b, false}
+	    {sparkplug, false}
 	  ]
 endef
 

@@ -431,13 +431,13 @@ public class MqttTest implements MqttCallback {
         client.disconnect();
     }
 
-    @Test public void sparkplug_b_topics() throws MqttException, IOException, InterruptedException, TimeoutException {
+    @Test public void sparkplug_topics() throws MqttException, IOException, InterruptedException, TimeoutException {
         final String amqp_091_topic = "spBv1___0.MACLab.DDATA.Opto22.CLX";
-        final String sparkplug_b_topic = "spBv1.0/MACLab/+/Opto22/CLX";
+        final String sparkplug_topic = "spBv1.0/MACLab/+/Opto22/CLX";
 
         client.connect(conOpt);
         client.setCallback(this);
-        client.subscribe(sparkplug_b_topic);
+        client.subscribe(sparkplug_topic);
 
         setUpAmqp();
         ch.basicPublish("amq.topic", amqp_091_topic, MessageProperties.MINIMAL_BASIC, payload);

@@ -63,7 +63,7 @@ coerce_default_pass(_) ->
     ?assertEqual(<<"guest_pass">>, rabbit_mqtt_util:env(default_pass)).
 
 mqtt_amqp_topic_translation(_) ->
-    ok = application:set_env(rabbitmq_mqtt, sparkplug_b, true),
+    ok = application:set_env(rabbitmq_mqtt, sparkplug, true),
     {ok, {mqtt2amqp_fun, Mqtt2AmqpFun}, {amqp2mqtt_fun, Amqp2MqttFun}} =
         rabbit_mqtt_util:get_topic_translation_funs(),
 
@@ -85,5 +85,5 @@ mqtt_amqp_topic_translation(_) ->
     ?assertEqual(T2_As_Amqp, Mqtt2AmqpFun(T2)),
     ?assertEqual(T2_As_Mqtt, Amqp2MqttFun(T2_As_Amqp)),
 
-    ok = application:unset_env(rabbitmq_mqtt, sparkplug_b),
+    ok = application:unset_env(rabbitmq_mqtt, sparkplug),
     ok.

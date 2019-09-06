@@ -37,7 +37,7 @@ subcription_queue_name(ClientId) ->
 %% #    #    match multiple topic levels
 %% .    /    topic level separator
 get_topic_translation_funs() ->
-    SparkplugB = env(sparkplug_b),
+    SparkplugB = env(sparkplug),
     ToAmqpFun = fun(T0) ->
                     T1 = string:replace(T0, "/", ".", all),
                     T2 = string:replace(T1, "+", "*", all),
