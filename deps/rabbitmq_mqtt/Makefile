@@ -22,7 +22,8 @@ define PROJECT_ENV
 	    {num_ssl_acceptors, 10},
 	    {tcp_listen_options, [{backlog,   128},
 	                          {nodelay,   true}]},
-	    {proxy_protocol, false}
+	    {proxy_protocol, false},
+	    {sparkplug, false}
 	  ]
 endef
 
