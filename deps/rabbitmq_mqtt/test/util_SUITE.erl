@@ -71,7 +71,7 @@ mqtt_amqp_topic_translation(_) ->
     T0_As_Amqp = <<".foo.bar.*.baz">>,
     T0_As_Mqtt = <<"/foo/bar/+/baz">>,
     ?assertEqual(T0_As_Amqp, Mqtt2AmqpFun(T0)),
-    ?assertEqual(T0_As_Mqtt, Amqp2MqttFun(T0_As_Mqtt)),
+    ?assertEqual(T0_As_Mqtt, Amqp2MqttFun(T0_As_Amqp)),
 
     T1 = "spAv1.0/foo/bar/+/baz",
     T1_As_Amqp = <<"spAv1___0.foo.bar.*.baz">>,
