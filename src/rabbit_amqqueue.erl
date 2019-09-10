@@ -1245,20 +1245,18 @@ delete_crashed_internal(Q, ActingUser) ->
 
 purge(Q) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call, [purge, infinity]})
     ok = rabbit_event:notify(queue_purged,
                              [{name, amqqueue:get_name(Q)},
                               {user_who_performed_action, amqqueue:get_user(Q)},
-                              {vhost, amqqueue:get_vhost(Q)},
-                              {purged_messages, qlen()}]);
+                              {vhost, amqqueue:get_vhost(Q)}]),
+    delegate:invoke(QPid, {gen_server2, call, [purge, infinity]});
 purge(Q) when ?amqqueue_is_quorum(Q) ->
     NodeId = amqqueue:get_pid(Q),
-    rabbit_quorum_queue:purge(NodeId)
     ok = rabbit_event:notify(queue_purged,
                              [{name, amqqueue:get_name(Q)},
                               {user_who_performed_action, amqqueue:get_user(Q)},
-                              {vhost, amqqueue:get_vhost(Q)},
-                              {purged_messages, qlen()}]).
+                              {vhost, amqqueue:get_vhost(Q)}]),
+    rabbit_quorum_queue:purge(NodeId).
 
 -spec requeue(pid() | amqqueue:ra_server_id(),
               {rabbit_fifo:consumer_tag(), [msg_id()]},
