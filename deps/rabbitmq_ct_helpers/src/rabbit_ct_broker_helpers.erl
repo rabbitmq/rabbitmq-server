@@ -1411,7 +1411,11 @@ stop_node_after(Config, Node, Sleep) ->
 kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
     %% FIXME maybe_flush_cover(Cfg),
-    os:cmd("kill -9 " ++ Pid),
+    Cmd = case os:type() of
+              {win32, _} -> rabbit_misc:format("taskkill /PID ~s /F", [Pid]);
+              _          -> rabbit_misc:format("kill -9 ~s", [Pid])
+          end,
+    os:cmd(Cmd),
     await_os_pid_death(Pid).
 
 kill_node_after(Config, Node, Sleep) ->
