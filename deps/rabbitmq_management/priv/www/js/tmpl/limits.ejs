@@ -28,7 +28,7 @@
 
                 <tr<%= alt_rows(j+1)%>>
                     <% if(j == 0) { %>
-                    <td rowspan="<%= limit_values.length %>"> <%= limit.vhost %> </td>
+                    <td rowspan="<%= limit_values.length %>"> <%= fmt_string(limit.vhost) %> </td>
                     <% } %>
                     <td><%= limit_value.name %></td>
                     <td><%= limit_value.value %></td>
