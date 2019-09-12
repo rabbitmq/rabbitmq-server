@@ -44,8 +44,8 @@
      <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
      <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
-     <td class="r"><%= upstream.value['ha-policy'] %></td>
-     <td class="r"><%= upstream.value['queue'] %></td>
+     <td class="r"><%= fmt_string(upstream.value['ha-policy']) %></td>
+     <td class="r"><%= fmt_string(upstream.value['queue']) %></td>
    </tr>
 <% } %>
  </tbody>
@@ -85,7 +85,7 @@
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
-       
+
 
         <tr>
           <th>
@@ -136,7 +136,7 @@
               <span class="help" id="federation-trust-user-id"></span>
             </label>
           </th>
-          
+
           <td>
             <select name="trust-user-id">
               <option value="false">No</option>
