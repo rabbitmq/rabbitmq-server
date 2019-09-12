@@ -669,7 +669,7 @@ shrink_all(Config) ->
     ok.
 
 rebalance(Config) ->
-    [Server0, Server1, Server2] =
+    [Server0, _, _] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -682,14 +682,14 @@ rebalance(Config) ->
 
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
                  declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    {ok, _, {_, Leader1}} = ra:members({ra_name(Q1), Server0}),
-    publish(Ch, Q1),
-    publish(Ch, Q1),
-    publish(Ch, Q1),
-
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
                  declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(1000),
+
+    {ok, _, {_, Leader1}} = ra:members({ra_name(Q1), Server0}),
     {ok, _, {_, Leader2}} = ra:members({ra_name(Q2), Server0}),
+    publish(Ch, Q1),
+    publish(Ch, Q1),
     publish(Ch, Q2),
     publish(Ch, Q2),
 
@@ -700,7 +700,7 @@ rebalance(Config) ->
     ?assertEqual({'queue.declare_ok', Q5, 0, 0},
                  declare(Ch, Q5, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(500),
-    {ok, Summary} = rpc:call(Server0, rabbit_quorum_queue, rebalance, [".*", ".*"]),
+    {ok, Summary} = rpc:call(Server0, rabbit_amqqueue, rebalance, [quorum, ".*", ".*"]),
 
     %% Q1 and Q2 should not have moved leader, as these are the queues with more
     %% log entries and we allow up to two queues per node (3 nodes, 5 queues)
