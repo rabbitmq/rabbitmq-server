@@ -6,9 +6,12 @@ plugin.
 
 ## Installation
 
-In recent releases, this plugin ships with RabbitMQ. Enable it with
+In recent releases, this [plugin](https://www.rabbitmq.com/plugins.html) ships with RabbitMQ.
+[Enable](https://www.rabbitmq.com/plugins.html#basics) it with
 
-    rabbitmq-plugins enable rabbitmq_management rabbitmq_federation_management
+``` shell
+rabbitmq-plugins enable rabbitmq_management rabbitmq_federation_management
+```
 
 If you have a heterogenous cluster (where the nodes have different
 plugins installed), this should be installed on the same nodes as the
@@ -36,6 +39,6 @@ and see under the `./plugins` directory.
 
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-2017.
+(c) Pivotal Software Inc, 2007-2019.
 
 See `LICENSE` for license information.
