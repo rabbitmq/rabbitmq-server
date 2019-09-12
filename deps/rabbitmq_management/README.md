@@ -4,8 +4,9 @@ This plugin provides a management UI and HTTP API for RabbitMQ.
 
 ## Installation
 
-This plugin is included in the RabbitMQ distribution. To enable
-it, use [rabbitmq-plugins](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html).
+This plugin is included in the RabbitMQ distribution. Like all [plugins](https://www.rabbitmq.com/plugins.html),
+it has to be [enabled](https://www.rabbitmq.com/plugins.html#basics) before it can be used.
+
 
 ## Documentation
 
