@@ -1582,6 +1582,15 @@ function get_chart_range_type(arg) {
     if (arg === 'queues') {
         return 'basic';
     }
+    if (arg === 'queue-churn') {
+        return 'basic';
+    }
+    if (arg === 'channel-churn') {
+        return 'basic';
+    }
+    if (arg === 'connection-churn') {
+        return 'basic';
+    }
 
     console.log('[WARNING]: range type not found for arg: ' + arg);
     return 'basic';
