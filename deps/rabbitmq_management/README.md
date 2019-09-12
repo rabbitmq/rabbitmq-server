@@ -14,4 +14,4 @@ it, use [rabbitmq-plugins](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.h
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2017.
+(c) Pivotal Software Inc., 2007-2019.
