@@ -168,7 +168,7 @@ define test_rabbitmq_config
 
 [
   {rabbit, [
-$(if $(RABBITMQ_NODE_PORT),      {listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
       {loopback_users, []},
       {log, [{file, [{level, debug}]}]}
     ]},
