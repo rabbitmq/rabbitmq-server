@@ -1,5 +1,7 @@
 /.erlang.mk/
 /deps/
 /ebin/
+/escript
 /plugins/
 /my_plugin.d
+/sbin

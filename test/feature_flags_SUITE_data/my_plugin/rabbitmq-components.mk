@@ -1,1 +1,1 @@
-../../../rabbitmq-components.mk
+include ../../../rabbitmq-components.mk
