@@ -28,6 +28,8 @@
 
 -export([sync_queue/1, cancel_sync_queue/1]).
 
+-export([transfer_leadership/2, queue_length/1, get_replicas/1]).
+
 %% for testing only
 -export([module/1]).
 
@@ -534,6 +536,46 @@ update_mirrors(Q) when ?is_amqqueue(Q) ->
     %% a policy requiring auto-sync.
     maybe_auto_sync(Q),
     ok.
+
+queue_length(Q) ->
+    [{messages, M}] = rabbit_amqqueue:info(Q, [messages]),
+    M.
+
+get_replicas(Q) ->
+    {MNode, SNodes} = suggested_queue_nodes(Q),
+    [MNode] ++ SNodes.
+
+transfer_leadership(Q, Destination) ->
+    QName = amqqueue:get_name(Q),
+    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
+    OldNodes = [OldMNode | OldSNodes],
+    add_mirrors(QName, [Destination] -- OldNodes, async),
+    drop_mirrors(QName, OldNodes -- [Destination]),
+    {Result, NewQ} = wait_for_new_master(QName, Destination),
+    update_mirrors(NewQ),
+    Result.
+
+wait_for_new_master(QName, Destination) ->
+    wait_for_new_master(QName, Destination, 100).
+
+wait_for_new_master(QName, _, 0) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    {{not_migrated, ""}, Q};
+wait_for_new_master(QName, Destination, N) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    case amqqueue:get_pid(Q) of
+        none ->
+            timer:sleep(100),
+            wait_for_new_master(QName, Destination, N - 1);
+        Pid ->
+            case node(Pid) of
+                Destination ->
+                    {{migrated, Destination}, Q};
+                _ ->
+                    timer:sleep(100),
+                    wait_for_new_master(QName, Destination, N - 1)
+            end
+    end.
 
 %% The arrival of a newly synced slave may cause the master to die if
 %% the policy does not want the master but it has been kept alive
