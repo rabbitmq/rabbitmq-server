@@ -53,6 +53,8 @@
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
+-export([rebalance/3]).
+
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
@@ -483,6 +485,120 @@ not_found_or_absent_dirty(Name) ->
         {error, not_found} -> not_found;
         {ok, Q}            -> {absent, Q, nodedown}
     end.
+
+-spec rebalance('all' | 'quorum' | 'classic', binary(), binary()) ->
+                       {ok, [{node(), pos_integer()}]}.
+rebalance(Type, VhostSpec, QueueSpec) ->
+    Running = rabbit_mnesia:cluster_nodes(running),
+    NumRunning = length(Running),
+    ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
+                        filter_per_type(Type, Q),
+                        is_replicated(Q),
+                        is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
+                            is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)],
+    NumToRebalance = length(ToRebalance),
+    ByNode = group_by_node(ToRebalance),
+    Rem = case (NumToRebalance rem NumRunning) of
+              0 -> 0;
+              _ -> 1
+          end,
+    MaxQueuesDesired = (NumToRebalance div NumRunning) + Rem,
+    iterative_rebalance(ByNode, MaxQueuesDesired).
+
+filter_per_type(all, _) ->
+    true;
+filter_per_type(quorum, Q) ->
+    ?amqqueue_is_quorum(Q);
+filter_per_type(classic, Q) ->
+    ?amqqueue_is_classic(Q).
+
+rebalance_module(Q) when ?amqqueue_is_quorum(Q) ->
+    rabbit_quorum_queue;
+rebalance_module(Q) when ?amqqueue_is_classic(Q) ->
+    rabbit_mirror_queue_misc.
+
+get_resource_name(#resource{name  = Name}) ->
+    Name.
+
+is_match(Subj, E) ->
+   nomatch /= re:run(Subj, E).
+
+iterative_rebalance(ByNode, MaxQueuesDesired) ->
+    case maybe_migrate(ByNode, MaxQueuesDesired) of
+        {ok, Summary} ->
+            rabbit_log:warning("Nothing to do, all balanced"),
+            {ok, Summary};
+        {migrated, Other} ->
+            iterative_rebalance(Other, MaxQueuesDesired);
+        {not_migrated, Other} ->
+            iterative_rebalance(Other, MaxQueuesDesired)
+    end.
+
+maybe_migrate(ByNode, MaxQueuesDesired) ->
+    maybe_migrate(ByNode, MaxQueuesDesired, maps:keys(ByNode)).
+
+maybe_migrate(ByNode, _, []) ->
+    {ok, maps:fold(fun(K, V, Acc) ->
+                           [{K, length(V)} | Acc]
+                   end, [], ByNode)};
+maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
+    case maps:get(N, ByNode, []) of
+        [{_, Q, false} = Queue | Queues] = All when length(All) > MaxQueuesDesired ->
+            Name = amqqueue:get_name(Q),
+            Module = rebalance_module(Q),
+            OtherNodes = Module:get_replicas(Q) -- [N],
+            case OtherNodes of
+                [] ->
+                    {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
+                _ ->
+                    [{Length, Destination} | _] = sort_by_number_of_queues(OtherNodes, ByNode),
+                    rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
+                                       [Name, N, length(All), Destination, Length]),
+                    case Module:transfer_leadership(Q, Destination) of
+                        {migrated, NewNode} ->
+                            rabbit_log:warning("Queue ~p migrated to ~p", [Name, NewNode]),
+                            {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
+                        {not_migrated, Reason} ->
+                            rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
+                            {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
+                    end
+            end;
+        [{_, _, true} | _] = All when length(All) > MaxQueuesDesired ->
+            rabbit_log:warning("Node ~p contains ~p queues, but all have already migrated. "
+                               "Do nothing", [N, length(All)]),
+            maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
+        All ->
+            rabbit_log:warning("Node ~p only contains ~p queues, do nothing",
+                               [N, length(All)]),
+            maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
+    end.
+
+update_not_migrated_queue(N, {Entries, Q, _}, Queues, ByNode) ->
+    maps:update(N, Queues ++ [{Entries, Q, true}], ByNode).
+
+update_migrated_queue(NewNode, OldNode, {Entries, Q, _}, Queues, ByNode) ->
+    maps:update_with(NewNode,
+                     fun(L) -> L ++ [{Entries, Q, true}] end,
+                     [{Entries, Q, true}], maps:update(OldNode, Queues, ByNode)).
+
+sort_by_number_of_queues(Nodes, ByNode) ->
+    lists:keysort(1,
+                  lists:map(fun(Node) ->
+                                    {num_queues(Node, ByNode), Node}
+                            end, Nodes)).
+
+num_queues(Node, ByNode) ->
+    length(maps:get(Node, ByNode, [])).
+
+group_by_node(Queues) ->
+    ByNode = lists:foldl(fun(Q, Acc) ->
+                                 Module = rebalance_module(Q),
+                                 Length = Module:queue_length(Q),
+                                 maps:update_with(amqqueue:qnode(Q),
+                                                   fun(L) -> [{Length, Q, false} | L] end,
+                                                  [{Length, Q, false}], Acc)
+                         end, #{}, Queues),
+    maps:map(fun(_K, V) -> lists:keysort(1, V) end, ByNode).
 
 -spec with(name(),
            qfun(A),

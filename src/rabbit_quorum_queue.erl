@@ -39,6 +39,7 @@
 -export([cleanup_data_dir/0]).
 -export([shrink_all/1,
          grow/4]).
+-export([transfer_leadership/2, get_replicas/1, queue_length/1]).
 
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
@@ -846,6 +847,31 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
         matches_strategy(Strategy, get_nodes(Q)),
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
         is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].
+
+transfer_leadership(Q, Destination) ->
+    {RaName, _} = Pid = amqqueue:get_pid(Q),
+    case ra:transfer_leadership(Pid, {RaName, Destination}) of
+        ok ->
+            {_, _, {_, NewNode}} = ra:members(Pid),
+            {migrated, NewNode};
+        already_leader ->
+            {not_migrated, already_leader};
+        {error, Reason} ->
+            {not_migrated, Reason};
+        {timeout, _} ->
+            %% TODO should we retry once?
+            {not_migrated, timeout}
+    end.
+
+queue_length(Q) ->
+    Name = amqqueue:get_name(Q),
+    case ets:lookup(ra_metrics, Name) of
+        [] -> 0;
+        [{_, _, SnapIdx, _, _, LastIdx, _}] -> LastIdx - SnapIdx
+    end.
+
+get_replicas(Q) ->
+    get_nodes(Q).
 
 get_resource_name(#resource{name  = Name}) ->
     Name.
