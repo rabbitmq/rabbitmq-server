@@ -688,10 +688,8 @@ rebalance(Config) ->
 
     {ok, _, {_, Leader1}} = ra:members({ra_name(Q1), Server0}),
     {ok, _, {_, Leader2}} = ra:members({ra_name(Q2), Server0}),
-    publish(Ch, Q1),
-    publish(Ch, Q1),
-    publish(Ch, Q2),
-    publish(Ch, Q2),
+    rabbit_ct_client_helpers:publish(Ch, Q1, 3),
+    rabbit_ct_client_helpers:publish(Ch, Q2, 2),
 
     ?assertEqual({'queue.declare_ok', Q3, 0, 0},
                  declare(Ch, Q3, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),

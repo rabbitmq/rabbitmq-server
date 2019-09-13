@@ -542,7 +542,8 @@ queue_length(Q) ->
     M.
 
 get_replicas(Q) ->
-    rabbit_mnesia:cluster_nodes(running).
+    {MNode, SNodes} = suggested_queue_nodes(Q),
+    [MNode] ++ SNodes.
 
 transfer_leadership(Q, Destination) ->
     QName = amqqueue:get_name(Q),
