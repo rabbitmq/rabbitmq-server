@@ -72,6 +72,12 @@
 {mapping, "management.ssl.password", "rabbitmq_management.ssl_config.password",
     [{datatype, string}]}.
 
+{mapping, "management.ssl.verify", "rabbitmq_management.ssl_config.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "management.ssl.fail_if_no_peer_cert", "rabbitmq_management.ssl_config.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
 {mapping, "management.ssl.honor_cipher_order", "rabbitmq_management.ssl_config.honor_cipher_order",
     [{datatype, {enum, [true, false]}}]}.
 
