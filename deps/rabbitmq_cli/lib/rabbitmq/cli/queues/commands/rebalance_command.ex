@@ -64,7 +64,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :rebalance, [arg, vhost_pat, queue_pat])
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+  def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage, do: "rebalance < all | classic | quorum > [--vhost-pattern <pattern>] [--queue-pattern <pattern>]"
 
