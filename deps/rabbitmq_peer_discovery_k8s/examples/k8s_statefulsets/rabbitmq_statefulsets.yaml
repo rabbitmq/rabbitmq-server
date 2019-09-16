@@ -5,7 +5,7 @@ metadata:
   name: rabbitmq
   labels:
     app: rabbitmq
-    type: LoadBalancer  
+    type: LoadBalancer
 spec:
   type: NodePort
   ports:
@@ -53,7 +53,7 @@ data:
       queue_master_locator=min-masters
       ## See https://www.rabbitmq.com/access-control.html#loopback-users
       loopback_users.guest = false
-   
+
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
@@ -70,7 +70,7 @@ spec:
     spec:
       serviceAccountName: rabbitmq
       terminationGracePeriodSeconds: 10
-      containers:        
+      containers:
       - name: rabbitmq-k8s
         image: rabbitmq:3.7
         volumeMounts:
@@ -121,7 +121,7 @@ spec:
           - name: K8S_SERVICE_NAME
             value: $(MY_POD_SERVICE_ACCOUNT)
           - name: RABBITMQ_ERLANG_COOKIE
-            value: "mycookie" 
+            value: "mycookie"
       volumes:
         - name: config-volume
           configMap:
