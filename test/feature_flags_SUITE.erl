@@ -529,7 +529,7 @@ enable_feature_flag_with_a_network_partition(Config) ->
 
     %% Repair the network and try again to enable the feature flag.
     unblock(NodePairs),
-    timer:sleep(1000),
+    timer:sleep(10000),
     [?assertEqual(ok, rabbit_ct_broker_helpers:stop_node(Config, N))
      || N <- [A, C, D]],
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
