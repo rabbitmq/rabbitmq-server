@@ -129,14 +129,18 @@
    management.ssl.port = 15671
    management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem",
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   management.ssl.verify   = verify_none
+   management.ssl.fail_if_no_peer_cert = false",
   [{rabbitmq_management,[
                          {ssl_config,[
                                       {ip, "192.168.1.2"},
                                       {port,15671},
                                       {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
                                       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"}
+                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                      {verify, verify_none},
+                                      {fail_if_no_peer_cert, false}
                                      ]}
                         ]}],
   [rabbitmq_management]},
@@ -152,6 +156,9 @@
    management.ssl.honor_ecc_order      = true
    management.ssl.client_renegotiation = false
    management.ssl.secure_renegotiate   = true
+
+   management.ssl.verify   = verify_peer
+   management.ssl.fail_if_no_peer_cert = false
 
    management.ssl.versions.1 = tlsv1.2
    management.ssl.versions.2 = tlsv1.1
@@ -172,6 +179,9 @@
                                       {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
                                       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
                                       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+
+                                      {verify, verify_peer},
+                                      {fail_if_no_peer_cert, false},
 
                                       {honor_cipher_order,   true},
                                       {honor_ecc_order,      true},
