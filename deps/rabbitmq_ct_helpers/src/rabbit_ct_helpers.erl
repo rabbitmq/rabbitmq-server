@@ -798,7 +798,7 @@ port_receive_loop(Port, Stdout, Options) ->
                     ct:pal(?LOW_IMPORTANCE, "Exit code: ~p (pid ~p)",
                       [X, self()]);
                 true ->
-                    ct:pal(?LOW_IMPORTANCE, "~s~nExit code: ~p (pid ~p)",
+                    ct:pal(?LOW_IMPORTANCE, "~ts~nExit code: ~p (pid ~p)",
                       [Stdout, X, self()])
             end,
             case proplists:get_value(match_stdout, Options) of
