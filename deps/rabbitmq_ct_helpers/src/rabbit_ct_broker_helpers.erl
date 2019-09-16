@@ -678,7 +678,6 @@ query_node(Config, NodeConfig) ->
                                              rabbit_feature_flags,
                                              enabled_feature_flags_list_file,
                                              []),
-               ct:pal("RABBITMQ_FEATURE_FLAGS_FILE=~p~n", [EnabledFeatureFlagsFile]),
                [{enabled_feature_flags_list_file, EnabledFeatureFlagsFile}
                 | Vars0]
            catch
