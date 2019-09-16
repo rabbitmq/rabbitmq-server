@@ -728,7 +728,9 @@ or:
 <pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":"administrator"}</pre>
         The <code>tags</code> key is mandatory. Either
         <code>password</code> or <code>password_hash</code>
-        must be set. Setting <code>password_hash</code> to <code>""</code> will ensure the
+        can be set. If neither are set the user will not be able to log in with a password,
+        but other mechanisms like client certificates may be used.
+        Setting <code>password_hash</code> to <code>""</code> will ensure the
         user cannot use a password to log in. <code>tags</code> is a
         comma-separated list of tags for the user. Currently recognised tags
         are <code>administrator</code>, <code>monitoring</code> and <code>management</code>.
