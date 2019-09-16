@@ -5,7 +5,7 @@ metadata:
   name: rabbitmq
   labels:
     app: rabbitmq
-    type: LoadBalancer  
+    type: LoadBalancer
 spec:
   type: NodePort
   ports:
@@ -53,7 +53,7 @@ data:
       queue_master_locator=min-masters
       ## See https://www.rabbitmq.com/access-control.html#loopback-users
       loopback_users.guest = false
-   
+
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
@@ -70,7 +70,7 @@ spec:
     spec:
       serviceAccountName: rabbitmq
       terminationGracePeriodSeconds: 10
-      containers:        
+      containers:
       - name: rabbitmq-k8s
         image: rabbitmq:3.7
         volumeMounts:
@@ -107,21 +107,17 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-          - name: MY_POD_SERVICE_ACCOUNT
-            valueFrom:
-              fieldRef:
-                fieldPath: spec.serviceAccountName
           - name: RABBITMQ_USE_LONGNAME
             value: "true"
           # See a note on cluster_formation.k8s.address_type in the config file section
-          - name: RABBITMQ_NODENAME
-            value: rabbit@$(MY_POD_NAME).$(MY_POD_SERVICE_ACCOUNT).$(MY_POD_NAMESPACE).svc.cluster.local
-          - name: K8S_HOSTNAME_SUFFIX
-            value: .$(MY_POD_SERVICE_ACCOUNT).$(MY_POD_NAMESPACE).svc.cluster.local
           - name: K8S_SERVICE_NAME
-            value: $(MY_POD_SERVICE_ACCOUNT)
+            value: rabbitmq
+          - name: RABBITMQ_NODENAME
+            value: rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local
+          - name: K8S_HOSTNAME_SUFFIX
+            value: .$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local
           - name: RABBITMQ_ERLANG_COOKIE
-            value: "mycookie" 
+            value: "mycookie"
       volumes:
         - name: config-volume
           configMap:
