@@ -706,7 +706,11 @@ rebalance(Config) ->
     ?assertMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0})),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun({_, V}) -> V =< 2 end, Summary)),
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
     ok.
 
 subscribe_should_fail_when_global_qos_true(Config) ->
