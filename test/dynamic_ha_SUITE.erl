@@ -571,7 +571,11 @@ rebalance_all(Config) ->
     {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun({_, V}) -> V =< 2 end, Summary)),
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
     %% Check that Q1 and Q2 haven't moved
     assert_slaves(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
     assert_slaves(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
@@ -608,7 +612,11 @@ rebalance_exactly(Config) ->
     {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun({_, V}) -> V =< 2 end, Summary)),
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
     %% Check that Q1 and Q2 haven't moved
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
@@ -647,7 +655,11 @@ rebalance_nodes(Config) ->
     {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
 
     %% Check that we have at most 3 queues per node
-    ?assert(lists:all(fun({_, V}) -> V =< 3 end, Summary)),
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 3;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
     %% Check that Q1 and Q2 haven't moved
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
