@@ -539,7 +539,7 @@ maybe_migrate(ByNode, MaxQueuesDesired) ->
 
 maybe_migrate(ByNode, _, []) ->
     {ok, maps:fold(fun(K, V, Acc) ->
-                           {CQs, QQs} = lists:splitwith(fun({_, Q, _}) ->
+                           {CQs, QQs} = lists:partition(fun({_, Q, _}) ->
                                                                 ?amqqueue_is_classic(Q)
                                                         end, V),
                            [[{<<"Node name">>, K}, {<<"Number of quorum queues">>, length(QQs)},
