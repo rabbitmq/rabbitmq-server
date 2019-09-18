@@ -1041,7 +1041,8 @@ boot_error(_, {error, {cannot_log_to_file, LogFile, Reason}}) ->
 boot_error(_, {error, {generate_config_file, Error}}) ->
     log_boot_error_and_exit(generate_config_file,
       "~nConfig file generation failed:~n~s"
-      "In case a setting of a plugin is unknown, verify the plugin is enabled or remove the setting from the config.~n",
+      "In case the setting comes from a plugin, make sure that the plugin is enabled.~n"
+      "Alternatively remove the setting from the config.~n",
       [Error]);
 boot_error(Class, Reason) ->
     LogLocations = log_locations(),
