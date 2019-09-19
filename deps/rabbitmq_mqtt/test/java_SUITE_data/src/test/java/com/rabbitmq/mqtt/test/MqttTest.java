@@ -124,7 +124,7 @@ public class MqttTest implements MqttCallback {
 
     private void disconnect(MqttClient client) {
         try {
-            if(client.isConnected()) {
+            if (client.isConnected()) {
               client.disconnect(5000);
             }
         } catch (Exception ignored) {}
@@ -224,7 +224,7 @@ public class MqttTest implements MqttCallback {
         } catch (MqttException ex) {
             Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
         } finally {
-            if(client.isConnected()) {
+            if (client.isConnected()) {
                 disconnect(client);
             }
         }
@@ -276,7 +276,7 @@ public class MqttTest implements MqttCallback {
             args.put("x-expires", 86400000);
             tmpCh.queueDeclare(q, durable, autoDelete, false, args);
         } finally {
-            if(c.isConnected()) {
+            if (c.isConnected()) {
                 c.disconnect(3000);
             }
 
@@ -297,7 +297,7 @@ public class MqttTest implements MqttCallback {
         } catch (MqttException ex) {
             Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
         } finally {
-            if(client.isConnected()) {
+            if (client.isConnected()) {
                 disconnect(client);
             }
         }
@@ -911,7 +911,7 @@ public class MqttTest implements MqttCallback {
     public void messageArrived(String topic, MqttMessage message) throws Exception {
         lastReceipt = System.currentTimeMillis();
         receivedMessages.add(message);
-        if(failOnDelivery){
+        if (failOnDelivery) {
             throw new Exception("unexpected delivery on topic " + topic);
         }
     }
