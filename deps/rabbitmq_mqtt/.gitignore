@@ -2,6 +2,7 @@
 .*.sw?
 *.beam
 .erlang.mk/
+.idea/*
 cover/
 debug/*
 deps/
@@ -13,5 +14,6 @@ plugins/
 /xrefr
 
 test/config_schema_SUITE_data/schema/
+test/.idea/*
 
 rabbitmq_mqtt.d
