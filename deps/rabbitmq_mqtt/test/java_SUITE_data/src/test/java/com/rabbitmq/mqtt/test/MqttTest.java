@@ -276,7 +276,7 @@ public class MqttTest implements MqttCallback {
         MqttClient c = new MqttClient(brokerUrl, clientId, null);
         MqttConnectOptions opts = new MyConnOpts();
         opts.setUserName("guest");
-        opts.setPassword(null);
+        opts.setPassword("".toCharArray());
         try {
             c.connect(opts);
             fail("Authentication failure expected");
