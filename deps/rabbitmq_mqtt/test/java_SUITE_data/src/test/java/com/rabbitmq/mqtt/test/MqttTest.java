@@ -168,7 +168,7 @@ public class MqttTest implements MqttCallback {
     }
 
     private void tearDownAmqp() throws IOException {
-        if(conn.isOpen()) {
+        if (conn.isOpen()) {
             conn.close();
         }
     }
@@ -601,12 +601,11 @@ public class MqttTest implements MqttCallback {
 
     @Test public void will() throws MqttException, InterruptedException, IOException {
         String topic = "rabbitmq-mqtt-will-test-1";
+        resetConOpts(conOpt);
         MqttClient client2 = newConnectedClient("will-client-2", conOpt);
         client2.subscribe(topic);
         client2.setCallback(this);
 
-        MqttConnectOptions opts = new MyConnOpts();
-        resetConOpts(opts);
         final SocketFactory factory = SocketFactory.getDefault();
         final ArrayList<Socket> sockets = new ArrayList<Socket>();
         SocketFactory testFactory = new SocketFactory() {
@@ -632,9 +631,11 @@ public class MqttTest implements MqttCallback {
             }
         };
 
-        MqttClient client = newClient(clientId);
+        MqttClient client = newClient("will-client-1");
         MqttTopic willTopic = client.getTopic(topic);
 
+        MqttConnectOptions opts = new MyConnOpts();
+        resetConOpts(opts);
         opts.setSocketFactory(testFactory);
         opts.setWill(willTopic, payload, 0, false);
         opts.setCleanSession(false);
@@ -654,7 +655,7 @@ public class MqttTest implements MqttCallback {
     @Test public void willIsRetained() throws MqttException, InterruptedException, IOException {
         MqttConnectOptions opts2 = new MyConnOpts();
         opts2.setCleanSession(true);
-        MqttClient client2 = newConnectedClient("will-client-2", opts2);
+        MqttClient client2 = newConnectedClient("will-is-retained-client-2", opts2);
         client2.setCallback(this);
 
         clearRetained(client2, retainedTopic);
@@ -688,7 +689,7 @@ public class MqttTest implements MqttCallback {
             }
         };
 
-        MqttClient client = newClient(clientId);
+        MqttClient client = newClient("will-is-retained-client-1");
         MqttTopic willTopic = client.getTopic(retainedTopic);
         byte[] willPayload = "willpayload".getBytes();
 
@@ -822,7 +823,7 @@ public class MqttTest implements MqttCallback {
                 return sock;
             }
         };
-        MqttClient client = newClient(clientId);
+        MqttClient client = newClient("last-will-not-sent-on-restricted-topic");
         opts.setSocketFactory(testFactory);
         MqttTopic willTopic = client.getTopic(lastWillTopic);
         opts.setWill(willTopic, payload, 0, false);
