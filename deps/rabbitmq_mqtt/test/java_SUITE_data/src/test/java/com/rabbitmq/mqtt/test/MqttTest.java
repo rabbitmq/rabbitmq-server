@@ -97,6 +97,7 @@ public class MqttTest implements MqttCallback {
         assertNotNull(host);
         return host.toString();
     }
+
     // override the 10s limit
     private class MyConnOpts extends MqttConnectOptions {
         private int keepAliveInterval = 60;
@@ -792,13 +793,15 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void lastWillNotSentOnRestrictedTopic() throws Exception {
-        MqttClient client2 = newConnectedClient(conOpt);
+        MqttConnectOptions client2_opts = new MyConnOpts();
+        resetConOpts(client2_opts);
+
+        MqttClient client2 = newConnectedClient(client2_opts);
         // topic authorized for subscription, restricted for publishing
         String lastWillTopic = "last-will";
         client2.subscribe(lastWillTopic);
         client2.setCallback(this);
 
-        MqttConnectOptions opts = new MyConnOpts();
         final SocketFactory factory = SocketFactory.getDefault();
         final ArrayList<Socket> sockets = new ArrayList<Socket>();
         SocketFactory testFactory = new SocketFactory() {
@@ -823,12 +826,16 @@ public class MqttTest implements MqttCallback {
                 return sock;
             }
         };
+
+        MqttConnectOptions client_opts = new MyConnOpts();
+        resetConOpts(client_opts);
+
         MqttClient client = newClient("last-will-not-sent-on-restricted-topic");
-        opts.setSocketFactory(testFactory);
+        client_opts.setSocketFactory(testFactory);
         MqttTopic willTopic = client.getTopic(lastWillTopic);
-        opts.setWill(willTopic, payload, 0, false);
-        opts.setCleanSession(false);
-        client.connect(opts);
+        client_opts.setWill(willTopic, payload, 0, false);
+        client_opts.setCleanSession(false);
+        client.connect(client_opts);
 
         Assert.assertEquals(1, sockets.size());
         expectConnectionFailure = true;
