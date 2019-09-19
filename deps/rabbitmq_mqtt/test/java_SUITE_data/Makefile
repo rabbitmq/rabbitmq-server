@@ -14,7 +14,7 @@ deps:
 	@mvnw dependency:copy-dependencies -DoutputDirectory=lib
 
 tests:
-	@mvnw -q $(MVN_FLAGS) test
+	@mvnw -X -e -q $(MVN_FLAGS) test
 
 clean:
 	@mvnw clean
