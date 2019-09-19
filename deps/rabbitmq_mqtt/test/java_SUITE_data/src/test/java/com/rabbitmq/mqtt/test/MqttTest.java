@@ -638,17 +638,16 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void willIsRetained() throws MqttException, InterruptedException, IOException {
-        MqttConnectOptions opts2 = new MyConnOpts();
-        opts2.setCleanSession(true);
-        MqttClient client2 = newConnectedClient("will-is-retained-client-2", opts2);
+        MqttConnectOptions client2_opts = new MyConnOpts();
+        resetConOpts(client2_opts);
+        client2_opts.setCleanSession(true);
+        MqttClient client2 = newConnectedClient("will-is-retained-client-2", client2_opts);
         client2.setCallback(this);
 
         clearRetained(client2, retainedTopic);
         client2.subscribe(retainedTopic, 1);
         disconnect(client2);
 
-        MqttConnectOptions opts = new MyConnOpts();
-        resetConOpts(opts);
         final SocketFactory factory = SocketFactory.getDefault();
         final ArrayList<Socket> sockets = new ArrayList<Socket>();
         SocketFactory testFactory = new SocketFactory() {
@@ -674,22 +673,25 @@ public class MqttTest implements MqttCallback {
             }
         };
 
+        MqttConnectOptions client_opts = new MyConnOpts();
+        resetConOpts(client_opts);
+
         MqttClient client = newClient("will-is-retained-client-1");
         MqttTopic willTopic = client.getTopic(retainedTopic);
         byte[] willPayload = "willpayload".getBytes();
 
-        opts.setSocketFactory(testFactory);
-        opts.setWill(willTopic, willPayload, 1, true);
+        client_opts.setSocketFactory(testFactory);
+        client_opts.setWill(willTopic, willPayload, 1, true);
 
-        client.connect(opts);
+        client.connect(client_opts);
 
         Assert.assertEquals(1, sockets.size());
         sockets.get(0).close();
 
         // let last will propagate after disconnection
         waitForTestDelay();
-
-        client2.connect(opts2);
+        
+        client2.connect(client2_opts);
         client2.setCallback(this);
         client2.subscribe(retainedTopic, 1);
 

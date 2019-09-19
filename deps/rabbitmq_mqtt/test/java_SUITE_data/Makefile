@@ -14,7 +14,9 @@ deps:
 	@mvnw dependency:copy-dependencies -DoutputDirectory=lib
 
 tests:
-	@mvnw -X -e -q $(MVN_FLAGS) test
+	# Note: to run a single test
+	# @mvnw -q $(MVN_FLAGS) -Dtest=MqttTest#subscribeQos1 test
+	@mvnw -q $(MVN_FLAGS) test
 
 clean:
 	@mvnw clean
