@@ -659,6 +659,10 @@ public class MqttTest implements MqttCallback {
         int pubCount = 50;
         for (int subQos=0; subQos <= 2; subQos++){
             for (int pubQos=0; pubQos <= 2; pubQos++){
+                // avoid reusing the client in this test as a shared
+                // client cannot handle connection churn very well. MK.
+                String cid = "test-sub-qos-" + subQos + "-pub-qos-" + pubQos;
+                MqttClient client = new MqttClient(brokerUrl, cid, null);
                 client.connect(conOpt);
                 client.subscribe(topic, subQos);
                 client.setCallback(this);
@@ -671,7 +675,7 @@ public class MqttTest implements MqttCallback {
                 System.out.println("publish QOS" + pubQos + " subscribe QOS" + subQos +
                                    ", " + pubCount + " msgs took " +
                                    (lastReceipt - start)/1000.0 + "sec");
-                client.disconnect();
+                client.disconnect(5000);
                 receivedMessages.clear();
             }
         }
