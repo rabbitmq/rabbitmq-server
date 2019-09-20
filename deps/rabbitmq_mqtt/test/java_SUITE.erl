@@ -91,8 +91,10 @@ init_per_testcase(Testcase, Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0,
         ["set_topic_permissions",  "-p", "/", "guest", "amq.topic",
-            "will-test-[0-9]|test-topic|test-retained-topic|.*topic.*|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+",
-            "will-test-[0-9]|test-topic|test-retained-topic|.*topic.*|last-will|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+"]),
+            % Write permission
+            "test-topic|test-retained-topic|.*topic.*|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+",
+            % Read permission
+            "test-topic|test-retained-topic|.*topic.*|last-will|{username}.{client_id}.a|^sp[AB]v\\d+___\\d+"]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
