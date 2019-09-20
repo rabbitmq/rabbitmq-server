@@ -15,7 +15,7 @@ deps:
 
 tests:
 	# Note: to run a single test
-	# @mvnw -q $(MVN_FLAGS) -Dtest=MqttTest#subscribeQos1 test
+	# @mvnw -q $(MVN_FLAGS) -Dtest=MqttTest#subscribeMultiple test
 	@mvnw -q $(MVN_FLAGS) test
 
 clean:
