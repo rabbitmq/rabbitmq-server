@@ -468,9 +468,9 @@ public class MqttTest implements MqttCallback {
         MqttConnectOptions client_opts = new TestMqttConnectOptions();
         MqttClient client = newConnectedClient(clientId, client_opts);
         client.setCallback(this);
-        client.subscribe("/+/mid/#");
-        String[] cases = new String[]{"/pre/mid2", "/mid", "/a/mid/b/c/d", "/frob/mid"};
-        List<String> expected = Arrays.asList("/a/mid/b/c/d", "/frob/mid");
+        client.subscribe("/+/test-topic/#");
+        String[] cases = new String[]{"/pre/test-topic2", "/test-topic", "/a/test-topic/b/c/d", "/frob/test-topic"};
+        List<String> expected = Arrays.asList("/a/test-topic/b/c/d", "/frob/test-topic");
         for(String example : cases){
             publish(client, example, 0, example.getBytes());
         }
