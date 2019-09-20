@@ -615,7 +615,6 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void will() throws MqttException, InterruptedException, IOException {
-        String topic = "rabbitmq-mqtt-will-test-1";
         MqttConnectOptions client_opts = new TestMqttConnectOptions();
         MqttClient client2 = newConnectedClient("will-client-2", client_opts);
         client2.subscribe(topic);
