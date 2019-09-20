@@ -78,27 +78,37 @@ ask the core team for their opinion on the [RabbitMQ users mailing list][rmq-use
 
 ## Running Tests
 
-To run a "fast suite" (a subset of tests):
+Assuming you have:
 
-    make ct-fast
+* Installed [Elixir](http://elixir-lang.org/install.html)
+* Have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g.  `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a server release repository clone
 
-To run a "slow suite" (a subset of tests that take much longer to run):
+...you can simply run `make tests` within this project's root directory.
 
-    make ct-slow
+### Running a Single Test Case
 
-To run a particular suite:
+To run a single test case, use `make test` like so:
 
-    make ct-$suite_name
+```
+make TEST_FILE=test/help_command_test.exs test
+```
 
-for example, to run the `backing_queue` suite:
+And if you want to run in verbose mode, set the `V` make variable:
 
-    make ct-backing_queue
+```
+make TEST_FILE=test/help_command_test.exs V=1 test
+```
 
-Finally,
+NOTE: You may see the following message several times:
 
-    make tests
+```
+warning: variable context is unused
+```
 
-will run all suites.
+This is nothing to be alarmed about; we're currently using setup context
+functions in Mix to start a new distributed node and connect it to the RabbitMQ
+server. It complains because we don't actually use the context dictionary, but
+it's fine otherwise.
 
 ## Code of Conduct
 
