@@ -53,10 +53,6 @@ public class MqttTest implements MqttCallback {
 
     private final String host = "localhost";
     private final String brokerUrl = "tcp://" + host + ":" + getPort();
-    private String clientId;
-    private String clientId2;
-    private MqttClient client;
-    private MqttClient client2;
     private volatile List<MqttMessage> receivedMessages;
 
     private final byte[] payload = "payload".getBytes();
@@ -790,7 +786,7 @@ public class MqttTest implements MqttCallback {
         client2.subscribe(lastWillTopic);
         client2.setCallback(this);
 
-        MqttConnectOptions opts = new MyConnOpts();
+        MqttConnectOptions opts = new TestMqttConnectOptions();
         final SocketFactory factory = SocketFactory.getDefault();
         final ArrayList<Socket> sockets = new ArrayList<Socket>();
         SocketFactory testFactory = new SocketFactory() {
