@@ -54,8 +54,6 @@ public class MqttTest implements MqttCallback {
     private final String host = "localhost";
     private final String brokerUrl = "tcp://" + host + ":" + getPort();
     private final String brokerThreeUrl = "tcp://" + host + ":" + getThirdPort();
-    private MqttClient client;
-    private MqttClient client2;
     private volatile List<MqttMessage> receivedMessages;
 
     private final byte[] payload = "payload".getBytes();
