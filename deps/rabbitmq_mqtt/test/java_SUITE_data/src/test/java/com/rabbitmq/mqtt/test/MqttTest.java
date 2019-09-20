@@ -730,16 +730,16 @@ public class MqttTest implements MqttCallback {
     @Test public void subscribeMultiple() throws MqttException {
         MqttConnectOptions client_opts = new TestMqttConnectOptions();
         MqttClient client = newConnectedClient(client_opts);
-        publish(client, "/topic/1", 1, "msq1-qos1".getBytes());
+        publish(client, "/test-topic/1", 1, "msq1-qos1".getBytes());
 
         MqttClient client2 = newConnectedClient(client_opts);
         client2.setCallback(this);
-        client2.subscribe("/topic/#");
-        client2.subscribe("/topic/#");
+        client2.subscribe("/test-topic/#");
+        client2.subscribe("/test-topic/#");
 
-        publish(client, "/topic/2", 0, "msq2-qos0".getBytes());
-        publish(client, "/topic/3", 1, "msq3-qos1".getBytes());
-        publish(client, "/topic/4", 2, "msq3-qos2".getBytes());
+        publish(client, "/test-topic/2", 0, "msq2-qos0".getBytes());
+        publish(client, "/test-topic/3", 1, "msq3-qos1".getBytes());
+        publish(client, "/test-topic/4", 2, "msq3-qos2".getBytes());
         publish(client, topic, 0, "msq4-qos0".getBytes());
         publish(client, topic, 1, "msq4-qos1".getBytes());
 
@@ -780,12 +780,12 @@ public class MqttTest implements MqttCallback {
         MqttConnectOptions client_opts = new TestMqttConnectOptions();
         MqttClient client = newConnectedClient(client_opts);
         client.setCallback(this);
-        client.subscribe("some/topic");
-        publish(client, "some/topic", 1, "content".getBytes());
+        client.subscribe("some/test-topic");
+        publish(client, "some/test-topic", 1, "content".getBytes());
         waitAtMost(timeout).until(receivedMessagesSize(),equalTo(1));
         assertTrue(client.isConnected());
         try {
-            publish(client, "forbidden", 1, "content".getBytes());
+            publish(client, "forbidden-topic", 1, "content".getBytes());
             fail("Publishing on a forbidden topic, an exception should have been thrown");
             client.disconnect();
         } catch(Exception e) {
@@ -797,9 +797,9 @@ public class MqttTest implements MqttCallback {
         MqttConnectOptions client_opts = new TestMqttConnectOptions();
         MqttClient client = newConnectedClient(client_opts);
         client.setCallback(this);
-        client.subscribe("some/topic");
+        client.subscribe("some/test-topic");
         try {
-            client.subscribe("forbidden");
+            client.subscribe("forbidden-topic");
             fail("Subscribing to a forbidden topic, an exception should have been thrown");
             client.disconnect();
         } catch(Exception e) {
