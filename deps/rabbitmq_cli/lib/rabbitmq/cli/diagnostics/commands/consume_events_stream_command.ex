@@ -19,9 +19,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventsStreamCommand do
   """
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  alias RabbitMQ.CLI.Core.LogFiles
-
-
   def switches(), do: [duration: :integer, pattern: :string, timeout: :integer]
   def aliases(), do: [d: :duration, t: :timeout]
 
@@ -30,8 +27,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventsStreamCommand do
   end
 
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
-
-  def printer(), do: RabbitMQ.CLI.Printers.StdIOJson
 
   def run([], %{node: node_name, timeout: timeout, duration: duration, pattern: pattern}) do
     pid = self()
@@ -58,6 +53,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventsStreamCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.JsonStream
+
+  def printer(), do: RabbitMQ.CLI.Printers.StdIORaw
 
   def help_section(), do: :observability_and_health_checks
 
