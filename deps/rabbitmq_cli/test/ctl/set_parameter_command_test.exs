@@ -128,7 +128,7 @@ defmodule SetParameterCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.banner([context[:component_name], context[:key], context[:value]], vhost_opts)
-      =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+      =~ ~r/Setting runtime parameter \"#{context[:key]}\" for component \"#{context[:component_name]}\" to \"#{context[:value]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values
