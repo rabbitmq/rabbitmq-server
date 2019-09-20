@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventsStreamCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventStreamCommand do
   @moduledoc """
   Displays standard log file location on the target node
   """
@@ -60,9 +60,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventsStreamCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Streams events from a running node for a period of time"
+  def description(), do: "Streams internal events from a running node. Output is jq-compatible."
 
-  def usage, do: "consume_events_stream [--duration|-d <seconds>] [--pattern <pattern>]"
+  def usage, do: "consume_event_stream [--duration|-d <seconds>] [--pattern <pattern>]"
 
   def usage_additional() do
     [
