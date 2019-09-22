@@ -70,4 +70,5 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("tls", path_segment: "ssl")
   Macros.defguide("troubleshooting")
   Macros.defguide("virtual_hosts", path_segments: "vhosts")
+  Macros.defguide("upgrade")
 end

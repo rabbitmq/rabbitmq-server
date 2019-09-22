@@ -39,7 +39,8 @@ defmodule RabbitMQCtl.MixfileBase do
      env: [scopes: ['rabbitmq-plugins': :plugins,
                     rabbitmqctl: :ctl,
                     'rabbitmq-diagnostics': :diagnostics,
-                    'rabbitmq-queues': :queues]]
+                    'rabbitmq-queues': :queues,
+                    'rabbitmq-upgrade': :upgrade]]
     ]
     |> add_modules(Mix.env)
   end
