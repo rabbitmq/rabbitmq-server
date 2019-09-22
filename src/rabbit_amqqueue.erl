@@ -526,7 +526,7 @@ is_match(Subj, E) ->
 iterative_rebalance(ByNode, MaxQueuesDesired) ->
     case maybe_migrate(ByNode, MaxQueuesDesired) of
         {ok, Summary} ->
-            rabbit_log:warning("Nothing to do, all balanced"),
+            rabbit_log:info("All queue masters are balanced"),
             {ok, Summary};
         {migrated, Other} ->
             iterative_rebalance(Other, MaxQueuesDesired);
