@@ -17,18 +17,16 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.PostUpgradeCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
-    arg = String.to_atom("all")
-    :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :rebalance, [arg, ".*", ".*"])
+    :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :rebalance, [:all, ".*", ".*"])
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "post_upgrade"
 
@@ -40,10 +38,11 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.PostUpgradeCommand do
 
   def help_section, do: :upgrade
 
-  def description, do: "Post upgrade tasks"
+  def description, do: "Runs post-upgrade tasks"
 
   def banner([], _) do
-    "Executing post upgrade tasks...\nRebalancing all queues..."
+    "Executing post upgrade tasks...\n" <>
+    "Rebalancing queue masters..."
   end
 
 end
