@@ -94,9 +94,12 @@ top_binary_refs(Count) ->
     io:format("~s ~p~n", [get_time(), Sorted]).
 
 binary_refs(Pid) ->
-    {binary, Refs} = info(Pid, binary, []),
-    lists:sum([Sz || {_Ptr, Sz} <- lists:usort([{Ptr, Sz} ||
-                                                   {Ptr, Sz, _Cnt} <- Refs])]).
+    case info(Pid, binary, []) of
+        {binary, Refs} ->
+            lists:sum([Sz || {_Ptr, Sz} <- lists:usort([{Ptr, Sz} ||
+                                                           {Ptr, Sz, _Cnt} <- Refs])]);
+        _ -> 0
+    end.
 
 info(Pid) ->
     [{pid, Pid} | info(Pid, ?PROCESS_INFO, [])].
