@@ -11,25 +11,22 @@
 //  The Original Code is RabbitMQ.
 //
 //  The Initial Developer of the Original Code is GoPivotal, Inc.
-//  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+//  Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 //
 
 package com.rabbitmq.mqtt.test.tls;
 
 import org.eclipse.paho.client.mqttv3.*;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 /**
@@ -77,7 +74,7 @@ public class MqttSSLTest implements MqttCallback {
     }
 
 
-    @Before
+    @BeforeEach
     public void setUp() throws MqttException, IOException {
         clientId = getClass().getSimpleName() + ((int) (10000 * Math.random()));
         clientId2 = clientId + "-2";
@@ -90,7 +87,7 @@ public class MqttSSLTest implements MqttCallback {
         expectConnectionFailure = false;
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws MqttException {
         // clean any sticky sessions
         setConOpts(conOpt);
