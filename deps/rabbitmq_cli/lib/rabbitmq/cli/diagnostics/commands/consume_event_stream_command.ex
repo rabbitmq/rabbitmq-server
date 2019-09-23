@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventStreamCommand do
   def aliases(), do: [d: :duration, t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{duration: :infinity, pattern: ".*"}, opts)}
+    {args, Map.merge(%{duration: :infinity, pattern: ".*", quiet: true}, opts)}
   end
 
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
