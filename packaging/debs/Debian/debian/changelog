@@ -1,3 +1,9 @@
+rabbitmq-server (3.7.18-2) unstable; urgency=low
+
+  * RabbitMQ 3.7.18 is compatible with Erlang 22.x (but not 23.x).
+
+ -- Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>  Mon, 23 Sep 2019 09:20:28 +0200
+
 rabbitmq-server (3.7.18-1) unstable; urgency=low
 
   * New Upstream Release.
