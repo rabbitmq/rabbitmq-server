@@ -39,6 +39,17 @@ if exist "!RABBITMQ_CONF_ENV_FILE!" (
     call "!RABBITMQ_CONF_ENV_FILE!"
 )
 
+rem Bump ETS table limit to 50000
+if "!ERL_MAX_ETS_TABLES!"=="" (
+    set ERL_MAX_ETS_TABLES=50000
+)
+
+rem Default is defined here:
+rem https://github.com/erlang/otp/blob/master/erts/emulator/beam/erl_port.h
+if "!ERL_MAX_PORTS!"=="" (
+    set ERL_MAX_PORTS=65536
+)
+
 set DEFAULT_SCHEDULER_BIND_TYPE=db
 if "!RABBITMQ_SCHEDULER_BIND_TYPE!"=="" (
     set RABBITMQ_SCHEDULER_BIND_TYPE=!SCHEDULER_BIND_TYPE!
