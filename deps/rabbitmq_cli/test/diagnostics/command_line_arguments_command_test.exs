@@ -18,7 +18,7 @@ defmodule CommandLineArgumentsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.CommandLineArgumentsCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

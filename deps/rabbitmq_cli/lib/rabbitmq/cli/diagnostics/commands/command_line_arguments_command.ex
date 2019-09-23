@@ -13,11 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.CommandLineArgumentsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:diagnostics]
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
@@ -25,7 +25,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CommandLineArgumentsCommand do
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :init, :get_arguments, [])
   end
-
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
