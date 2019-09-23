@@ -301,11 +301,6 @@ if "!RABBITMQ_SERVICE_RESTART!"=="" (
     set RABBITMQ_SERVICE_RESTART=restart
 )
 
-rem Bump ETS table limit to 50000
-if "!ERL_MAX_ETS_TABLES!"=="" (
-    set ERL_MAX_ETS_TABLES=50000
-)
-
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "!RABBITMQ_EBIN_ROOT:\=/!" ^
 -boot start_sasl ^
