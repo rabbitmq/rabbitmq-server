@@ -44,7 +44,8 @@ defmodule ConsumeEventStreamCommandTest do
 
   test "merge_defaults: duration defaults to infinity, pattern to anything" do
     assert @command.merge_defaults([], %{}) == {[], %{duration: :infinity,
-                                                      pattern: ".*"}}
+                                                      pattern: ".*",
+                                                      quiet: true}}
   end
 
   test "validate: treats positional arguments as a failure" do
