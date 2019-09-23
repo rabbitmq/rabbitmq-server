@@ -27,7 +27,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     ListPermissionsCommand,
     ListPoliciesCommand,
     ListQueuesCommand,
-    StatusCommand
+    StatusCommand,
+    CommandLineArgumentsCommand
   }
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -61,7 +62,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
           run_command(ClusterStatusCommand, [], opts),
           run_command(EnvironmentCommand, [], opts),
           run_command(ListConnectionsCommand, info_keys(ListConnectionsCommand), opts),
-          run_command(ListChannelsCommand, info_keys(ListChannelsCommand), opts)
+          run_command(ListChannelsCommand, info_keys(ListChannelsCommand), opts),
+          run_command(CommandLineArgumentsCommand, [], opts)
         ]
 
         vhost_data =
