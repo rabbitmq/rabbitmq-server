@@ -382,6 +382,7 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-plugins \
 	  rabbitmq-diagnostics \
 	  rabbitmq-queues \
+	  rabbitmq-upgrade \
 	  cuttlefish
 
 AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
@@ -394,6 +395,7 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-queues.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
+		  rabbitmq-upgrade.bat \
 		  rabbitmqctl.bat \
 		  cuttlefish
 
