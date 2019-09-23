@@ -27,9 +27,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     ListPermissionsCommand,
     ListPoliciesCommand,
     ListQueuesCommand,
-    StatusCommand,
-    CommandLineArgumentsCommand
+    StatusCommand
   }
+  alias RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
