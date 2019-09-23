@@ -955,8 +955,8 @@
 ##
 ## Related doc guide: https://rabbitmq.com/ldap.html#authorisation.
 
-## Following configuration should be defined in additional.config file
-## DO NOT UNCOMMENT THIS LINES!
+## Following configuration should be defined in advanced.config file
+## DO NOT UNCOMMENT THESE LINES!
 
 ## Set the query to use when determining vhost access
 ##
