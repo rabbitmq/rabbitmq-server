@@ -240,7 +240,6 @@ systemctl try-restart %{name}.service >/dev/null 2>&1 || :
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
 %doc README
-%doc deps/rabbit/docs/rabbitmq.config.example
 %doc deps/rabbit/docs/set_rabbitmq_policy.sh.example
 
 %clean
