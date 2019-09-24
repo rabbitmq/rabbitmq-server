@@ -62,7 +62,7 @@ defmodule LogTailStreamCommandTest do
     ensure_log_file()
     time_before = System.system_time(:second)
 
-    stream = @command.run([], Map.merge(context[:opts], %{duration: 5}))
+    stream = @command.run([], Map.merge(context[:opts], %{duration: 15}))
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message"])
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message1"])
     :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message2"])
@@ -79,9 +79,9 @@ defmodule LogTailStreamCommandTest do
     assert String.match?(data, ~r/Message3/)
 
     time_spent = time_after - time_before
-    assert time_spent > 5
+    assert time_spent > 15
     # This my take longer then duration but not too long
-    assert time_spent < 30
+    assert time_spent < 45
   end
 
   test "run: may return an error if there is no log", context do
