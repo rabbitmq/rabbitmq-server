@@ -1,6 +1,11 @@
 %% -*- mode: erlang -*-
 %% ----------------------------------------------------------------------------
-%% RabbitMQ Sample Configuration File.
+%% Classic RabbitMQ configuration format example.
+%% This format should be considered DEPRECATED.
+%%
+%% Users of RabbitMQ 3.7.x
+%% or later should prefer the new style format (rabbitmq.conf)
+%% in combination with an advanced.config file (as needed).
 %%
 %% Related doc guide: https://www.rabbitmq.com/configure.html. See
 %% https://rabbitmq.com/documentation.html for documentation ToC.
