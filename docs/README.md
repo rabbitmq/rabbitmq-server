@@ -14,7 +14,7 @@ Please [see rabbitmq.com](https://rabbitmq.com/documentation.html) for documenta
 Feeling nostalgic and looking for the [classic configuration file example](https://github.com/rabbitmq/rabbitmq-server/blob/v3.7.x/docs/rabbitmq.config.example)?
 Now that's old school! Keep in mind that classic configuration file **should be considered deprecated**.
 Prefer `rabbitmq.conf` (see [new style configuration format](https://www.rabbitmq.com/configure.html#config-file-formats))
-with `advanced.config` as needed.
+with an `advanced.config` to complement it as needed.
 
 
 ## man Pages
