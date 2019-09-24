@@ -3,7 +3,7 @@
 This directory contains [CLI tool](https://rabbitmq.com/cli.html) man page sources as well as a few documentation extras:
 
  * An [annotated rabbitmq.conf example](./rabbitmq.conf.example) (see [new style configuration format](https://www.rabbitmq.com/configure.html#config-file-formats))
- * An [annotated advanced.config example](./advanced.config.example) (see [new style configuration format](https://www.rabbitmq.com/configure.html#advanced-config-file))
+ * An [annotated advanced.config example](./advanced.config.example) (see [The advanced.config file](https://www.rabbitmq.com/configure.html#advanced-config-file))
  * A [systemd unit file example](./rabbitmq-server.service.example)
 
 Please [see rabbitmq.com](https://rabbitmq.com/documentation.html) for documentation guides.
