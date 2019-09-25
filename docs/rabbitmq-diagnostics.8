@@ -419,6 +419,22 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics check_port_listener 5672
 .\" ------------------------------------
+.It Cm consume_event_stream
+.Pp
+Streams internal events from a running node. Output is jq-compatible.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics consume_event_stream -n rabbit@hostname --duration 20 --pattern "queue_.*"
+.\" ------------------------------------
+.It Cm command_line_arguments
+.Pp
+Displays target node's command-line arguments and flags as reported by the runtime.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics command_line_arguments -n rabbit@hostname
+.\" ------------------------------------
 .It Cm status
 See
 .Cm status
