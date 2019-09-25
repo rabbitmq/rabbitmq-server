@@ -1184,20 +1184,19 @@ print_banner() ->
                               {"", ["(none)"]}
     end,
     %% padded list lines
-    {LogFmt, LogLocations} = LineListFormatter("~n                    ~ts", log_locations()),
-    {CfgFmt, CfgLocations} = LineListFormatter("~n                              ~ts", config_locations()),
-    io:format("~n  ##  ##"
-              "~n  ##  ##      ~s ~s. ~s"
-              "~n  ##########  ~s"
-              "~n  ######  ##"
-              "~n  ##########  Logs: ~ts" ++ LogFmt ++ "~n"
-              "~n              Config file(s): ~ts" ++ CfgFmt ++ "~n"
-              "~n              Tutorials:  https://rabbitmq.com/getstarted.html"
-              "~n              Doc guides: https://rabbitmq.com/documentation.html"
+    {LogFmt, LogLocations} = LineListFormatter("~n        ~ts", log_locations()),
+    {CfgFmt, CfgLocations} = LineListFormatter("~n                  ~ts", config_locations()),
+    io:format("~n  ##  ##      ~s ~s. ~s"
+              "~n  ##  ##      ~s"
+              "~n  ##########"
+              "~n  ######  ##  Tutorials:  https://rabbitmq.com/getstarted.html"
+              "~n  ##########  Doc guides: https://rabbitmq.com/documentation.html"
               "~n              Monitoring: https://rabbitmq.com/monitoring.html"
               "~n              Get help:   https://rabbitmq.com/contact.html"
-              "~n~n              Starting broker..."
-              "~n",
+              "~n"
+              "~n  Logs: ~ts" ++ LogFmt ++ "~n"
+              "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
+              "~n  Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
               LogLocations ++
               CfgLocations).
