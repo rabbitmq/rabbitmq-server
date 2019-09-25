@@ -389,7 +389,14 @@ queue(Q) when ?is_amqqueue(Q) ->
     Arguments = amqqueue:get_arguments(Q),
     Pid = amqqueue:get_pid(Q),
     State = amqqueue:get_state(Q),
-    Type = amqqueue:get_type(Q),
+    %% TODO: in the future queue types should be registered with their
+    %% full and short names and this hard-coded translation should not be
+    %% necessary
+    Type = case amqqueue:get_type(Q) of
+               rabbit_classic_queue -> classic;
+               rabbit_quorum_queue -> quorum;
+               T -> T
+           end,
     format(
       [{name,        Name},
        {durable,     Durable},
