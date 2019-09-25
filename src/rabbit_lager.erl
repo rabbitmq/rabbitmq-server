@@ -25,6 +25,10 @@
 %% For test purposes
 -export([configure_lager/0]).
 
+-export_type([log_location/0]).
+
+-type log_location() :: string().
+
 start_logger() ->
     ok = maybe_remove_logger_handler(),
     ok = app_utils:stop_applications([lager, syslog]),
