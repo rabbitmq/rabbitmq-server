@@ -61,6 +61,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
 
   def usage_additional() do
     [
+      ["<node>", "node name to remove replicas from"],
       ["--errors-only", "only list queues which reported an error"]
     ]
   end
