@@ -267,8 +267,7 @@
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
-%% this really should be an abstract type
--type log_location() :: string().
+
 -type param() :: atom().
 -type app_name() :: atom().
 
@@ -1124,10 +1123,13 @@ start_logger() ->
     rabbit_lager:start_logger(),
     ok.
 
--spec log_locations() -> [log_location()].
-
+-spec log_locations() -> [rabbit_lager:log_location()].
 log_locations() ->
     rabbit_lager:log_locations().
+
+-spec config_locations() -> [rabbit_config:config_location()].
+config_locations() ->
+    rabbit_config:config_files().
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
@@ -1175,24 +1177,29 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(description),
     {ok, Version} = application:get_key(vsn),
-    {LogFmt, LogLocations} = case log_locations() of
-        [_ | Tail] = LL ->
-            LF = lists:flatten(["~n                    ~ts"
-                                || _ <- lists:seq(1, length(Tail))]),
-            {LF, LL};
-        [] ->
-            {"", ["(none)"]}
+    LineListFormatter = fun (Placeholder, [_ | Tail] = LL) ->
+                              LF = lists:flatten([Placeholder || _ <- lists:seq(1, length(Tail))]),
+                              {LF, LL};
+                            (_, []) ->
+                              {"", ["(none)"]}
     end,
-    io:format("~n  ##  ##"
-              "~n  ##  ##      ~s ~s. ~s"
-              "~n  ##########  ~s"
-              "~n  ######  ##"
-              "~n  ##########  Logs: ~ts" ++
-              LogFmt ++
-              "~n~n              Starting broker..."
-              "~n",
+    %% padded list lines
+    {LogFmt, LogLocations} = LineListFormatter("~n        ~ts", log_locations()),
+    {CfgFmt, CfgLocations} = LineListFormatter("~n                  ~ts", config_locations()),
+    io:format("~n  ##  ##      ~s ~s. ~s"
+              "~n  ##  ##      ~s"
+              "~n  ##########"
+              "~n  ######  ##  Tutorials:  https://rabbitmq.com/getstarted.html"
+              "~n  ##########  Doc guides: https://rabbitmq.com/documentation.html"
+              "~n              Monitoring: https://rabbitmq.com/monitoring.html"
+              "~n              Get help:   https://rabbitmq.com/contact.html"
+              "~n"
+              "~n  Logs: ~ts" ++ LogFmt ++ "~n"
+              "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
+              "~n  Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
-              LogLocations).
+              LogLocations ++
+              CfgLocations).
 
 log_banner() ->
     {FirstLog, OtherLogs} = case log_locations() of
