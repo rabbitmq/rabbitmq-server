@@ -2231,9 +2231,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     case rabbit_event:stats_level(State, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
-            [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
-                QRef        <- AllDeliveredQRefs,
-                {ok, QName} <- [maps:find(QRef, QNames1)]];
+            [?INCR_STATS(queue_exchange_stats,
+                         {amqqueue:get_name(Q), XName}, 1, publish) ||
+                Q        <- Qs];
         _ ->
             ok
     end,
