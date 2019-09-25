@@ -52,7 +52,7 @@ add_binding(transaction, #exchange{name = #resource{name = ?EXCH_NAME} = Name},
             _Bs) ->
     case rabbit_binding:list_for_source(Name) of
         [_] ->
-            rabbit_event ! {event_exchange, added_first_binding},
+            rpc:abcast(rabbit_event, {event_exchange, added_first_binding}),
             ok;
         _ ->
             ok
@@ -64,7 +64,7 @@ remove_bindings(transaction, #exchange{name = #resource{name = ?EXCH_NAME} = Nam
                 _Bs) ->
     case rabbit_binding:list_for_source(Name) of
         [] ->
-            rabbit_event ! {event_exchange, removed_last_binding},
+            rpc:abcast(rabbit_event, {event_exchange, removed_last_binding}),
             ok;
         _ ->
             ok
