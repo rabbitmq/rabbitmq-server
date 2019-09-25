@@ -32,6 +32,12 @@ defmodule RabbitMQ.CLI.Formatters.JsonStream do
   alias RabbitMQ.CLI.Formatters.FormatterHelpers
   alias RabbitMQ.CLI.Core.Platform
 
+  def format_output("", _opts) do
+    # the empty string can be emitted along with a finishing marker that ends the stream
+    # (e.g. with commands that have a duration argument)
+    # we just emit the empty string as the last value for the stream in this case
+    ""
+  end
   def format_output(output, _opts) do
     {:ok, json} = JSON.encode(keys_to_atoms(output))
     json
