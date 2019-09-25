@@ -7,15 +7,18 @@ It is largely a "clean room" design that reuses some prior work from Prometheus 
 
 ## Project Maturity
 
-This plugin is new and relatively immature. It shipped in the RabbitMQ distribution starting with `3.8.0`.
+This plugin is reasonably mature and will ship in the RabbitMQ distribution as of `3.8.0`.
 
 ## Documentation
 
 See [Monitoring RabbitMQ with Prometheus and Grafana](https://www.rabbitmq.com/prometheus.html).
 
-## Enable the Plugin
+## Installation
 
-To enable it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
+This plugin is included into RabbitMQ 3.8.x releases. Like all [plugins](https://www.rabbitmq.com/plugins.html), it has to be
+[enabled](https://www.rabbitmq.com/plugins.html#ways-to-enable-plugins) before it can be used:
+
+To enable it with [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
 
     rabbitmq-plugins enable rabbitmq_prometheus
 
