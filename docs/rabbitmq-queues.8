@@ -108,9 +108,13 @@ Displays general help and commands supported by
 .Pp
 Grows quorum queue clusters by adding a member (replica) to all or half of matching quorum queues on the given node.
 .\" ------------------------------------
-.It Cm rebalance
+.It Cm rebalance Op Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
 .Pp
 Rebalances queues.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues rebalance all --vhost-pattern "a-vhost" --queue-pattern ".*"
 .\" ------------------------------------
 .It Cm shrink
 .Pp
