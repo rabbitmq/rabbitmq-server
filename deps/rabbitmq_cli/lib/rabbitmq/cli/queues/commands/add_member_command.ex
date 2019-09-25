@@ -57,7 +57,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
   def usage_additional do
     [
       ["<queue>", "quorum queue name"],
-      ["<node>", "node to add to the Raft cluster of the queue"]
+      ["<node>", "node to add a new replica on"]
     ]
   end
 
@@ -69,11 +69,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   def help_section, do: :replication
 
-  def description, do: "Adds a quorum queue member (replica) for a queue on the given node."
+  def description, do: "Adds a quorum queue member (replica) on the given node."
 
   def banner([name, node], _) do
     [
-      "Adding member #{node} to quorum queue #{name} cluster..."
+      "Adding a replica for queue #{name} on node #{node}..."
     ]
   end
 end
