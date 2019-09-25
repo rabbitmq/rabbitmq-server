@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
   ]
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-  
+
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
   end
@@ -70,7 +70,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
 
   def usage_additional do
     [
-      ["<type> --queue-pattern <pattern>", "regular expression to pick queue names"]
+      ["<type>", "queue type, must be one of: all, classic, quorum"],
+      ["--queue-pattern <pattern>", "regular expression to match queue names"],
+      ["--vhost-pattern <pattern>", "regular expression to match virtual host names"]
     ]
   end
 
