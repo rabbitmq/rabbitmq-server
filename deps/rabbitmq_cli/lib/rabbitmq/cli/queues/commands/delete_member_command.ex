@@ -47,7 +47,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
   def usage_additional do
     [
       ["<queue>", "quorum queue name"],
-      ["<node>", "node to remove from the Raft cluster of the queue"]
+      ["<node>", "node to remove a new replica on"]
     ]
   end
 
@@ -59,9 +59,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
 
   def help_section, do: :replication
 
-  def description, do: "Removes a quorum queue member (replica) for a queue on the given node."
+  def description, do: "Removes a quorum queue member (replica) on the given node."
 
   def banner([name, node], _) do
-    "Deleting member #{node} from quorum queue #{name} cluster..."
+    "Removing a replica of queue #{name} on node #{node}..."
   end
 end
