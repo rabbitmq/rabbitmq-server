@@ -88,7 +88,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     [
       ["<node>", "node name to place replicas on"],
       ["<all | even>", "how many matching quorum queues should have a replica added on this node: all or half (evenly numbered)?"],
-      ["--queue-pattern <pattern>", "regular expression to pick queue names"]
+      ["--queue-pattern <pattern>", "regular expression to match queue names"],
+      ["--vhost-pattern <pattern>", "regular expression to match virtual host names"],
+      ["--errors-only", "only list queues which reported an error"]
     ]
   end
 
