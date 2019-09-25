@@ -394,10 +394,13 @@ install-windows-docs: install-windows-erlapp
 	$(inst_verbose) man $(DEPS_DIR)/rabbit/docs/rabbitmq-service.8 > tmp-readme-service.txt
 	$(verbose) col -bx < ./tmp-readme-service.txt > $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
 	$(verbose) rm -f ./tmp-readme-service.txt
+	$(verbose) cp $(DEPS_DIR)/rabbit/docs/rabbitmq.config.example \
+		$(DESTDIR)$(WINDOWS_PREFIX)/etc
 	$(verbose) for file in \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/LICENSE* \
-	 $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL; do \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/etc/rabbitmq.config.example; do \
 		$(UNIX_TO_DOS) "$$file"; \
 		case "$$file" in \
 		*.txt) ;; \
