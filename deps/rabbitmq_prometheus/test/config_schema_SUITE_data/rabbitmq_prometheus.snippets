@@ -1,4 +1,15 @@
 [
+  %%
+  %% Path
+  %%
+
+  {endpoint_path,
+   "prometheus.path = /metriczzz",
+   [{rabbitmq_prometheus,[
+                          {path, "/metriczzz"}
+                         ]}],
+   [rabbitmq_prometheus]},
+
    %%
    %% TCP listener
    %%
