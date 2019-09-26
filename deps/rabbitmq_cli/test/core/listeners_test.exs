@@ -44,5 +44,8 @@ defmodule CoreListenersTest do
     assert protocol_label(:https) == "HTTP API over TLS (HTTPS)"
     assert protocol_label(:'https/web-stomp') == "STOMP over WebSockets and TLS (HTTPS)"
     assert protocol_label(:'https/web-mqtt') == "MQTT over WebSockets and TLS (HTTPS)"
+
+    assert protocol_label(:'http/prometheus') == "Prometheus exporter API over HTTP"
+    assert protocol_label(:'https/prometheus') == "Prometheus exporter API over TLS (HTTPS)"
   end
 end
