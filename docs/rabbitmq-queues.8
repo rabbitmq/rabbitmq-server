@@ -112,15 +112,15 @@ Supported
 .Ar selector
 values are:
 .Bl -tag -width Ds
-.It Dv all
+.It Dv Sy all
 Selects all quorum queues
-.It Dv even
+.It Dv Sy even
 Selects quorum queues with an even number of replicas
 .El
 .Pp
 Example:
 .Sp
-.Dl rabbitmq-queues grow rabbit@newhost all --vhost-pattern "a-vhost" --queue-pattern ".*"
+.Dl rabbitmq-queues grow Qo rabbit@newhost Qc Qo all Qc --vhost-pattern Qo a-vhost Qc --queue-pattern Qo .* Qc
 .\" ------------------------------------
 .It Cm rebalance Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
 .Pp
@@ -130,24 +130,25 @@ Supported
 .Ar type
 values are:
 .Bl -tag -width Ds
-.It Dv all
+.It Dv Sy all
 All queue types
-.It Dv quorum
+.It Dv Sy quorum
 Only quorum queues
-.It Dv classic
+.It Dv Sy classic
 Only classic queues
 .El
 .Pp
 Example:
 .Sp
-.Dl rabbitmq-queues rebalance all --vhost-pattern "a-vhost" --queue-pattern ".*"
+.Dl rabbitmq-queues rebalance Qo all Qc --vhost-pattern Qo a-vhost Qc --queue-pattern Qo .* Qc
 .\" ------------------------------------
 .It Cm shrink Ar node
 .Pp
 Shrinks quorum queue clusters by removing any members (replicas) on the given node.
+.Pp
 Example:
 .Sp
-.Dl rabbitmq-queues shrink rabbit@decomissioned-node
+.Dl rabbitmq-queues shrink Qo rabbit@decomissioned-node Qc
 .\" ------------------------------------
 .El
 .Ss Replication
@@ -159,7 +160,7 @@ Adds a quorum queue member (replica) on the given node.
 .Pp
 Example:
 .Sp
-.Dl rabbitmq-queues add_member --vhost "a-vhost" "a-queue" rabbit@new-node
+.Dl rabbitmq-queues add_member --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@new-node Qc
 .\" ------------------------------------
 .It Cm delete_member Ar queue Ar node Fl -vhost Ar virtual-host
 .Pp
@@ -167,7 +168,7 @@ Removes a quorum queue member (replica) on the given node.
 .Pp
 Example:
 .Sp
-.Dl rabbitmq-queues delete_member --vhost "a-vhost" "a-queue" rabbit@decomissioned-node
+.Dl rabbitmq-queues delete_member --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@decomissioned-node Qc
 .\" ------------------------------------
 .El
 .Ss Queues
@@ -179,7 +180,7 @@ Displays quorum status of a quorum queue.
 .Pp
 Example:
 .Sp
-.Dl rabbitmq-queues quorum_status --vhost "a-vhost" "a-queue"
+.Dl rabbitmq-queues quorum_status --vhost Qo a-vhost Qc Qo a-queue Qc
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------
