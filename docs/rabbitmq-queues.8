@@ -111,10 +111,12 @@ Adds a new replica on the given node for all or a half of matching quorum queues
 Supported
 .Ar selector
 values are:
-.Qq all
-(selects all quorum queues) or
-.Qq even
-(selects quorum queues with an even number of replicas)
+.Bl -tag -width Ds
+.It Dv all
+Selects all quorum queues
+.It Dv even
+Selects quorum queues with an even number of replicas
+.El
 .Pp
 Example:
 .Sp
@@ -127,12 +129,14 @@ Rebalances queue master replicas across cluster nodes.
 Supported
 .Ar type
 values are:
-.Qq all
-(all types),
-.Qq quorum
-(only quorum queues),
-.Qq classic
-(only classic queues)
+.Bl -tag -width Ds
+.It Dv all
+All queue types
+.It Dv quorum
+Only quorum queues
+.It Dv classic
+Only classic queues
+.El
 .Pp
 Example:
 .Sp
