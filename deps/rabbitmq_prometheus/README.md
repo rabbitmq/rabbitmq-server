@@ -24,22 +24,20 @@ Default port used by the plugin is `15692`.
 
 ## Configuration
 
-This exporter supports the following options via `rabbitmq_prometheus` app env:
+This exporter supports the following options via a set of `prometheus.*` configuration keys:
 
- * `path` defines a scrape endpoint. Default is `"metrics"`.
- * `ssl_config`
- * `tcp_config`
+ * `prometheus.path` defines a scrape endpoint. Default is `"/metrics"`.
+ * `prometheus.tcp.*` controls HTTP listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#configuration)
+ * `prometheus.ssl.*` controls TLS (HTTPS) listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#single-listener-https)
 
-Sample `/etc/rabbitmq/rabbitmq.config`:
+Sample configuration snippet:
 
-```erlang
-[
- {rabbitmq_prometheus, [
-   {path, "/metrics"},
-   {tcp_config, [{port, 15692}]}
- ]}
-].
+``` ini
+# these values are defaults
+prometheus.path = /metrics
+prometheus.tcp.port =  15692
 ```
+
 
 ## Contributing
 
