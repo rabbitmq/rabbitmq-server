@@ -25,10 +25,10 @@ ENV OPENSSL_SOURCE_SHA256="f6fb3079ad15076154eda9413fed42877d668e7069d9b87396d08
 ENV OPENSSL_PGP_KEY_IDS="0x8657ABB260F056B1E5190839D9C4D26D0E604491 0x5B2545DAB21995F4088CEFAA36CEE4DEB00CFE33 0xED230BEC4D4F2518B9D7DF41F0DB4D21C1D35231 0xC1F33DD8CE1D4CC613AF14DA9195C48241FBF7DD 0x7953AC1FBC3DC8B3B292393ED5E9E43F7DF9EE8C 0xE5E52560DD91C556DDBDA5D02064C53641C25E5D"
 
 # Use the latest stable Erlang/OTP release - gmake find_latest_otp - https://github.com/erlang/otp/tags
-ENV OTP_VERSION 22.0.7
+ENV OTP_VERSION 22.1
 # TODO add PGP checking when the feature will be added to Erlang/OTP's build system
 # http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
-ENV OTP_SOURCE_SHA256="04c090b55ec4a01778e7e1a5b7fdf54012548ca72737965b7aa8c4d7878c92bc"
+ENV OTP_SOURCE_SHA256="7b26f64eb6c712968d8477759fc716d64701d41f6325e8a4d0dd9c31de77284a"
 
 # Install dependencies required to build Erlang/OTP from source
 # http://erlang.org/doc/installation_guide/INSTALL.html
@@ -77,15 +77,16 @@ RUN set -eux; \
 	RELEASE="4.x.y-z" \
 	SYSTEM='Linux' \
 	BUILD='???' \
-	./config --openssldir="$OPENSSL_CONFIG_DIR"; \
+	./config \
+		--openssldir="$OPENSSL_CONFIG_DIR" \
+# add -rpath to avoid conflicts between our OpenSSL's "libssl.so" and the libssl package by making sure /usr/local/lib is searched first (but only for Erlang/OpenSSL to avoid issues with other tools using libssl; https://github.com/docker-library/rabbitmq/issues/364)
+		-Wl,-rpath=/usr/local/lib \
+	; \
 # Compile, install OpenSSL, verify that the command-line works & development headers are present
 	make -j "$(getconf _NPROCESSORS_ONLN)"; \
 	make install_sw install_ssldirs; \
 	cd ..; \
 	rm -rf "$OPENSSL_PATH"*; \
-# this is included in "/etc/ld.so.conf.d/libc.conf", but on arm64, it gets overshadowed by "/etc/ld.so.conf.d/aarch64-linux-gnu.conf" (vs "/etc/ld.so.conf.d/x86_64-linux-gnu.conf") so the precedence isn't correct -- we install our own file to overcome that and ensure any .so files in /usr/local/lib (especially OpenSSL's libssl.so) are preferred appropriately regardless of the target architecture
-# see https://bugs.debian.org/685706
-	echo '/usr/local/lib' > /etc/ld.so.conf.d/000-openssl-libc.conf; \
 	ldconfig; \
 # use Debian's CA certificates
 	rmdir "$OPENSSL_CONFIG_DIR/certs" "$OPENSSL_CONFIG_DIR/private"; \
@@ -109,6 +110,8 @@ RUN set -eux; \
 	export ERL_TOP="$OTP_PATH"; \
 	./otp_build autoconf; \
 	CFLAGS="$(dpkg-buildflags --get CFLAGS)"; export CFLAGS; \
+# add -rpath to avoid conflicts between our OpenSSL's "libssl.so" and the libssl package by making sure /usr/local/lib is searched first (but only for Erlang/OpenSSL to avoid issues with other tools using libssl; https://github.com/docker-library/rabbitmq/issues/364)
+	export CFLAGS="$CFLAGS -Wl,-rpath=/usr/local/lib"; \
 	hostArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"; \
 	buildArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
 	dpkgArch="$(dpkg --print-architecture)"; dpkgArch="${dpkgArch##*-}"; \
