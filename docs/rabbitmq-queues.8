@@ -112,7 +112,7 @@ Example:
 .Sp
 .Dl rabbitmq-queues grow rabbit@newhost all --vhost-pattern "a-vhost" --queue-pattern ".*"
 .\" ------------------------------------
-.It Cm rebalance Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
+.It Cm rebalance Ar type <all | classic | quorum> Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
 .Pp
 Rebalances queue master replicas across cluster nodes.
 .Pp
