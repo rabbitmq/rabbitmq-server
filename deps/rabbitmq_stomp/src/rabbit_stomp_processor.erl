@@ -504,7 +504,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
 %% thus we don't have to clean it up.
 tidy_canceled_subscription(ConsumerTag, _Subscription,
                            undefined, State = #proc_state{subscriptions = Subs}) ->
-    Subs1 = dict:erase(ConsumerTag, Subs),
+    Subs1 = maps:remove(ConsumerTag, Subs),
     ok(State#proc_state{subscriptions = Subs1});
 
 %% Client-initiated cancelations will pass an actual frame
