@@ -38,9 +38,9 @@
 is a command line tool that provides commands used to manage queues,
 mainly member handling for quorum queues.
 See the
-.Lk https://www.rabbitmq.com/quorum-queues.html "RabbitMQ quorum queue guide"
+.Lk https://www.rabbitmq.com/quorum-queues.html "RabbitMQ quorum queues guide"
 and
-.Lk https://www.rabbitmq.com/ha.html "RabbitMQ highly available (mirrored) queues guide"
+.Lk https://www.rabbitmq.com/ha.html "RabbitMQ classic mirrored queues guide"
 to learn more about queue types in RabbitMQ.
 .
 .\" ------------------------------------------------------------------
@@ -104,39 +104,58 @@ Displays general help and commands supported by
 .Ss Cluster
 .Bl -tag -width Ds
 .\" ------------------------------------
-.It Cm grow
+.It Cm grow Ar node Ar <all | even> Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern Fl -errors-only
 .Pp
-Grows quorum queue clusters by adding a member (replica) to all or half of matching quorum queues on the given node.
+Adds a new replica on the given node for all or a half of matching quorum queues.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues grow rabbit@newhost all --vhost-pattern "a-vhost" --queue-pattern ".*"
 .\" ------------------------------------
-.It Cm rebalance Op Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
+.It Cm rebalance Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
 .Pp
-Rebalances queues.
+Rebalances queue master replicas across cluster nodes.
 .Pp
 Example:
 .Sp
 .Dl rabbitmq-queues rebalance all --vhost-pattern "a-vhost" --queue-pattern ".*"
 .\" ------------------------------------
-.It Cm shrink
+.It Cm shrink Ar node
 .Pp
 Shrinks quorum queue clusters by removing any members (replicas) on the given node.
+Example:
+.Sp
+.Dl rabbitmq-queues shrink rabbit@decomissioned-node
 .\" ------------------------------------
 .El
 .Ss Replication
 .Bl -tag -width Ds
 .\" ------------------------------------
-.It Cm add_member
+.It Cm add_member Ar queue Ar node Fl -vhost Ar virtual-host
 .Pp
-Adds a quorum queue member (replica) for a queue on the given node.
+Adds a quorum queue member (replica) on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues add_member --vhost "a-vhost" "a-queue" rabbit@new-node
 .\" ------------------------------------
-.It Cm delete_member
+.It Cm delete_member Ar queue Ar node Fl -vhost Ar virtual-host
 .Pp
-Removes a quorum queue member (replica) for a queue on the given node.
+Removes a quorum queue member (replica) on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues delete_member --vhost "a-vhost" "a-queue" rabbit@decomissioned-node
 .\" ------------------------------------
 .El
 .Ss Queues
 .Bl -tag -width Ds
 .\" ------------------------------------
-.It Cm quorum_status
+.It Cm quorum_status Ar queue Fl -vhost Ar virtual-host
 .Pp
 Displays quorum status of a quorum queue.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues quorum_status --vhost "a-vhost" "a-queue"
 .\" ------------------------------------
