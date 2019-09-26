@@ -104,9 +104,17 @@ Displays general help and commands supported by
 .Ss Cluster
 .Bl -tag -width Ds
 .\" ------------------------------------
-.It Cm grow Ar node Ar <all | even> Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern Fl -errors-only
+.It Cm grow Ar node Ar selector Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern Fl -errors-only
 .Pp
 Adds a new replica on the given node for all or a half of matching quorum queues.
+.Pp
+Supported
+.Ar selector
+values are:
+.Qq all
+(selects all quorum queues) or
+.Qq even
+(selects quorum queues with an even number of replicas)
 .Pp
 Example:
 .Sp
@@ -115,6 +123,16 @@ Example:
 .It Cm rebalance Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
 .Pp
 Rebalances queue master replicas across cluster nodes.
+.Pp
+Supported
+.Ar type
+values are:
+.Qq all
+(all types),
+.Qq quorum
+(only quorum queues),
+.Qq classic
+(only classic queues)
 .Pp
 Example:
 .Sp
