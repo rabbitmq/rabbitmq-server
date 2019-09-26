@@ -159,7 +159,11 @@ amqp10_source(Config, AckMode) ->
                                       headers = [{<<"x-shovelled">>, _, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
-            ok = amqp_channel:call(Chan, #'basic.ack'{delivery_tag = AckTag})
+            case AckMode of
+                no_ack -> ok;
+                _      -> ok = amqp_channel:call(
+                                 Chan, #'basic.ack'{delivery_tag = AckTag})
+            end
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,
 
