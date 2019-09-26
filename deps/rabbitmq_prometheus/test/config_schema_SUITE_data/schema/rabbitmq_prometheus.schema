@@ -4,6 +4,10 @@
 %% See https://rabbitmq.com/prometheus.html for details
 %% ----------------------------------------------------------------------------
 
+%% Endpoint path
+{mapping, "prometheus.path", "rabbitmq_prometheus.path",
+    [{datatype, string}]}.
+
 %% HTTP (TCP) listener options ========================================================
 
 %% HTTP listener consistent with the management plugin, Web STOMP and Web MQTT.
