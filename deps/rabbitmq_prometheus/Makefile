@@ -1,6 +1,6 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.859
+BASED_ON_RABBITMQ_VERSION := 3.8.0-alpha.880
 DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
@@ -105,9 +105,6 @@ define LATEST_STABLE_OTP_VERSION
 curl --silent --fail https://api.github.com/repos/erlang/otp/git/refs/tags | \
   $(JQ) -r '.[].ref | sub("refs/tags/OTP.{1}";"") | match("^$(OTP_CURRENT_STABLE_MAJOR)[0-9.]+$$") | .string' | \
   tail -n 1
-endef
-define LATEST_STABLE_OTP_SHA256
-c14aebda6afae82809325c18d51a66e618b3f237b856080a7d8f4b5bb089e758
 endef
 .PHONY: find_latest_otp
 find_latest_otp: $(JQ)
