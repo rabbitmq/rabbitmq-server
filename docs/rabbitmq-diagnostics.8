@@ -133,10 +133,16 @@ The default value is
 .Ss Help
 .Bl -tag -width Ds
 .\" ------------------------------------
-.It Cm help
+.Bl -tag -width Ds
+.It Cm help Oo Fl l Oc Op Ar command_name
 .Pp
-Displays general help and commands supported by
-.Nm .
+Prints usage for all available commands.
+.Bl -tag -width Ds
+.It Fl l , Fl -list-commands
+List command usages only, without parameter explanation.
+.It Ar command_name
+Prints usage for the specified command.
+.El
 .\" ------------------------------------
 .It Cm version
 .Pp
@@ -146,6 +152,7 @@ Displays CLI tools version
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm wait
+.Pp
 See
 .Cm wait
 in
@@ -155,6 +162,7 @@ in
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm cluster_status
+.Pp
 See
 .Cm cluster_status
 in
@@ -164,6 +172,7 @@ in
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm list_users
+.Pp
 See
 .Cm list_users
 in
@@ -173,35 +182,39 @@ in
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm list_permissions Op Fl p Ar vhost
+.Pp
 See
 .Cm list_permissions
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_topic_permissions Op Fl p Ar vhost
+.Pp
 See
 .Cm list_topic_permissions
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_user_permissions Ar username
+.Pp
 See
 .Cm list_user_permissions
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_user_topic_permissions Ar username
+.Pp
 See
 .Cm list_user_topic_permissions
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_vhosts Op Ar vhostinfoitem ...
+.Pp
 See
 .Cm list_vhosts
 in
 .Xr rabbitmqctl 8
-.El
 .El
 .Ss Monitoring, observability and health checks
 .Bl -tag -width Ds
@@ -391,54 +404,63 @@ Example:
 .Dl rabbitmq-diagnostics is_running
 .\" ------------------------------------
 .It Cm list_bindings Oo Fl p Ar vhost Oc Op Ar bindinginfoitem ...
+.Pp
 See
 .Cm list_bindings
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
-.ll.It Cm list_channels Op Ar channelinfoitem ...
+.It Cm list_channels Op Ar channelinfoitem ...
+.Pp
 See
 .Cm list_channels
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_ciphers
+.Pp
 See
 .Cm list_ciphers
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_connections Op Ar connectioninfoitem ...
+.Pp
 See
 .Cm list_connections
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_consumers Op Fl p Ar vhost
+.Pp
 See
 .Cm list_consumers
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_exchanges Oo Fl p Ar vhost Oc Op Ar exchangeinfoitem ...
+.Pp
 See
 .Cm list_exchanges
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_hashes
+.Pp
 See
 .Cm list_hashes
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_queues Oo Fl p Ar vhost Oc Oo Fl -offline | Fl -online | Fl -local Oc Op Ar queueinfoitem ...
+.Pp
 See
 .Cm list_queues
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_unresponsive_queues Oc Oo Fl -local Oc Oo Fl -queue_timeout Ar milliseconds Oc Oo Ar column ... Oc Op Fl -no-table-headers
+.Pp
 See
 .Cm list_unresponsive_queues
 in
@@ -526,6 +548,7 @@ and
 can authenticate with it successfully.
 .\" ------------------------------------
 .It Cm report
+.Pp
 See
 .Cm report
 in
@@ -560,6 +583,7 @@ Example:
 .Dl rabbitmq-diagnostics server_version -q
 .\" ------------------------------------
 .It Cm status
+.Pp
 See
 .Cm status
 in
@@ -579,39 +603,40 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics tls_versions -q
 .El
-.El
 .Ss Parameters
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm list_global_parameters
+.Pp
 See
 .Cm list_global_parameters
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_parameters Op Fl p Ar vhost
+.Pp
 See
 .Cm list_parameters
 in
 .Xr rabbitmqctl 8
 .El
-.El
 .Ss Policies
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm list_operator_policies Op Fl p Ar vhost
+.Pp
 See
 .Cm list_operator_policies
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
 .It Cm list_policies Op Fl p Ar vhost
+.Pp
 See
 .Cm list_policies
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
-.El
 .El
 .Ss Virtual hosts
 .Bl -tag -width Ds
@@ -622,7 +647,6 @@ See
 .Cm list_vhost_limits
 in
 .Xr rabbitmqctl 8
-.El
 .El
 .Ss Node configuration
 .Bl -tag -width Ds
@@ -635,21 +659,21 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics log_location -a
 .El
-.El
 .Ss Feature flags
 .Bl -tag -width Ds
 .\" ------------------------------------
 .It Cm list_feature_flags Oc Oo Ar column ... Oc Op Fl -timeout Ar milliseconds
+.Pp
 See
 .Cm list_feature_flags
 in
 .Xr rabbitmqctl 8
-.\" ------------------------------------
-.El
 .El
 .Ss Queues
 .Bl -tag -width Ds
+.\" ------------------------------------
 .It Cm quorum_status Ar queue Oc Op Fl -vhost Ar vhost
+.Pp
 See
 .Cm quorum_status
 in
