@@ -122,7 +122,6 @@ Prints usage for the specified command.
 .Pp
 Displays CLI tools version
 .El
-.El
 .Ss Nodes
 .Bl -tag -width Ds
 .\" ------------------------------------
@@ -275,7 +274,6 @@ up:
 .sp
 .Dl rabbitmqctl wait /var/run/rabbitmq/pid
 .El
-.El
 .Ss Cluster management
 .Bl -tag -width Ds
 .\" ------------------------------------
@@ -319,7 +317,6 @@ with the currently running nodes.
 For example, this command displays the nodes in the cluster:
 .sp
 .Dl rabbitmqctl cluster_status
-.El
 .El
 .Ss Application Management
 .Bl -tag -width Ds
@@ -579,7 +576,6 @@ The following command will solve this situation:
 .sp
 .Dl update_cluster_nodes -n Va A Va C
 .El
-.El
 .Ss Replication
 .Bl -tag -width Ds
 .\" ------------------------------------
@@ -724,7 +720,6 @@ This command instructs the RabbitMQ broker to remove any tags from the user name
 .Qq janeway :
 .sp
 .Dl rabbitmqctl set_user_tags janeway
-.El
 .El
 .Ss Access control
 .Bl -tag -width Ds
@@ -952,7 +947,6 @@ The previous example could be made more generic by using
 .Qq ^{username}-.* :
 .sp
 .Dl rabbitmqctl set_topic_permissions -p my-vhost janeway amq.topic Qo ^{username}-.* Qc Qo ^{username}-.* Qc
-.El
 .El
 .Ss Monitoring, observability and health checks
 .Bl -tag -width Ds
@@ -1488,7 +1482,6 @@ broker:
 .sp
 .Dl rabbitmqctl status
 .El
-.El
 .Ss Parameters
 .Bl -tag -width Ds
 .\" ------------------------------------
@@ -1751,7 +1744,6 @@ Show limits for all vhosts.
 Suppresses the
 .Fl p
 parameter.
-.El
 .El
 .Ss Topology Introspection
 The topology introspection commands list topology entities (e.g. queues) with tab-delimited columns.
@@ -2229,7 +2221,6 @@ The period for which the peer's SSL certificate is valid.
 .It Cm node
 The node name of the RabbitMQ node to which connection is established.
 .El
-.El
 .Ss MQTT plugin
 .Bl -tag -width Ds
 .It Cm list_mqtt_connections Op Ar mqtt_connectioninfoitem
@@ -2320,7 +2311,6 @@ Id of the Erlang process associated with retain storage for the connection.
 Username associated with the connection.
 .It Cm vhost
 Virtual host name with non-ASCII characters escaped as in C.
-.El
 .El
 .Ss STOMP plugin
 .Bl -tag -width Ds
@@ -2413,7 +2403,6 @@ SSL cipher algorithm (e.g.\&
 SSL hash function (e.g.\&
 .Qq sha ) .
 .El
-.El
 .Ss Management agent plugin
 .Bl -tag -width Ds
 .It Cm reset_stats_db Op Fl -all
@@ -2421,7 +2410,6 @@ Reset management stats database for the RabbitMQ node.
 .Bl -tag -width Ds
 .It Fl -all
 Reset stats database for all nodes in the cluster.
-.El
 .El
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
