@@ -1075,6 +1075,7 @@ cipher suites supported by encoding commands:
 .Dl rabbitmqctl list_ciphers
 .El
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm list_connections Op Ar connectioninfoitem ...
 .Pp
 Returns TCP/IP connection statistics.
@@ -1196,6 +1197,7 @@ for each connection:
 .sp
 .Dl rabbitmqctl list_connections send_pend port
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm list_consumers Op Fl p Ar vhost
 .Pp
 Lists consumers, i.e. subscriptions to a queue\'s message stream.
@@ -1208,6 +1210,7 @@ consumer, an integer indicating the prefetch limit (with 0 meaning
 .Qq none ) ,
 and any arguments for this consumer.
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm list_exchanges Oo Fl p Ar vhost Oc Op Ar exchangeinfoitem ...
 .Pp
 Returns exchange details.
@@ -1265,6 +1268,7 @@ of the virtual host named
 .sp
 .Dl rabbitmqctl list_exchanges -p my-vhost name type
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm list_hashes
 .Pp
 Lists hash functions supported by encoding commands.
@@ -1274,6 +1278,7 @@ functions supported by encoding commands:
 .sp
 .Dl rabbitmqctl list_hashes
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm list_queues Oo Fl p Ar vhost Oc Oo Fl -offline | Fl -online | Fl -local Oc Op Ar queueinfoitem ...
 .Pp
 Returns queue details.
@@ -1422,6 +1427,7 @@ each queue of the virtual host named
 .sp
 .Dl rabbitmqctl list_queues -p my-vhost messages consumers
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm list_unresponsive_queues Oc Oo Fl -local Oc Oo Fl -queue_timeout Ar milliseconds Oc Oo Ar column ... Oc Op Fl -no-table-headers
 .Pp
 Tests queues to respond within timeout. Lists those which did not respond
@@ -1431,6 +1437,7 @@ is located on the current node.
 .Sp
 .Dl rabbitmqctl list_unresponsive_queues --local name
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm node_health_check
 .Pp
 Performs several health checks of the target node.
@@ -1441,6 +1448,7 @@ then checks that every queue and channel on the node can emit basic stats.
 Example:
 .Dl rabbitmqctl node_health_check -n rabbit@hostname
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm ping
 .Pp
 Checks that the node OS process is up, registered with EPMD and CLI tools can authenticate with it
@@ -1448,6 +1456,7 @@ Checks that the node OS process is up, registered with EPMD and CLI tools can au
 Example:
 .Dl rabbitmqctl ping -n rabbit@hostname
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm report
 .Pp
 Generate a server status report containing a concatenation of all server
@@ -1460,6 +1469,7 @@ to a support request email:
 .sp
 .Dl rabbitmqctl report > server_report.txt
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm schema_info Oc Oo Fl -no-table-headers Oc Op Ar column ...
 .Pp
 Lists schema database tables and their properties
@@ -1468,6 +1478,7 @@ For example, this command lists the table names and their active replicas:
 .sp
 .Dl rabbitmqctl schema_info name active_replicas
 .\" ------------------------------------
+.Bl -tag -width Ds
 .It Cm status
 .Pp
 Displays broker status information such as the running applications on
