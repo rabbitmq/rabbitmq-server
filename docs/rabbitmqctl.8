@@ -1930,7 +1930,7 @@ Lower bound limit as an integer in bytes or a string with memory unit symbols
 Once free disk space reaches the limit, a disk alarm will be set.
 .El
 .\" ------------------------------------------------------------------
-.It Cm set_disk_free_limit Oc mem_relative Ar fraction
+.It Cm set_disk_free_limit mem_relative Ar fraction
 .Bl -tag -width Ds
 .It Ar fraction
 Limit relative to the total amount available RAM as a non-negative
@@ -1938,7 +1938,7 @@ floating point number.
 Values lower than 1.0 can be dangerous and should be used carefully.
 .El
 .\" ------------------------------------------------------------------
-.It Cm set_log_level Oc Op Ar log_level
+.It Cm set_log_level Op Ar log_level
 .Pp
 Sets log level in the running node
 .Pp
@@ -1969,7 +1969,7 @@ The new memory threshold fraction at which flow control is triggered, as
 a floating point number greater than or equal to 0.
 .El
 .\" ------------------------------------------------------------------
-.It Cm set_vm_memory_high_watermark Oc absolute Ar memory_limit
+.It Cm set_vm_memory_high_watermark Oo absolute Oc Ar memory_limit
 .Bl -tag -width Ds
 .It Ar memory_limit
 The new memory limit at which flow control is triggered, expressed in
@@ -2117,7 +2117,7 @@ directory:
 .Ss Queues
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
-.It Cm delete_queue Oc Ar queue_name Oc Oo Fl -if-empty | Fl e Oc Op Fl -if-unused | Fl u
+.It Cm delete_queue Ar queue_name Oo Fl -if-empty | Fl e Oc Op Fl -if-unused | Fl u
 .Bl -tag -width Ds
 .It Ar queue_name
 The name of the queue to delete.
@@ -2137,7 +2137,7 @@ The name of the queue to purge.
 .Pp
 Purges a queue (removes all messages in it).
 .\" ------------------------------------------------------------------
-.It Cm quorum_status Oc Ar queue_name
+.It Cm quorum_status Ar queue_name
 .Bl -tag -width Ds
 .It Ar queue_name
 The name of the queue.
@@ -2153,6 +2153,9 @@ Currently available commands can be found in
 output.
 Following commands are added by RabbitMQ plugins, available in default
 distribution:
+.\" ------------------------------------------------------------------
+.\" ## Shovel
+.\" ------------------------------------------------------------------
 .Ss Shovel plugin
 .Bl -tag -width Ds
 .It Cm shovel_status
@@ -2161,6 +2164,9 @@ Prints a list of configured shovels
 Instructs the RabbitMQ node to delete the configured shovel by
 .Ar name .
 .El
+.\" ------------------------------------------------------------------
+.\" ## Federation
+.\" ------------------------------------------------------------------
 .Ss Federation plugin
 .Bl -tag -width Ds
 .It Cm federation_status Op Fl -only-down
@@ -2173,7 +2179,10 @@ Only list federation links which are not running.
 Instructs the RabbitMQ node to restart the federation link with specified
 .Ar link_id .
 .El
-.Ss AMQP-1.0 plugin
+.\" ------------------------------------------------------------------
+.\" ## AMQP 1.0
+.\" ------------------------------------------------------------------
+.Ss AMQP 1.0 plugin
 .Bl -tag -width Ds
 .It Cm list_amqp10_connections Op Ar amqp10_connectioninfoitem ...
 Similar to the
@@ -2251,6 +2260,9 @@ The period for which the peer's SSL certificate is valid.
 .It Cm node
 The node name of the RabbitMQ node to which connection is established.
 .El
+.\" ------------------------------------------------------------------
+.\" ## MQTT
+.\" ------------------------------------------------------------------
 .Ss MQTT plugin
 .Bl -tag -width Ds
 .It Cm list_mqtt_connections Op Ar mqtt_connectioninfoitem
@@ -2342,6 +2354,9 @@ Username associated with the connection.
 .It Cm vhost
 Virtual host name with non-ASCII characters escaped as in C.
 .El
+.\" ------------------------------------------------------------------
+.\" ## STOMP
+.\" ------------------------------------------------------------------
 .Ss STOMP plugin
 .Bl -tag -width Ds
 .It Cm list_stomp_connections Op Ar stomp_connectioninfoitem
@@ -2433,6 +2448,9 @@ SSL cipher algorithm (e.g.\&
 SSL hash function (e.g.\&
 .Qq sha ) .
 .El
+.\" ------------------------------------------------------------------
+.\" ## Management Agent
+.\" ------------------------------------------------------------------
 .Ss Management agent plugin
 .Bl -tag -width Ds
 .It Cm reset_stats_db Op Fl -all
