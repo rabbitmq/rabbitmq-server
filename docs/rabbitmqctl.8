@@ -123,7 +123,7 @@ Prints usage for the specified command.
 Displays CLI tools version
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Nodes
+.\" ## Nodes
 .\" ------------------------------------------------------------------
 .Ss Nodes
 .Bl -tag -width Ds
@@ -278,7 +278,7 @@ up:
 .Dl rabbitmqctl wait /var/run/rabbitmq/pid
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Cluster management
+.\" ## Cluster management
 .\" ------------------------------------------------------------------
 .Ss Cluster management
 .Bl -tag -width Ds
@@ -583,7 +583,7 @@ The following command will solve this situation:
 .Dl update_cluster_nodes -n Va A Va C
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Replication
+.\" ## Replication
 .\" ------------------------------------------------------------------
 .Ss Replication
 .Bl -tag -width Ds
@@ -615,7 +615,7 @@ The name of the queue to cancel synchronisation for.
 Instructs a synchronising mirrored queue to stop synchronising itself.
 .El
 .\" ------------------------------------------------------------------
-.\" ##  User management
+.\" ## User management
 .\" ------------------------------------------------------------------
 .Ss User Management
 Note that all user management commands
@@ -734,7 +734,7 @@ This command instructs the RabbitMQ broker to remove any tags from the user name
 .Dl rabbitmqctl set_user_tags janeway
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Access Control
+.\" ## Access Control
 .\" ------------------------------------------------------------------
 .Ss Access control
 .Bl -tag -width Ds
@@ -852,7 +852,7 @@ has been granted access, and the topic permissions the user has in these virtual
 .Dl rabbitmqctl list_topic_user_permissions janeway
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Parameter management
+.\" ## Parameter management
 .\" ------------------------------------------------------------------
 .Ss Parameter Management
 Certain features of RabbitMQ (such as the Federation plugin) are
@@ -967,7 +967,7 @@ The previous example could be made more generic by using
 .Dl rabbitmqctl set_topic_permissions -p my-vhost janeway amq.topic Qo ^{username}-.* Qc Qo ^{username}-.* Qc
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Monitoring and Observability
+.\" ## Monitoring and Observability
 .\" ------------------------------------------------------------------
 .Ss Monitoring, observability and health checks
 .Bl -tag -width Ds
@@ -1503,9 +1503,18 @@ broker:
 .Dl rabbitmqctl status
 .El
 .\" ------------------------------------------------------------------
-.\" ##  Runtime Parameters
+.\" ## Runtime Parameters and Policies
 .\" ------------------------------------------------------------------
-.Ss Parameters
+.Ss Runtime Parameters and Policies
+Some settings must be identical on all cluster nodes and are likely
+to change at runtime. They are controlled via a mechanism
+called runtime parameters.
+Policies is a feature built on top of runtime parameters.
+Policies are used to control and modify the behaviour of queues and
+exchanges on a cluster-wide basis.
+Policies apply within a given vhost, and consist of a name, pattern,
+definition and an optional priority.
+Policies can be set, cleared and listed.
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm clear_global_parameter Ar name
@@ -1552,17 +1561,6 @@ but the global runtime parameters are not tied to any virtual host.
 For example, this command lists all global parameters:
 .sp
 .Dl rabbitmqctl list_global_parameters
-.El
-.\" ------------------------------------------------------------------
-.\" ##  Policies
-.\" ------------------------------------------------------------------
-.Ss Policy Management
-Policies are used to control and modify the behaviour of queues and
-exchanges on a cluster-wide basis.
-Policies apply within a given vhost, and consist of a name, pattern,
-definition and an optional priority.
-Policies can be set, cleared and listed.
-.Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm list_parameters Op Fl p Ar vhost
 .Pp
@@ -1614,39 +1612,6 @@ component in the default virtual host to the following JSON
 .Qq guest :
 .sp
 .Dl rabbitmqctl set_parameter federation-upstream node01 '{"uri":"amqp://user:password@server/%2F","ack-mode":"on-publish"}'
-.El
-.Ss Policies
-.Bl -tag -width Ds
-.\" ------------------------------------------------------------------
-.It Cm clear_operator_policy Oo Fl p Ar vhost Oc Ar name
-.Pp
-Clears an operator policy.
-Arguments are identical to those of
-.Cm clear_policy .
-.\" ------------------------------------------------------------------
-.It Cm clear_policy Oo Fl p Ar vhost Oc Ar name
-.Pp
-Clears a policy.
-.Bl -tag -width Ds
-.It Ar name
-The name of the policy being cleared.
-.El
-.Pp
-For example, this command clears the
-.Qq federate-me
-policy in the default virtual host:
-.sp
-.Dl rabbitmqctl clear_policy federate-me
-.\" ------------------------------------------------------------------
-.It Cm list_operator_policies Op Fl p Ar vhost
-.Pp
-Lists operator policy overrides for a virtual host.
-Arguments are identical to those of
-.Cm list_policies .
-.El
-.Ss Virtual Host Limits
-It is possible to enforce certain limits on virtual hosts.
-.Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm list_policies Op Fl p Ar vhost
 .Pp
@@ -1713,6 +1678,43 @@ in the default virtual host so that built-in exchanges are federated:
 .sp
 .Dl rabbitmqctl set_policy federate-me "^amq." '{"federation-upstream-set":"all"}'
 .El
+.\" ------------------------------------------------------------------
+.\" ## Operator Policies
+.\" ------------------------------------------------------------------
+.Ss Operator Policies
+Operator policies are merged with user-defined policies and allow for
+operator override of a limited set of optional queue arguments (such as max length limit).
+.Bl -tag -width Ds
+.\" ------------------------------------------------------------------
+.It Cm clear_operator_policy Oo Fl p Ar vhost Oc Ar name
+.Pp
+Clears an operator policy.
+Arguments are identical to those of
+.Cm clear_policy .
+.\" ------------------------------------------------------------------
+.It Cm clear_policy Oo Fl p Ar vhost Oc Ar name
+.Pp
+Clears a policy.
+.Bl -tag -width Ds
+.It Ar name
+The name of the policy being cleared.
+.El
+.Pp
+For example, this command clears the
+.Qq federate-me
+policy in the default virtual host:
+.sp
+.Dl rabbitmqctl clear_policy federate-me
+.\" ------------------------------------------------------------------
+.It Cm list_operator_policies Op Fl p Ar vhost
+.Pp
+Lists operator policy overrides for a virtual host.
+Arguments are identical to those of
+.Cm list_policies .
+.El
+.\" ------------------------------------------------------------------
+.\" ## Virtual Host Management
+.\" ------------------------------------------------------------------
 .Ss Virtual hosts
 Note that
 .Nm
@@ -1726,6 +1728,7 @@ not be visible to
 .Bl -tag -width Ds
 .It Ar vhost
 The name of the virtual host entry to create.
+.El
 .Pp
 Creates a virtual host.
 .Pp
@@ -1759,7 +1762,7 @@ For example, this command instructs the RabbitMQ broker to delete the
 virtual host called
 .Qq test :
 .sp
-.Dl rabbitmqctl delete_vhost test
+.Dl rabbitmqctl delete_vhost a-vhost
 .\" ------------------------------------------------------------------
 .It Cm list_vhost_limits Oo Fl p Ar vhost Oc Oo Fl -global Oc Op Fl -no-table-headers
 .Pp
@@ -1771,37 +1774,12 @@ Suppresses the
 .Fl p
 parameter.
 .El
-.El
-.\" ------------------------------------------------------------------
-.\" ## Topology Introspection
-.\" ------------------------------------------------------------------
-.Ss Topology Introspection
-The topology introspection commands list topology entities (e.g. queues) with tab-delimited columns.
-Some commands (
-.Cm list_queues ,
-.Cm list_exchanges ,
-.Cm list_bindings
-and
-.Cm list_consumers )
-accept an optional
-.Ar vhost
-parameter.
-.Pp
-The
-.Cm list_queues ,
-.Cm list_exchanges
-and
-.Cm list_bindings
-commands accept an optional virtual host parameter for which to display
-results.
-The default value is
-.Qq / .
-.Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm restart_vhost Ar vhost
 .Bl -tag -width Ds
 .It Ar vhost
 The name of the virtual host entry to restart.
+.El
 .Pp
 Restarts a failed vhost data stores and queues.
 .Pp
@@ -1869,9 +1847,12 @@ The name of the virtual host for which to start tracing.
 .Pp
 Starts tracing.
 Note that the trace state is not persistent; it will revert to being off
-if the server is restarted.
+if the node is restarted.
 .El
-.Ss Node configuration
+.\" ------------------------------------------------------------------
+.\" ## Configuration
+.\" ------------------------------------------------------------------
+.Ss Configuration
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm decode Ar value Ar passphrase Oo Fl -cipher Ar cipher Oc Oo Fl -hash Ar hash Oc Op Fl -iterations Ar iterations
@@ -1990,18 +1971,23 @@ megabytes (10^6 bytes)
 .It Cm GB
 gigabytes (10^9 bytes)
 .El
+.El
+.El
+.\" ------------------------------------------------------------------
+.\" ## Feature Flags
+.\" ------------------------------------------------------------------
 .Ss Feature flags
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm enable_feature_flag Ar feature_flag
 .Pp
-Enables a feature flag on target node
+Enables a feature flag on the target node.
+.Pp
 Example:
 .Sp
 .Dl rabbitmqctl enable_feature_flag quorum_queue
-.El
 .\" ------------------------------------------------------------------
-.It Cm list_feature_flags Oc Op Ar column ...
+.It Cm list_feature_flags Op Ar column ...
 .Pp
 Lists feature flags
 .Pp
@@ -2022,11 +2008,15 @@ desc
 .It
 doc_url
 .El
+.Pp
 Example:
 .Sp
 .Dl rabbitmqctl list_feature_flags name state
 .El
-.Ss Operations
+.\" ------------------------------------------------------------------
+.\" ## Misc Operations
+.\" ------------------------------------------------------------------
+.Ss Connection Operations
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm close_all_connections Oo Fl p Ar vhost Oc Oo Fl -global Oc Oo Fl -per-connection-delay Ar delay Oc Oo Fl -limit Ar limit Oc Ar explanation
@@ -2091,8 +2081,18 @@ passing the explanation
 to the connected client:
 .sp
 .Dl rabbitmqctl close_connection Qo <rabbit@tanto.4262.0> Qc Qq go away
+.El
 .\" ------------------------------------------------------------------
-.It Cm eval Ar expr
+.\" ## Misc
+.\" ------------------------------------------------------------------
+.Ss Misc
+.Bl -tag -width Ds
+.\" ------------------------------------------------------------------
+.It Cm eval Ar expression
+.Pp
+Evaluates an Erlang expression on the target node
+.\" ------------------------------------------------------------------
+.It Cm hipe_compile Ar directory
 .Pp
 Performs HiPE-compilation and caches resulting
 .Pa .beam Ns -files in the given directory.
@@ -2114,7 +2114,10 @@ directory:
 .sp
 .Dl rabbitmqctl hipe_compile /tmp/rabbit-hipe/ebin
 .El
-.Ss Queues
+.\" ------------------------------------------------------------------
+.\" ## Queue Operations
+.\" ------------------------------------------------------------------
+.Ss Queue Operations
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm delete_queue Ar queue_name Oo Fl -if-empty | Fl e Oc Op Fl -if-unused | Fl u
@@ -2136,14 +2139,7 @@ The name of the queue to purge.
 .El
 .Pp
 Purges a queue (removes all messages in it).
-.\" ------------------------------------------------------------------
-.It Cm quorum_status Ar queue_name
-.Bl -tag -width Ds
-.It Ar queue_name
-The name of the queue.
 .El
-.Pp
-Displays quorum status of a quorum queue.
 .\" ------------------------------------------------------------------------------------------------
 .Sh PLUGIN COMMANDS
 .\" ------------------------------------------------------------------------------------------------
@@ -2159,7 +2155,7 @@ distribution:
 .Ss Shovel plugin
 .Bl -tag -width Ds
 .It Cm shovel_status
-Prints a list of configured shovels
+Prints a list of configured Shovels
 .It Cm delete_shovel Oo Fl p Ar vhost Oc Ar name
 Instructs the RabbitMQ node to delete the configured shovel by
 .Ar name .
@@ -2260,6 +2256,7 @@ The period for which the peer's SSL certificate is valid.
 .It Cm node
 The node name of the RabbitMQ node to which connection is established.
 .El
+.El
 .\" ------------------------------------------------------------------
 .\" ## MQTT
 .\" ------------------------------------------------------------------
@@ -2354,6 +2351,7 @@ Username associated with the connection.
 .It Cm vhost
 Virtual host name with non-ASCII characters escaped as in C.
 .El
+.El
 .\" ------------------------------------------------------------------
 .\" ## STOMP
 .\" ------------------------------------------------------------------
@@ -2436,17 +2434,18 @@ Informational properties transmitted by the client during connection
 .It Cm ssl
 Boolean indicating whether the connection is secured with SSL.
 .It Cm ssl_protocol
-SSL protocol (e.g.\&
+TLS protocol (e.g.\&
 .Qq tlsv1 ) .
 .It Cm ssl_key_exchange
-SSL key exchange algorithm (e.g.\&
+TLS key exchange algorithm (e.g.\&
 .Qq rsa ) .
 .It Cm ssl_cipher
-SSL cipher algorithm (e.g.\&
+TLS cipher algorithm (e.g.\&
 .Qq aes_256_cbc ) .
 .It Cm ssl_hash
 SSL hash function (e.g.\&
 .Qq sha ) .
+.El
 .El
 .\" ------------------------------------------------------------------
 .\" ## Management Agent
@@ -2458,6 +2457,7 @@ Reset management stats database for the RabbitMQ node.
 .Bl -tag -width Ds
 .It Fl -all
 Reset stats database for all nodes in the cluster.
+.El
 .El
 .\" ------------------------------------------------------------------------------------------------
 .Sh SEE ALSO
