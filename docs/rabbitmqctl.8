@@ -278,7 +278,7 @@ up:
 .Dl rabbitmqctl wait /var/run/rabbitmq/pid
 .El
 .\" ------------------------------------------------------------------
-.\" ## Cluster management
+.\" ## Cluster Operations
 .\" ------------------------------------------------------------------
 .Ss Cluster management
 .Bl -tag -width Ds
@@ -323,9 +323,6 @@ with the currently running nodes.
 For example, this command displays the nodes in the cluster:
 .sp
 .Dl rabbitmqctl cluster_status
-.El
-.Ss Application Management
-.Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm force_boot
 .Pp
@@ -417,12 +414,14 @@ from the node
 .sp
 .Dl rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer
 .\" ------------------------------------------------------------------
-.It Cm join_cluster Ar clusternode Op Fl -ram
+.It Cm join_cluster Ar seed-node Op Fl -ram
 .Bl -tag -width Ds
-.It Ar clusternode
-Node to cluster with.
+.It Ar seed-node
+Existing cluster member (seed node) to cluster with.
 .It Fl -ram
 If provided, the node will join the cluster as a RAM node.
+RAM node use is discouraged. Use only if you understand why
+exactly you need to use them.
 .El
 .Pp
 Instructs the node to become a member of the cluster that the specified
@@ -463,14 +462,14 @@ You can also remove nodes remotely with the
 .Cm forget_cluster_node
 command.
 .Pp
-For more details see the
-.Lk https://www.rabbitmq.com/clustering.html Clustering guide .
-.Pp
 For example, this command instructs the RabbitMQ node to join the cluster that
 .Qq hare@elena
 is part of, as a ram node:
 .sp
 .Dl rabbitmqctl join_cluster hare@elena --ram
+.Pp
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide".
 .\" ------------------------------------------------------------------
 .It Cm rename_cluster_node Ar oldnode1 Ar newnode1 Op Ar oldnode2 Ar newnode2 ...
 .Pp
@@ -532,14 +531,13 @@ mv \\
 .Ed
 .sp
 .It
-If you have
+If node name is configured e.g. using
 .Ar /etc/rabbitmq/rabbitmq-env.conf
-and configured the node name there, update this configuration.
+it has also be updated there.
 .sp
 .It
 Start the node when ready
 .El
-.Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm update_cluster_nodes Ar clusternode
 .Bl -tag -width Ds
@@ -549,7 +547,7 @@ The node to consult for up-to-date information.
 .Pp
 Instructs an already clustered node to contact
 .Ar clusternode
-to cluster when waking up.
+to cluster when booting up.
 This is different from
 .Cm join_cluster
 since it does not join any cluster - it checks that the node is already
@@ -558,32 +556,40 @@ in a cluster with
 .Pp
 The need for this command is motivated by the fact that clusters can
 change while a node is offline.
-Consider the situation in which node
-.Va A
+Consider a situation where node
+.Va rabbit@A
 and
-.Va B
+.Va rabbit@B
 are clustered.
-.Va A
+.Va rabbit@A
 goes down,
-.Va C
+.Va rabbit@C
 clusters with
-.Va B ,
+.Va rabbit@B ,
 and then
-.Va B
+.Va rabbit@B
 leaves the cluster.
 When
-.Va A
-wakes up, it'll try to contact
-.Va B ,
+.Va rabbit@A
+starts back up, it'll try to contact
+.Va rabbit@B ,
 but this will fail since
-.Va B
+.Va rabbit@B
 is not in the cluster anymore.
-The following command will solve this situation:
+The following command will rename node
+.Va rabbit@B
+to
+.Va rabbit@C
+on node
+.Va rabbitA
 .sp
-.Dl update_cluster_nodes -n Va A Va C
+.Dl update_cluster_nodes -n Va rabbit@A Va rabbit@B Va rabbit@C
+.Pp
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
 .El
 .\" ------------------------------------------------------------------
-.\" ## Replication
+.\" ## Classic Mirrored Queues
 .\" ------------------------------------------------------------------
 .Ss Replication
 .Bl -tag -width Ds
@@ -1677,20 +1683,6 @@ For example, this command sets the policy
 in the default virtual host so that built-in exchanges are federated:
 .sp
 .Dl rabbitmqctl set_policy federate-me "^amq." '{"federation-upstream-set":"all"}'
-.El
-.\" ------------------------------------------------------------------
-.\" ## Operator Policies
-.\" ------------------------------------------------------------------
-.Ss Operator Policies
-Operator policies are merged with user-defined policies and allow for
-operator override of a limited set of optional queue arguments (such as max length limit).
-.Bl -tag -width Ds
-.\" ------------------------------------------------------------------
-.It Cm clear_operator_policy Oo Fl p Ar vhost Oc Ar name
-.Pp
-Clears an operator policy.
-Arguments are identical to those of
-.Cm clear_policy .
 .\" ------------------------------------------------------------------
 .It Cm clear_policy Oo Fl p Ar vhost Oc Ar name
 .Pp
@@ -1705,6 +1697,12 @@ For example, this command clears the
 policy in the default virtual host:
 .sp
 .Dl rabbitmqctl clear_policy federate-me
+.\" ------------------------------------------------------------------
+.It Cm clear_operator_policy Oo Fl p Ar vhost Oc Ar name
+.Pp
+Clears an operator policy.
+Arguments are identical to those of
+.Cm clear_policy .
 .\" ------------------------------------------------------------------
 .It Cm list_operator_policies Op Fl p Ar vhost
 .Pp
