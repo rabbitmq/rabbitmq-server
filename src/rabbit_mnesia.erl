@@ -155,7 +155,9 @@ init_from_config() ->
     Peers = nodes_excl_me(DiscoveredNodes),
     case Peers of
         [] ->
-            rabbit_log:info("Discovered no peer nodes (or no eligible ones) to cluster with"),
+            rabbit_log:info("Discovered no peer nodes to cluster with. "
+                            "Some discovery backends can filter nodes out based on a readiness criteria. "
+                            "Enabling debug logging might help troubleshoot."),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
             rabbit_log:info("Peer nodes we can cluster with: ~s~n",
