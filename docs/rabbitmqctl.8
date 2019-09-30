@@ -856,25 +856,6 @@ virtual hosts to which the user named
 has been granted access, and the topic permissions the user has in these virtual hosts:
 .sp
 .Dl rabbitmqctl list_topic_user_permissions janeway
-.El
-.\" ------------------------------------------------------------------
-.\" ## Parameter management
-.\" ------------------------------------------------------------------
-.Ss Parameter Management
-Certain features of RabbitMQ (such as the Federation plugin) are
-controlled by dynamic, cluster-wide
-.Em parameters.
-There are 2 kinds of parameters: parameters scoped to a virtual host and
-global parameters.
-Each vhost-scoped parameter consists of a component name, a name and a
-value.
-The component name and name are strings, and the value is a valid JSON document.
-A global parameter consists of a name and value.
-The name is a string and the value is an arbitrary Erlang data structure.
-Parameters can be set, cleared and listed.
-In general you should refer to the documentation for the feature in
-question to see how to set parameters.
-.Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm list_vhosts Op Ar vhostinfoitem ...
 .Pp
@@ -1512,9 +1493,20 @@ broker:
 .\" ## Runtime Parameters and Policies
 .\" ------------------------------------------------------------------
 .Ss Runtime Parameters and Policies
-Some settings must be identical on all cluster nodes and are likely
-to change at runtime. They are controlled via a mechanism
-called runtime parameters.
+Certain features of RabbitMQ (such as the Federation plugin) are
+controlled by dynamic, cluster-wide
+.Em parameters.
+There are 2 kinds of parameters: parameters scoped to a virtual host and
+global parameters.
+Each vhost-scoped parameter consists of a component name, a name and a
+value.
+The component name and name are strings, and the value is a valid JSON document.
+A global parameter consists of a name and value.
+The name is a string and the value is an arbitrary Erlang data structure.
+Parameters can be set, cleared and listed.
+In general you should refer to the documentation for the feature in
+question to see how to set parameters.
+.Pp
 Policies is a feature built on top of runtime parameters.
 Policies are used to control and modify the behaviour of queues and
 exchanges on a cluster-wide basis.
