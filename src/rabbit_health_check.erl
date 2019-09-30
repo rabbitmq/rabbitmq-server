@@ -62,8 +62,11 @@ node_health_check(list_queues) ->
 
 node_health_check(rabbit_node_monitor) ->
     case rabbit_node_monitor:partitions() of
-        L when is_list(L) ->
-            ok
+        [] ->
+            ok;
+        L when is_list(L), length(L) > 0 ->
+            ErrorMsg = io_lib:format("cluster partition in effect: ~p", [L]),
+            {error_string, ErrorMsg}
     end;
 
 node_health_check(alarms) ->
