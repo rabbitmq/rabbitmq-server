@@ -274,7 +274,7 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics check_port_connectivity
 .\" ------------------------------------
-.It Cm check_port_listener
+.It Cm check_port_listener Ar port
 .Pp
 Health check that fails (returns with a non-zero code) if the target node
 is not listening on the specified port (there is no listener that
@@ -288,7 +288,7 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics check_port_listener 5672
 .\" ------------------------------------
-.It Cm check_protocol_listener
+.It Cm check_protocol_listener Ar protocol
 .Pp
 Health check that fails (returns with a non-zero code) if the target node
 does not have a listener for the specified protocol.
@@ -338,7 +338,7 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics command_line_arguments -n rabbit@hostname
 .\" ------------------------------------
-.It Cm consume_event_stream
+.It Cm consume_event_stream Oo Fl -duration Ar seconds | Fl d Ar seconds Oc Oo Fl -pattern Ar pattern Oc Op Fl -timeout Ar milliseconds
 .Pp
 Streams internal events from a running node. Output is jq-compatible.
 .Pp
@@ -568,7 +568,7 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics runtime_thread_stats --sample-interval 15
 .\" ------------------------------------
-.It Cm schema_info Oc Oo Fl -no_table_headers Oc Oo Ar column ... Oc Op Fl -timeout Ar milliseconds
+.It Cm schema_info Oo Fl -no_table_headers Oc Oo Ar column ... Oc Op Fl -timeout Ar milliseconds
 .Pp
 See
 .Cm schema_info
