@@ -748,9 +748,9 @@ add_command(_, _, [], Acc) ->
 add_command(Cid, settle, MsgIds, Acc) ->
     [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
 add_command(Cid, return, MsgIds, Acc) ->
-    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
+    [rabbit_fifo:make_return(Cid, MsgIds) | Acc];
 add_command(Cid, discard, MsgIds, Acc) ->
-    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc].
+    [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
 
 set_timer(#state{servers = [Server | _]} = State) ->
     Ref = erlang:send_after(?TIMER_TIME, self(),
