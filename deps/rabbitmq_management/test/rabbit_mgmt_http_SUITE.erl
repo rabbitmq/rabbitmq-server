@@ -109,6 +109,7 @@ all_tests() -> [
     definitions_server_named_queue_test,
     definitions_with_charset_test,
     long_definitions_test,
+    long_definitions_multipart_test,
     aliveness_test,
     healthchecks_test,
     arguments_test,
@@ -244,8 +245,9 @@ end_per_testcase(Testcase, Config) ->
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
-end_per_testcase0(long_definitions_test, Config) ->
-    Vhosts = long_definitions_vhosts(),
+end_per_testcase0(T, Config)
+  when T =:= long_definitions_test; T =:= long_definitions_multipart_test ->
+    Vhosts = long_definitions_vhosts(T),
     [rabbit_ct_broker_helpers:delete_vhost(Config, Name)
      || #{name := Name} <- Vhosts],
     Config;
@@ -1632,7 +1634,7 @@ definitions_test(Config) ->
 
 long_definitions_test(Config) ->
     %% Vhosts take time to start. Generate a bunch of them
-    Vhosts = long_definitions_vhosts(),
+    Vhosts = long_definitions_vhosts(long_definitions_test),
     LongDefs =
         #{users       => [],
           vhosts      => Vhosts,
@@ -1643,9 +1645,32 @@ long_definitions_test(Config) ->
     http_post(Config, "/definitions", LongDefs, {group, '2xx'}),
     passed.
 
-long_definitions_vhosts() ->
-    [#{name => <<"long_definitions_test-", (integer_to_binary(N))/binary>>}
-     || N <- lists:seq(1, 120)].
+long_definitions_multipart_test(Config) ->
+    %% Vhosts take time to start. Generate a bunch of them
+    Vhosts = long_definitions_vhosts(long_definitions_multipart_test),
+    LongDefs =
+        #{users       => [],
+          vhosts      => Vhosts,
+          permissions => [],
+          queues      => [],
+          exchanges   => [],
+          bindings    => []},
+    Data = binary_to_list(format_for_upload(LongDefs)),
+    CodeExp = {group, '2xx'},
+    Boundary = "------------long_definitions_multipart_test",
+    Body = format_multipart_filedata(Boundary, [{file, "file", Data}]),
+    ContentType = lists:concat(["multipart/form-data; boundary=", Boundary]),
+    MoreHeaders = [{"content-type", ContentType}, {"content-length", integer_to_list(length(Body))}],
+    http_upload_raw(Config, post, "/definitions", Body, "guest", "guest", CodeExp, MoreHeaders),
+    passed.
+
+long_definitions_vhosts(long_definitions_test) ->
+    [#{name => <<"long_definitions_test-", (integer_to_binary(N))/binary>>} ||
+     N <- lists:seq(1, 120)];
+long_definitions_vhosts(long_definitions_multipart_test) ->
+    Bin = list_to_binary(lists:flatten(lists:duplicate(524288, "X"))),
+    [#{name => <<"long_definitions_test-", Bin/binary, (integer_to_binary(N))/binary>>} ||
+     N <- lists:seq(1, 16)].
 
 defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
@@ -3223,4 +3248,19 @@ wait_until(Fun, N) ->
 
 http_post_json(Config, Path, Body, Assertion) ->
     http_upload_raw(Config,  post, Path, Body, "guest", "guest",
-                    Assertion, [{"Content-Type", "application/json"}]).
+                    Assertion, [{"content-type", "application/json"}]).
+
+%% @doc encode fields and file for HTTP post multipart/form-data.
+%% @reference Inspired by <a href="http://code.activestate.com/recipes/146306/">Python implementation</a>.
+format_multipart_filedata(Boundary, Files) ->
+    FileParts = lists:map(fun({FieldName, FileName, FileContent}) ->
+                                  [lists:concat(["--", Boundary]),
+                                   lists:concat(["content-disposition: form-data; name=\"", atom_to_list(FieldName), "\"; filename=\"", FileName, "\""]),
+                                   lists:concat(["content-type: ", "application/octet-stream"]),
+                                   "",
+                                   FileContent]
+                          end, Files),
+    FileParts2 = lists:append(FileParts),
+    EndingParts = [lists:concat(["--", Boundary, "--"]), ""],
+    Parts = lists:append([FileParts2, EndingParts]),
+    string:join(Parts, "\r\n").
