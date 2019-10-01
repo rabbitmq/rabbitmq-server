@@ -100,8 +100,13 @@ req(Config, Node, Type, Path, Headers) ->
     httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers}, ?HTTPC_OPTS, []).
 
 req(Config, Node, Type, Path, Headers, Body) ->
-    httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers, "application/json", Body},
-                  ?HTTPC_OPTS, []).
+    ContentType = case proplists:get_value("content-type", Headers) of
+                      undefined ->
+                          "application/json";
+                      CT ->
+                          CT
+                  end,
+    httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers, ContentType, Body}, ?HTTPC_OPTS, []).
 
 uri_base_from(Config, Node) ->
     uri_base_from(Config, Node, "api").
