@@ -30,6 +30,12 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     end)
   end
 
+  def listeners_with_certificates(listeners) do
+    Enum.filter(listeners, fn listener(opts: opts) ->
+      Keyword.has_key?(opts, :cacertfile) or Keyword.has_key?(opts, :certfile)
+    end)
+  end
+
   def listener_lines(listeners) do
     listeners
     |> listener_maps
@@ -72,6 +78,32 @@ defmodule RabbitMQ.CLI.Core.Listeners do
 
   def listener_maps(listeners) do
     Enum.map(listeners, &listener_map/1)
+  end
+
+  def listener_certs(listener) do
+    listener(node: node, protocol: protocol, ip_address: interface, port: port, opts: opts) = listener
+
+    %{
+      node: node,
+      protocol: protocol,
+      interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
+      port: port,
+      purpose: protocol_label(to_atom(protocol)),
+      certfile: read_cert(Keyword.get(opts, :certfile)),
+      cacertfile: read_cert(Keyword.get(opts, :cacertfile))
+    }
+  end
+
+  def read_cert(nil) do
+    nil
+  end
+  def read_cert(path) do
+    case File.read(path) do
+      {:ok, bin} ->
+        bin
+      {:error, _} = err ->
+        err
+    end
   end
 
   def listener_rows(listeners) do
