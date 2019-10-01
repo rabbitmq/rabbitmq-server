@@ -257,20 +257,28 @@ format({vhost_limit_exceeded, ErrMsg}) ->
 format(E) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~p", [E])).
 
-get_all_parts(ReqData) ->
-    get_all_parts(ReqData, []).
+get_all_parts(Req) ->
+    get_all_parts(Req, []).
 
-get_all_parts(ReqData0, Acc) ->
-    case cowboy_req:read_part(ReqData0) of
-        {done, ReqData} ->
-            {Acc, ReqData};
-        {ok, Headers, ReqData1} ->
+get_all_parts(Req0, Acc) ->
+    case cowboy_req:read_part(Req0) of
+        {done, Req1} ->
+            {Acc, Req1};
+        {ok, Headers, Req1} ->
             Name = case cow_multipart:form_data(Headers) of
-                {data, N} -> N;
-                {file, N, _, _} -> N
-            end,
-            {ok, Body, ReqData} = cowboy_req:read_part_body(ReqData1),
-            get_all_parts(ReqData, [{Name, Body}|Acc])
+                       {data, N} -> N;
+                       {file, N, _, _} -> N
+                   end,
+            {ok, Body, Req2} = stream_part_body(Req1, <<>>),
+            get_all_parts(Req2, [{Name, Body}|Acc])
+    end.
+
+stream_part_body(Req0, Acc) ->
+    case cowboy_req:read_part_body(Req0) of
+        {more, Data, Req1} ->
+            stream_part_body(Req1, <<Acc/binary, Data/binary>>);
+        {ok, Data, Req1} ->
+            {ok, <<Acc/binary, Data/binary>>, Req1}
     end.
 
 get_part(Name, Parts) ->
