@@ -1645,11 +1645,27 @@ function select_queue_type(queuetype) {
 }
 
 function is_quorum(queue) {
-    return queue["arguments"]["x-queue-type"] == "quorum";
+    if (queue["arguments"]) {
+        if (queue["arguments"]["x-queue-type"]) {
+            return queue["arguments"]["x-queue-type"] === "quorum";
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
 }
 
 function is_classic(queue) {
-    return queue["arguments"]["x-queue-type"] == "classic";
+    if (queue["arguments"]) {
+        if (queue["arguments"]["x-queue-type"]) {
+            return queue["arguments"]["x-queue-type"] === "classic";
+        } else {
+            return true;
+        }
+    } else {
+        return true;
+    }
 }
 
 function ensure_queues_chart_range() {
