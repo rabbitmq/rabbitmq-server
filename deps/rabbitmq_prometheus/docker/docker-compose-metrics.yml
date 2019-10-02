@@ -11,6 +11,27 @@ volumes:
   rabbitmq-prometheus_grafana:
 
 services:
+  grafana:
+    # https://hub.docker.com/r/grafana/grafana/tags
+    image: grafana/grafana:6.4.1
+    ports:
+      - "3000:3000"
+    networks:
+      - "rabbitmq-prometheus"
+    volumes:
+      - rabbitmq-prometheus_grafana:/var/lib/grafana
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
+      - ./grafana/dashboards:/dashboards
+    environment:
+      # https://grafana.com/plugins/flant-statusmap-panel
+      # https://grafana.com/plugins/grafana-piechart-panel
+      # https://grafana.com/plugins/grafana-polystat-panel
+      # https://grafana.com/plugins/jdbranham-diagram-panel
+      # https://grafana.com/plugins/michaeldmoore-multistat-panel
+      # https://grafana.com/plugins/vonage-status-panel
+      # https://grafana.com/plugins/yesoreyeram-boomtable-panel
+      GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel"
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
     image: prom/prometheus:v2.12.0
@@ -50,24 +71,3 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
-  grafana:
-    # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:6.3.5
-    ports:
-      - "3000:3000"
-    networks:
-      - "rabbitmq-prometheus"
-    volumes:
-      - rabbitmq-prometheus_grafana:/var/lib/grafana
-      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/rabbitmq.yaml
-      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yaml
-      - ./grafana/dashboards:/dashboards
-    environment:
-      # https://grafana.com/plugins/flant-statusmap-panel
-      # https://grafana.com/plugins/grafana-piechart-panel
-      # https://grafana.com/plugins/grafana-polystat-panel
-      # https://grafana.com/plugins/jdbranham-diagram-panel
-      # https://grafana.com/plugins/michaeldmoore-multistat-panel
-      # https://grafana.com/plugins/vonage-status-panel
-      # https://grafana.com/plugins/yesoreyeram-boomtable-panel
-      GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel"
