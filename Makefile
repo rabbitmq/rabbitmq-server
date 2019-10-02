@@ -96,7 +96,7 @@ define PROJECT_ENV
 	    %% see rabbitmq-server#143,
 	    %% rabbitmq-server#949, rabbitmq-server#1098
 	    {credit_flow_default_credit, {400, 200}},
-	    {quorum_commands_soft_limit, 256},
+	    {quorum_commands_soft_limit, 400},
 	    {quorum_cluster_size, 5},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667

@@ -45,7 +45,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(SOFT_LIMIT, 256).
+-define(SOFT_LIMIT, 400).
 -define(TIMER_TIME, 10000).
 
 -type seq() :: non_neg_integer().
@@ -61,8 +61,14 @@
 -record(consumer, {last_msg_id :: seq() | -1,
                    delivery_count = 0 :: non_neg_integer()}).
 
--record(state, {cluster_name :: cluster_name(),
+-record(conf, {cluster_name :: cluster_name(),
                 servers = [] :: [ra:server_id()],
+                soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
+                block_handler :: fun(() -> term()),
+                unblock_handler :: fun(() -> ok),
+                timeout :: non_neg_integer()}).
+
+-record(state, {conf :: #conf{},
                 leader :: undefined | ra:server_id(),
                 next_seq = 0 :: seq(),
                 %% Last applied is initialise to -1 to note that no command has yet been
@@ -74,15 +80,12 @@
                 slow = false :: boolean(),
                 unsent_commands = #{} :: #{rabbit_fifo:consumer_id() =>
                                            {[seq()], [seq()], [seq()]}},
-                soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
+                effective_soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
                 pending = #{} :: #{seq() =>
                                    {term(), rabbit_fifo:command()}},
                 consumer_deliveries = #{} :: #{rabbit_fifo:consumer_tag() =>
                                                #consumer{}},
-                block_handler = fun() -> ok end :: fun(() -> term()),
-                unblock_handler = fun() -> ok end :: fun(() -> ok),
-                timer_state :: term(),
-                timeout :: non_neg_integer()
+                timer_state :: term()
                }).
 
 -opaque state() :: #state{}.
@@ -110,27 +113,27 @@ init(ClusterName, Servers) ->
 %% @param MaxPending size defining the max number of pending commands.
 -spec init(cluster_name(), [ra:server_id()], non_neg_integer()) -> state().
 init(ClusterName = #resource{}, Servers, SoftLimit) ->
-    Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
-    #state{cluster_name = ClusterName,
-           servers = Servers,
-           soft_limit = SoftLimit,
-           timeout = Timeout}.
+    init(ClusterName, Servers, SoftLimit, fun () -> ok end, fun () -> ok end).
 
--spec init(cluster_name(), [ra:server_id()], non_neg_integer(), fun(() -> ok),
+-spec init(cluster_name(),
+           [ra:server_id()],
+           non_neg_integer(),
+           fun(() -> ok),
            fun(() -> ok)) -> state().
 init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
-    #state{cluster_name = ClusterName,
-           servers = Servers,
-           block_handler = BlockFun,
-           unblock_handler = UnblockFun,
-           soft_limit = SoftLimit,
-           timeout = Timeout}.
+    Conf = #conf{cluster_name = ClusterName,
+                 servers = Servers,
+                 block_handler = BlockFun,
+                 unblock_handler = UnblockFun,
+                 soft_limit = SoftLimit,
+                 timeout = Timeout},
+    #state{conf = Conf,
+           effective_soft_limit = SoftLimit}.
 
 %% @doc Enqueues a message.
 %% @param Correlation an arbitrary erlang term used to correlate this
-%% command when it has been applied.
-%% @param Msg an arbitrary erlang term representing the message.
+%% command when it has been applied.  %% @param Msg an arbitrary erlang term representing the message.
 %% @param State the current {@module} state.
 %% @returns
 %% `{ok | slow, State}' if the command was successfully sent. If the return
@@ -141,14 +144,14 @@ init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 -spec enqueue(Correlation :: term(), Msg :: term(), State :: state()) ->
     {ok | slow, state()}.
-enqueue(Correlation, Msg, State0 = #state{slow = Slow,
-                                          block_handler = BlockFun}) ->
+enqueue(Correlation, Msg, State0 = #state{slow = Slow}) ->
     Node = pick_node(State0),
     {Next, State1} = next_enqueue_seq(State0),
     % by default there is no correlation id
     Cmd = rabbit_fifo:make_enqueue(self(), Next, Msg),
     case send_command(Node, Correlation, Cmd, low, State1) of
-        {slow, State} when not Slow ->
+        {slow, #state{conf = #conf{block_handler = BlockFun}} = State}
+          when not Slow ->
             BlockFun(),
             {slow, set_timer(State)};
         Any ->
@@ -186,7 +189,7 @@ enqueue(Msg, State) ->
               Settlement :: settled | unsettled, state()) ->
     {ok, {rabbit_fifo:delivery_msg(), non_neg_integer()}
      | empty, state()} | {error | timeout, term()}.
-dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
+dequeue(ConsumerTag, Settlement, #state{conf = #conf{timeout = Timeout}} = State0) ->
     Node = pick_node(State0),
     ConsumerId = consumer_id(ConsumerTag),
     case ra:process_command(Node,
@@ -424,8 +427,8 @@ stat(Leader) ->
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().
-cluster_name(#state{cluster_name = ClusterName}) ->
-    ClusterName.
+cluster_name(#state{conf = Conf}) ->
+    Conf#conf.cluster_name.
 
 update_machine_state(Node, Conf) ->
     case ra:process_command(Node, rabbit_fifo:make_update_config(Conf)) of
@@ -482,8 +485,8 @@ update_machine_state(Node, Conf) ->
     {internal, Correlators :: [term()], actions(), state()} |
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
-                #state{soft_limit = SftLmt,
-                       unblock_handler = UnblockFun} = State0) ->
+                #state{effective_soft_limit = SftLmt,
+                       conf = Conf} = State0) ->
     {Corrs, Actions, State1} = lists:foldl(fun seq_applied/2,
                                            {[], [], State0#state{leader = From}},
                                            Seqs),
@@ -515,7 +518,7 @@ handle_ra_event(From, {applied, Seqs},
                                                 S
                                         end
                                 end, State2, Commands),
-            UnblockFun(),
+            (Conf#conf.unblock_handler)(),
             {internal, lists:reverse(Corrs), lists:reverse(Actions), State};
         _ ->
             {internal, lists:reverse(Corrs), lists:reverse(Actions), State1}
@@ -540,8 +543,8 @@ handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
     State1 = State0#state{leader = Leader},
     State = resend(Seq, State1),
     {internal, [], [], State};
-handle_ra_event(_, timeout, #state{servers = Servers} = State0) ->
-    case find_leader(Servers) of
+handle_ra_event(_, timeout, #state{conf = Conf} = State0) ->
+    case find_leader(Conf#conf.servers) of
         undefined ->
             %% still no leader, set the timer again
             {internal, [], [], set_timer(State0)};
@@ -704,30 +707,35 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     {ok, {_, Missing}, _} = ra:local_query(Leader, Query),
     Missing.
 
-pick_node(#state{leader = undefined, servers = [N | _]}) ->
+pick_node(#state{leader = undefined,
+                 conf = #conf{servers = [N | _]}}) ->
     %% TODO: pick random rather that first?
     N;
 pick_node(#state{leader = Leader}) ->
     Leader.
 
 % servers sorted by last known leader
-sorted_servers(#state{leader = undefined, servers = Servers}) ->
+sorted_servers(#state{leader = undefined,
+                      conf = #conf{servers = Servers}}) ->
     Servers;
-sorted_servers(#state{leader = Leader, servers = Servers}) ->
+sorted_servers(#state{leader = Leader, conf = #conf{servers = Servers}}) ->
     [Leader | lists:delete(Leader, Servers)].
 
 next_seq(#state{next_seq = Seq} = State) ->
     {Seq, State#state{next_seq = Seq + 1}}.
 
-next_enqueue_seq(#state{next_enqueue_seq = Seq} = State) ->
-    {Seq, State#state{next_enqueue_seq = Seq + 1}}.
+next_enqueue_seq(#state{conf = #conf{soft_limit = Limit},
+                        next_enqueue_seq = Seq} = State) ->
+    %% reduce soft limit for publishing channels
+    {Seq, State#state{next_enqueue_seq = Seq + 1,
+                      effective_soft_limit = Limit div 2}}.
 
 consumer_id(ConsumerTag) ->
     {ConsumerTag, self()}.
 
 send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
-                    soft_limit = SftLmt} = State0) ->
+                    effective_soft_limit = SftLmt} = State0) ->
     {Seq, State} = next_seq(State0),
     ok = ra:pipeline_command(Server, Command, Seq, Priority),
     Tag = case maps:size(Pending) >= SftLmt of
@@ -752,7 +760,7 @@ add_command(Cid, return, MsgIds, Acc) ->
 add_command(Cid, discard, MsgIds, Acc) ->
     [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
 
-set_timer(#state{servers = [Server | _]} = State) ->
+set_timer(#state{conf = #conf{servers = [Server | _]}} = State) ->
     Ref = erlang:send_after(?TIMER_TIME, self(),
                             {ra_event, Server, timeout}),
     State#state{timer_state = Ref}.
