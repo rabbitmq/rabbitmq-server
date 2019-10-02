@@ -1,12 +1,34 @@
 {
-  "__inputs": [
+  "__requires": [
     {
-      "name": "DS_PROMETHEUS",
-      "label": "prometheus",
-      "description": "",
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "6.0.0"
+    },
+    {
       "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "2.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "singlestat",
+      "name": "Singlestat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "flant-statusmap-panel",
+      "name": "Statusmap",
+      "version": "0.1.1"
     }
   ],
   "annotations": {
@@ -2202,7 +2224,7 @@
           "text": "rabbitmq-qq",
           "value": "rabbitmq-qq"
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": "Prometheus",
         "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
@@ -2229,7 +2251,7 @@
             "$__all"
           ]
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": "Prometheus",
         "definition": "label_values(erlang_vm_dist_proc_status, type)",
         "hide": 0,
         "includeAll": true,
