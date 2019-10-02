@@ -44,6 +44,21 @@ prometheus.tcp.port =  15692
 See [CONTRIBUTING.md](https://github.com/rabbitmq/rabbitmq-prometheus/blob/master/CONTRIBUTING.md).
 
 
+## Makefile
+
+This project uses [erlang.mk](https://erlang.mk/), running `make help` will return erlang.mk help.
+
+To see all custom targets that have been documented, run `make h`.
+
+For BASH shell autocompletion, run `eval $(make autocomplete)`, then type `make a<TAB>` to see all Make targets starting with the letter `a`, e.g.:
+
+```sh
+$ make a<TAB
+ac               all.coverdata    app-build        apps             apps-eunit       asciidoc-guide   autocomplete
+all              app              app-c_src        apps-ct          asciidoc         asciidoc-manual
+```
+
+
 ## Copyright
 
 (c) Pivotal Software Inc., 2007-2019.
