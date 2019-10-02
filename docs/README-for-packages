@@ -10,12 +10,12 @@ and for previous versions at:
 https://www.rabbitmq.com/previous.html
 
 Man pages are installed with this package. Of particular interest are
-rabbitmqctl(1), to interact with a running RabbitMQ server, and
-rabbitmq-plugins(1), to enable and disable plugins. These should be
-run as the superuser.
+rabbitmqctl(8), rabbitmq-diagnostics(8), rabbitmq-queues(8).
+They interact with a running node. rabbitmq-plugins(1) is  used to manage plugins.
+All of these should be run as the superuser.
 
 An example configuration file is provided in the same directory as
-this README. Copy it to /etc/rabbitmq/rabbitmq.config to use it. The
+this README. Copy it to /etc/rabbitmq/rabbitmq.conf to use it. The
 RabbitMQ server must be restarted after changing the configuration
 file.
 
