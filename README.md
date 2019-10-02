@@ -23,6 +23,7 @@
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
 
+
 ## Getting Help
 
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
@@ -45,8 +46,8 @@ RabbitMQ server is [licensed under the MPL 1.1](LICENSE-MPL-RabbitMQ).
 
 ## Building From Source and Packaging
 
- * [Building RabbitMQ Server From Source](https://rabbitmq.com/build-server.html)
- * [Building RabbitMQ Server Packages](https://rabbitmq.com/build-server.html)
+ * [Building RabbitMQ from Source](https://rabbitmq.com/build-server.html)
+ * [Building RabbitMQ Distribution Packages](https://rabbitmq.com/build-server.html)
 
 
 ## Copyright
