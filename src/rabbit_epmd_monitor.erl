@@ -61,17 +61,29 @@ init_handle_port_please(noport, Mod, Me, Host) ->
                    me = Me,
                    host = Host,
                    port = undefined},
+    rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
     {ok, ensure_timer(State)};
 init_handle_port_please({port, Port, _Version}, Mod, Me, Host) ->
+    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~p", [Port]),
     State = #state{mod = Mod,
                    me = Me,
                    host = Host,
                    port = Port},
+    {ok, ensure_timer(State)};
+init_handle_port_please({error, Error}, Mod, Me, Host) ->
+    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
+    State = #state{mod = Mod,
+                   me = Me,
+                   host = Host,
+                   port = undefined},
     {ok, ensure_timer(State)}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
+handle_cast(check, State0) ->
+    {ok, State1} = check_epmd(State0),
+    {noreply, ensure_timer(State1#state{timer = undefined})};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -97,14 +109,19 @@ check_epmd(State = #state{mod  = Mod,
                           me   = Me,
                           host = Host,
                           port = Port}) ->
+    rabbit_log:debug("Asked to [re-]register this node (~s@~s) with epmd...", [Me, Host]),
     Port1 = case Mod:port_please(Me, Host) of
                 noport ->
                     rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n",
                                        [Me, Port]),
                     Port;
                 {port, NewPort, _Version} ->
-                    NewPort
+                    NewPort;
+                {error, Error} ->
+                    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
+                    Port
             end,
     rabbit_nodes:ensure_epmd(),
     Mod:register_node(Me, Port1),
+    rabbit_log:debug("[Re-]registered this node (~s@~s) with epmd at port ~p", [Me, Host, Port1]),
     {ok, State#state{port = Port1}}.
