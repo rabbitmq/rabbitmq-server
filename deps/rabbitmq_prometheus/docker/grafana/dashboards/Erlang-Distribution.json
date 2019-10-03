@@ -1,36 +1,4 @@
 {
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "6.0.0"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "2.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "singlestat",
-      "name": "Singlestat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "flant-statusmap-panel",
-      "name": "Statusmap",
-      "version": "0.1.1"
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -48,7 +16,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1567503571131,
+  "iteration": 1570119158161,
   "links": [],
   "panels": [
     {
@@ -60,6 +28,7 @@
         "#1F60C4",
         "#37872D"
       ],
+      "datasource": null,
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -137,6 +106,7 @@
         "#1F60C4",
         "#37872D"
       ],
+      "datasource": null,
       "description": "When a connection between a node and peer is established, the distribution link is considered to be `up`",
       "format": "none",
       "gauge": {
@@ -221,6 +191,7 @@
         "#1F60C4",
         "#C4162A"
       ],
+      "datasource": null,
       "description": "When a new connection is exchanging information between the node and the peer the distribution link is considered to be `pending`",
       "format": "none",
       "gauge": {
@@ -305,6 +276,7 @@
         "#1F60C4",
         "#C4162A"
       ],
+      "datasource": null,
       "description": "When a new connection is established and there is an existing connection between the node and the peer, this connection needs to wait for the initial connection to go down before it can become active. The distribution link is considered `up_pending`",
       "format": "none",
       "gauge": {
@@ -382,6 +354,7 @@
     },
     {
       "collapsed": false,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -430,6 +403,7 @@
         "decimals": null,
         "unitFormat": "short"
       },
+      "datasource": null,
       "description": "",
       "gridPos": {
         "h": 5,
@@ -487,6 +461,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the 64MB threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
       "fill": 1,
       "fillGradient": 0,
@@ -625,6 +600,7 @@
     },
     {
       "collapsed": false,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -641,6 +617,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "",
       "fill": 0,
       "fillGradient": 0,
@@ -773,6 +750,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "",
       "fill": 0,
       "fillGradient": 0,
@@ -907,6 +885,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "Number of inet packets sent to the distribution link port.\n\nIf too few messages are sent and data sits in the port driver buffer, increasing the `inet_dist_connect_options` as well as `inet_dist_listen_options` buffer values will result in more stable throughput.",
       "fill": 0,
       "fillGradient": 0,
@@ -1041,6 +1020,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "Number of inet packets received from the distribution link port.\n\nIf too many messages are received, increasing the `inet_dist_connect_options` as well as `inet_dist_listen_options` buffer values will result in more stable throughput.",
       "fill": 0,
       "fillGradient": 0,
@@ -1173,6 +1153,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "Corresponds to the average size of the argument passed to `gen_tcp:send/2` or equivalent.\n\nTypically corresponds to TCP window size.\n\nIf TLS is used for inter-node communication, the `inet` packet size will be varied so that the system as a whole is both secure and performant.\n\n`inet` packets larger than the TCP window will be split into TCP packets by the system kernel.\n\n`inet` packets smaller than the TCP window _may_ be joined into TCP packets by the system kernel.\n\n* [`inet` packet](http://erlang.org/doc/man/inet.html#packet)",
       "fill": 0,
       "fillGradient": 0,
@@ -1305,6 +1286,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "Corresponds to the average size of the argument received from `gen_tcp:recv/2` or equivalent.\n\nTypically corresponds to TCP window size.\n\nIf TLS is used for inter-node communication, the `inet` packet size will be varied so that the system as a whole is both secure and performant.\n\n* [`inet` packet](http://erlang.org/doc/man/inet.html#packet)",
       "fill": 0,
       "fillGradient": 0,
@@ -1436,6 +1418,7 @@
     },
     {
       "collapsed": false,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1452,6 +1435,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "The total number of bytes allocated for this port by the runtime system. The port itself can have allocated memory that is not included.",
       "fill": 0,
       "fillGradient": 0,
@@ -1584,6 +1568,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "The total number of bytes queued by the port using the ERTS driver queue implementation\n\nAny values above a few KBs hint to an overloaded distribution",
       "fill": 1,
       "fillGradient": 0,
@@ -1686,6 +1671,7 @@
     },
     {
       "collapsed": false,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1757,6 +1743,7 @@
         "decimals": null,
         "unitFormat": "short"
       },
+      "datasource": null,
       "description": "",
       "gridPos": {
         "h": 5,
@@ -1821,6 +1808,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "The number of messages currently in the message queue of the process\n\nAny values above 0 hint to an overloaded distribution",
       "fill": 0,
       "fillGradient": 0,
@@ -1933,6 +1921,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "The size in bytes of process memory. This includes call stack, heap, and internal structures.",
       "fill": 0,
       "fillGradient": 0,
@@ -2072,6 +2061,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": null,
       "description": "The number of reductions executed by the process",
       "fill": 0,
       "fillGradient": 0,
@@ -2208,7 +2198,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 19,
+  "schemaVersion": 20,
   "style": "dark",
   "tags": [
     "erlang",
@@ -2224,7 +2214,7 @@
           "text": "rabbitmq-qq",
           "value": "rabbitmq-qq"
         },
-        "datasource": "Prometheus",
+        "datasource": "prometheus",
         "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
@@ -2251,7 +2241,7 @@
             "$__all"
           ]
         },
-        "datasource": "Prometheus",
+        "datasource": "prometheus",
         "definition": "label_values(erlang_vm_dist_proc_status, type)",
         "hide": 0,
         "includeAll": true,

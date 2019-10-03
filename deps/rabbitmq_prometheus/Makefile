@@ -201,8 +201,9 @@ CFh:
 # Defined as explicit, individual targets so that autocompletion works
 define GENERATE_DASHBOARD
 cd $(DASHBOARDS_TO_PATH) \
-&& jq --slurp add $(@F) __inputs.json \
-| jq '.templating.list[].datasource = "$${DS_PROMETHEUS}"'
+&& jq --slurp add $(@F) __inputs.json __requires.json \
+| jq '.templating.list[].datasource = "$${DS_PROMETHEUS}"' \
+| jq '.panels[].datasource = "$${DS_PROMETHEUS}"'
 endef
 .PHONY: Erlang-Distribution.json
 Erlang-Distribution.json: $(JQ) ##     | Ready to import Erlang-Distribution Grafana dashboard
