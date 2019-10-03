@@ -52,7 +52,7 @@ This project uses [erlang.mk](https://erlang.mk/), running `make help` will retu
 
 To see all custom targets that have been documented, run `make h`.
 
-For BASH shell autocompletion, run `eval $(make autocomplete)`, then type `make a<TAB>` to see all Make targets starting with the letter `a`, e.g.:
+For BASH shell autocompletion, run `eval "$(make autocomplete)"`, then type `make a<TAB>` to see all Make targets starting with the letter `a`, e.g.:
 
 ```sh
 $ make a<TAB

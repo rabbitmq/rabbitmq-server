@@ -182,6 +182,7 @@ DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
 update-dashboards: ## ud  | Update Grafana dashboards from ~/Downloads
 	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Overview-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Overview.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Raft-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Raft.json ; \
+	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-PerfTest-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-PerfTest.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
 	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
 	true
@@ -210,6 +211,9 @@ Erlang-Distribution.json: $(JQ) ##     | Ready to import Erlang-Distribution Gra
 	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-Overview.json
 RabbitMQ-Overview.json: $(JQ) ##     | Ready to import RabbitMQ-Overview Grafana dashboard
+	@$(GENERATE_DASHBOARD)
+.PHONY: RabbitMQ-PerfTest.json
+RabbitMQ-PerfTest.json: $(JQ) ##     | Ready to import RabbitMQ-PerfTest Grafana dashboard
 	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-Raft.json
 RabbitMQ-Raft.json: $(JQ) ##     | Ready to import RabbitMQ-Raft Grafana dashboard

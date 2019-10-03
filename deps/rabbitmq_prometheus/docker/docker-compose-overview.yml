@@ -50,6 +50,7 @@ services:
       - "5675:5672"
       - "15675:15672"
       - "15695:15692"
+
   basic-get:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:2.9.0.RC2-ubuntu
@@ -64,6 +65,7 @@ services:
       POLLING_INTERVAL: 5000
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: &startup_timeout 60
+      METRICS_PROMETHEUS: "true"
   basic-get-auto:
     image: *perf-test-image
     networks:
@@ -77,6 +79,7 @@ services:
       POLLING_INTERVAL: 5000
       AUTOACK: "true"
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
   greedy-consumer:
     image: *perf-test-image
     networks:
@@ -90,6 +93,7 @@ services:
       QOS: 2000
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
   publisher-confirms:
     image: *perf-test-image
     networks:
@@ -103,6 +107,7 @@ services:
       CONFIRM: 1
       CONFIRM_TIMEOUT: 1
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
   slow-consumer-persistent:
     image: *perf-test-image
     networks:
@@ -120,6 +125,7 @@ services:
       QOS: 50
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
   nack:
     image: *perf-test-image
     networks:
@@ -138,6 +144,7 @@ services:
       QOS: 5
       CONSUMER_LATENCY: 3000000
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
   unroutable-return:
     image: *perf-test-image
     networks:
@@ -149,6 +156,7 @@ services:
       CONSUMERS: 0
       FLAG: mandatory
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
   unroutable-drop:
     image: *perf-test-image
     networks:
@@ -159,3 +167,4 @@ services:
       VARIABLE_SIZE: "100:30,200:30"
       CONSUMERS: 0
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
