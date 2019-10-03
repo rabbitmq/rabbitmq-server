@@ -46,7 +46,7 @@ services:
       - "5681:5672"
       - "15681:15672"
       - "15701:15692"
-  stress-test-qq:
+  stress-qq:
     image: &perf-test-image pivotalrabbitmq/perf-test:2.9.0.RC2-ubuntu
     networks:
       - "rabbitmq-prometheus"
@@ -63,3 +63,4 @@ services:
       RATE: 200
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
+      METRICS_PROMETHEUS: "true"

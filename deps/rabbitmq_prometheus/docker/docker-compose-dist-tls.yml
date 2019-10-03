@@ -53,7 +53,7 @@ services:
       - "5678:5672"
       - "15678:15672"
       - "15698:15692"
-  stress_dist:
+  stress-dist-tls:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
     image: &perf-test-image pivotalrabbitmq/perf-test:2.9.0.RC2-ubuntu
     networks:
@@ -71,3 +71,4 @@ services:
       AUTOACK: "false"
       VARIABLE_RATE: "1:30,20:30,40:30"
       SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
+      METRICS_PROMETHEUS: "true"
