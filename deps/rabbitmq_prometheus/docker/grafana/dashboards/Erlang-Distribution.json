@@ -2201,10 +2201,10 @@
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
+    "rabbitmq-prometheus",
     "erlang",
-    "pivotal",
-    "prometheus",
-    "rabbitmq"
+    "rabbitmq",
+    "prometheus"
   ],
   "templating": {
     "list": [

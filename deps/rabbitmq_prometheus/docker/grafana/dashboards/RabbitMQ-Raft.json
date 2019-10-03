@@ -662,9 +662,9 @@
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
-    "pivotal",
-    "prometheus",
-    "rabbitmq"
+    "rabbitmq-prometheus",
+    "rabbitmq",
+    "prometheus"
   ],
   "templating": {
     "list": [
