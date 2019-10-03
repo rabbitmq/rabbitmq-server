@@ -107,7 +107,7 @@ check_epmd(State = #state{mod  = Mod,
                           me   = Me,
                           host = Host,
                           port = Port}) ->
-    rabbit_log:debug("Asked to [re-]register this node (~s@~p) with epmd...", [Me, Host]),
+    rabbit_log:debug("Asked to [re-]register this node (~s@~s) with epmd...", [Me, Host]),
     Port1 = case Mod:port_please(Me, Host) of
                 noport ->
                     rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n",
@@ -121,5 +121,5 @@ check_epmd(State = #state{mod  = Mod,
             end,
     rabbit_nodes:ensure_epmd(),
     Mod:register_node(Me, Port1),
-    rabbit_log:debug("[Re-]registered this node (~s@~p) with epmd at port ~p", [Me, Host, Port1]),
+    rabbit_log:debug("[Re-]registered this node (~s@~s) with epmd at port ~p", [Me, Host, Port1]),
     {ok, State#state{port = Port1}}.
