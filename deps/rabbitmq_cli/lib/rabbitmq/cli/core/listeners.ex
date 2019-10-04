@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Listeners do
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecord: 3, extract: 2]
   import RabbitCommon.Records
   import Rabbitmq.Atom.Coerce
 
@@ -22,7 +22,9 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   # API
   #
 
-  defrecord :hostent, extract(:hostent, from_lib: "kernel/include/inet.hrl")
+  defrecord :certificate, :Certificate, extract(:Certificate, from_lib: "public_key/include/public_key.hrl")
+  defrecord :tbscertificate, :TBSCertificate, extract(:TBSCertificate, from_lib: "public_key/include/public_key.hrl")
+  defrecord :validity, :Validity, extract(:Validity, from_lib: "public_key/include/public_key.hrl")
 
   def listeners_on(listeners, target_node) do
     Enum.filter(listeners, fn listener(node: node) ->
@@ -103,6 +105,100 @@ defmodule RabbitMQ.CLI.Core.Listeners do
         bin
       {:error, _} = err ->
         err
+    end
+  end
+
+  def listener_expiring_within(listener, seconds) do
+    listener(node: node, protocol: protocol, ip_address: interface, port: port, opts: opts) = listener
+    certfile = Keyword.get(opts, :certfile)
+    cacertfile = Keyword.get(opts, :cacertfile)
+    now = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
+    expiry_date = now + seconds
+    certfile_expires_on = expired(cert_validity(read_cert(certfile)), expiry_date)
+    cacertfile_expires_on = expired(cert_validity(read_cert(cacertfile)), expiry_date)
+    case {certfile_expires_on, cacertfile_expires_on} do
+      {[], []} ->
+        false
+      _ ->
+        %{
+          node: node,
+          protocol: protocol,
+          interface: interface,
+          port: port,
+          certfile: certfile,
+          cacertfile: cacertfile,
+          certfile_expires_on: certfile_expires_on,
+          cacertfile_expires_on: cacertfile_expires_on
+    }
+    end
+  end
+
+  def expired_listener_map(%{node: node, protocol: protocol, interface: interface, port: port, certfile_expires_on: certfile_expires_on, cacertfile_expires_on: cacertfile_expires_on, certfile: certfile, cacertfile: cacertfile}) do
+    %{
+      node: node,
+      protocol: protocol,
+      interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
+      port: port,
+      purpose: protocol_label(to_atom(protocol)),
+      certfile: certfile |> to_string,
+      cacertfile: cacertfile |> to_string,
+      certfile_expires_on: expires_on_list(certfile_expires_on),
+      cacertfile_expires_on: expires_on_list(cacertfile_expires_on)
+    }
+  end
+
+  def expires_on_list({:error, _} = error) do
+    [error]
+  end
+  def expires_on_list(expires) do
+    Enum.map(expires, &expires_on/1)
+  end
+
+  def expires_on({:error, _} = error) do
+    error
+  end
+  def expires_on(seconds) do
+    {:ok, naive} = NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(seconds))
+    NaiveDateTime.to_string(naive)
+  end
+
+  def expired(nil, _) do
+    []
+  end
+  def expired({:error, _} = error, _) do
+    error
+  end
+  def expired(expires, expiry_date) do
+    Enum.filter(expires, fn ({:error, _} = e) -> true
+      (seconds) -> seconds < expiry_date end)
+  end
+
+  def cert_validity(nil) do
+    nil
+  end
+  def cert_validity(cert) do
+    dsa_entries = :public_key.pem_decode(cert)
+    case dsa_entries do
+      [] ->
+        {:error, "The certificate file provided does not contain any PEM entry."}
+      _ ->
+        now = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
+        Enum.map(dsa_entries, fn ({:Certificate, _, _} = dsa_entry) ->
+          certificate(tbsCertificate: tbs_certificate) = :public_key.pem_entry_decode(dsa_entry)
+          tbscertificate(validity: validity) = tbs_certificate
+          validity(notAfter: not_after, notBefore: not_before) = validity
+          start = :pubkey_cert.time_str_2_gregorian_sec(not_before)
+          case start > now do
+            true ->
+              {:ok, naive} = NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(start))
+              startdate = NaiveDateTime.to_string(naive)
+              {:error, "Certificate is not yet valid. It starts on #{startdate}"}
+            false ->
+              :pubkey_cert.time_str_2_gregorian_sec(not_after)
+          end
+          ({type, _, _}) ->
+            {:error, "The certificate file provided contains a #{type} entry."}
+        end)
     end
   end
 
