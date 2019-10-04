@@ -61,5 +61,5 @@ run(Config, Test) ->
 
 
 cur_dir() ->
-    {Src, _} = filename:find_src(?MODULE),
+    {ok, Src} = filelib:find_source(?MODULE),
     filename:dirname(Src).

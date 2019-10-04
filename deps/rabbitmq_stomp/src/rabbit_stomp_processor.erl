@@ -822,9 +822,15 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                        [ConsumerTag],
                        State)
     end,
-    amqp_channel:notify_received(DeliveryCtx),
+    notify_received(DeliveryCtx),
     NewState.
 
+notify_received(undefined) ->
+  %% no notification for quorum queues
+  ok;
+notify_received(DeliveryCtx) ->
+  %% notification for flow control
+  amqp_channel:notify_received(DeliveryCtx).
 
 send_method(Method, Channel, State) ->
     amqp_channel:call(Channel, Method),
