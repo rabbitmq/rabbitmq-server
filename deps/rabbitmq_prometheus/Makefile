@@ -118,6 +118,19 @@ docker-image-run: ## dir | Run container with local Docker image
 .PHONY: dir
 dir: docker-image-run
 
+DOCKER_COMPOSE_ACTION ?= up --detach && docker-compose --file $(@F) logs --follow
+DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
+.PHONY: $(DOCKER_COMPOSE_FILES)
+$(DOCKER_COMPOSE_FILES):
+	@cd docker && \
+	docker-compose --file $(@F) $(DOCKER_COMPOSE_ACTION) ; \
+	true
+.PHONY: down
+down: DOCKER_COMPOSE_ACTION = down
+down: $(DOCKER_COMPOSE_FILES) ## d   | Stop all containers
+.PHONY: d
+d: down
+
 JQ := /usr/local/bin/jq
 $(JQ):
 	@brew install jq
@@ -163,32 +176,6 @@ dt: dist-tls
 qq: ##     | Make RabbitMQ-Raft panels come alive - HIGH LOAD
 	@$(DOCKER_COMPOSE_UP)
 
-DOCKER_COMPOSE_ACTION ?= up --detach && docker-compose --file $(@F) logs --follow
-DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
-.PHONY: $(DOCKER_COMPOSE_FILES)
-$(DOCKER_COMPOSE_FILES):
-	@cd docker && \
-	docker-compose --file $(@F) $(DOCKER_COMPOSE_ACTION) ; \
-	true
-.PHONY: down
-down: DOCKER_COMPOSE_ACTION = down
-down: $(DOCKER_COMPOSE_FILES) ## d   | Stop all containers
-.PHONY: d
-d: down
-
-DASHBOARDS_FROM_PATH := $(HOME)/Downloads
-DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
-.PHONY: update-dashboards
-update-dashboards: ## ud  | Update Grafana dashboards from ~/Downloads
-	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Overview-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Overview.json ; \
-	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-Raft-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-Raft.json ; \
-	mv -fv $(DASHBOARDS_FROM_PATH)/RabbitMQ-PerfTest-*.json $(DASHBOARDS_TO_PATH)/RabbitMQ-PerfTest.json ; \
-	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Distribution-*.json $(DASHBOARDS_TO_PATH)/Erlang-Distribution.json ; \
-	mv -fv $(DASHBOARDS_FROM_PATH)/Erlang-Memory-Allocators-*.json $(DASHBOARDS_TO_PATH)/Erlang-Memory-Allocators.json ; \
-	true
-.PHONY: ud
-ud: update-dashboards
-
 SEPARATOR := -------------------------------------------------------------------------------------------------
 .PHONY: h
 h:
@@ -200,22 +187,23 @@ CFh:
 	@watch -c $(MAKE) h
 
 # Defined as explicit, individual targets so that autocompletion works
+DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
 define GENERATE_DASHBOARD
 cd $(DASHBOARDS_TO_PATH) \
-&& jq --slurp add $(@F) __inputs.json __requires.json \
+&& jq --slurp add $(@F) __inputs.json \
 | jq '.templating.list[].datasource = "$${DS_PROMETHEUS}"' \
 | jq '.panels[].datasource = "$${DS_PROMETHEUS}"'
 endef
 .PHONY: Erlang-Distribution.json
-Erlang-Distribution.json: $(JQ) ##     | Ready to import Erlang-Distribution Grafana dashboard
+Erlang-Distribution.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-Overview.json
-RabbitMQ-Overview.json: $(JQ) ##     | Ready to import RabbitMQ-Overview Grafana dashboard
+RabbitMQ-Overview.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-PerfTest.json
-RabbitMQ-PerfTest.json: $(JQ) ##     | Ready to import RabbitMQ-PerfTest Grafana dashboard
+RabbitMQ-PerfTest.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-Raft.json
-RabbitMQ-Raft.json: $(JQ) ##     | Ready to import RabbitMQ-Raft Grafana dashboard
+RabbitMQ-Raft.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
 
