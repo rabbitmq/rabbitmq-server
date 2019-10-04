@@ -1249,7 +1249,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Network IN traffic",
+      "title": "Network IN traffic / s",
       "transform": "timeseries_aggregations",
       "type": "table"
     },
@@ -1565,7 +1565,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Network OUT traffic",
+      "title": "Network OUT traffic / s",
       "transform": "timeseries_aggregations",
       "type": "table"
     }
