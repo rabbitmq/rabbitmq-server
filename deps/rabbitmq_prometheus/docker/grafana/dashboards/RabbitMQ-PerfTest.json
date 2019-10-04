@@ -1,4 +1,36 @@
 {
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "6.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "table",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "heatmap",
+      "name": "Heatmap",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -15,7 +47,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1570119244925,
+  "iteration": 1570184644782,
   "links": [],
   "panels": [
     {
@@ -94,7 +126,7 @@
             "rgba(50, 172, 45, 0.97)"
           ],
           "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
+          "decimals": 1,
           "mappingType": 1,
           "pattern": "/.*/",
           "thresholds": [],
@@ -432,7 +464,7 @@
             "rgba(50, 172, 45, 0.97)"
           ],
           "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
+          "decimals": 1,
           "mappingType": 1,
           "pattern": "/.*/",
           "thresholds": [],
@@ -1657,7 +1689,7 @@
           "value": "0.99"
         },
         "datasource": "prometheus",
-        "definition": "",
+        "definition": "label_values(perftest_latency_seconds, quantile)",
         "hide": 0,
         "includeAll": false,
         "label": "Percentile",
@@ -1665,7 +1697,7 @@
         "name": "percentile",
         "options": [],
         "query": "label_values(perftest_latency_seconds, quantile)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 4,

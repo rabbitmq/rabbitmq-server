@@ -1,4 +1,30 @@
 {
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "6.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "heatmap",
+      "name": "Heatmap",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
