@@ -197,6 +197,9 @@ endef
 .PHONY: Erlang-Distribution.json
 Erlang-Distribution.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
+.PHONY: Erlang-Distributions-Compare.json
+Erlang-Distributions-Compare.json: $(JQ)
+	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-Overview.json
 RabbitMQ-Overview.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
