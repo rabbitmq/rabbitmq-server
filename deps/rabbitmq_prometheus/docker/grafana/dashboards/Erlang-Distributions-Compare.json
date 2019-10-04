@@ -122,7 +122,7 @@
       ],
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\"}",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -178,7 +178,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\",instance=~\"$instance\"}",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "format": "time_series",
           "instant": false,
           "interval": "1s",
@@ -263,7 +263,7 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\",instance=~\"$instance\"} > 0",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "format": "heatmap",
           "intervalFactor": 1,
           "refId": "A"
@@ -339,7 +339,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\",instance=~\"$instance\"} > 0",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -460,7 +460,7 @@
       ],
       "targets": [
         {
-          "expr": "perftest_published",
+          "expr": "perftest_published{instance=~\"$instance\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -733,7 +733,7 @@
       ],
       "targets": [
         {
-          "expr": "perftest_consumed",
+          "expr": "perftest_consumed{instance=~\"$instance\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -1115,7 +1115,7 @@
       },
       "styles": [
         {
-          "alias": "Container",
+          "alias": "Host",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -1203,7 +1203,7 @@
       },
       "styles": [
         {
-          "alias": "Container",
+          "alias": "Host",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -1519,7 +1519,7 @@
       },
       "styles": [
         {
-          "alias": "Container",
+          "alias": "Host",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
