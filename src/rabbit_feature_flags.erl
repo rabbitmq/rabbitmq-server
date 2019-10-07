@@ -246,6 +246,8 @@
               migration_fun/0,
               migration_fun_context/0]).
 
+-on_load(on_load/0).
+
 -spec list() -> feature_flags().
 %% @doc
 %% Lists all supported feature flags.
@@ -2265,3 +2267,15 @@ maybe_enable_locally_after_app_load([FeatureName | Rest]) ->
 share_new_feature_flags_after_app_load(FeatureFlags, Timeout) ->
     push_local_feature_flags_from_apps_unknown_remotely(
       node(), FeatureFlags, Timeout).
+
+on_load() ->
+    case application:get_env(rabbit, feature_flags_file) of
+        {ok, _} ->
+            ok;
+        _ ->
+            "Refusing to load '" ?MODULE_STRING "' in what appears to "
+            "be a pre-feature-flags running node "
+            "(" ++ rabbit_misc:version() ++ "). This is fine: it is "
+            "probably a remote node querying this node for its feature "
+            "flags."
+    end.
