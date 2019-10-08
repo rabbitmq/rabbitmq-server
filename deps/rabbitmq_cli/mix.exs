@@ -103,7 +103,8 @@ defmodule RabbitMQCtl.MixfileBase do
 
       {:amqp, "~> 1.2.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
-      {:temp, "~> 0.4", only: :test}
+      {:temp, "~> 0.4", only: :test},
+      {:x509, "~> 0.7", only: :test}
     ]
 
     rabbitmq_deps = case System.get_env("DEPS_DIR") do
