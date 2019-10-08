@@ -48,4 +48,26 @@ defmodule CoreListenersTest do
     assert protocol_label(:'http/prometheus') == "Prometheus exporter API over HTTP"
     assert protocol_label(:'https/prometheus') == "Prometheus exporter API over TLS (HTTPS)"
   end
+
+  test "listener expiring within" do
+    validityInDays = 10
+    validity = X509.Certificate.Validity.days_from_now(validityInDays)
+    ca_key = X509.PrivateKey.new_ec(:secp256r1)
+    ca = X509.Certificate.self_signed(ca_key,
+      "/C=US/ST=CA/L=San Francisco/O=Acme/CN=ECDSA Root CA",
+      template: :root_ca,
+      validity: validity
+    )
+    pem = X509.Certificate.to_pem(ca)
+
+    opts = [{:certfile, {:pem, pem}}, {:cacertfile, {:pem, pem}}]
+    listener = listener(node: :rabbit@mercurio,
+      protocol: :stomp,
+      ip_address: {0,0,0,0,0,0,0,0},
+      port: 61613,
+      opts: opts)
+
+    assert listener_expiring_within(listener, 86400 * (validityInDays - 5)) == false
+    assert listener_expiring_within(listener, 86400 * (validityInDays + 5)) != false
+  end
 end

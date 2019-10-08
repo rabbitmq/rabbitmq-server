@@ -99,6 +99,9 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def read_cert(nil) do
     nil
   end
+  def read_cert({:pem, pem}) do
+    pem
+  end
   def read_cert(path) do
     case File.read(path) do
       {:ok, bin} ->
