@@ -47,7 +47,7 @@ defmodule ObserverCommandTest do
   end
 
   @tag test_timeout: 3000
-  test "run: targeting an unreachable node throws a badrpc", context do
+  test "run: targeting an unreachable node throws a badrpc" do
     assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, interval: 5}))
   end
 end
