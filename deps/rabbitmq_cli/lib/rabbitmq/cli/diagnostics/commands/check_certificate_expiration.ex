@@ -78,7 +78,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
     {:error, :check_failed, Enum.map(listeners, &expired_listener_map/1)}
   end
 
-  def usage, do: "check_certificate_expiration"
+  def usage, do: "check_certificate_expiration [--within <period>] [--unit <unit>]"
+
+  def usage_additional() do
+    [
+      ["<period>", "period of time to check. Default is 1 day."],
+      ["<unit>", "time unit for the period, can be days, weeks, months, years. Default is days."],
+    ]
+  end
 
   def usage_doc_guides() do
     [
