@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   def switches(), do: [unit: :string, within: :integer]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{unit: "days", within: 1}, opts)}
+    {args, Map.merge(%{unit: "weeks", within: 4}, opts)}
   end
 
   def validate(args, _) when length(args) > 0 do
@@ -73,7 +73,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   def output(listeners, %{formatter: "json"}) do
     {:error, :check_failed, %{"result" => "error", "expired" => Enum.map(listeners, &expired_listener_map/1)}}
   end
-  
+
   def output(listeners, %{}) do
     {:error, :check_failed, Enum.map(listeners, &expired_listener_map/1)}
   end
@@ -82,15 +82,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
 
   def usage_additional() do
     [
-      ["<period>", "period of time to check. Default is 1 day."],
-      ["<unit>", "time unit for the period, can be days, weeks, months, years. Default is days."],
+      ["<period>", "period of time to check. Default is 4 weeks."],
+      ["<unit>", "time unit for the period, can be days, weeks, months, years. Default is weeks."],
     ]
   end
 
   def usage_doc_guides() do
     [
-      DocGuide.configuration(),
-      DocGuide.tls()
+      DocGuide.tls(),
+      DocGuide.networking()
     ]
   end
 
@@ -98,5 +98,5 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
 
   def description(), do: "Checks the expiration date on the certificates for every listener configured to use TLS"
 
-  def banner(_, %{node: node_name}), do: "Expired certificates of node #{node_name} ..."
+  def banner(_, %{node: node_name}), do: "Checking certificate expiration on node #{node_name} ..."
 end
