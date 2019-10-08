@@ -54,7 +54,7 @@ defmodule CoreListenersTest do
     validity = X509.Certificate.Validity.days_from_now(validityInDays)
     ca_key = X509.PrivateKey.new_ec(:secp256r1)
     ca = X509.Certificate.self_signed(ca_key,
-      "/C=US/ST=CA/L=San Francisco/O=Acme/CN=ECDSA Root CA",
+      "/C=US/ST=CA/L=San Francisco/O=Megacorp/CN=Megacorp Intermediate CA",
       template: :root_ca,
       validity: validity
     )
@@ -67,7 +67,7 @@ defmodule CoreListenersTest do
       port: 61613,
       opts: opts)
 
-    assert listener_expiring_within(listener, 86400 * (validityInDays - 5)) == false
-    assert listener_expiring_within(listener, 86400 * (validityInDays + 5)) != false
+    assert not listener_expiring_within(listener, 86400 * (validityInDays - 5))
+    assert listener_expiring_within(listener, 86400 * (validityInDays + 5))
   end
 end
