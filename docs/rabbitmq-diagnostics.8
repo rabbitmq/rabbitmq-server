@@ -231,6 +231,14 @@ Example:
 .Sp
 .Dl rabbitmq-diagnostics alarms
 .\" ------------------------------------
+.It Cm certificates
+.Pp
+Displays the node certificates for every listener configured to use TLS.
+.Pp
+Example:
+.sp
+.Dl rabbitmq-diagnostics certificates
+.\" ------------------------------------
 .It Cm check_alarms
 .Pp
 Health check that fails (returns with a non-zero code) if there are alarms
@@ -243,6 +251,25 @@ to learn more.
 Example:
 .Sp
 .Dl rabbitmq-diagnostics check_alarms
+.\" ------------------------------------
+.It Cm check_certificate_expiration Oo Fl -unit Ar time_unit Oc Op Fl -within Ar seconds
+.Pp
+Checks the expiration date on the certificates for every listener configured to use TLS.
+Supported time units are:
+.Bl -bullet
+.It
+days
+.It
+weeks
+.It
+months
+.It
+years
+.El
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_certificate_expiration --unit weeks --within 6
 .\" ------------------------------------
 .It Cm check_local_alarms
 .Pp
