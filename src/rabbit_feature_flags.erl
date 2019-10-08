@@ -2283,11 +2283,10 @@ on_load() ->
             %% rabbit.feature_flags_file would not be set in unit tests. MK.
             case code:is_loaded(eunit) of
               false ->
-                "Refusing to load '" ?MODULE_STRING "' in what appears to "
-                "be a pre-feature-flags running node "
+                "Refusing to load '" ?MODULE_STRING "' on this node. It appears to "
+                "be a pre-feature-flags version "
                 "(" ++ Vsn ++ "). This is fine: it is "
-                "probably a remote node querying this node for its feature "
-                "flags.";
+                "probably a remote feature flag-enabled node querying our capabilities.";
               {file, _} -> ok;
               _         -> ok
             end
