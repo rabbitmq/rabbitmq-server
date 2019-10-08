@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CertificatesCommand do
 
       xs when is_list(xs) ->
         listeners = listeners_with_certificates(listeners_on(xs, node_name))
-        
+
         case listeners do
           [] -> %{}
           _ -> Enum.map(listeners, &listener_certs/1)
@@ -58,7 +58,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CertificatesCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Displays the node certificates for every lisetener configured to use TLS"
+  def description(), do: "Displays certificates (public keeys) for every listener on target node that is configured to use TLS"
 
   def banner(_, %{node: node_name}), do: "Certificates of node #{node_name} ..."
 end

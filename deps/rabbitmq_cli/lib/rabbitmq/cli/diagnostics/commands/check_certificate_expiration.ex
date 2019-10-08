@@ -82,7 +82,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
 
   def usage_additional() do
     [
-      ["<period>", "period of time to check. Default is 4 weeks."],
+      ["<period>", "period of time to check. Default is four (weeks)."],
       ["<unit>", "time unit for the period, can be days, weeks, months, years. Default is weeks."],
     ]
   end
