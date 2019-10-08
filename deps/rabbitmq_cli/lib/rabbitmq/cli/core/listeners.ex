@@ -169,7 +169,7 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     error
   end
   def expired(expires, expiry_date) do
-    Enum.filter(expires, fn ({:error, _} = e) -> true
+    Enum.filter(expires, fn ({:error, _}) -> true
       (seconds) -> seconds < expiry_date end)
   end
 
