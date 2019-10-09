@@ -2284,7 +2284,7 @@ on_load() ->
             case code:is_loaded(eunit) of
               false ->
                 "Refusing to load '" ?MODULE_STRING "' on this node. It appears to "
-                "be running a pre-feature-flags version "
+                "be a pre-feature-flags version "
                 "(" ++ Vsn ++ "). This is fine: it is "
                 "probably a remote feature flag-enabled node querying our capabilities.";
               {file, _} -> ok;
