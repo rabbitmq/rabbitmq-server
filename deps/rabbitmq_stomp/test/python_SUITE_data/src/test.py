@@ -16,5 +16,6 @@ if __name__ == '__main__':
         'destinations',
         'redelivered',
         'topic_permissions',
+        'x_queue_type_quorum'
     ]
     test_runner.run_unittests(modules)

@@ -158,6 +158,12 @@ handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
                                                                  ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
+             Message = #amqp_msg{}},
+             State) ->
+    %% receiving a message from a quorum queue
+    %% no delivery context
+    handle_info({Delivery, Message, undefined}, State);
+handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload},
              DeliveryCtx},
              State) ->
