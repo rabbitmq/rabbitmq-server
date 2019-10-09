@@ -1,14 +1,13 @@
-import unittest
-import stomp
 import pika
 import base
 import time
 import os
 
+
 class TestUserGeneratedQueueName(base.BaseTest):
 
     def test_quorum_queue(self):
-        queueName='my-quorum-queue'
+        queueName = 'my-quorum-queue'
 
         # subscribe
         self.subscribe_dest(
@@ -28,7 +27,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
         time.sleep(5)
 
         connection = pika.BlockingConnection(
-                pika.ConnectionParameters( host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
+                pika.ConnectionParameters(host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
         # publish a message to the named queue
@@ -38,7 +37,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 body='Hello World!')
 
         # check if we receive the message from the STOMP subscription
-        self.assertTrue(self.listener.wait(2), "initial message not received")
+        self.assertTrue(self.listener.wait(5), "initial message not received")
         self.assertEquals(1, len(self.listener.messages))
 
         self.conn.disconnect()
