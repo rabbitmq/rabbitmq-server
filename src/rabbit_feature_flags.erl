@@ -246,7 +246,24 @@
               migration_fun/0,
               migration_fun_context/0]).
 
+%% rabbit.feature_flags_file would not be set in unit tests. MK.
+-ifndef(TEST).
 -on_load(on_load/0).
+
+on_load() ->
+    Vsn = rabbit_data_coercion:to_list(rabbit_misc:version()),
+    case application:get_env(rabbit, feature_flags_file) of
+        {ok, _} ->
+            ok;
+        _ ->
+            Msg = "Refusing to load '" ?MODULE_STRING "' on this node. It appears to "
+                  "be running a pre-feature-flags version "
+                  "(" ++ Vsn ++ "). This is fine: it is "
+                  "probably a remote feature flag-enabled node querying our capabilities.",
+            rabbit_log:warning(Msg),
+            Msg
+    end.
+-endif.
 
 -spec list() -> feature_flags().
 %% @doc
@@ -2267,15 +2284,3 @@ maybe_enable_locally_after_app_load([FeatureName | Rest]) ->
 share_new_feature_flags_after_app_load(FeatureFlags, Timeout) ->
     push_local_feature_flags_from_apps_unknown_remotely(
       node(), FeatureFlags, Timeout).
-
-on_load() ->
-    case application:get_env(rabbit, feature_flags_file) of
-        {ok, _} ->
-            ok;
-        _ ->
-            "Refusing to load '" ?MODULE_STRING "' in what appears to "
-            "be a pre-feature-flags running node "
-            "(" ++ rabbit_misc:version() ++ "). This is fine: it is "
-            "probably a remote node querying this node for its feature "
-            "flags."
-    end.
