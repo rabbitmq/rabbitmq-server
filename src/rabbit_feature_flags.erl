@@ -246,8 +246,6 @@
               migration_fun/0,
               migration_fun_context/0]).
 
--on_load(on_load/0).
-
 -spec list() -> feature_flags().
 %% @doc
 %% Lists all supported feature flags.
@@ -1641,9 +1639,8 @@ does_node_support(Node, FeatureNames, Timeout) ->
           end,
     case Ret of
         {error, pre_feature_flags_rabbitmq} ->
-            %% See run_feature_flags_mod_on_remote_node/4 for
-            %% an explanation why we consider this node a 3.7.x
-            %% pre-feature-flags node.
+            %% See run_feature_flags_mod_on_remote_node/4 for an
+            %% explanation why we consider this node a 3.7.x node.
             rabbit_log:debug(
               "Feature flags: no feature flags support on node `~s`, "
               "consider the feature flags unsupported: ~p",
@@ -1806,9 +1803,8 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
                   {undef,
                    [{?MODULE, Function, Args, []}
                     | _]}}} ->
-            %% If rabbit_feature_flags:Function() is undefined
-            %% on the remote node, we consider it to be a 3.7.x
-            %% pre-feature-flags node.
+            %% If rabbit_feature_flags:is_supported_locally/1 is undefined
+            %% on the remote node, we consider it to be a 3.7.x node.
             %%
             %% Theoretically, it could be an older version (3.6.x and
             %% older). But the RabbitMQ version consistency check
@@ -1817,7 +1813,7 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
             %% this situation from happening before we reach this point.
             rabbit_log:debug(
               "Feature flags: ~s:~s~p unavailable on node `~s`: "
-              "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
+              "assuming it is a RabbitMQ 3.7.x node",
               [?MODULE, Function, Args, Node]),
             {error, pre_feature_flags_rabbitmq};
         {badrpc, Reason} = Error ->
@@ -1842,9 +1838,8 @@ query_remote_feature_flags(Node, Which, Timeout) ->
                      [Which, Node]),
     case run_feature_flags_mod_on_remote_node(Node, list, [Which], Timeout) of
         {error, pre_feature_flags_rabbitmq} ->
-            %% See run_feature_flags_mod_on_remote_node/4 for
-            %% an explanation why we consider this node a 3.7.x
-            %% pre-feature-flags node.
+            %% See run_feature_flags_mod_on_remote_node/4 for an
+            %% explanation why we consider this node a 3.7.x node.
             rabbit_log:debug(
               "Feature flags: no feature flags support on node `~s`, "
               "consider the list of feature flags empty", [Node]),
@@ -2267,15 +2262,3 @@ maybe_enable_locally_after_app_load([FeatureName | Rest]) ->
 share_new_feature_flags_after_app_load(FeatureFlags, Timeout) ->
     push_local_feature_flags_from_apps_unknown_remotely(
       node(), FeatureFlags, Timeout).
-
-on_load() ->
-    case application:get_env(rabbit, feature_flags_file) of
-        {ok, _} ->
-            ok;
-        _ ->
-            "Refusing to load '" ?MODULE_STRING "' in what appears to "
-            "be a pre-feature-flags running node "
-            "(" ++ rabbit_misc:version() ++ "). This is fine: it is "
-            "probably a remote node querying this node for its feature "
-            "flags."
-    end.
