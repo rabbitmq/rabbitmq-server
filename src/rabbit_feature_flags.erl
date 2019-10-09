@@ -2275,20 +2275,13 @@ share_new_feature_flags_after_app_load(FeatureFlags, Timeout) ->
       node(), FeatureFlags, Timeout).
 
 on_load() ->
-    Vsn = rabbit_data_coercion:to_list(rabbit_misc:version()),
     case application:get_env(rabbit, feature_flags_file) of
         {ok, _} ->
             ok;
         _ ->
-            %% rabbit.feature_flags_file would not be set in unit tests. MK.
-            case code:is_loaded(eunit) of
-              false ->
-                "Refusing to load '" ?MODULE_STRING "' in what appears to "
-                "be a pre-feature-flags running node "
-                "(" ++ Vsn ++ "). This is fine: it is "
-                "probably a remote node querying this node for its feature "
-                "flags.";
-              {file, _} -> ok;
-              _         -> ok
-            end
+            "Refusing to load '" ?MODULE_STRING "' in what appears to "
+            "be a pre-feature-flags running node "
+            "(" ++ rabbit_misc:version() ++ "). This is fine: it is "
+            "probably a remote node querying this node for its feature "
+            "flags."
     end.
