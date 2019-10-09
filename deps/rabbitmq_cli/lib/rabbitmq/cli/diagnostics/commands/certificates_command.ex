@@ -58,7 +58,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CertificatesCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Displays certificates (public keeys) for every listener on target node that is configured to use TLS"
+  def description(), do: "Displays certificates (public keys) for every listener on target node that is configured to use TLS"
 
   def banner(_, %{node: node_name}), do: "Certificates of node #{node_name} ..."
 end
