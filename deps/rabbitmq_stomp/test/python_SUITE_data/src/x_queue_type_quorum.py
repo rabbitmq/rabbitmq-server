@@ -2,6 +2,7 @@ import pika
 import base
 import time
 import os
+import re
 
 
 class TestUserGeneratedQueueName(base.BaseTest):
@@ -36,9 +37,19 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 routing_key=queueName,
                 body='Hello World!')
 
-        # check if we receive the message from the STOMP subscription
-        self.assertTrue(self.listener.wait(5), "initial message not received")
-        self.assertEquals(1, len(self.listener.messages))
+        # could we declare a quorum queue?
+        quorum_queue_supported = True
+        if len(self.listener.errors) > 0:
+            pattern = re.compile(r"feature flag is disabled", re.MULTILINE)
+            for error in self.listener.errors:
+                if pattern.search(error['message']) != None:
+                    quorum_queue_supported = False
+                    break
 
-        self.conn.disconnect()
+        if quorum_queue_supported:
+            # check if we receive the message from the STOMP subscription
+            self.assertTrue(self.listener.wait(5), "initial message not received")
+            self.assertEquals(1, len(self.listener.messages))
+            self.conn.disconnect()
+
         connection.close()
