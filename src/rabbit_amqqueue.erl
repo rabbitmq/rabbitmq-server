@@ -32,7 +32,7 @@
          emit_info_local/4, emit_info_down/4]).
 -export([count/0]).
 -export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
-         list_with_possible_retry/1]).
+         list_local_names_down/0, list_with_possible_retry/1]).
 -export([list_by_type/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -935,6 +935,19 @@ list_names(VHost) -> [amqqueue:get_name(Q) || Q <- list(VHost)].
 list_local_names() ->
     [ amqqueue:get_name(Q) || Q <- list(),
            amqqueue:get_state(Q) =/= crashed, is_local_to_node(amqqueue:get_pid(Q), node())].
+
+list_local_names_down() ->
+    [ amqqueue:get_name(Q) || Q <- list(),
+                              is_down(Q),
+                              is_local_to_node(amqqueue:get_pid(Q), node())].
+
+is_down(Q) ->
+    try
+        info(Q, [state]) == [{state, down}]
+    catch
+        _:_ ->
+            true
+    end.
 
 -spec list_by_type(atom()) -> [amqqueue:amqqueue()].
 
