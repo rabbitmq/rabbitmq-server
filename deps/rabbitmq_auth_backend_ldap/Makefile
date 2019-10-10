@@ -2,6 +2,8 @@ PROJECT = rabbitmq_auth_backend_ldap
 PROJECT_DESCRIPTION = RabbitMQ LDAP Authentication Backend
 PROJECT_MOD = rabbit_auth_backend_ldap_app
 
+# Note:
+# Use of these default values in calls to get_expected_env_str/2
 define PROJECT_ENV
 [
 	    {servers,               undefined},
