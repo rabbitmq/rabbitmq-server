@@ -1197,7 +1197,7 @@ simple_confirm_availability_on_leader_change(Config) ->
     publish_confirm(Ch, QQ),
 
     %% stop the node hosting the leader
-    stop_node(Config, Node2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
     %% this should not fail as the channel should detect the new leader and
     %% resend to that
     publish_confirm(Ch, QQ),
