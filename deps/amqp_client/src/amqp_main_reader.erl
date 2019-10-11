@@ -88,7 +88,7 @@ handle_info({Tag, Sock}, State = #state{sock = Sock})
 handle_info({Tag, Sock, Reason}, State = #state{sock = Sock})
             when Tag =:= tcp_error; Tag =:= ssl_error ->
     handle_error(Reason, State);
-handle_info({timeout, TimerRef, idle_timeout}, State = #state{timer = TimerRef}) ->
+handle_info({timeout, _TimerRef, idle_timeout}, State) ->
     handle_error(timeout, State).
 
 handle_data(<<Type:8, Channel:16, Length:32, Payload:Length/binary, ?FRAME_END,
