@@ -762,7 +762,12 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                               end,
                     State = lists:foldl(
                               fun({MsgId, {MsgHeader, Msg}}, Acc) ->
-                                      IsDelivered = maps:is_key(delivery_count, MsgHeader),
+                                      IsDelivered = case MsgHeader of
+                                                        #{delivery_count := _} ->
+                                                            true;
+                                                        _ ->
+                                                            false
+                                                    end,
                                       Msg1 = add_delivery_count_header(MsgHeader, Msg),
                                       handle_deliver(CTag, AckRequired,
                                                      {QName, From, MsgId, IsDelivered, Msg1},
