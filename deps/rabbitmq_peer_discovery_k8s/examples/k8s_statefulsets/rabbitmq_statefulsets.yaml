@@ -76,7 +76,7 @@ spec:
         kubernetes.io/os: linux
       containers:
       - name: rabbitmq-k8s
-        image: rabbitmq:3.7
+        image: rabbitmq:3.8
         volumeMounts:
           - name: config-volume
             mountPath: /etc/rabbitmq
