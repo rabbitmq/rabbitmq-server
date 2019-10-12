@@ -70,6 +70,10 @@ spec:
     spec:
       serviceAccountName: rabbitmq
       terminationGracePeriodSeconds: 10
+      nodeSelector:
+        # Use Linux nodes in a mixed OS kubernetes cluster.
+        # Learn more at https://kubernetes.io/docs/reference/kubernetes-api/labels-annotations-taints/#kubernetes-io-os
+        kubernetes.io/os: linux
       containers:
       - name: rabbitmq-k8s
         image: rabbitmq:3.7
