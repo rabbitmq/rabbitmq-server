@@ -2239,10 +2239,7 @@
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
-    "rabbitmq-prometheus",
-    "erlang",
-    "rabbitmq",
-    "prometheus"
+    "rabbitmq-prometheus"
   ],
   "templating": {
     "list": [
@@ -2252,7 +2249,7 @@
           "text": "rabbitmq-qq",
           "value": "rabbitmq-qq"
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
@@ -2279,7 +2276,7 @@
             "$__all"
           ]
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(erlang_vm_dist_proc_status, type)",
         "hide": 0,
         "includeAll": true,

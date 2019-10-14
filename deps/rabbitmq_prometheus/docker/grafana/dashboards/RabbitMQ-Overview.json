@@ -5005,9 +5005,7 @@
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
-    "rabbitmq-prometheus",
-    "rabbitmq",
-    "prometheus"
+    "rabbitmq-prometheus"
   ],
   "templating": {
     "list": [
@@ -5017,7 +5015,7 @@
           "text": "",
           "value": ""
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
