@@ -94,7 +94,7 @@ declare_queue(XName, Durable, N, Node) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
     try rabbit_amqqueue:declare(QueueName, Durable, false, [], none,
-                                ?SHARDING_USER, Node) of
+                                ?SHARDING_USER, {ignore_location, Node}) of
         {_Reply, _Q} ->
             ok
     catch

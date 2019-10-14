@@ -45,7 +45,8 @@ groups() ->
                                 shard_update_routing_key_test,
                                 shard_basic_consume_interceptor_test,
                                 shard_auto_scale_cluster_test,
-                                queue_declare_test
+                                queue_declare_test,
+                                shard_queue_master_locator_test
                                ]}
     ].
 
@@ -228,8 +229,6 @@ shard_auto_scale_cluster_test(Config) ->
               Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
               ?assertEqual(Nodes, lists:usort(queue_nodes(Qs))),
 
-              rabbit_ct_broker_helpers:stop_broker(Config, 1),
-
               teardown(Config, Ch,
                        [{?TEST_X, 6}],
                        [<<"three">>])
@@ -253,6 +252,24 @@ queue_declare_test(Config) ->
               teardown(Config, Ch,
                        [{?TEST_X, 6}],
                        [<<"declare">>])
+      end).
+
+shard_queue_master_locator_test(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              set_policy(Config, 0, <<"qml">>, <<"^sharding">>, <<"queues">>, [{<<"queue-master-locator">>, <<"client-local">>}]),
+              amqp_channel:call(Ch, x_declare(?TEST_X)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
+
+              [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+              NodesOfQueues = [node(amqqueue:get_pid(Q)) || Q <- queues(Config, 0)],
+              ?assertEqual(3, length(lists:filter(fun(N) -> N == A end, NodesOfQueues))),
+              ?assertEqual(3, length(lists:filter(fun(N) -> N == B end, NodesOfQueues))),
+
+              teardown(Config, Ch,
+                       [{?TEST_X, 6}],
+                       [<<"3_shard">>, <<"qml">>])
       end).
 
 start_consumer(Ch, Shard) ->
