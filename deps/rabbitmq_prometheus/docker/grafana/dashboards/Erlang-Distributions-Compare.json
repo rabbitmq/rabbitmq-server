@@ -47,7 +47,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1570196120544,
+  "iteration": 1570592307822,
   "links": [],
   "panels": [
     {
@@ -72,15 +72,16 @@
       "datasource": null,
       "fontSize": "100%",
       "gridPos": {
-        "h": 8,
-        "w": 6,
+        "h": 7,
+        "w": 8,
         "x": 0,
         "y": 0
       },
-      "id": 47,
+      "id": 56,
       "options": {},
       "pageSize": 6,
       "pluginVersion": "6.4.1",
+      "scroll": true,
       "showHeader": true,
       "sort": {
         "col": 4,
@@ -88,7 +89,7 @@
       },
       "styles": [
         {
-          "alias": "Instance",
+          "alias": "Node -> Peer",
           "colorMode": null,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
@@ -117,19 +118,19 @@
           "pattern": "/.*/",
           "thresholds": [],
           "type": "number",
-          "unit": "s"
+          "unit": "Bps"
         }
       ],
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
-          "legendFormat": "{{instance}}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "End-to-end message latency",
+      "title": "Erlang Distribution links",
       "transform": "timeseries_aggregations",
       "type": "table"
     },
@@ -139,24 +140,25 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "fill": 1,
+      "description": "",
+      "fill": 0,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
+        "h": 7,
+        "w": 16,
+        "x": 8,
         "y": 0
       },
-      "id": 45,
+      "id": 3,
       "legend": {
         "alignAsTable": true,
-        "avg": true,
+        "avg": false,
         "current": true,
         "max": true,
         "min": true,
         "rightSide": false,
         "show": false,
-        "sort": "avg",
+        "sort": "max",
         "sortDesc": true,
         "total": false,
         "values": true
@@ -169,21 +171,60 @@
         "dataLinks": []
       },
       "percentage": false,
-      "pointradius": 5,
+      "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/^rabbit@\\w+0/",
+          "color": "#56A64B"
+        },
+        {
+          "alias": "/^rabbit@\\w+1/",
+          "color": "#F2CC0C"
+        },
+        {
+          "alias": "/^rabbit@\\w+2/",
+          "color": "#3274D9"
+        },
+        {
+          "alias": "/^rabbit@\\w+3/",
+          "color": "#A352CC"
+        },
+        {
+          "alias": "/^rabbit@\\w+4/",
+          "color": "#FF780A"
+        },
+        {
+          "alias": "/^rabbit@\\w+5/",
+          "color": "#96D98D"
+        },
+        {
+          "alias": "/^rabbit@\\w+6/",
+          "color": "#FFEE52"
+        },
+        {
+          "alias": "/^rabbit@\\w+7/",
+          "color": "#8AB8FF"
+        },
+        {
+          "alias": "/^rabbit@\\w+8/",
+          "color": "#CA95E5"
+        },
+        {
+          "alias": "/^rabbit@\\w+9/",
+          "color": "#FFB357"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
-          "instant": false,
-          "interval": "1s",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
       ],
@@ -191,7 +232,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "End-to-end message latency",
+      "title": "Erlang Distribution traffic / s",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -208,7 +249,8 @@
       },
       "yaxes": [
         {
-          "format": "s",
+          "decimals": 0,
+          "format": "Bps",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -230,101 +272,133 @@
       }
     },
     {
-      "cards": {
-        "cardPadding": null,
-        "cardRound": null
-      },
-      "color": {
-        "cardColor": "rgb(255, 255, 255)",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateSpectral",
-        "exponent": 0.4,
-        "max": null,
-        "min": null,
-        "mode": "opacity"
-      },
-      "dataFormat": "timeseries",
-      "datasource": null,
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 0
-      },
-      "heatmap": {},
-      "hideZeroBuckets": false,
-      "highlightCards": true,
-      "id": 41,
-      "legend": {
-        "show": true
-      },
-      "links": [],
-      "options": {},
-      "reverseYBuckets": false,
-      "targets": [
+      "columns": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
-          "format": "heatmap",
-          "intervalFactor": 1,
-          "refId": "A"
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
         }
       ],
-      "title": "End-to-end message latency distribution",
-      "tooltip": {
-        "show": true,
-        "showHistogram": true
+      "datasource": null,
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 7
       },
-      "transparent": true,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
+      "id": 61,
+      "options": {},
+      "pageSize": 6,
+      "pluginVersion": "6.4.1",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 4,
+        "desc": true
       },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": null,
-        "format": "s",
-        "logBase": 1,
-        "max": null,
-        "min": "0",
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
+      "styles": [
+        {
+          "alias": "Host",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "Bps"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$vm\"}[5m]))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[60s]))",
+          "legendFormat": "{{name}}",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Network IN traffic / s",
+      "transform": "timeseries_aggregations",
+      "type": "table"
     },
     {
       "aliasColors": {},
-      "bars": true,
+      "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "fill": 1,
+      "decimals": null,
+      "editable": true,
+      "error": false,
+      "fill": 0,
       "fillGradient": 0,
+      "grid": {},
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 0
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 7
       },
-      "id": 43,
+      "height": "",
+      "id": 58,
       "legend": {
         "alignAsTable": true,
         "avg": true,
-        "current": true,
+        "current": false,
+        "hideEmpty": true,
+        "hideZero": true,
         "max": true,
         "min": true,
-        "rightSide": false,
+        "rightSide": true,
         "show": false,
         "sort": "max",
         "sortDesc": true,
         "total": false,
         "values": true
       },
-      "lines": false,
+      "lines": true,
       "linewidth": 1,
       "links": [],
+      "maxPerRow": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -333,53 +407,68 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
+      "repeatDirection": "h",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
+          "calculatedInterval": "2s",
+          "datasourceErrors": {},
+          "errors": {},
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$vm\"}[5m]))",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
-          "refId": "A"
+          "metric": "",
+          "refId": "A",
+          "step": 20
+        },
+        {
+          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[60s]))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{name}}",
+          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "End-to-end message latency distribution",
+      "title": "Network IN traffic / s",
       "tooltip": {
-        "shared": false,
-        "sort": 0,
+        "msResolution": false,
+        "shared": true,
+        "sort": 2,
         "value_type": "individual"
       },
       "transparent": true,
       "type": "graph",
       "xaxis": {
-        "buckets": 20,
-        "mode": "histogram",
+        "buckets": null,
+        "mode": "time",
         "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "format": "none",
+          "decimals": 1,
+          "format": "Bps",
           "label": "",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
           "format": "short",
-          "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": 0,
           "show": false
         }
       ],
@@ -410,15 +499,428 @@
       "datasource": null,
       "fontSize": "100%",
       "gridPos": {
-        "h": 8,
-        "w": 6,
+        "h": 7,
+        "w": 8,
         "x": 0,
-        "y": 8
+        "y": 14
+      },
+      "id": 60,
+      "options": {},
+      "pageSize": 6,
+      "pluginVersion": "6.4.1",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 4,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "Host",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "Bps"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$vm\"}[5m]))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[60s]))",
+          "legendFormat": "{{name}}",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Network OUT traffic / s",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "decimals": null,
+      "editable": true,
+      "error": false,
+      "fill": 0,
+      "fillGradient": 0,
+      "grid": {},
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 14
+      },
+      "height": "",
+      "id": 57,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "hideEmpty": true,
+        "hideZero": true,
+        "max": true,
+        "min": true,
+        "rightSide": true,
+        "show": false,
+        "sort": "max",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "maxPerRow": 3,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "repeatDirection": "h",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "calculatedInterval": "2s",
+          "datasourceErrors": {},
+          "errors": {},
+          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$vm\"}[5m]))",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
+          "metric": "",
+          "refId": "A",
+          "step": 20
+        },
+        {
+          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[60s]))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{name}}",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Network OUT traffic / s",
+      "tooltip": {
+        "msResolution": false,
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 1,
+          "format": "Bps",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 21
+      },
+      "id": 59,
+      "options": {},
+      "pageSize": 6,
+      "pluginVersion": "6.4.1",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 4,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "Host",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "percent"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "100 - (max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=\"idle\", instance=~\"$vm\"}[5m])) * 100)",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[60s])) * 100",
+          "legendFormat": "{{name}}",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "CPU",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "decimals": null,
+      "editable": true,
+      "error": false,
+      "fill": 0,
+      "fillGradient": 0,
+      "grid": {},
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 21
+      },
+      "height": "",
+      "id": 28,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": false,
+        "hideEmpty": true,
+        "hideZero": true,
+        "max": true,
+        "min": true,
+        "rightSide": true,
+        "show": false,
+        "sort": "max",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "maxPerRow": 3,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "repeat": null,
+      "repeatDirection": "h",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "calculatedInterval": "2s",
+          "datasourceErrors": {},
+          "errors": {},
+          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$vm\"}[5m])) * 100)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
+          "metric": "",
+          "refId": "A",
+          "step": 20
+        },
+        {
+          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[60s])) * 100",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{name}}",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "CPU",
+      "tooltip": {
+        "msResolution": false,
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "percent",
+          "label": "",
+          "logBase": 1,
+          "max": 100,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "max": null,
+          "min": 0,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 28
       },
       "id": 49,
       "options": {},
       "pageSize": 6,
       "pluginVersion": "6.4.1",
+      "scroll": true,
       "showHeader": true,
       "sort": {
         "col": 4,
@@ -480,10 +982,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 8
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 28
       },
       "id": 51,
       "legend": {
@@ -567,6 +1069,90 @@
       }
     },
     {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 35
+      },
+      "id": 55,
+      "options": {},
+      "pageSize": 5,
+      "pluginVersion": "6.4.1",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 4,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "Instance",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "short"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "perftest_consumed{instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Messages consumed / s",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -575,10 +1161,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 8
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 35
       },
       "id": 53,
       "legend": {
@@ -683,15 +1269,16 @@
       "datasource": null,
       "fontSize": "100%",
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 8
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 42
       },
-      "id": 55,
+      "id": 47,
       "options": {},
-      "pageSize": 5,
+      "pageSize": 6,
       "pluginVersion": "6.4.1",
+      "scroll": true,
       "showHeader": true,
       "sort": {
         "col": 4,
@@ -723,107 +1310,24 @@
             "rgba(50, 172, 45, 0.97)"
           ],
           "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
+          "decimals": 1,
           "mappingType": 1,
           "pattern": "/.*/",
           "thresholds": [],
           "type": "number",
-          "unit": "short"
+          "unit": "s"
         }
       ],
       "targets": [
         {
-          "expr": "perftest_consumed{instance=~\"$instance\"}",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Messages consumed / s",
-      "transform": "timeseries_aggregations",
-      "type": "table"
-    },
-    {
-      "columns": [
-        {
-          "text": "Min",
-          "value": "min"
-        },
-        {
-          "text": "Max",
-          "value": "max"
-        },
-        {
-          "text": "Avg",
-          "value": "avg"
-        },
-        {
-          "text": "Current",
-          "value": "current"
-        }
-      ],
-      "datasource": null,
-      "fontSize": "100%",
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 16
-      },
-      "id": 56,
-      "options": {},
-      "pageSize": 6,
-      "pluginVersion": "6.4.1",
-      "showHeader": true,
-      "sort": {
-        "col": 4,
-        "desc": true
-      },
-      "styles": [
-        {
-          "alias": "Node -> Peer",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
-          "mappingType": 1,
-          "pattern": "Metric",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "mappingType": 1,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "Bps"
-        }
-      ],
-      "targets": [
-        {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
-          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Erlang Distribution links",
+      "title": "End-to-end message latency",
       "transform": "timeseries_aggregations",
       "type": "table"
     },
@@ -833,25 +1337,24 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "",
-      "fill": 0,
+      "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 16
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 42
       },
-      "id": 3,
+      "id": 45,
       "legend": {
         "alignAsTable": true,
-        "avg": false,
+        "avg": true,
         "current": true,
         "max": true,
         "min": true,
         "rightSide": false,
         "show": false,
-        "sort": "max",
+        "sort": "avg",
         "sortDesc": true,
         "total": false,
         "values": true
@@ -864,60 +1367,21 @@
         "dataLinks": []
       },
       "percentage": false,
-      "pointradius": 2,
+      "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [
-        {
-          "alias": "/^rabbit@\\w+0/",
-          "color": "#56A64B"
-        },
-        {
-          "alias": "/^rabbit@\\w+1/",
-          "color": "#F2CC0C"
-        },
-        {
-          "alias": "/^rabbit@\\w+2/",
-          "color": "#3274D9"
-        },
-        {
-          "alias": "/^rabbit@\\w+3/",
-          "color": "#A352CC"
-        },
-        {
-          "alias": "/^rabbit@\\w+4/",
-          "color": "#FF780A"
-        },
-        {
-          "alias": "/^rabbit@\\w+5/",
-          "color": "#96D98D"
-        },
-        {
-          "alias": "/^rabbit@\\w+6/",
-          "color": "#FFEE52"
-        },
-        {
-          "alias": "/^rabbit@\\w+7/",
-          "color": "#8AB8FF"
-        },
-        {
-          "alias": "/^rabbit@\\w+8/",
-          "color": "#CA95E5"
-        },
-        {
-          "alias": "/^rabbit@\\w+9/",
-          "color": "#FFB357"
-        }
-      ],
+      "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "format": "time_series",
+          "instant": false,
+          "interval": "1s",
           "intervalFactor": 1,
-          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -925,12 +1389,13 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Erlang Distribution traffic / s",
+      "title": "End-to-end message latency",
       "tooltip": {
         "shared": true,
         "sort": 2,
         "value_type": "individual"
       },
+      "transparent": true,
       "type": "graph",
       "xaxis": {
         "buckets": null,
@@ -941,8 +1406,7 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
-          "format": "Bps",
+          "format": "s",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -965,333 +1429,35 @@
     },
     {
       "aliasColors": {},
-      "bars": false,
+      "bars": true,
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "decimals": null,
-      "editable": true,
-      "error": false,
-      "fill": 0,
+      "fill": 1,
       "fillGradient": 0,
-      "grid": {},
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 16
-      },
-      "height": "",
-      "id": 28,
-      "legend": {
-        "alignAsTable": true,
-        "avg": true,
-        "current": false,
-        "hideEmpty": true,
-        "hideZero": true,
-        "max": true,
-        "min": true,
-        "rightSide": true,
-        "show": false,
-        "sort": "max",
-        "sortDesc": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "maxPerRow": 3,
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 5,
-      "points": false,
-      "renderer": "flot",
-      "repeat": null,
-      "repeatDirection": "h",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "calculatedInterval": "2s",
-          "datasourceErrors": {},
-          "errors": {},
-          "expr": "100 - (max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=\"idle\", instance=~\"$vm\"}[5m])) * 100)",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
-          "metric": "",
-          "refId": "A",
-          "step": 20
-        },
-        {
-          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[60s])) * 100",
-          "legendFormat": "{{name}}",
-          "refId": "B"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "CPU",
-      "tooltip": {
-        "msResolution": false,
-        "shared": true,
-        "sort": 2,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "percent",
-          "label": "",
-          "logBase": 1,
-          "max": 100,
-          "min": 0,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "max": null,
-          "min": 0,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "columns": [
-        {
-          "text": "Min",
-          "value": "min"
-        },
-        {
-          "text": "Max",
-          "value": "max"
-        },
-        {
-          "text": "Avg",
-          "value": "avg"
-        },
-        {
-          "text": "Current",
-          "value": "current"
-        }
-      ],
-      "datasource": null,
-      "fontSize": "100%",
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 16
-      },
-      "id": 59,
-      "options": {},
-      "pageSize": 6,
-      "pluginVersion": "6.4.1",
-      "showHeader": true,
-      "sort": {
-        "col": 4,
-        "desc": true
-      },
-      "styles": [
-        {
-          "alias": "Host",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
-          "mappingType": 1,
-          "pattern": "Metric",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
-          "mappingType": 1,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "percent"
-        }
-      ],
-      "targets": [
-        {
-          "expr": "100 - (max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=\"idle\", instance=~\"$vm\"}[5m])) * 100)",
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        },
-        {
-          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[60s])) * 100",
-          "legendFormat": "{{name}}",
-          "refId": "B"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "CPU",
-      "transform": "timeseries_aggregations",
-      "type": "table"
-    },
-    {
-      "columns": [
-        {
-          "text": "Min",
-          "value": "min"
-        },
-        {
-          "text": "Max",
-          "value": "max"
-        },
-        {
-          "text": "Avg",
-          "value": "avg"
-        },
-        {
-          "text": "Current",
-          "value": "current"
-        }
-      ],
-      "datasource": null,
-      "fontSize": "100%",
-      "gridPos": {
-        "h": 8,
-        "w": 6,
+        "w": 8,
         "x": 0,
-        "y": 24
+        "y": 49
       },
-      "id": 61,
-      "options": {},
-      "pageSize": 6,
-      "pluginVersion": "6.4.1",
-      "showHeader": true,
-      "sort": {
-        "col": 4,
-        "desc": true
-      },
-      "styles": [
-        {
-          "alias": "Host",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
-          "mappingType": 1,
-          "pattern": "Metric",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "mappingType": 1,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "Bps"
-        }
-      ],
-      "targets": [
-        {
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$vm\"}[5m]))",
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        },
-        {
-          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[60s]))",
-          "legendFormat": "{{name}}",
-          "refId": "B"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Network IN traffic / s",
-      "transform": "timeseries_aggregations",
-      "type": "table"
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "decimals": null,
-      "editable": true,
-      "error": false,
-      "fill": 0,
-      "fillGradient": 0,
-      "grid": {},
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 6,
-        "y": 24
-      },
-      "height": "",
-      "id": 58,
+      "id": 43,
       "legend": {
         "alignAsTable": true,
         "avg": true,
-        "current": false,
-        "hideEmpty": true,
-        "hideZero": true,
+        "current": true,
         "max": true,
         "min": true,
-        "rightSide": true,
+        "rightSide": false,
         "show": false,
         "sort": "max",
         "sortDesc": true,
         "total": false,
         "values": true
       },
-      "lines": true,
+      "lines": false,
       "linewidth": 1,
       "links": [],
-      "maxPerRow": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -1300,65 +1466,53 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "repeatDirection": "h",
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "calculatedInterval": "2s",
-          "datasourceErrors": {},
-          "errors": {},
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$vm\"}[5m]))",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
           "format": "time_series",
-          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
-          "metric": "",
-          "refId": "A",
-          "step": 20
-        },
-        {
-          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[60s]))",
-          "legendFormat": "{{name}}",
-          "refId": "B"
+          "refId": "A"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Network IN traffic / s",
+      "title": "End-to-end message latency distribution",
       "tooltip": {
-        "msResolution": false,
-        "shared": true,
-        "sort": 2,
+        "shared": false,
+        "sort": 0,
         "value_type": "individual"
       },
+      "transparent": true,
       "type": "graph",
       "xaxis": {
-        "buckets": null,
-        "mode": "time",
+        "buckets": 20,
+        "mode": "histogram",
         "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "decimals": 1,
-          "format": "Bps",
+          "format": "none",
           "label": "",
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
           "format": "short",
+          "label": null,
           "logBase": 1,
           "max": null,
-          "min": 0,
+          "min": null,
           "show": false
         }
       ],
@@ -1368,217 +1522,79 @@
       }
     },
     {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "rgb(255, 255, 255)",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateSpectral",
+        "exponent": 0.4,
+        "max": null,
+        "min": null,
+        "mode": "opacity"
+      },
+      "dataFormat": "timeseries",
       "datasource": null,
-      "decimals": null,
-      "editable": true,
-      "error": false,
-      "fill": 0,
-      "fillGradient": 0,
-      "grid": {},
       "gridPos": {
         "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 24
+        "w": 16,
+        "x": 8,
+        "y": 49
       },
-      "height": "",
-      "id": 57,
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 41,
       "legend": {
-        "alignAsTable": true,
-        "avg": true,
-        "current": false,
-        "hideEmpty": true,
-        "hideZero": true,
-        "max": true,
-        "min": true,
-        "rightSide": true,
-        "show": false,
-        "sort": "max",
-        "sortDesc": true,
-        "total": false,
-        "values": true
+        "show": true
       },
-      "lines": true,
-      "linewidth": 1,
       "links": [],
-      "maxPerRow": 3,
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 5,
-      "points": false,
-      "renderer": "flot",
-      "repeatDirection": "h",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "calculatedInterval": "2s",
-          "datasourceErrors": {},
-          "errors": {},
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$vm\"}[5m]))",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
-          "metric": "",
-          "refId": "A",
-          "step": 20
-        },
-        {
-          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[60s]))",
-          "legendFormat": "{{name}}",
-          "refId": "B"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Network OUT traffic / s",
-      "tooltip": {
-        "msResolution": false,
-        "shared": true,
-        "sort": 2,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "decimals": 1,
-          "format": "Bps",
-          "label": "",
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "logBase": 1,
-          "max": null,
-          "min": 0,
-          "show": false
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "columns": [
-        {
-          "text": "Min",
-          "value": "min"
-        },
-        {
-          "text": "Max",
-          "value": "max"
-        },
-        {
-          "text": "Avg",
-          "value": "avg"
-        },
-        {
-          "text": "Current",
-          "value": "current"
-        }
-      ],
-      "datasource": null,
-      "fontSize": "100%",
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 24
-      },
-      "id": 60,
       "options": {},
-      "pageSize": 6,
-      "pluginVersion": "6.4.1",
-      "showHeader": true,
-      "sort": {
-        "col": 4,
-        "desc": true
-      },
-      "styles": [
-        {
-          "alias": "Host",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 0,
-          "mappingType": 1,
-          "pattern": "Metric",
-          "thresholds": [],
-          "type": "string",
-          "unit": "short"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "decimals": 1,
-          "mappingType": 1,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "Bps"
-        }
-      ],
+      "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$vm\"}[5m]))",
-          "legendFormat": "{{instance}}",
+          "expr": "perftest_latency_seconds{quantile=\"$percentile\", instance=~\"$instance\"}",
+          "format": "heatmap",
+          "intervalFactor": 1,
           "refId": "A"
-        },
-        {
-          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[60s]))",
-          "legendFormat": "{{name}}",
-          "refId": "B"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Network OUT traffic / s",
-      "transform": "timeseries_aggregations",
-      "type": "table"
+      "title": "End-to-end message latency distribution",
+      "tooltip": {
+        "show": true,
+        "showHistogram": true
+      },
+      "transparent": true,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "s",
+        "logBase": 1,
+        "max": null,
+        "min": "0",
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
     }
   ],
   "refresh": "15s",
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
-    "rabbitmq-perf-test",
-    "rabbitmq-prometheus",
+    "cadvisor",
     "node-exporter",
-    "rabbitmq",
-    "prometheus"
+    "rabbitmq-perf-test",
+    "rabbitmq-prometheus"
   ],
   "templating": {
     "list": [
@@ -1615,7 +1631,7 @@
             "$__all"
           ]
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(perftest_published, instance)",
         "hide": 0,
         "includeAll": true,
@@ -1640,7 +1656,7 @@
           "text": "0.99",
           "value": "0.99"
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(perftest_latency_seconds, quantile)",
         "hide": 0,
         "includeAll": false,
@@ -1667,7 +1683,7 @@
             "$__all"
           ]
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(node_network_info, instance)",
         "hide": 0,
         "includeAll": true,
@@ -1694,7 +1710,7 @@
             "$__all"
           ]
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(container_network_receive_bytes_total, name)",
         "hide": 0,
         "includeAll": true,
