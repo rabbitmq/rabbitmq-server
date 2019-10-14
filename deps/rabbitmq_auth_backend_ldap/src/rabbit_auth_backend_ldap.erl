@@ -225,9 +225,11 @@ evaluate0({in_group_nested, DNPattern, Desc}, Args, User, LDAP) ->
 evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
           #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
     GroupsBase = case env(group_lookup_base) of
-        none -> env(dn_lookup_base);
-        B    -> B
-    end,
+                     none ->
+                         get_expected_env_str(dn_lookup_base, none);
+                     B ->
+                         B
+                 end,
     GroupDN = fill(DNPattern, Args),
     EldapScope =
         case Scope of
@@ -698,6 +700,20 @@ ssl_options() ->
 at_least(Ver) ->
     rabbit_misc:version_compare(erlang:system_info(version), Ver) =/= lt.
 
+% Note:
+% Default is configured in the Makefile
+get_expected_env_str(Key, Default) ->
+    V = case env(Key) of
+            Default ->
+                rabbit_log_ldap:warning("rabbitmq_auth_backend_ldap configuration key '~p' is set to "
+                                        "the default value of '~p', expected to get a non-default value~n",
+                                        [Key, Default]),
+                Default;
+            V0 ->
+                V0
+        end,
+    rabbit_data_coercion:to_list(V).
+
 env(F) ->
     {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, F),
     V.
@@ -746,14 +762,19 @@ vhost_if_defined([])    -> [];
 vhost_if_defined(<<>>)  -> [];
 vhost_if_defined(VHost) -> [{vhost, VHost}].
 
-dn_lookup_when() -> case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
-                        {none, _}       -> never;
-                        {_,    as_user}   -> postbind;
-                        %% make it more obvious what the invariants are,
-                        %% see rabbitmq/rabbitmq-auth-backend-ldap#94. MK.
-                        {_,    anon}      -> prebind;
-                        {_,    _}         -> prebind
-                    end.
+dn_lookup_when() ->
+    case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
+        {none, DnLookupBind} ->
+            rabbit_log_ldap:warning(
+              "dn_lookup_attribute is 'none' but dn_lookup_bind is ~p. No DN lookup bind will be performed~n",
+              [DnLookupBind]),
+            never;
+        {_, as_user} -> postbind;
+        %% make it more obvious what the invariants are,
+        %% see rabbitmq/rabbitmq-auth-backend-ldap#94. MK.
+        {_, anon} -> prebind;
+        {_, _} -> prebind
+    end.
 
 username_to_dn_prebind(Username) ->
     with_ldap({ok, env(dn_lookup_bind)},
@@ -764,10 +785,11 @@ username_to_dn(Username, _LDAP, _When)    -> fill_user_dn_pattern(Username).
 
 dn_lookup(Username, LDAP) ->
     Filled = fill_user_dn_pattern(Username),
+    DnLookupBase = get_expected_env_str(dn_lookup_base, none),
+    DnLookupAttribute = get_expected_env_str(dn_lookup_attribute, none),
     case eldap:search(LDAP,
-                      [{base, env(dn_lookup_base)},
-                       {filter, eldap:equalityMatch(
-                                  env(dn_lookup_attribute), Filled)},
+                      [{base, DnLookupBase},
+                       {filter, eldap:equalityMatch(DnLookupAttribute, Filled)},
                        {attributes, ["distinguishedName"]}]) of
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
