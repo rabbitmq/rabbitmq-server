@@ -1649,9 +1649,7 @@
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
-    "rabbitmq-perf-test",
-    "rabbitmq",
-    "prometheus"
+    "rabbitmq-perf-test"
   ],
   "templating": {
     "list": [
@@ -1663,7 +1661,7 @@
             "$__all"
           ]
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(perftest_published, instance)",
         "hide": 0,
         "includeAll": true,
@@ -1688,7 +1686,7 @@
           "text": "0.99",
           "value": "0.99"
         },
-        "datasource": "prometheus",
+        "datasource": null,
         "definition": "label_values(perftest_latency_seconds, quantile)",
         "hide": 0,
         "includeAll": false,
