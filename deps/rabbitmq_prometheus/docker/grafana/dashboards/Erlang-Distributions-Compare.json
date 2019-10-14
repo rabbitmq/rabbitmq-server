@@ -53,10 +53,11 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1571042816409,
+  "iteration": 1571048957438,
   "links": [],
   "panels": [
     {
+      "collapsed": false,
       "datasource": null,
       "gridPos": {
         "h": 1,
@@ -65,6 +66,7 @@
         "y": 0
       },
       "id": 67,
+      "panels": [],
       "title": "rabbitmq-prometheus",
       "type": "row"
     },
@@ -376,19 +378,19 @@
       ],
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$vm\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$host\"}[5m]))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[60s]))",
+          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[1m]))",
           "legendFormat": "{{name}}",
           "refId": "B"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Network IN traffic / s",
+      "title": "Network incoming traffic / s",
       "transform": "timeseries_aggregations",
       "type": "table"
     },
@@ -449,7 +451,7 @@
           "calculatedInterval": "2s",
           "datasourceErrors": {},
           "errors": {},
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$vm\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$host\"}[5m]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -459,7 +461,7 @@
           "step": 20
         },
         {
-          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[60s]))",
+          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{name}}",
@@ -470,7 +472,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Network IN traffic / s",
+      "title": "Network incoming traffic / s",
       "tooltip": {
         "msResolution": false,
         "shared": true,
@@ -582,19 +584,19 @@
       ],
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$vm\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$host\"}[5m]))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[60s]))",
+          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[1m]))",
           "legendFormat": "{{name}}",
           "refId": "B"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Network OUT traffic / s",
+      "title": "Network outgoing traffic / s",
       "transform": "timeseries_aggregations",
       "type": "table"
     },
@@ -655,7 +657,7 @@
           "calculatedInterval": "2s",
           "datasourceErrors": {},
           "errors": {},
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$vm\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$host\"}[5m]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -665,7 +667,7 @@
           "step": 20
         },
         {
-          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[60s]))",
+          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{name}}",
@@ -676,7 +678,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Network OUT traffic / s",
+      "title": "Network outgoing traffic / s",
       "tooltip": {
         "msResolution": false,
         "shared": true,
@@ -788,12 +790,12 @@
       ],
       "targets": [
         {
-          "expr": "100 - (max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=\"idle\", instance=~\"$vm\"}[5m])) * 100)",
+          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$host\"}[5m])) * 100)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[60s])) * 100",
+          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[1m])) * 100",
           "legendFormat": "{{name}}",
           "refId": "B"
         }
@@ -862,7 +864,7 @@
           "calculatedInterval": "2s",
           "datasourceErrors": {},
           "errors": {},
-          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$vm\"}[5m])) * 100)",
+          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$host\"}[5m])) * 100)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -872,8 +874,9 @@
           "step": 20
         },
         {
-          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[60s])) * 100",
+          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[1m])) * 100",
           "format": "time_series",
+          "hide": false,
           "intervalFactor": 1,
           "legendFormat": "{{name}}",
           "refId": "B"
@@ -1733,9 +1736,9 @@
         "definition": "label_values(node_network_info, instance)",
         "hide": 0,
         "includeAll": true,
-        "label": "VM",
+        "label": "Host",
         "multi": true,
-        "name": "vm",
+        "name": "host",
         "options": [],
         "query": "label_values(node_network_info, instance)",
         "refresh": 2,
