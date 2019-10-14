@@ -53,7 +53,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1571048957438,
+  "iteration": 1571048957454,
   "links": [],
   "panels": [
     {
@@ -150,7 +150,7 @@
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Erlang Distribution links",
+      "title": "Erlang Distribution outgoing traffic / s",
       "transform": "timeseries_aggregations",
       "type": "table"
     },
@@ -252,7 +252,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Erlang Distribution traffic / s",
+      "title": "Erlang Distribution outgoing traffic / s",
       "tooltip": {
         "shared": true,
         "sort": 2,
