@@ -13,6 +13,12 @@
       "version": "1.0.0"
     },
     {
+      "type": "row",
+      "id": "row",
+      "name": "Row",
+      "version": ""
+    },
+    {
       "type": "table",
       "id": "table",
       "name": "Table",
@@ -47,9 +53,21 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1570592307822,
+  "iteration": 1571042816409,
   "links": [],
   "panels": [
+    {
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 67,
+      "title": "rabbitmq-prometheus",
+      "type": "row"
+    },
     {
       "columns": [
         {
@@ -73,13 +91,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 56,
       "options": {},
-      "pageSize": 6,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -145,9 +163,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 0
+        "w": 15,
+        "x": 9,
+        "y": 1
       },
       "id": 3,
       "legend": {
@@ -272,6 +290,20 @@
       }
     },
     {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 65,
+      "panels": [],
+      "title": "node-exporter_cadvisor",
+      "type": "row"
+    },
+    {
       "columns": [
         {
           "text": "Min",
@@ -294,13 +326,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 7
+        "y": 9
       },
       "id": 61,
       "options": {},
-      "pageSize": 6,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -374,9 +406,9 @@
       "grid": {},
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 7
+        "w": 15,
+        "x": 9,
+        "y": 9
       },
       "height": "",
       "id": 58,
@@ -500,13 +532,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 14
+        "y": 16
       },
       "id": 60,
       "options": {},
-      "pageSize": 6,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -580,9 +612,9 @@
       "grid": {},
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 14
+        "w": 15,
+        "x": 9,
+        "y": 16
       },
       "height": "",
       "id": 57,
@@ -706,13 +738,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 21
+        "y": 23
       },
       "id": 59,
       "options": {},
-      "pageSize": 6,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -786,9 +818,9 @@
       "grid": {},
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 21
+        "w": 15,
+        "x": 9,
+        "y": 23
       },
       "height": "",
       "id": 28,
@@ -890,6 +922,20 @@
       }
     },
     {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 63,
+      "panels": [],
+      "title": "rabbitmq-perf-test",
+      "type": "row"
+    },
+    {
       "columns": [
         {
           "text": "Min",
@@ -912,13 +958,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 28
+        "y": 31
       },
       "id": 49,
       "options": {},
-      "pageSize": 6,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -983,9 +1029,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 28
+        "w": 15,
+        "x": 9,
+        "y": 31
       },
       "id": 51,
       "legend": {
@@ -1091,13 +1137,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 35
+        "y": 38
       },
       "id": 55,
       "options": {},
-      "pageSize": 5,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -1162,9 +1208,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 35
+        "w": 15,
+        "x": 9,
+        "y": 38
       },
       "id": 53,
       "legend": {
@@ -1270,13 +1316,13 @@
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 42
+        "y": 45
       },
       "id": 47,
       "options": {},
-      "pageSize": 6,
+      "pageSize": null,
       "pluginVersion": "6.4.1",
       "scroll": true,
       "showHeader": true,
@@ -1341,9 +1387,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 42
+        "w": 15,
+        "x": 9,
+        "y": 45
       },
       "id": 45,
       "legend": {
@@ -1437,9 +1483,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 9,
         "x": 0,
-        "y": 49
+        "y": 52
       },
       "id": 43,
       "legend": {
@@ -1529,7 +1575,7 @@
       "color": {
         "cardColor": "rgb(255, 255, 255)",
         "colorScale": "sqrt",
-        "colorScheme": "interpolateSpectral",
+        "colorScheme": "interpolateBlues",
         "exponent": 0.4,
         "max": null,
         "min": null,
@@ -1539,12 +1585,12 @@
       "datasource": null,
       "gridPos": {
         "h": 8,
-        "w": 16,
-        "x": 8,
-        "y": 49
+        "w": 15,
+        "x": 9,
+        "y": 52
       },
       "heatmap": {},
-      "hideZeroBuckets": false,
+      "hideZeroBuckets": true,
       "highlightCards": true,
       "id": 41,
       "legend": {
