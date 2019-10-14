@@ -13,6 +13,12 @@
       "version": "1.0.0"
     },
     {
+      "type": "row",
+      "id": "row",
+      "name": "Row",
+      "version": ""
+    },
+    {
       "type": "panel",
       "id": "graph",
       "name": "Graph",
@@ -38,7 +44,7 @@
       }
     ]
   },
-  "description": "RabbitMQ Management Overview page - https://www.rabbitmq.com/management.html",
+  "description": "A new RabbitMQ Management Overview",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
@@ -51,7 +57,7 @@
       "title": "Monitoring with Prometheus & Grafana",
       "tooltip": "",
       "type": "link",
-      "url": "https://next.rabbitmq.com/prometheus.html"
+      "url": "https://rabbitmq.com/prometheus.html"
     }
   ],
   "panels": [
