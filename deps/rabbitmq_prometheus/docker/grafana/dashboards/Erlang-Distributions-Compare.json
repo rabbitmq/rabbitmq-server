@@ -160,7 +160,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "",
+      "description": "Erlang Distribution traffic, node network traffic and CPU + PerfTest message throughput and latency",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
