@@ -53,6 +53,7 @@
     {
       "collapsed": false,
       "datasource": null,
+      "description": "RabbitMQ message latency & throughput across all PerfTest instances",
       "gridPos": {
         "h": 1,
         "w": 24,
