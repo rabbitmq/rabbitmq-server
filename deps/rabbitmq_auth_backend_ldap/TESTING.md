@@ -2,6 +2,16 @@
 
 ## The OpenLDAP Dependency
 
+There are two ways of setting up an OpenLDAP node with a seed expectd
+by the test suite:
+
+ * Vagrant
+ * Docker
+
+The test setup will seed the LDAP database with the required objects.
+
+### With Vagrant
+
 If you have [Vagrant](https://www.vagrantup.com) installed you
 can simply `vagrant up` from the root of the project directory.
 This will start a vagrant box with OpenLDAP running, accessible
@@ -14,12 +24,26 @@ Alternatively run OpenLDAP locally on a local port specified via the `LDAP_PORT`
 The setup script currently needs to be executed between test suite runs,
 too.
 
-The test setup will seed the LDAP database with the required objects.
+### With Docker
+
+First build the image:
+
+``` sh
+docker build -t rabbitmq_auth_backend_ldap .
+```
+
+Run it with
+
+``` sh
+docker run -p 3890:389 -i -t rabbitmq_auth_backend_ldap
+```
 
 ## Running All Suites
 
 As with all other RabbitMQ subprojects,
 
-    make tests
+``` sh
+make tests
+```
 
 will run all test suites.

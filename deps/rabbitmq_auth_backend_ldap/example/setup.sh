@@ -9,8 +9,11 @@ slapd    slapd/internal/adminpw    password openstack
 slapd    slapd/password1    password    openstack
 slapd    slapd/backend    select    BDB
 " | sudo debconf-set-selections
-sudo apt-get --yes install slapd ldap-utils
-sleep 1
+sudo apt-get --yes install dialog slapd ldap-utils
+sleep 5
+
+sudo service slapd start
+sudo service slapd status
 
 DIR=$(dirname $0)
 
