@@ -13,12 +13,6 @@
       "version": "1.0.0"
     },
     {
-      "type": "row",
-      "id": "row",
-      "name": "Row",
-      "version": ""
-    },
-    {
       "type": "table",
       "id": "table",
       "name": "Table",
@@ -53,7 +47,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1571048957454,
+  "iteration": 1571066778520,
   "links": [],
   "panels": [
     {
@@ -143,7 +137,7 @@
       ],
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\"}",
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
@@ -241,7 +235,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1650,15 +1644,18 @@
       {
         "allValue": null,
         "current": {
-          "text": "rabbitmq-overview",
-          "value": "rabbitmq-overview"
+          "tags": [],
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": null,
         "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "RabbitMQ Cluster",
-        "multi": false,
+        "multi": true,
         "name": "rabbitmq_cluster",
         "options": [],
         "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
