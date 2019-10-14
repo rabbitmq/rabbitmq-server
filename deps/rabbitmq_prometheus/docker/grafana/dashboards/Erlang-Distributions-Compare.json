@@ -901,7 +901,7 @@
           "format": "percent",
           "label": "",
           "logBase": 1,
-          "max": 100,
+          "max": null,
           "min": 0,
           "show": true
         },
@@ -1644,7 +1644,6 @@
       {
         "allValue": null,
         "current": {
-          "tags": [],
           "text": "All",
           "value": [
             "$__all"
