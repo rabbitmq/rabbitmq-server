@@ -34,7 +34,7 @@ init(Req, _State) ->
 
 content_types_provided(ReqData, Context) ->
     %% Since Prometheus 2.0 Protobuf is no longer supported
-    {[{<<"text/plain">>, generate_response}], ReqData, Context}.
+    {[{{<<"text">>, <<"plain">>, '*'}, generate_response}], ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     {true, ReqData, Context}.
