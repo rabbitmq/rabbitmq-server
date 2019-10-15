@@ -4,6 +4,9 @@ kind: ServiceAccount
 metadata:
   name: rabbitmq
   namespace: test-rabbitmq
+# Required from EKS 1.13
+# https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
+automountServiceAccountToken: true
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1beta1
