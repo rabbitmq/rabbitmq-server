@@ -47,7 +47,12 @@ groups() ->
           exchange_count,
           queue_count,
           connection_count,
-          connection_lookup
+          connection_lookup,
+          file_handle_cache_reserve,
+          file_handle_cache_reserve_release,
+          file_handle_cache_reserve_above_limit,
+          file_handle_cache_reserve_monitor,
+          file_handle_cache_reserve_open_file_above_limit
         ]}
     ].
 
@@ -194,6 +199,147 @@ file_handle_cache1(_Config) ->
     receive {'DOWN', _MRef1, process, Pid1, _Reason1} -> ok end,
     [file:delete(File) || File <- Files],
     ok = file_handle_cache:set_limit(Limit),
+    passed.
+
+file_handle_cache_reserve(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve1, [Config]).
+
+file_handle_cache_reserve1(_Config) ->
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5),
+    %% Reserves are always accepted, even if above the limit
+    %% These are for special processes such as quorum queues
+    ok = file_handle_cache:set_reservation(7),
+
+    Self = self(),
+    spawn(fun () -> ok = file_handle_cache:obtain(),
+                    Self ! obtained
+          end),
+
+    Props = file_handle_cache:info([files_reserved, sockets_used]),
+    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
+    ?assertEqual(0, proplists:get_value(sockets_used, Props)),
+
+    %% The obtain should still be blocked, as there are no file handles
+    %% available
+    receive
+        obtained ->
+            throw(error_file_obtained)
+    after 1000 ->
+            %% Let's release 5 file handles, that should leave
+            %% enough free for the `obtain` to go through
+            file_handle_cache:set_reservation(2),
+            Props0 = file_handle_cache:info([files_reserved, sockets_used]),
+            ?assertEqual(2, proplists:get_value(files_reserved, Props0)),
+            ?assertEqual(1, proplists:get_value(sockets_used, Props0)),
+            receive
+                obtained ->
+                    ok = file_handle_cache:set_limit(Limit),
+                    passed
+            after 5000 ->
+                    throw(error_file_not_released)
+            end
+    end.
+
+file_handle_cache_reserve_release(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_release1, [Config]).
+
+file_handle_cache_reserve_release1(_Config) ->
+    ok = file_handle_cache:set_reservation(7),
+    ?assertEqual([{files_reserved, 7}], file_handle_cache:info([files_reserved])),
+    ok = file_handle_cache:set_reservation(3),
+    ?assertEqual([{files_reserved, 3}], file_handle_cache:info([files_reserved])),
+    ok = file_handle_cache:release_reserve(),
+    ?assertEqual([{files_reserved, 0}], file_handle_cache:info([files_reserved])),
+    passed.
+
+file_handle_cache_reserve_above_limit(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_above_limit1, [Config]).
+
+file_handle_cache_reserve_above_limit1(_Config) ->
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5),
+    %% Reserves are always accepted, even if above the limit
+    %% These are for special processes such as quorum queues
+    ok = file_handle_cache:obtain(5),
+    ?assertEqual([{file_descriptor_limit, []}],  rabbit_alarm:get_alarms()),
+
+    ok = file_handle_cache:set_reservation(7),
+
+    Props = file_handle_cache:info([files_reserved, sockets_used]),
+    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
+    ?assertEqual(5, proplists:get_value(sockets_used, Props)),
+
+    ok = file_handle_cache:set_limit(Limit),
+    passed.
+
+file_handle_cache_reserve_open_file_above_limit(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_open_file_above_limit1, [Config]).
+
+file_handle_cache_reserve_open_file_above_limit1(_Config) ->
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5),
+    %% Reserves are always accepted, even if above the limit
+    %% These are for special processes such as quorum queues
+    ok = file_handle_cache:set_reservation(7),
+
+    Self = self(),
+    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    spawn(fun () -> {ok, _} = file_handle_cache:open(
+                                filename:join(TmpDir, "file_above_limit"),
+                                [write], []),
+                    Self ! opened
+          end),
+
+    Props = file_handle_cache:info([files_reserved]),
+    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
+
+    %% The open should still be blocked, as there are no file handles
+    %% available
+    receive
+        opened ->
+            throw(error_file_opened)
+    after 1000 ->
+            %% Let's release 5 file handles, that should leave
+            %% enough free for the `open` to go through
+            file_handle_cache:set_reservation(2),
+            Props0 = file_handle_cache:info([files_reserved, total_used]),
+            ?assertEqual(2, proplists:get_value(files_reserved, Props0)),
+            receive
+                opened ->
+                    ok = file_handle_cache:set_limit(Limit),
+                    passed
+            after 5000 ->
+                    throw(error_file_not_released)
+            end
+    end.
+
+file_handle_cache_reserve_monitor(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_monitor1, [Config]).
+
+file_handle_cache_reserve_monitor1(_Config) ->
+    %% Check that if the process that does the reserve dies, the file handlers are
+    %% released by the cache
+    Self = self(),
+    Pid = spawn(fun () ->
+                        ok = file_handle_cache:set_reservation(2),
+                        Self ! done,
+                        receive
+                            stop -> ok
+                        end
+                end),
+    receive
+        done -> ok
+    end,
+    ?assertEqual([{files_reserved, 2}], file_handle_cache:info([files_reserved])),
+    Pid ! stop,
+    timer:sleep(500),
+    ?assertEqual([{files_reserved, 0}], file_handle_cache:info([files_reserved])),
     passed.
 
 %% -------------------------------------------------------------------
