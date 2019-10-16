@@ -523,22 +523,27 @@ duplicate_delivery_test(_) ->
     ?assertEqual(1, maps:size(Messages)),
     ok.
 
-state_enter_leader_test(_) ->
+state_enter_file_handle_leader_reservation_test(_) ->
     S0 = init(#{name => the_name,
                 queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                 become_leader_handler => {m, f, [a]}}),
-    ?assertEqual([{mod_call, m, f, [a, the_name]}],
-                 rabbit_fifo:state_enter(leader, S0)),
+
+    Resource = {resource, <<"/">>, queue, <<"test">>},
+    Effects = rabbit_fifo:state_enter(leader, S0),
+    ?assertEqual([
+        {mod_call, m, f, [a, the_name]},
+        {mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}
+      ], Effects),
     ok.
 
-state_enter_file_handle_reservation_test(_) ->
+state_enter_file_handle_other_reservation_test(_) ->
     S0 = init(#{name => the_name,
                 queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
-
-    ?assertEqual({mod_call,rabbit_quorum_queue,
-                  file_handle_leader_reservation,
-                  [{resource,<<"/">>,queue,<<"test">>}]}]},
-                  rabbit_fifo:state_enter(other, S0)),
+    Effects = rabbit_fifo:state_enter(other, S0),
+    ?assertEqual([
+        {mod_call, rabbit_quorum_queue, file_handle_other_reservation, []}
+      ],
+      Effects),
     ok.
 
 state_enter_monitors_and_notifications_test(_) ->
