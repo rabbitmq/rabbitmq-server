@@ -251,7 +251,7 @@ file_handle_cache_reserve_release1(_Config) ->
     ?assertEqual([{files_reserved, 7}], file_handle_cache:info([files_reserved])),
     ok = file_handle_cache:set_reservation(3),
     ?assertEqual([{files_reserved, 3}], file_handle_cache:info([files_reserved])),
-    ok = file_handle_cache:release_reserve(),
+    ok = file_handle_cache:release_reservation(),
     ?assertEqual([{files_reserved, 0}], file_handle_cache:info([files_reserved])),
     passed.
 

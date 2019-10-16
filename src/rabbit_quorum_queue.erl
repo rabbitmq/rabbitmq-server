@@ -894,7 +894,7 @@ file_handle_other_reservation() ->
     file_handle_cache:set_reservation(2).
 
 file_handle_release_reservation() ->
-    file_handle_cache:release_reserve().
+    file_handle_cache:release_reservation().
 
 %%----------------------------------------------------------------------------
 dlx_mfa(Q) ->
