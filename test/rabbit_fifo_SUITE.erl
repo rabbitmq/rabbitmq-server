@@ -523,11 +523,22 @@ duplicate_delivery_test(_) ->
     ?assertEqual(1, maps:size(Messages)),
     ok.
 
-state_enter_test(_) ->
+state_enter_leader_test(_) ->
     S0 = init(#{name => the_name,
                 queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                 become_leader_handler => {m, f, [a]}}),
-    [{mod_call, m, f, [a, the_name]}] = rabbit_fifo:state_enter(leader, S0),
+    ?assertEqual([{mod_call, m, f, [a, the_name]}],
+                 rabbit_fifo:state_enter(leader, S0)),
+    ok.
+
+state_enter_file_handle_reservation_test(_) ->
+    S0 = init(#{name => the_name,
+                queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+
+    ?assertEqual({mod_call,rabbit_quorum_queue,
+                  file_handle_leader_reservation,
+                  [{resource,<<"/">>,queue,<<"test">>}]}]},
+                  rabbit_fifo:state_enter(other, S0)),
     ok.
 
 state_enter_monitors_and_notifications_test(_) ->
@@ -948,8 +959,9 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(_) ->
         [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
 
     Effects = rabbit_fifo:state_enter(leader, State1),
-    % 2 effects for each consumer process (channel process), 1 effect for the node
-    ?assertEqual(2 * 3 + 1, length(Effects)).
+    %% 2 effects for each consumer process (channel process), 1 effect for the node,
+    %% 1 effect for file handle reservation
+    ?assertEqual(2 * 3 + 1 + 1, length(Effects)).
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
     Resource = rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
@@ -978,8 +990,9 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
                           {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
 
     Effects = rabbit_fifo:state_enter(eol, State1),
-    % 1 effect for each consumer process (channel process)
-    ?assertEqual(3, length(Effects)).
+    %% 1 effect for each consumer process (channel process),
+    %% 1 effect for file handle reservation
+    ?assertEqual(4, length(Effects)).
 
 query_consumers_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
