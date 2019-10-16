@@ -13,7 +13,7 @@ Source3: rabbitmq-server.service
 Source4: rabbitmq-server.tmpfiles
 URL: https://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= %{erlang_minver}, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
+BuildRequires: erlang >= %{erlang_minver}, gzip, sed, zip, rsync
 
 %if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 BuildRequires:  systemd
@@ -54,7 +54,7 @@ RabbitMQ is an open source multi-protocol messaging broker.
 
 %build
 cp -a deps/rabbit/docs/README-for-packages %{_builddir}/rabbitmq-server-%{upstream_version}/README
-env -u DEPS_DIR make %{?_smp_mflags} dist manpages
+env -u DEPS_DIR make dist manpages
 
 %install
 rm -rf %{buildroot}
