@@ -115,6 +115,8 @@ queues in an uneven way.
 
 ## Load Distribution and Consumer Balancing
 
+As of RabbitMQ 3.8.1, the plugin is no longer affected by the queue master locator policy when using mirrored queues. Please read below if you use a previous version.
+
 This plugin can be affected by [queue master locator policy used](https://www.rabbitmq.com/ha.html) in
 the cluster as well as client connection load balancing strategy.
 
