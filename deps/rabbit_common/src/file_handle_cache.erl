@@ -157,7 +157,8 @@
          handle_info/2, terminate/2, code_change/3, prioritise_cast/3]).
 
 -define(SERVER, ?MODULE).
--define(RESERVED_FOR_OTHERS, 100).
+%% Reserve 3 handles for ra usage: wal, segment writer and a dets table
+-define(RESERVED_FOR_OTHERS, 100 + 3).
 
 -define(FILE_HANDLES_LIMIT_OTHER, 1024).
 -define(FILE_HANDLES_CHECK_INTERVAL, 2000).
