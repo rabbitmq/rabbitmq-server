@@ -150,7 +150,7 @@
 -export([obtain/0, obtain/1, release/0, release/1, transfer/1, transfer/2,
          set_limit/1, get_limit/0, info_keys/0, with_handle/1, with_handle/2,
          info/0, info/1, clear_read_cache/0, clear_process_read_cache/0]).
--export([set_reservation/0, set_reservation/1, release_reserve/0]).
+-export([set_reservation/0, set_reservation/1, release_reservation/0]).
 -export([ulimit/0]).
 
 -export([start_link/0, start_link/2, init/1, handle_call/3, handle_cast/2,
@@ -566,7 +566,7 @@ set_maximum_since_use(MaximumAge) ->
 obtain()          -> obtain(1).
 set_reservation() -> set_reservation(1).
 release()         -> release(1).
-release_reserve() -> release_reserve(file).
+release_reservation() -> release_reservation(file).
 transfer(Pid)     -> transfer(Pid, 1).
 
 obtain(Count)          -> obtain(Count, socket).
@@ -600,8 +600,8 @@ set_reservation(Count, Type) when Count > 0 ->
 release(Count, Type) when Count > 0 ->
     gen_server2:cast(?SERVER, {release, Count, Type, self()}).
 
-release_reserve(Type) ->
-    gen_server2:cast(?SERVER, {release_reserve, Type, self()}).
+release_reservation(Type) ->
+    gen_server2:cast(?SERVER, {release_reservation, Type, self()}).
 
 transfer(Pid, Count) when Count > 0 ->
     gen_server2:cast(?SERVER, {transfer, Count, self(), Pid}).
@@ -1115,7 +1115,7 @@ init([AlarmSet, AlarmClear]) ->
 prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {release, _, _, _}           -> 5;
-        {release_reserve, _, _, _}   -> 5;
+        {release_reservation, _, _, _}   -> 5;
         _                            -> 0
     end.
 
@@ -1225,7 +1225,7 @@ handle_cast(clear_read_cache, State) ->
     _ = clear_process_read_cache(),
     {noreply, State};
 
-handle_cast({release_reserve, Type, Pid}, State) ->
+handle_cast({release_reservation, Type, Pid}, State) ->
     State1 = process_pending(update_counts({reserve, Type}, Pid, 0, State)),
     {noreply, adjust_alarm(State, State1)};
 
