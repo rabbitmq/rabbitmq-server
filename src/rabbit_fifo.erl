@@ -574,9 +574,11 @@ state_enter(eol, #?MODULE{enqueuers = Enqs,
     [{send_msg, P, eol, ra_event}
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
         [{mod_call, rabbit_quorum_queue, file_handle_release_reservation, []}];
-state_enter(_, #?MODULE{cfg = #cfg{resource = Resource} }) ->
+state_enter(_, #?MODULE{cfg = #cfg{resource = _Resource} }) ->
+    [{mod_call, rabbit_quorum_queue, file_handle_other_reservation, []}];
+ state_enter(_, _) ->
     %% catch all as not handling all states
-    [{mod_call, rabbit_quorum_queue, file_handle_other_reservation, []}].
+    [].
 
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
