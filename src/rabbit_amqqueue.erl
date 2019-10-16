@@ -309,9 +309,14 @@ do_declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
 declare_classic_queue(Q, Node) ->
     QName = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
-    Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
-              {ok, Node0}  -> Node0;
-              {error, _}   -> Node
+    Node1 = case Node of
+                {ignore_location, Node0} ->
+                    Node0;
+                _ ->
+                    case rabbit_queue_master_location_misc:get_location(Q)  of
+                        {ok, Node0}  -> Node0;
+                        {error, _}   -> Node
+                    end
             end,
     Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
