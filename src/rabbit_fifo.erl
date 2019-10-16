@@ -541,6 +541,7 @@ state_enter(leader, #?MODULE{consumers = Cons,
                              enqueuers = Enqs,
                              waiting_consumers = WaitingConsumers,
                              cfg = #cfg{name = Name,
+                                        resource = Resource,
                                         become_leader_handler = BLH},
                              prefix_msgs = {[], []}
                             }) ->
@@ -551,7 +552,8 @@ state_enter(leader, #?MODULE{consumers = Cons,
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
-    Effects = Mons ++ Nots ++ NodeMons,
+    FHReservation = [{mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}],
+    Effects = Mons ++ Nots ++ NodeMons ++ FHReservation,
     case BLH of
         undefined ->
             Effects;
@@ -570,10 +572,11 @@ state_enter(eol, #?MODULE{enqueuers = Enqs,
                                     #{}, WaitingConsumers0),
     AllConsumers = maps:merge(Custs, WaitingConsumers1),
     [{send_msg, P, eol, ra_event}
-     || P <- maps:keys(maps:merge(Enqs, AllConsumers))];
-state_enter(_, _) ->
+     || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
+        [{mod_call, rabbit_quorum_queue, file_handle_release_reservation, []}];
+state_enter(_, #?MODULE{cfg = #cfg{resource = Resource} }) ->
     %% catch all as not handling all states
-    [].
+    [{mod_call, rabbit_quorum_queue, file_handle_other_reservation, []}].
 
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
