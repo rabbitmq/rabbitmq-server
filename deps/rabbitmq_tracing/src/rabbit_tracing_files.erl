@@ -46,6 +46,12 @@ full_path(Name0) ->
 %%--------------------------------------------------------------------
 
 file_info(Name) ->
-    {ok, Info} = file:read_file_info(full_path(Name)),
-    [{name, list_to_binary(Name)},
-     {size, Info#file_info.size}].
+    Size = case file:read_file_info(full_path(Name)) of
+               {ok, Info} ->
+                   Info#file_info.size;
+               {error, Error} ->
+                   rabbit_log:warning("error getting file info for ~s: ~p",
+                                      [Name, Error]),
+                   0
+           end,
+    [{name, list_to_binary(Name)}, {size, Size}].
