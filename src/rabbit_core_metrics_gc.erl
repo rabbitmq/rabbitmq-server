@@ -75,11 +75,9 @@ gc_queues() ->
 
 gc_local_queues() ->
     Queues = rabbit_amqqueue:list_local_names(),
-    QueuesDown = rabbit_amqqueue:list_local_names_down(),
     GbSet = gb_sets:from_list(Queues),
-    GbSetDown = gb_sets:from_list(QueuesDown),
     gc_entity(queue_metrics, GbSet),
-    gc_queue_metrics(GbSet, GbSetDown),
+    gc_entity(queue_coarse_metrics, GbSet),
     Followers = gb_sets:from_list(rabbit_amqqueue:list_local_followers()),
     gc_leader_data(Followers).
 
@@ -134,24 +132,6 @@ gc_process(Pid, Table, Key) ->
             ets:delete(Table, Key),
             none
     end.
-
-gc_queue_metrics(GbSet, GbSetDown) ->
-    Table = queue_metrics,
-    ets:foldl(fun({Key, Props, Marker}, none) ->
-                      case gb_sets:is_member(Key, GbSet) of
-                          true ->
-                              case gb_sets:is_member(Key, GbSetDown) of
-                                  true ->
-                                      ets:insert(Table, {Key, [{state, down} | lists:keydelete(state, 1, Props)], Marker}),
-                                      none;
-                                  false ->
-                                      none
-                              end;
-                          false ->
-                              ets:delete(Table, Key),
-                              none
-                      end
-              end, none, Table).
 
 gc_entity(Table, GbSet) ->
     ets:foldl(fun({{_, Id} = Key, _}, none) ->
