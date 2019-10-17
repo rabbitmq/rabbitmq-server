@@ -104,7 +104,9 @@
 -record(cfg,
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
-         release_cursor_interval = ?RELEASE_CURSOR_EVERY :: non_neg_integer(),
+         release_cursor_interval =
+             {?RELEASE_CURSOR_EVERY, ?RELEASE_CURSOR_EVERY} ::
+             non_neg_integer() | {non_neg_integer(), non_neg_integer()},
          dead_letter_handler :: option(applied_mfa()),
          become_leader_handler :: option(applied_mfa()),
          max_length :: option(non_neg_integer()),
