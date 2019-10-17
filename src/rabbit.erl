@@ -783,6 +783,10 @@ wait_for_boot_to_finish(Node) ->
 wait_for_boot_to_finish(Node, PrintProgressReports) ->
     wait_for_boot_to_finish(Node, PrintProgressReports, ?BOOT_FINISH_TIMEOUT).
 
+wait_for_boot_to_finish(Node, PrintProgressReports, infinity) ->
+    %% This assumes that 100K iterations is close enough to "infinity".
+    %% Now that's deep.
+    do_wait_for_boot_to_finish(Node, PrintProgressReports, 100000);
 wait_for_boot_to_finish(Node, PrintProgressReports, Timeout) ->
     Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
     do_wait_for_boot_to_finish(Node, PrintProgressReports, Iterations).
