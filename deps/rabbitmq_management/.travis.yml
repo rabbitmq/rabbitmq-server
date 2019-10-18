@@ -1,6 +1,6 @@
-  - "21.3"# vim:sw=2:et:
+# vim:sw=2:et:
 
-dist: xenial
+dist: bionic
 sudo: false
 language: erlang
 notifications:
@@ -22,6 +22,7 @@ env:
 
 otp_release:
   - "21.3"
+  - "22.1"
 
 before_script:
   - elixir --version
