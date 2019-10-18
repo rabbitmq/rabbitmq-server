@@ -13,7 +13,7 @@ notifications:
 addons:
   apt:
     sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+      - sourceline: deb https://packages.erlang-solutions.com/ubuntu bionic contrib
         key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
       - awscli
