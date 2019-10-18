@@ -18,11 +18,13 @@
 %% in enqueue messages. Used to ensure ordering of messages send from the
 %% same process
 
--type msg_header() :: #{size := msg_size(),
+-type msg_header() :: msg_size() |
+                      #{size := msg_size(),
                         delivery_count => non_neg_integer()}.
-%% The message header map:
+%% The message header:
 %% delivery_count: the number of unsuccessful delivery attempts.
 %%                 A non-zero value indicates a previous attempt.
+%% If it only contains the size it can be condensed to an integer only
 
 -type msg() :: {msg_header(), raw_msg()}.
 %% message with a header map.
@@ -102,7 +104,9 @@
 -record(cfg,
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
-         release_cursor_interval = ?RELEASE_CURSOR_EVERY :: non_neg_integer(),
+         release_cursor_interval =
+             {?RELEASE_CURSOR_EVERY, ?RELEASE_CURSOR_EVERY} ::
+             non_neg_integer() | {non_neg_integer(), non_neg_integer()},
          dead_letter_handler :: option(applied_mfa()),
          become_leader_handler :: option(applied_mfa()),
          max_length :: option(non_neg_integer()),

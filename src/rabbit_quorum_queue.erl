@@ -473,7 +473,10 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
         {ok, empty, QState} ->
             {ok, empty, QState};
         {ok, {{MsgId, {MsgHeader, Msg0}}, MsgsReady}, QState} ->
-            Count = maps:get(delivery_count, MsgHeader, 0),
+            Count = case MsgHeader of
+                        #{delivery_count := C} -> C;
+                       _ -> 0
+                    end,
             IsDelivered = Count > 0,
             Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
             {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};

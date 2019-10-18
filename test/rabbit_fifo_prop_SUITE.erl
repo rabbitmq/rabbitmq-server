@@ -691,7 +691,7 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
 validate_msg_order(_, [], S) ->
     S;
 validate_msg_order(Cid, [{_, {H, Num}} | Rem], PrevMax) ->
-    Redelivered = maps:is_key(delivery_count, H),
+    Redelivered = is_map(H) andalso maps:is_key(delivery_count, H),
     case undefined of
         _ when Num == PrevMax + 1 ->
             %% forwards case

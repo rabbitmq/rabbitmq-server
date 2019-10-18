@@ -444,12 +444,12 @@ discarded_message_without_dead_letter_handler_is_removed_test(_) ->
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {#{}, first}}]}, _},
+                 {delivery, _, [{0, {_, first}}]}, _},
                 Effects1),
     {_State2, _, Effects2} = apply(meta(1),
                                    rabbit_fifo:make_discard(Cid, [0]), State1),
     ?assertNoEffect({send_msg, _,
-                     {delivery, _, [{0, {#{}, first}}]}, _},
+                     {delivery, _, [{0, {_, first}}]}, _},
                     Effects2),
     ok.
 
@@ -462,7 +462,7 @@ discarded_message_with_dead_letter_handler_emits_mod_call_effect_test(_) ->
     {State0, [_, _]} = enq(1, 1, first, State00),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {#{}, first}}]}, _},
+                 {delivery, _, [{0, {_, first}}]}, _},
                 Effects1),
     {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
     % assert mod call effect with appended reason and message
@@ -502,7 +502,7 @@ delivery_query_returns_deliveries_test(_) ->
     Entries = lists:zip(Indexes, Commands),
     {State, _Effects} = run_log(test_init(help), Entries),
     % 3 deliveries are returned
-    [{0, {#{}, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
+    [{0, {_, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
     [_, _, _] = rabbit_fifo:get_checked_out(Cid, 1, 3, State),
     ok.
 
