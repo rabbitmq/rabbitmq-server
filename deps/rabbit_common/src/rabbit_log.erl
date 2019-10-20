@@ -31,7 +31,7 @@
 -include("rabbit_log.hrl").
 %%----------------------------------------------------------------------------
 
--type category() :: connection | channel | mirroring | queue | federation | upgrade.
+-type category() :: connection | channel | ldap | mirroring | queue | federation | upgrade.
 
 -spec debug(string()) -> 'ok'.
 -spec debug(string(), [any()]) -> 'ok'.
