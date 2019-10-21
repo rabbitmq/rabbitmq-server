@@ -38,7 +38,7 @@
       }
     ]
   },
-  "description": "RabbitMQ Raft metrics",
+  "description": "RabbitMQ Quorum Queues - Raft state",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
@@ -51,7 +51,7 @@
       "title": "Quorum Queues Documentation",
       "tooltip": "",
       "type": "link",
-      "url": "http://next.rabbitmq.com/quorum-queues.html"
+      "url": "https://www.rabbitmq.com/quorum-queues.html"
     }
   ],
   "panels": [
@@ -744,7 +744,7 @@
     ]
   },
   "timezone": "",
-  "title": "RabbitMQ-Raft",
+  "title": "RabbitMQ-Quorum-Queues-Raft",
   "uid": "f1Mee9nZz",
   "version": 1
 }
