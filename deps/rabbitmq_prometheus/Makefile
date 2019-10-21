@@ -173,7 +173,7 @@ dist-tls: ## dt  | Make Erlang-Distribution panels come alive - HIGH LOAD
 .PHONY: dt
 dt: dist-tls
 .PHONY: qq
-qq: ##     | Make RabbitMQ-Raft panels come alive - HIGH LOAD
+qq: ##     | Make RabbitMQ-Quorum-Queues-Raft panels come alive - HIGH LOAD
 	@$(DOCKER_COMPOSE_UP)
 
 SEPARATOR := -------------------------------------------------------------------------------------------------
@@ -206,7 +206,7 @@ RabbitMQ-Overview.json: $(JQ)
 .PHONY: RabbitMQ-PerfTest.json
 RabbitMQ-PerfTest.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
-.PHONY: RabbitMQ-Raft.json
-RabbitMQ-Raft.json: $(JQ)
+.PHONY: RabbitMQ-Quorum-Queues-Raft.json
+RabbitMQ-Quorum-Queues-Raft.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
 
