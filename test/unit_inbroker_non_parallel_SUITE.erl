@@ -605,8 +605,12 @@ head_message_timestamp1(_Config) ->
     dummy_event_receiver:start(self(), [node()], [queue_stats]),
 
     %% Check timestamp is empty when queue is empty
-    Event1 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    '' = proplists:get_value(head_message_timestamp, Event1),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == '')
+                                        end),
 
     rabbit_channel:do(Ch, #'tx.select'{}),
     receive #'tx.select_ok'{} -> ok
@@ -625,18 +629,30 @@ head_message_timestamp1(_Config) ->
     receive #'tx.commit_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_tx_commit_ok)
     end,
-    Event2 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    ?assertEqual(1, proplists:get_value(head_message_timestamp, Event2)),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == 1)
+                                        end),
 
     %% Get first message and check timestamp is that of second message
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
-    Event3 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    ?assertEqual(2, proplists:get_value(head_message_timestamp, Event3)),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == 2)
+                                        end),
 
     %% Get second message and check timestamp is empty again
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
-    Event4 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    '' = proplists:get_value(head_message_timestamp, Event4),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == '')
+                                        end),
 
     %% Teardown
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
