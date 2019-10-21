@@ -1431,8 +1431,9 @@ send_log_effect({CTag, CPid}, IdxMsgs) ->
              Msgs = lists:zipwith(fun({enqueue, _, _, Msg}, {MsgId, Header}) ->
                                           {MsgId, {Header, Msg}}
                                   end, Log, Data),
-             [{send_msg, CPid, {delivery, CTag, Msgs}, ra_event}]
-     end}.
+             [{send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}]
+     end,
+     {local, node(CPid)}}.
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
     {log, [RaftIdx],
