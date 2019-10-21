@@ -589,7 +589,7 @@ head_message_timestamp1(_Config) ->
     %% Set up event receiver for queue
     dummy_event_receiver:start(self(), [node()], [queue_stats]),
 
-    %% Check timestamp is empty when queue is empty
+    %% the head timestamp field is empty when queue is empty empty
     test_queue_statistics_receive_event(QPid,
                                         fun (E) ->
                                                 (proplists:get_value(name, E) == QRes)
@@ -602,7 +602,7 @@ head_message_timestamp1(_Config) ->
     after ?TIMEOUT -> throw(failed_to_receive_tx_select_ok)
     end,
 
-    %% Publish two messages and check timestamp is that of first message
+    %% Publish two messages and check that the timestamp is that of first message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
                                            routing_key = QName},
                       rabbit_basic:build_content(#'P_basic'{timestamp = 1}, <<"">>)),
@@ -621,7 +621,7 @@ head_message_timestamp1(_Config) ->
                                                       (proplists:get_value(head_message_timestamp, E) == 1)
                                         end),
 
-    %% Get first message and check timestamp is that of second message
+    %% Consume a message and check that the timestamp is now that of the second message
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
     test_queue_statistics_receive_event(QPid,
                                         fun (E) ->
@@ -630,7 +630,7 @@ head_message_timestamp1(_Config) ->
                                                       (proplists:get_value(head_message_timestamp, E) == 2)
                                         end),
 
-    %% Get second message and check timestamp is empty again
+    %% Consume one more message and check again
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
     test_queue_statistics_receive_event(QPid,
                                         fun (E) ->
