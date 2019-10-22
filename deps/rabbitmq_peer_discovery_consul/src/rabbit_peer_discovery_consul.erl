@@ -567,7 +567,7 @@ consul_session_create(Query, Headers, Body) ->
 %%--------------------------------------------------------------------
 -spec serialize_json_body(term()) -> {ok, Payload :: binary()} | {error, atom()}.
 serialize_json_body([]) -> {ok, []};
-serialize_json_body(Payload) ->©p
+serialize_json_body(Payload) ->
     case rabbit_json:try_encode(Payload) of
         {ok, Body} -> {ok, Body};
         {error, Reason} -> {error, Reason}
