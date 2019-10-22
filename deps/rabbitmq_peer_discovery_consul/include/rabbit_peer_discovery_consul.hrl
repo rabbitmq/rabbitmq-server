@@ -75,6 +75,10 @@
                                                    env_variable  = "CONSUL_SVC_TAGS",
                                                    default_value = []
                                                   },
+          consul_svc_meta                    => #peer_discovery_config_entry_meta{
+                                                   type          = list,
+                                                   default_value = []
+                                                  },
           consul_deregister_after            => #peer_discovery_config_entry_meta{
                                                    type          = integer,
                                                    env_variable  = "CONSUL_DEREGISTER_AFTER",

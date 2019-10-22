@@ -258,6 +258,26 @@ fun(Conf) ->
     end
 end}.
 
+%% service metadata
+
+{mapping, "cluster_formation.consul.svc_meta", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_meta", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "cluster_formation.consul.svc_meta.$name", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_meta", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_meta",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_meta", Conf, undefined) of
+        none -> [];
+        _    ->
+          Pairs = cuttlefish_variable:filter_by_prefix("cluster_formation.consul.svc_meta", Conf),
+          [{list_to_binary(lists:last(Segments)), list_to_binary(V)} || {Segments, V} <- Pairs]
+    end
+end}.
+
 %% lock key prefix
 
 {mapping, "cluster_formation.consul.lock_prefix", "rabbit.cluster_formation.peer_discovery_consul.consul_lock_prefix", [
