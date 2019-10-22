@@ -36,7 +36,7 @@ all: packages
 .PHONY: packages package-deb \
 	package-rpm \
 	package-rpm-redhat package-rpm-fedora \
-	package-rpm-rhel6 package-rpm-rhel7 \
+	package-rpm-rhel6 package-rpm-rhel7 package-rpm-rhel8 \
 	package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
 	package-windows package-standalone-macosx \
 	package-standalone-linux-x86_64 \
@@ -79,7 +79,7 @@ package-rpm: package-rpm-redhat package-rpm-suse
 	@:
 
 # FIXME: Why not package-rpm-fedora?
-package-rpm-redhat: package-rpm-rhel6 package-rpm-rhel7
+package-rpm-redhat: package-rpm-rhel6 package-rpm-rhel7 package-rpm-rhel8
 	@:
 
 package-rpm-fedora: $(SOURCE_DIST_FILE)
@@ -90,6 +90,9 @@ package-rpm-rhel6: $(SOURCE_DIST_FILE)
 
 package-rpm-rhel7: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=rhel7 all $(DO_CLEAN)
+
+package-rpm-rhel8: $(SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=rhel8 all $(DO_CLEAN)
 
 package-rpm-suse: package-rpm-opensuse package-rpm-sles11
 	@:

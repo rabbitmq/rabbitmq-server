@@ -50,6 +50,8 @@ ifeq "$(RPM_OS)" "rhel6"
 SPEC_DEFINES=--define 'group_tag Development/Libraries' --define 'dist .el6' --define 'rhel 6'
 else ifeq "$(RPM_OS)" "rhel7"
 SPEC_DEFINES=--define 'group_tag Development/Libraries' --define '_unitdir /usr/lib/systemd/system' --define 'dist .el7' --define 'rhel 7'
+else ifeq "$(RPM_OS)" "rhel8"
+SPEC_DEFINES=--define 'group_tag Development/Libraries' --define '_unitdir /usr/lib/systemd/system' --define 'dist .el8' --define 'rhel 8'
 else
 SPEC_DEFINES=--define 'group_tag Development/Libraries'
 endif
