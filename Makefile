@@ -342,7 +342,7 @@ PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
 packages package-deb package-rpm \
 package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
-package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
+package-rpm-rhel8 package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
 package-windows package-standalone-macosx \
 package-standalone-linux-x86_64 \
 package-standalone-freebsd-x86_64 \
