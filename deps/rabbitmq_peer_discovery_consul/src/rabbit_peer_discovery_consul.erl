@@ -249,7 +249,6 @@ list_nodes_query_args(Value, Warn) ->
 -spec registration_body() -> {ok, Body :: binary()} | {error, atom()}.
 registration_body() ->
   Payload = build_registration_body(),
-  rabbit_log:debug("Payload for Consul registration: ~p", [Payload]),
   registration_body(rabbit_json:try_encode(Payload)).
 
 -spec registration_body(Response :: {ok, Body :: string()} |
@@ -568,8 +567,7 @@ consul_session_create(Query, Headers, Body) ->
 %%--------------------------------------------------------------------
 -spec serialize_json_body(term()) -> {ok, Payload :: binary()} | {error, atom()}.
 serialize_json_body([]) -> {ok, []};
-serialize_json_body(Payload) ->
-    rabbit_log:debug("JSON body to serialize: ~p", [Payload]),
+serialize_json_body(Payload) ->©p
     case rabbit_json:try_encode(Payload) of
         {ok, Body} -> {ok, Body};
         {error, Reason} -> {error, Reason}
