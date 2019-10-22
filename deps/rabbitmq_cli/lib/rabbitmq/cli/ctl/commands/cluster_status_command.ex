@@ -75,6 +75,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: timed out while waiting for a response from #{node_name}."}
   end
+
+  def output(result, %{formatter: "erlang"}) do
+    {:ok, result}
+  end
+
   def output(result, %{formatter: "json"}) when is_list(result) do
     # format more data structures as map for sensible JSON output
     m = result_map(result)
@@ -85,6 +90,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
     {:ok, m}
   end
+
   def output(result, %{node: node_name}) when is_list(result) do
     m = result_map(result)
 
@@ -147,6 +153,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
     {:ok, Enum.join(lines, line_separator())}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String

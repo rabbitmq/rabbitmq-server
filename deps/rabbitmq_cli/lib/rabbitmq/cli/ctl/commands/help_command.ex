@@ -145,7 +145,7 @@ short            | long          | description
 -p               | --vhost       | for commands that are scoped to a virtual host,
                  |               | virtual host to use
                  | --formatter   | alternative result formatter to use
-                                 | if supported: json, pretty_table, table, csv.
+                                 | if supported: json, pretty_table, table, csv, erlang
                                    not all commands support all (or any) alternative formatters."]
   end
 

@@ -62,11 +62,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: timed out while waiting for a response from #{node_name}."}
   end
+
+  def output(result, %{formatter: "erlang"}) do
+    {:ok, result}
+  end
+
   def output(result, %{formatter: "json"}) when is_list(result) do
     m = result_map(result) |> Map.update(:alarms, [], fn xs -> alarm_maps(xs) end)
 
     {:ok, m}
   end
+
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
     m = result_map(result)
 
@@ -154,6 +160,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
     {:ok, Enum.join(lines, line_separator())}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
@@ -163,7 +170,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def usage_additional() do
     [
       ["--unit <bytes | mb | gb>", "byte multiple (bytes, megabytes, gigabytes) to use"],
-      ["--formatter <json>", "alternative formatter (JSON)"]
+      ["--formatter <json | erlang>", "alternative formatter (JSON, Erlang terms)"]
     ]
   end
 

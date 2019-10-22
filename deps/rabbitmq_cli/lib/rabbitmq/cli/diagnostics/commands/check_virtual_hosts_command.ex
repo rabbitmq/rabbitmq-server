@@ -41,16 +41,26 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckVirtualHostsCommand do
     {:ok, :check_passed}
   end
 
+  def output([], %{formatter: "erlang"}) do
+    {:ok, :check_passed}
+  end
+
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported all vhosts as running"}
+  end
+
+  def output(vhosts, %{formatter: "erlang"} = _opts) when is_list(vhosts) do
+    {:error, :check_failed, {:down_vhosts, vhosts}}
   end
 
   def output(vhosts, %{formatter: "json"} = _opts) when is_list(vhosts) do
     {:error, :check_failed, %{"result" => "error", "down_vhosts" => vhosts}}
   end
+
   def output(vhosts, %{silent: true} = _opts) when is_list(vhosts) do
     {:error, :check_failed}
   end
+
   def output(vhosts, %{node: node_name}) when is_list(vhosts) do
     lines = Enum.join(vhosts, line_separator())
     {:error, "Some virtual hosts on node #{node_name} are down:\n#{lines}"}
