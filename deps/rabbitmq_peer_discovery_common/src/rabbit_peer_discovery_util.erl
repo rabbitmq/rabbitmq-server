@@ -44,7 +44,9 @@
 -type stringifyable() :: atom() | binary() | string() | integer().
 
 
--spec getenv(Key :: string()) -> string() | false.
+-spec getenv(Key :: string() | undefined) -> string() | false.
+getenv(undefined) ->
+  false;
 getenv(Key) ->
   process_getenv_value(Key, os:getenv(Key)).
 
