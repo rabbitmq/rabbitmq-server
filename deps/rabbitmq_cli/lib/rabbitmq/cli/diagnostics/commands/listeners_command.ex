@@ -23,6 +23,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
 
   import RabbitMQ.CLI.Core.Listeners,
     only: [listeners_on: 2, listener_lines: 1, listener_maps: 1, listener_rows: 1]
+
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -57,16 +58,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
     end
   end
 
+  def output([], %{formatter: fmt}) when fmt == "csv" or fmt == "erlang" do
+    {:ok, []}
+  end
+
   def output([], %{node: node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "node" => node_name, "listeners" => []}}
   end
 
-  def output([], %{formatter: "csv"}) do
-    {:ok, []}
-  end
-
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no enabled listeners."}
+  end
+
+  def output(listeners, %{formatter: "erlang"}) do
+    {:ok, listener_rows(listeners)}
   end
 
   def output(listeners, %{node: node_name, formatter: "json"}) do
@@ -85,7 +90,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists active connection listeners (bound interface, port, protocol) on the target node"
+  def description(),
+    do: "Lists active connection listeners (bound interface, port, protocol) on the target node"
 
   def usage, do: "listeners"
 

@@ -77,7 +77,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   def usage_additional() do
     [
       ["--unit <bytes | mb | gb>", "byte multiple (bytes, megabytes, gigabytes) to use"],
-      ["--formatter <json | csv>", "alternative formatter to use, JSON or CSV"]
+      ["--formatter <json | csv | erlang>", "alternative formatter to use, JSON, CSV or Erlang terms"]
     ]
   end
 
