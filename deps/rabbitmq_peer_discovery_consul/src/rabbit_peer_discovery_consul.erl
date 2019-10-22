@@ -371,7 +371,7 @@ registration_body_maybe_add_meta(Payload, "default", []) ->
   Payload;
 registration_body_maybe_add_meta(Payload, "default", Meta) ->
   lists:append(Payload, [{<<"meta">>, Meta}]);
-registration_body_maybe_add_meta(Payload, ClusterName, []) ->
+registration_body_maybe_add_meta(Payload, _ClusterName, []) ->
   Payload;
 registration_body_maybe_add_meta(Payload, ClusterName, Meta) ->
   Merged = maps:to_list(maps:merge(#{<<"cluster">> => rabbit_data_coercion:to_binary(ClusterName)}, maps:from_list(Meta))),
