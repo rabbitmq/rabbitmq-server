@@ -233,6 +233,39 @@
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
 
+
+ , {consul_service_meta,
+  "cluster_formation.consul.svc_meta.owner = an-owner
+   cluster_formation.consul.svc_meta.env = qa",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_meta, [{<<"owner">>, <<"an-owner">>},
+                                                                              {<<"env">>,   <<"qa">>}]}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+ , {consul_service_meta_set_to_none,
+  "cluster_formation.consul.svc_meta = none",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_meta, []}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+ , {consul_service_meta_with_spaces,
+  "cluster_formation.consul.svc_meta.owner = an owner
+   cluster_formation.consul.svc_meta.env = qa",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_meta, [{<<"owner">>, <<"an owner">>},
+                                                                              {<<"env">>,   <<"qa">>}]}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
  , {all_values_absent,
   "",
   [],
