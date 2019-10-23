@@ -21,6 +21,7 @@
 
 start(_Type, _StartArgs) ->
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
+    rabbit_peer_discovery_httpc:maybe_configure_inet6(),
     rabbit_peer_discovery_common_sup:start_link().
 
 stop(_State) ->
