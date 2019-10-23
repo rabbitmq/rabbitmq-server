@@ -269,7 +269,8 @@ build_registration_body() ->
   Payload3 = registration_body_maybe_add_address(Payload2),
   Payload4 = registration_body_add_port(Payload3),
   Payload5 = registration_body_maybe_add_check(Payload4),
-  registration_body_maybe_add_tag(Payload5).
+  Payload6 = registration_body_maybe_add_tag(Payload5),
+  registration_body_maybe_add_meta(Payload6).
 
 -spec registration_body_add_id() -> list().
 registration_body_add_id() ->
@@ -354,6 +355,27 @@ registration_body_maybe_add_tag(Payload, Cluster, []) ->
   lists:append(Payload, [{'Tags', [rabbit_data_coercion:to_atom(Cluster)]}]);
 registration_body_maybe_add_tag(Payload, Cluster, Tags) ->
   lists:append(Payload, [{'Tags', [rabbit_data_coercion:to_atom(Cluster)] ++ [rabbit_data_coercion:to_atom(X) || X <- Tags]}]).
+
+
+-spec registration_body_maybe_add_meta(Payload :: list()) -> list().
+registration_body_maybe_add_meta(Payload) ->
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  ClusterName = get_config_key(cluster_name, M),
+  Meta = ?UTIL_MODULE:as_list(get_config_key(consul_svc_meta, M)),
+  registration_body_maybe_add_meta(Payload, ClusterName, Meta).
+
+-spec registration_body_maybe_add_meta(Payload :: list(),
+                                       ClusterName :: string(),
+                                       Meta :: list()) -> list().
+registration_body_maybe_add_meta(Payload, "default", []) ->
+  Payload;
+registration_body_maybe_add_meta(Payload, "default", Meta) ->
+  lists:append(Payload, [{<<"meta">>, Meta}]);
+registration_body_maybe_add_meta(Payload, _ClusterName, []) ->
+  Payload;
+registration_body_maybe_add_meta(Payload, ClusterName, Meta) ->
+  Merged = maps:to_list(maps:merge(#{<<"cluster">> => rabbit_data_coercion:to_binary(ClusterName)}, maps:from_list(Meta))),
+  lists:append(Payload, [{<<"meta">>, Merged}]).
 
 
 -spec validate_addr_parameters(false | true, false | true) -> false | true.
@@ -517,7 +539,7 @@ create_session(Name, TTL) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec consul_session_create(Query, Headers, Body) -> {ok, term()} | {error, Reason::string()} when
-      Query :: [autocluster_httpc:query_component()],
+      Query :: list(),
       Headers :: [{string(), string()}],
       Body :: term().
 consul_session_create(Query, Headers, Body) ->
