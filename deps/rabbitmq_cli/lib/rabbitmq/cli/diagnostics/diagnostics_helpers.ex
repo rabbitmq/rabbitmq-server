@@ -14,13 +14,13 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Helpers do
-  def test_connection(hostname, port, timeout) do 
-      case :gen_tcp.connect(hostname, port, [], timeout) do 
+  def test_connection(hostname, port, timeout) do
+      case :gen_tcp.connect(hostname, port, [], timeout) do
           {:error, _} -> :gen_tcp.connect(hostname, port, [:inet6], timeout)
           r -> r
       end
   end
-    
+
   def check_port_connectivity(port, node_name, timeout) do
     regex = Regex.recompile!(~r/^(.+)@/)
     hostname = Regex.replace(regex, to_string(node_name), "") |> to_charlist
