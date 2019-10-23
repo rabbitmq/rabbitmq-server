@@ -32,7 +32,8 @@
          post/6,
          put/6,
          put/7,
-         maybe_configure_proxy/0]).
+         maybe_configure_proxy/0,
+         maybe_configure_inet6/0]).
 
 %% Export all for unit tests
 -ifdef(TEST).
@@ -284,6 +285,19 @@ maybe_configure_proxy() ->
           ok
   end.
 
+%% @public
+%% @spec maybe_configure_inet6() -> Result
+%% @where Result = ok.
+%% @doc Configures HTTP[S] inet6 settings in httpc, if necessary
+%% @end
+-spec maybe_configure_inet6() -> ok.
+maybe_configure_inet6() ->
+    IpFamily = case proplists:get_value(inet6, inet:get_rc(), false) of
+                   true -> inet6;
+                   false -> inet
+               end,
+    httpc:set_option(ipfamily, IpFamily).
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc Set httpc proxy options.
@@ -299,7 +313,7 @@ maybe_set_proxy(Option, ProxyUrl, ProxyExclusions) ->
       rabbit_log:debug(
         "Configuring HTTP client's ~s setting: ~p, exclusions: ~p",
         [Option, {Host, Port}, ProxyExclusions]),
-      httpc:set_options([{Option, {{Host, Port}, ProxyExclusions}}]);
+      httpc:set_option(Option, {{Host, Port}, ProxyExclusions});
     {error, Reason} ->
           rabbit_log:error("Failed to set HTTP client setting ~p"
                            " with value of ~p, exclusions of ~p: ~p",
