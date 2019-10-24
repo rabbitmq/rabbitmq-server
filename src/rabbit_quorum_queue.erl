@@ -40,6 +40,8 @@
 -export([shrink_all/1,
          grow/4]).
 -export([transfer_leadership/2, get_replicas/1, queue_length/1]).
+-export([file_handle_leader_reservation/1, file_handle_other_reservation/0]).
+-export([file_handle_release_reservation/0]).
 
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
@@ -886,6 +888,16 @@ matches_strategy(even, Members) ->
 is_match(Subj, E) ->
    nomatch /= re:run(Subj, E).
 
+file_handle_leader_reservation(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    ClusterSize = length(get_nodes(Q)),
+    file_handle_cache:set_reservation(2 + ClusterSize).
+
+file_handle_other_reservation() ->
+    file_handle_cache:set_reservation(2).
+
+file_handle_release_reservation() ->
+    file_handle_cache:release_reservation().
 
 %%----------------------------------------------------------------------------
 dlx_mfa(Q) ->
