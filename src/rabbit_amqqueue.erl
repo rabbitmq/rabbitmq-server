@@ -1073,13 +1073,25 @@ map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
 
 is_unresponsive(Q, _Timeout) when ?amqqueue_state_is(Q, crashed) ->
     false;
-is_unresponsive(Q, Timeout) ->
+is_unresponsive(Q, Timeout) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
     try
         delegate:invoke(QPid, {gen_server2, call, [{info, [name]}, Timeout]}),
         false
     catch
         %% TODO catch any exit??
+        exit:{timeout, _} ->
+            true
+    end;
+is_unresponsive(Q, Timeout) when ?amqqueue_is_quorum(Q) ->
+    try
+        Leader = amqqueue:get_pid(Q),
+        case rabbit_fifo_client:stat(Leader, Timeout) of
+          {ok, _, _}   -> false;
+          {timeout, _} -> true;
+          {error, _}   -> true
+        end
+    catch
         exit:{timeout, _} ->
             true
     end.
