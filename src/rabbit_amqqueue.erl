@@ -1085,7 +1085,8 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_classic(Q) ->
     end;
 is_unresponsive(Q, Timeout) when ?amqqueue_is_quorum(Q) ->
     try
-        case rabbit_fifo_client:stat(Q, Timeout) of
+        Leader = amqqueue:get_pid(Q),
+        case rabbit_fifo_client:stat(Leader, Timeout) of
           {ok, _, _}   -> false;
           {timeout, _} -> true;
           {error, _}   -> true
