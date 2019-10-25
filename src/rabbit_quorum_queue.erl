@@ -18,7 +18,7 @@
 
 -export([init_state/2, handle_event/2]).
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
--export([info/1, info/2, stat/1, infos/1]).
+-export([info/1, info/2, stat/1, stat/2, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/10, basic_cancel/4]).
 -export([credit/4]).
 -export([purge/1]).
@@ -586,9 +586,19 @@ info(Q, Items) ->
 -spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 
 stat(Q) when ?is_amqqueue(Q) ->
+    %% same short default timeout as in rabbit_fifo_client:stat/1
+    stat(Q, 250).
+
+-spec stat(amqqueue:amqqueue(), non_neg_integer()) -> {'ok', non_neg_integer(), non_neg_integer()}.
+
+stat(Q, Timeout) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
     try
-        {ok, _, _} = rabbit_fifo_client:stat(Leader)
+        case rabbit_fifo_client:stat(Leader, Timeout) of
+          {ok, _, _} = Success -> Success;
+          {error, _}           -> {ok, 0, 0};
+          {timeout, _}         -> {ok, 0, 0}
+        end
     catch
         _:_ ->
             %% Leader is not available, cluster might be in minority

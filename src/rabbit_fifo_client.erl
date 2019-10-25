@@ -40,7 +40,8 @@
          cluster_name/1,
          update_machine_state/2,
          pending_size/1,
-         stat/1
+         stat/1,
+         stat/2
          ]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -419,8 +420,19 @@ pending_size(#state{pending = Pend}) ->
 stat(Leader) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    {ok, {_, {R, C}}, _} = ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250),
-    {ok, R, C}.
+    stat(Leader, 250).
+
+-spec stat(ra:server_id(), non_neg_integer()) ->
+    {ok, non_neg_integer(), non_neg_integer()}
+    | {error | timeout, term()}.
+stat(Leader, Timeout) ->
+    %% short timeout as we don't want to spend too long if it is going to
+    %% fail anyway
+    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, Timeout) of
+      {ok, {_, {R, C}}, _} -> {ok, R, C};
+      {error, _} = Error   -> Error;
+      {timeout, _} = Error -> Error
+    end.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().
@@ -771,4 +783,3 @@ find_leader([Server | Servers]) ->
         _ ->
             find_leader(Servers)
     end.
-
