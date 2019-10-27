@@ -541,7 +541,12 @@ start_loaded_apps(Apps, RestartTypes) ->
     %% default OTP logger
     application:set_env(ra, logger_module, rabbit_log_ra_shim),
     %% use a larger segments size for queues
-    application:set_env(ra, segment_max_entries, 32768),
+    case application:get_env(ra, segment_max_entries) of
+      undefined ->
+        application:set_env(ra, segment_max_entries, 32768);
+      _ ->
+        ok
+    end,
     case application:get_env(ra, wal_max_size_bytes) of
         undefined ->
             application:set_env(ra, wal_max_size_bytes, 536870912); %% 5 * 2 ^ 20

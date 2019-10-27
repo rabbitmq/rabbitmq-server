@@ -1522,6 +1522,67 @@ end}.
     end
 }.
 
+%%
+%% Ra
+%%
+
+{mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.segment_max_entries",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.segment_max_entries", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.wal_max_size_bytes", "ra.wal_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.wal_max_size_bytes",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.wal_max_size_bytes", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.wal_max_batch_size", "ra.wal_max_batch_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.wal_max_batch_size",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.wal_max_batch_size", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.snapshot_chunk_size", "ra.snapshot_chunk_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.snapshot_chunk_size",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.snapshot_chunk_size", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+
 % ===============================
 % Validators
 % ===============================
