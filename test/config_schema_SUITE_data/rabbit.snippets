@@ -638,5 +638,38 @@ credential_validator.regexp = ^abc\\d+",
                {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
                {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
                {keyfile,"test/config_schema_SUITE_data/certs/key.pem"}]}}]}],
-  []}
+  []},
+
+  %%
+  %% Raft
+  %%
+
+  {raft_segment_max_entries,
+   "raft.segment_max_entries = 65535",
+   [{ra, [
+      {segment_max_entries, 65535}
+     ]}],
+   []},
+
+  {raft_wal_max_size_bytes,
+   "raft.wal_max_size_bytes = 1048576",
+   [{ra, [
+      {wal_max_size_bytes, 1048576}
+     ]}],
+   []},
+
+   {raft_wal_max_batch_size,
+    "raft.wal_max_batch_size = 32768",
+    [{ra, [
+       {wal_max_batch_size, 32768}
+      ]}],
+    []},
+
+    {raft_snapshot_chunk_size,
+     "raft.snapshot_chunk_size = 1000000",
+     [{ra, [
+        {snapshot_chunk_size, 1000000}
+       ]}],
+     []}
+
 ].
