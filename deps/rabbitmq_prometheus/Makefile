@@ -197,6 +197,9 @@ endef
 .PHONY: Erlang-Distribution.json
 Erlang-Distribution.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
+.PHONY: Erlang-Memory-Allocators.json
+Erlang-Memory-Allocators.json: $(JQ)
+	@$(GENERATE_DASHBOARD)
 .PHONY: Erlang-Distributions-Compare.json
 Erlang-Distributions-Compare.json: $(JQ)
 	@$(GENERATE_DASHBOARD)

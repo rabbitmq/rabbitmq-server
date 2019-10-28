@@ -1,0 +1,1995 @@
+{
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "6.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "singlestat",
+      "name": "Singlestat",
+      "version": ""
+    },
+    {
+      "type": "table",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Visualise Erlang VM memory utilisation from erts_alloc perspective",
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "iteration": 1571829655509,
+  "links": [],
+  "panels": [
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "format": "percent",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": true,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 50,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "repeatDirection": "v",
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n* 100",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "25,50",
+      "title": "Allocated Used",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#37872D",
+        "#1F60C4",
+        "#C4162A"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "format": "percent",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": true,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 51,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "repeatDirection": "v",
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "(\n  sum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n  -\n  sum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n) / sum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n* 100",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "50,75",
+      "title": "Allocated Unused",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": false,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "description": "Total Size of Allocated Blocks\n\nMemory that is actively used by Erlang data.\n\nThe smallest unit of memory that an allocator can work with is called a `block`. When you call an allocator to allocate a certain amount of memory what you get back is a block. It is also blocks that you give as an argument to the allocator when you want to deallocate memory.\n\nThe allocator does not allocate blocks from the operating system directly though. Instead the allocator allocates a carrier from the operating system, either through `sys_alloc` or through `mseg_alloc`, which in turn uses `malloc` or `mmap`. If `sys_alloc` is used the carrier is placed on the C-heap and if `mseg_alloc` is used the carrier is placed in a segment.\n\nSmall blocks are placed in a multiblock carrier. A multiblock carrier can as the name suggests contain many blocks. Larger blocks are placed in a singleblock carrier, which as the name implies on contains one block.\n\nWhat’s considered a small and a large block is determined by the parameter singleblock carrier threshold (`sbct`).\n\n* [erts_alloc](http://erlang.org/doc/man/erts_alloc.html)\n* [The Memory Subsystem](https://github.com/happi/theBeamBook/blob/master/chapters/memory.asciidoc)",
+      "format": "decbytes",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": true,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 215,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "repeatDirection": "v",
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "",
+      "title": "Allocated Used",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": false,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "description": "Allocated Carriers - Allocated Blocks\n\n* [erts_alloc](http://erlang.org/doc/man/erts_alloc.html)\n* [The Memory Subsystem](https://github.com/happi/theBeamBook/blob/master/chapters/memory.asciidoc)",
+      "format": "decbytes",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": true,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 216,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "repeatDirection": "v",
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n-\nsum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "",
+      "title": "Allocated Unused",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": false,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "description": "Total Size of Allocated Carriers\n\nMemory that is reserved by the Erlang VM, which fits  one of the following descriptions:\n\n* actively used memory\n* memory given by the OS, yet-to-be-used\n* deallocated memory kept around before it is destroyed\n* carrier gaps in multi-block carriers (a.k.a. memory fragmentation)\n\nThe total size of allocated carriers can be either larger or smaller than the Erlang VM system process RSS memory.\n\n* [erts_alloc](http://erlang.org/doc/man/erts_alloc.html)\n* [The Memory Subsystem](https://github.com/happi/theBeamBook/blob/master/chapters/memory.asciidoc)",
+      "format": "decbytes",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": true,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 188,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "repeatDirection": "v",
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "",
+      "title": "Allocated Total",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": false,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "description": "Erlang VM Resident Set Size (RSS)\n\nAs reported by the OS",
+      "format": "decbytes",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": true,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 214,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "repeatDirection": "v",
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "rabbitmq_process_resident_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"}",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "",
+      "title": "Resident Set Size",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 3
+      },
+      "id": 59,
+      "options": {},
+      "pageSize": null,
+      "pluginVersion": "6.4.1",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 3,
+        "desc": false
+      },
+      "styles": [
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "decbytes"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Allocated Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n-\nsum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Allocated Unused",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 3
+      },
+      "id": 61,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatDirection": "v",
+      "seriesOverrides": [
+        {
+          "alias": "Allocated Used",
+          "color": "#37872D"
+        },
+        {
+          "alias": "Allocated Unused",
+          "color": "#FADE2A"
+        },
+        {
+          "alias": "Resident Set Size",
+          "color": "#C4162A",
+          "stack": false
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "Allocated Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n-\nsum (erlang_vm_allocators{usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Allocated Unused",
+          "refId": "B"
+        },
+        {
+          "expr": "rabbitmq_process_resident_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"}",
+          "legendFormat": "Resident Set Size",
+          "refId": "C"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 226,
+      "title": "Allocated by Allocator Type",
+      "type": "row"
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "description": "",
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 55,
+      "options": {},
+      "pageSize": null,
+      "pluginVersion": "6.4.1",
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 3,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "Memory Allocator",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "decbytes"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum by(alloc) (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "{{alloc}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 8,
+        "y": 10
+      },
+      "id": 53,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "repeatDirection": "v",
+      "seriesOverrides": [
+        {
+          "alias": "binary_alloc"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum by(alloc) (erlang_vm_allocators{usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{alloc}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "decimals": 0,
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 63,
+      "panels": [],
+      "repeat": "memory_allocator",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "title": "$memory_allocator",
+      "type": "row"
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "description": "",
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
+      "id": 217,
+      "options": {},
+      "pageSize": null,
+      "pluginVersion": "6.4.1",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 3,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "decbytes"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{kind=\"mbcs\", alloc=\"$memory_allocator\", usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{kind=\"mbcs\", alloc=\"$memory_allocator\", usage=\"carriers\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Average Multiblock Carrier",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{kind=\"mbcs\", alloc=\"$memory_allocator\", usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{kind=\"mbcs\", alloc=\"$memory_allocator\", usage=\"blocks\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Average Multiblock Block",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "$memory_allocator - Multiblock Average Size",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fill": 10,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 8,
+        "y": 20
+      },
+      "id": 64,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/Used/",
+          "color": "#37872D"
+        },
+        {
+          "alias": "/Unused/",
+          "color": "#FADE2A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"mbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "Multiblock Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"carriers_size\", kind=\"mbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n-\nsum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"mbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Mutiblock Unused",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "format": "percent",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 20,
+        "y": 20
+      },
+      "id": 20,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"mbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"carriers_size\", kind=\"mbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n* 100",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "50,75",
+      "title": "Multiblock Utilization",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "description": "",
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 26
+      },
+      "id": 221,
+      "options": {},
+      "pageSize": null,
+      "pluginVersion": "6.4.1",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 3,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "decbytes"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{kind=\"mbcs_pool\", alloc=\"$memory_allocator\", usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{kind=\"mbcs_pool\", alloc=\"$memory_allocator\", usage=\"carriers\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Average Multiblock Pool Carrier",
+          "refId": "C"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{kind=\"mbcs_pool\", alloc=\"$memory_allocator\", usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{kind=\"mbcs_pool\", alloc=\"$memory_allocator\", usage=\"blocks\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Average Multiblock Pool Block",
+          "refId": "D"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "$memory_allocator - Multiblock Pool Average Size",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fill": 10,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 8,
+        "y": 26
+      },
+      "id": 219,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/Used/",
+          "color": "#37872D"
+        },
+        {
+          "alias": "/Unused/",
+          "color": "#FADE2A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"mbcs_pool\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "Multiblock Pool Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"carriers_size\", kind=\"mbcs_pool\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n-\nsum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"mbcs_pool\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Multiblock Pool  Unused",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "format": "percent",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 20,
+        "y": 26
+      },
+      "id": 223,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"mbcs_pool\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"carriers_size\", kind=\"mbcs_pool\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n* 100",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "50,75",
+      "title": "Multiblock Pool Utilization",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "columns": [
+        {
+          "text": "Min",
+          "value": "min"
+        },
+        {
+          "text": "Max",
+          "value": "max"
+        },
+        {
+          "text": "Avg",
+          "value": "avg"
+        },
+        {
+          "text": "Current",
+          "value": "current"
+        }
+      ],
+      "datasource": null,
+      "description": "",
+      "fontSize": "100%",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "id": 222,
+      "options": {},
+      "pageSize": null,
+      "pluginVersion": "6.4.1",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "scroll": true,
+      "showHeader": true,
+      "sort": {
+        "col": 3,
+        "desc": true
+      },
+      "styles": [
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 0,
+          "mappingType": 1,
+          "pattern": "Metric",
+          "thresholds": [],
+          "type": "string",
+          "unit": "short"
+        },
+        {
+          "alias": "",
+          "colorMode": null,
+          "colors": [
+            "rgba(245, 54, 54, 0.9)",
+            "rgba(237, 129, 40, 0.89)",
+            "rgba(50, 172, 45, 0.97)"
+          ],
+          "dateFormat": "YYYY-MM-DD HH:mm:ss",
+          "decimals": 1,
+          "mappingType": 1,
+          "pattern": "/.*/",
+          "thresholds": [],
+          "type": "number",
+          "unit": "decbytes"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{kind=\"sbcs\", alloc=\"$memory_allocator\", usage=\"carriers_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{kind=\"sbcs\", alloc=\"$memory_allocator\", usage=\"carriers\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Average Singleblock Carrier",
+          "refId": "E"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{kind=\"sbcs\", alloc=\"$memory_allocator\", usage=\"blocks_size\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{kind=\"sbcs\", alloc=\"$memory_allocator\", usage=\"blocks\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Average Singleblock Block",
+          "refId": "F"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "$memory_allocator - Singleblock Average Size",
+      "transform": "timeseries_aggregations",
+      "type": "table"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fill": 10,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 8,
+        "y": 32
+      },
+      "id": 218,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/Used/",
+          "color": "#37872D"
+        },
+        {
+          "alias": "/Unused/",
+          "color": "#FADE2A"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"sbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "Singleblock Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"carriers_size\", kind=\"sbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n-\nsum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"sbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})",
+          "legendFormat": "Singleblock Unused",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "decbytes",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": true,
+      "colorValue": false,
+      "colors": [
+        "#C4162A",
+        "#1F60C4",
+        "#37872D"
+      ],
+      "datasource": null,
+      "decimals": 1,
+      "format": "percent",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 20,
+        "y": 32
+      },
+      "id": 224,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "scopedVars": {
+        "memory_allocator": {
+          "selected": true,
+          "text": "binary_alloc",
+          "value": "binary_alloc"
+        }
+      },
+      "sparkline": {
+        "fillColor": "rgba(255, 255, 255, 0)",
+        "full": false,
+        "lineColor": "rgb(255, 255, 255)",
+        "show": true
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "sum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"blocks_size\", kind=\"sbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n/\nsum (erlang_vm_allocators{alloc=~\"$memory_allocator\", usage=\"carriers_size\", kind=\"sbcs\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_node=\"$rabbitmq_node\"})\n* 100",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "refId": "A"
+        }
+      ],
+      "thresholds": "50,75",
+      "title": "Singleblock Utilization",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 20,
+  "style": "dark",
+  "tags": [
+    "rabbitmq-prometheus"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "prometheus",
+        "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "RabbitMQ Cluster",
+        "multi": false,
+        "name": "rabbitmq_cluster",
+        "options": [],
+        "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "prometheus",
+        "definition": "label_values(rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}, rabbitmq_node)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "RabbitMQ Node",
+        "multi": false,
+        "name": "rabbitmq_node",
+        "options": [],
+        "query": "label_values(rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}, rabbitmq_node)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "text": "binary_alloc + eheap_alloc + ets_alloc",
+          "value": [
+            "binary_alloc",
+            "eheap_alloc",
+            "ets_alloc"
+          ]
+        },
+        "datasource": "prometheus",
+        "definition": "label_values(erlang_vm_allocators, alloc)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Erlang Memory Allocator",
+        "multi": true,
+        "name": "memory_allocator",
+        "options": [],
+        "query": "label_values(erlang_vm_allocators, alloc)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "15s",
+      "30s",
+      "1m",
+      "5m",
+      "10m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
+  },
+  "timezone": "",
+  "title": "Erlang-Memory-Allocators",
+  "uid": "o_rtdpWik",
+  "version": 1
+}
