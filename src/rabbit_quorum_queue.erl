@@ -1052,22 +1052,27 @@ i(open_files, Q) when ?is_amqqueue(Q) ->
     lists:flatten(Data);
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
-    case SacResult of
-        {value, {_ConsumerTag, ChPid}} ->
+    case ra:local_query(QPid, fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, {value, {_ConsumerTag, ChPid}}}, _} ->
             ChPid;
-        _ ->
+        {ok, _, _} ->
+            '';
+        {error, _} ->
+            '';
+        {timeout, _} ->
             ''
     end;
 i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
-    case SacResult of
-        {value, {ConsumerTag, _ChPid}} ->
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, {value, {ConsumerTag, _ChPid}}}, _} ->
             ConsumerTag;
-        _ ->
+        {ok, _, _} ->
+            '';
+        {error, _} ->
+            '';
+        {timeout, _} ->
             ''
     end;
 i(type, _) -> quorum;
