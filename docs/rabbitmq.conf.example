@@ -448,7 +448,7 @@
 ## NB: changing these on a node with existing data directory
 ##     can lead to DATA LOSS.
 ##
-# raft.segment_max_entries = 65535
+# raft.segment_max_entries = 65536
 # raft.wal_max_size_bytes = 1048576
 # raft.wal_max_batch_size = 32768
 # raft.snapshot_chunk_size = 1000000
