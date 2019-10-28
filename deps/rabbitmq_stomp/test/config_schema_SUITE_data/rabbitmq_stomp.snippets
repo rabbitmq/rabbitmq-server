@@ -64,9 +64,10 @@
  {defaults,
   "stomp.default_user = guest
    stomp.default_pass = guest
-   stomp.proxy_protocol = false",
+   stomp.proxy_protocol = false
+   stomp.hide_server_info = false",
   [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,"guest"}]},
-                    {proxy_protocol,false}]}],
+                    {proxy_protocol,false},{hide_server_info,false}]}],
   [rabbitmq_stomp]},
  {ssl_cert_login,
   "stomp.ssl_cert_login = true",
@@ -88,5 +89,9 @@
  {default_topic_exchange,
   "stomp.default_topic_exchange = my.fancy.topic",
   [{rabbitmq_stomp,[{default_topic_exchange,<<"my.fancy.topic">>}]}],
+  [rabbitmq_stomp]},
+ {hide_server_info,
+  "stomp.hide_server_info = true",
+  [{rabbitmq_stomp,[{hide_server_info,true}]}],
   [rabbitmq_stomp]}
 ].
