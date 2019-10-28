@@ -64,7 +64,8 @@
  {defaults,
   "stomp.default_user = guest
    stomp.default_pass = guest
-   stomp.proxy_protocol = false",
+   stomp.proxy_protocol = false
+   stomp.hide_server_info = false",
   [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,"guest"}]},
                     {proxy_protocol,false},{hide_server_info,false}]}],
   [rabbitmq_stomp]},
