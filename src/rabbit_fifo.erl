@@ -567,10 +567,6 @@ state_enter(leader, #?MODULE{consumers = Cons,
         {Mod, Fun, Args} ->
             [{mod_call, Mod, Fun, Args ++ [Name]} | Effects]
     end;
-state_enter(recovered, #?MODULE{prefix_msgs = PrefixMsgCounts})
-  when PrefixMsgCounts =/= {[], []} ->
-    %% TODO: remove assertion?
-    exit({rabbit_fifo, unexpected_prefix_msgs, PrefixMsgCounts});
 state_enter(eol, #?MODULE{enqueuers = Enqs,
                           consumers = Custs0,
                           waiting_consumers = WaitingConsumers0}) ->
