@@ -28,9 +28,9 @@ unregister(ClientId, Pid) ->
     run_ra_command({unregister, ClientId, Pid}).
 
 list() ->
-     NodeId = mqtt_node:node_id(),
+     NodeIds = mqtt_node:all_node_ids(),
      QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
-     case ra:leader_query(NodeId, QF) of
+     case ra:leader_query(NodeIds, QF) of
        {ok, {_, Ids}, _} -> Ids;
        {timeout, _}      -> []
      end.

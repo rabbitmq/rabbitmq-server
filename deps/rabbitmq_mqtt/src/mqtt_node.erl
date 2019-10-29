@@ -15,8 +15,9 @@
 %%
 -module(mqtt_node).
 
--export([start/0, node_id/0, leave/1]).
+-export([start/0, node_id/0, all_node_ids/0, leave/1]).
 
+-define(ID_NAME, mqtt_node).
 -define(START_TIMEOUT, 100000).
 -define(RETRY_INTERVAL, 5000).
 
@@ -24,13 +25,16 @@ node_id() ->
     node_id(node()).
 
 node_id(Node) ->
-    {mqtt_node, Node}.
+    {?ID_NAME, Node}.
+
+all_node_ids() ->
+    [node_id(N) || N <- rabbit_mnesia:cluster_nodes(all),
+                   can_participate_in_clientid_tracking(N)].
 
 start() ->
-    Name = mqtt_node,
+    Name = ?ID_NAME,
     NodeId = node_id(),
-    Nodes = [{Name, N} || N <- rabbit_mnesia:cluster_nodes(all),
-                          can_participate_in_clientid_tracking(N)] -- [NodeId],
+    Nodes = all_node_ids() -- [NodeId],
     Res = case ra_directory:uid_of(Name) of
               undefined ->
                   UId = ra:new_uid(ra_lib:to_binary(Name)),
