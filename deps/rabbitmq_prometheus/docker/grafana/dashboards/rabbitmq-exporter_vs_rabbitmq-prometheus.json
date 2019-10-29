@@ -341,16 +341,11 @@
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
-      "10s",
+      "15s",
       "30s",
       "1m",
       "5m",
-      "15m",
-      "30m",
-      "1h",
-      "2h",
-      "1d"
+      "10m"
     ]
   },
   "timezone": "",
