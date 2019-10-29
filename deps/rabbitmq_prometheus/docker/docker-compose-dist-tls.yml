@@ -72,3 +72,10 @@ services:
       VARIABLE_RATE: "1:30,20:30,40:30"
       SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
       METRICS_PROMETHEUS: "true"
+  rabbitmq-exporter:
+    # https://hub.docker.com/r/kbudde/rabbitmq-exporter/tags
+    image: kbudde/rabbitmq-exporter:v0.29.0
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      RABBIT_URL: "http://rmq0-dist-tls:15672"
