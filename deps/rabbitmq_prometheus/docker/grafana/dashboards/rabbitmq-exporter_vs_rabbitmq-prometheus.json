@@ -36,7 +36,6 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1570119158161,
   "links": [],
   "panels": [
     {
@@ -120,6 +119,11 @@
           "expr": "scrape_duration_seconds{job=\"rabbitmq-server\", instance=~\".*dist-tls.*\"}",
           "legendFormat": "{{instance}}",
           "refId": "B"
+        },
+        {
+          "expr": "scrape_duration_seconds{job=\"rabbitmq-prometheus\"}",
+          "legendFormat": "{{deployment}} {{instance}}",
+          "refId": "C"
         }
       ],
       "timeFrom": null,
@@ -177,6 +181,11 @@
           "expr": "scrape_duration_seconds{job=\"rabbitmq-server\", instance=~\".*dist-tls.*\"}",
           "legendFormat": "{{instance}}",
           "refId": "B"
+        },
+        {
+          "expr": "scrape_duration_seconds{job=\"rabbitmq-prometheus\"}",
+          "legendFormat": "{{deployment}} {{instance}}",
+          "refId": "C"
         }
       ],
       "thresholds": [
@@ -325,7 +334,7 @@
       }
     }
   ],
-  "refresh": "10s",
+  "refresh": "15s",
   "schemaVersion": 20,
   "style": "dark",
   "tags": [
@@ -336,7 +345,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -346,6 +355,17 @@
       "1m",
       "5m",
       "10m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
     ]
   },
   "timezone": "",
