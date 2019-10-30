@@ -31,6 +31,7 @@
 -define(APP, rabbitmq_mqtt).
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
+-define(MAX_TOPIC_PERMISSION_CACHE_SIZE, 12).
 
 initial_state(Socket, SSLLoginName) ->
     RealSocket = rabbit_net:unwrap_socket(Socket),
@@ -959,7 +960,8 @@ check_topic_access(TopicName, Access,
 
             try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
                 ok ->
-                    put(topic_permission_cache, [Key | Cache]),
+                    CacheTail = lists:sublist(Cache, ?MAX_TOPIC_PERMISSION_CACHE_SIZE - 1),
+                    put(topic_permission_cache, [Key | CacheTail]),
                     ok;
                 R ->
                     R
