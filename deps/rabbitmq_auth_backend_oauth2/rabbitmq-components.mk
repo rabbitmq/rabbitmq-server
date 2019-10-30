@@ -116,7 +116,7 @@ dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.9.0
 dep_lager = hex 3.8.0
 dep_prometheus = hex 4.4.0
-dep_ra = hex 1.0.4
+dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.0
 dep_observer_cli = hex 1.5.2
@@ -213,7 +213,7 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
-possible_base_rmq_ref := v3.8.x
+possible_base_rmq_ref := master
 ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
 base_rmq_ref := $(current_rmq_ref)
 else
