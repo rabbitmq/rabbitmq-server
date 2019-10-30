@@ -212,4 +212,7 @@ RabbitMQ-PerfTest.json: $(JQ)
 .PHONY: RabbitMQ-Quorum-Queues-Raft.json
 RabbitMQ-Quorum-Queues-Raft.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
+.PHONY: rabbitmq-exporter_vs_rabbitmq-prometheus.json
+rabbitmq-exporter_vs_rabbitmq-prometheus.json: $(JQ)
+	@$(GENERATE_DASHBOARD)
 
