@@ -105,10 +105,12 @@ check_vhost_access(User = #auth_user{username = Username,
             {user_dn,  UserDN},
             {vhost,    VHost}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)]),
-    R = evaluate_ldap(env(vhost_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-       [log_vhost(Args), log_user(User), log_result(R)]),
-    R.
+    R0 = evaluate_ldap(env(vhost_access_query), Args, User),
+    R1 = ensure_rabbit_authz_backend_result(R0),
+    ?L("DECISION: ~s for ~s: ~p (~p)",
+       [log_vhost(Args), log_user(User),
+        log_result(R0), log_result(R1)]),
+    R1.
 
 check_resource_access(User = #auth_user{username = Username,
                                         impl     = #impl{user_dn = UserDN}},
@@ -124,10 +126,12 @@ check_resource_access(User = #auth_user{username = Username,
             {name,       Name},
             {permission, Permission}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
-    R = evaluate_ldap(env(resource_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-       [log_resource(Args), log_user(User), log_result(R)]),
-    R.
+    R0 = evaluate_ldap(env(resource_access_query), Args, User),
+    R1 = ensure_rabbit_authz_backend_result(R0),
+    ?L("DECISION: ~s for ~s: ~p (~p)",
+       [log_resource(Args), log_user(User),
+        log_result(R0), log_result(R1)]),
+    R1.
 
 check_topic_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
@@ -143,14 +147,30 @@ check_topic_access(User = #auth_user{username = Username,
             {name,       Name},
             {permission, Permission}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
-    R = evaluate_ldap(env(topic_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-        [log_resource(Args), log_user(User), log_result(R)]),
-    R.
+    R0 = evaluate_ldap(env(topic_access_query), Args, User),
+    R1 = ensure_rabbit_authz_backend_result(R0),
+    ?L("DECISION: ~s for ~s: ~p (~p)",
+        [log_resource(Args), log_user(User),
+         log_result(R0), log_result(R1)]),
+    R1.
 
 state_can_expire() -> false.
 
 %%--------------------------------------------------------------------
+
+ensure_rabbit_authz_backend_result(true) ->
+    true;
+ensure_rabbit_authz_backend_result(false) ->
+    false;
+ensure_rabbit_authz_backend_result({error, _}=Error) ->
+    Error;
+% rabbitmq/rabbitmq-auth-backend-ldap#116
+ensure_rabbit_authz_backend_result({refused, _, _}) ->
+    false;
+ensure_rabbit_authz_backend_result({ok, _}) ->
+    true;
+ensure_rabbit_authz_backend_result({ok, _, _}) ->
+    true.
 
 context_as_options(Context, Namespace) when is_map(Context) ->
     % filter keys that would erase fixed variables
