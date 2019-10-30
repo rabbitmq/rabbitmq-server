@@ -1592,7 +1592,7 @@ basic_consume(Q,
             {ok, maps:put(Name, QState, QStates)};
         {error, Reason} ->
             rabbit_misc:protocol_error(internal_error,
-                                       "Cannot consume a message from quorum queue '~s': ~p",
+                                       "Cannot consume a message from quorum queue '~s': ~w",
                                        [rabbit_misc:rs(QName), Reason])
     end.
 
