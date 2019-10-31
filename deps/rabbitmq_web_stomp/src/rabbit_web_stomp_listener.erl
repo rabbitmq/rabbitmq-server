@@ -48,22 +48,28 @@ init() ->
     end,
     ok.
 
-start_tcp_listener(TCPConf0, CowboyOpts, Routes) ->
+start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
   NumTcpAcceptors = case application:get_env(rabbitmq_web_stomp, num_tcp_acceptors) of
       undefined -> get_env(num_acceptors, 10);
       {ok, NumTcp}  -> NumTcp
   end,
   Port = get_tcp_port(application:get_all_env(rabbitmq_web_stomp)),
   TCPConf = get_tcp_conf(TCPConf0, Port),
-  MaxConnections = get_max_connections(),
-  case ranch:start_listener(
-          http, NumTcpAcceptors,
-          ranch_tcp, [{connection_type, supervisor}, {max_connections, MaxConnections}] ++ TCPConf,
-          rabbit_web_stomp_connection_sup,
-          CowboyOpts#{env => #{dispatch => Routes},
-                      middlewares => [cowboy_router,
-                                      rabbit_web_stomp_middleware,
-                                      cowboy_handler]}) of
+  RanchTransportOpts = #{
+    socket_opts     => TCPConf,
+    connection_type => supervisor,
+    max_connections => get_max_connections(),
+    num_acceptors   => NumTcpAcceptors
+  },
+  CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
+                            middlewares => [cowboy_router,
+                                            rabbit_web_stomp_middleware,
+                                            cowboy_handler]},
+  case ranch:start_listener(web_stomp,
+                           ranch_tcp,
+                           RanchTransportOpts,
+                           rabbit_web_stomp_connection_sup,
+                           CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTCP}                  ->
@@ -79,7 +85,7 @@ start_tcp_listener(TCPConf0, CowboyOpts, Routes) ->
       [get_binding_address(TCPConf), Port]).
 
 
-start_tls_listener(TLSConf0, CowboyOpts, Routes) ->
+start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
   rabbit_networking:ensure_ssl(),
   NumSslAcceptors = case application:get_env(rabbitmq_web_stomp, num_ssl_acceptors) of
       undefined     -> get_env(num_acceptors, 10);
@@ -87,15 +93,21 @@ start_tls_listener(TLSConf0, CowboyOpts, Routes) ->
   end,
   TLSPort = proplists:get_value(port, TLSConf0),
   TLSConf = maybe_parse_ip(TLSConf0),
-  MaxConnections = get_max_connections(),
-  case ranch:start_listener(
-         https, NumSslAcceptors,
-         ranch_ssl, [{connection_type, supervisor}, {max_connections, MaxConnections}] ++ TLSConf,
-         rabbit_web_stomp_connection_sup,
-         CowboyOpts#{env => #{dispatch => Routes},
-                     middlewares => [cowboy_router,
-                                     rabbit_web_stomp_middleware,
-                                     cowboy_handler]}) of
+  RanchTransportOpts = #{
+    socket_opts     => TLSConf,
+    connection_type => supervisor,
+    max_connections => get_max_connections(),
+    num_acceptors   => NumSslAcceptors
+  },
+  CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
+                            middlewares => [cowboy_router,
+                                            rabbit_web_stomp_middleware,
+                                            cowboy_handler]},
+  case ranch:start_listener(web_stomp_secure,
+                            ranch_ssl,
+                            RanchTransportOpts,
+                            rabbit_web_stomp_connection_sup,
+                            CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTLS}                  ->
