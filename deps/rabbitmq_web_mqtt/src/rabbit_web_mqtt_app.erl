@@ -66,10 +66,17 @@ mqtt_init() ->
 
 start_tcp_listener(TCPConf0, CowboyOpts) ->
   {TCPConf, IpStr, Port} = get_tcp_conf(TCPConf0),
-  MaxConnections = get_max_connections(),
-  case ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
-      ranch_tcp, [{max_connections, MaxConnections}|TCPConf],
-      rabbit_web_mqtt_connection_sup, CowboyOpts) of
+  RanchTransportOpts = #{
+    socket_opts => TCPConf,
+    connection_type => supervisor,
+    max_connections => get_max_connections(),
+    num_acceptors => get_env(num_tcp_acceptors, 10)
+  },
+  case ranch:start_listener(web_mqtt,
+                            ranch_tcp,
+                            RanchTransportOpts,
+                            rabbit_web_mqtt_connection_sup,
+                            CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTCP}               ->
@@ -86,13 +93,17 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
 start_tls_listener(TLSConf0, CowboyOpts) ->
   rabbit_networking:ensure_ssl(),
   {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
-  MaxConnections = get_max_connections(),
-  {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
-      ranch_ssl, [{max_connections, MaxConnections}|TLSConf],
-      rabbit_web_mqtt_connection_sup, CowboyOpts),
-  case ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 10),
-      ranch_ssl, [{max_connections, MaxConnections}|TLSConf],
-      rabbit_web_mqtt_connection_sup, CowboyOpts) of
+  RanchTransportOpts = #{
+    socket_opts => TLSConf,
+    connection_type => supervisor,
+    max_connections => get_max_connections(),
+    num_acceptors => get_env(num_ssl_acceptors, 10)
+  },
+  case ranch:start_listener(web_mqtt_secure,
+                            ranch_ssl,
+                            RanchTransportOpts,
+                            rabbit_web_mqtt_connection_sup,
+                            CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTLS}               ->
@@ -115,20 +126,18 @@ listener_started(Protocol, Listener) ->
     ok.
 
 get_tcp_conf(TCPConf0) ->
-    TCPConf1 = [{connection_type, supervisor}|TCPConf0],
-    TCPConf2 = case proplists:get_value(port, TCPConf1) of
-                   undefined -> [{port, 15675}|TCPConf1];
-                   _ -> TCPConf1
+    TCPConf1 = case proplists:get_value(port, TCPConf0) of
+                   undefined -> [{port, 15675}|TCPConf0];
+                   _ -> TCPConf0
                end,
-    get_ip_port(TCPConf2).
+    get_ip_port(TCPConf1).
 
 get_tls_conf(TLSConf0) ->
-    TLSConf1 = [{connection_type, supervisor}|TLSConf0],
-    TLSConf2 = case proplists:get_value(port, TLSConf1) of
-                   undefined -> [{port, 15675}|proplists:delete(port, TLSConf1)];
-                   _ -> TLSConf1
+    TLSConf1 = case proplists:get_value(port, TLSConf0) of
+                   undefined -> [{port, 15675}|proplists:delete(port, TLSConf0)];
+                   _ -> TLSConf0
                end,
-    get_ip_port(TLSConf2).
+    get_ip_port(TLSConf1).
 
 get_ip_port(Conf0) ->
     IpStr = proplists:get_value(ip, Conf0),
