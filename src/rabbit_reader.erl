@@ -663,7 +663,7 @@ switch_callback(State, Callback, Length) ->
 terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
                               rabbit_misc:amqp_error(
-                                connection_forced, Explanation, [], none))};
+                                connection_forced, "~s", [Explanation], none))};
 terminate(_Explanation, State) ->
     {force, State}.
 
