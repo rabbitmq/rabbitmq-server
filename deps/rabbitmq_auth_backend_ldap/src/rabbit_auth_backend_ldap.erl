@@ -103,10 +103,12 @@ check_vhost_access(User = #auth_user{username = Username,
             {user_dn,  UserDN},
             {vhost,    VHost}] ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)]),
-    R = evaluate_ldap(env(vhost_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-       [log_vhost(Args), log_user(User), log_result(R)]),
-    R.
+    R0 = evaluate_ldap(env(vhost_access_query), Args, User),
+    R1 = ensure_rabbit_authz_backend_result(R0),
+    ?L("DECISION: ~s for ~s: ~p (~p)",
+       [log_vhost(Args), log_user(User),
+        log_result(R0), log_result(R1)]),
+    R1.
 
 check_resource_access(User = #auth_user{username = Username,
                                         impl     = #impl{user_dn = UserDN}},
@@ -120,17 +122,19 @@ check_resource_access(User = #auth_user{username = Username,
             {name,       Name},
             {permission, Permission}] ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
-    R = evaluate_ldap(env(resource_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-       [log_resource(Args), log_user(User), log_result(R)]),
-    R.
+    R0 = evaluate_ldap(env(resource_access_query), Args, User),
+    R1 = ensure_rabbit_authz_backend_result(R0),
+    ?L("DECISION: ~s for ~s: ~p (~p)",
+       [log_resource(Args), log_user(User),
+        log_result(R0), log_result(R1)]),
+    R1.
 
 check_topic_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
                    #resource{virtual_host = VHost, kind = topic = Resource, name = Name},
                    Permission,
                    Context) ->
-    OptionsArgs = topic_context_as_options(Context, undefined),
+    OptionsArgs = context_as_options(Context, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
@@ -139,20 +143,36 @@ check_topic_access(User = #auth_user{username = Username,
             {name,       Name},
             {permission, Permission}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
-    R = evaluate_ldap(env(topic_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-        [log_resource(Args), log_user(User), log_result(R)]),
-    R.
+    R0 = evaluate_ldap(env(topic_access_query), Args, User),
+    R1 = ensure_rabbit_authz_backend_result(R0),
+    ?L("DECISION: ~s for ~s: ~p (~p)",
+        [log_resource(Args), log_user(User),
+         log_result(R0), log_result(R1)]),
+    R1.
 
 %%--------------------------------------------------------------------
 
-topic_context_as_options(Context, Namespace) when is_map(Context) ->
+ensure_rabbit_authz_backend_result(true) ->
+    true;
+ensure_rabbit_authz_backend_result(false) ->
+    false;
+ensure_rabbit_authz_backend_result({error, _}=Error) ->
+    Error;
+% rabbitmq/rabbitmq-auth-backend-ldap#116
+ensure_rabbit_authz_backend_result({refused, _, _}) ->
+    false;
+ensure_rabbit_authz_backend_result({ok, _}) ->
+    true;
+ensure_rabbit_authz_backend_result({ok, _, _}) ->
+    true.
+
+context_as_options(Context, Namespace) when is_map(Context) ->
     % filter keys that would erase fixed variables
     lists:flatten([begin
          Value = maps:get(Key, Context),
          case Value of
              MapOfValues when is_map(MapOfValues) ->
-                 topic_context_as_options(MapOfValues, Key);
+                 context_as_options(MapOfValues, Key);
              SimpleValue ->
                  case Namespace of
                      undefined ->
@@ -164,7 +184,7 @@ topic_context_as_options(Context, Namespace) when is_map(Context) ->
      end || Key <- maps:keys(Context), lists:member(
                     rabbit_data_coercion:to_atom(Key),
                     ?RESOURCE_ACCESS_QUERY_VARIABLES) =:= false]);
-topic_context_as_options(_, _) ->
+context_as_options(_, _) ->
     [].
 
 create_option_name_with_namespace(Namespace, Key) ->
@@ -376,7 +396,7 @@ do_match(S1, S2) ->
             R
     end.
 
-%% In some cases when fetching regular expressions, LDAP evalution() 
+%% In some cases when fetching regular expressions, LDAP evalution()
 %% returns a list of strings, so we need to wrap guards around that.
 %% If a list of strings is returned, loop and match versus each element.
 do_match_multi(S1, []) ->
