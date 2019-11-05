@@ -808,7 +808,7 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void lastWillDowngradesQoS2(TestInfo info) throws Exception {
-        String lastWillTopic = "last-will-downgrades-qos";
+        String lastWillTopic = "test-topic-will-downgrades-qos";
 
         MqttConnectOptions client2Opts = new TestMqttConnectOptions();
         MqttClient client2 = newConnectedClient(info, client2Opts);
@@ -842,7 +842,7 @@ public class MqttTest implements MqttCallback {
 
         MqttConnectOptions clientOpts = new TestMqttConnectOptions();
 
-        MqttClient client = newClient("last-will-downgrades-qos");
+        MqttClient client = newClient("test-topic-will-downgrades-qos");
         clientOpts.setSocketFactory(testFactory);
         MqttTopic willTopic = client.getTopic(lastWillTopic);
         clientOpts.setWill(willTopic, payload, 2, false);
