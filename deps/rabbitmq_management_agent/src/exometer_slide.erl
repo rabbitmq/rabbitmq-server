@@ -352,14 +352,17 @@ maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
 
 
 create_normalized_lookup(Start, Interval, RoundFun, Samples) ->
-    lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
-                          NewTS = map_timestamp(TS, Start, Interval, RoundFun),
-                          orddict:update(NewTS, fun({T, V}) when T > TS ->
-                                                        {T, V};
-                                                   (_) -> {TS, Value}
-                                                end, {TS, Value}, Dict);
-                        (_, Dict) -> Dict end, orddict:new(),
-                     Samples).
+    lists:foldl(fun({TS, Value}, Acc) when TS - Start >= 0 ->
+                        NewTS = map_timestamp(TS, Start, Interval, RoundFun),
+                        maps:update_with(NewTS,
+                                         fun({T, V}) when T > TS ->
+                                                 {T, V};
+                                            (_) ->
+                                                 {TS, Value}
+                                         end, {TS, Value}, Acc);
+                   (_, Acc) ->
+                        Acc
+                end, #{}, Samples).
 
 -spec to_normalized_list(timestamp(), timestamp(), integer(), slide(),
                          no_pad | tuple()) -> [tuple()].
@@ -399,7 +402,7 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
 
     {_, Res1} = lists:foldl(
                   fun(T, {Last, Acc}) ->
-                          case orddict:find(T, Lookup) of
+                          case maps:find(T, Lookup) of
                               {ok, {_, V}} ->
                                   {V, [{T, V} | Acc]};
                               error when Last =:= undefined ->
@@ -407,7 +410,8 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                               error -> % this pads the last value into the future
                                   {Last, [{T, Last} | Acc]}
                           end
-                  end, {undefined, []}, lists:seq(Start, NowRound, Interval)),
+                  end, {undefined, []},
+                  lists:seq(Start, NowRound, Interval)),
     Res1 ++ Pad.
 
 
@@ -428,9 +432,9 @@ sum([#slide{size = Size, interval = Interval} | _] = Slides, Pad) ->
 
 
 sum(Now, Start, Interval, [Slide | _ ] = All, Pad) ->
-    Fun = fun({TS, Value}, Dict) ->
-                  orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
-                                 Value, Dict)
+    Fun = fun({TS, Value}, Acc) ->
+                  maps:update_with(TS, fun(V) -> add_to_total(V, Value) end,
+                                   Value, Acc)
           end,
     {Total, Dict} =
         lists:foldl(fun(#slide{total = T} = S, {Tot, Acc}) ->
@@ -439,9 +443,9 @@ sum(Now, Start, Interval, [Slide | _ ] = All, Pad) ->
                            Total = add_to_total(T, Tot),
                            Folded = lists:foldl(Fun, Acc, Samples),
                            {Total, Folded}
-                    end, {undefined, orddict:new()}, All),
+                    end, {undefined, #{}}, All),
 
-    {First, Buffer} = case orddict:to_list(Dict) of
+    {First, Buffer} = case lists:sort(maps:to_list(Dict)) of
                           [] ->
                               F = case [TS || #slide{first = TS} <- All,
                                               is_integer(TS)] of
