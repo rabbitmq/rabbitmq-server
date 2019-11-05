@@ -413,8 +413,8 @@ public class MqttTest implements MqttCallback {
 
     @Test public void subscribeReceivesRetainedMessagesWithDowngradedQoS(TestInfo info)
             throws MqttException, InterruptedException {
-        MqttConnectOptions client_opts = new TestMqttConnectOptions();
-        MqttClient client = newConnectedClient(info, client_opts);
+        MqttConnectOptions clientOpts = new TestMqttConnectOptions();
+        MqttClient client = newConnectedClient(info, clientOpts);
         client.setCallback(this);
         clearRetained(client, retainedTopic);
         client.subscribe(retainedTopic, 1);
@@ -805,6 +805,58 @@ public class MqttTest implements MqttCallback {
             // OK
             e.printStackTrace();
         }
+    }
+
+    @Test public void lastWillDowngradesQoS2(TestInfo info) throws Exception {
+        String lastWillTopic = "last-will-downgrades-qos";
+
+        MqttConnectOptions client2Opts = new TestMqttConnectOptions();
+        MqttClient client2 = newConnectedClient(info, client2Opts);
+        client2.subscribe(lastWillTopic);
+        client2.setCallback(this);
+
+        final SocketFactory factory = SocketFactory.getDefault();
+        final ArrayList<Socket> sockets = new ArrayList<>();
+        SocketFactory testFactory = new SocketFactory() {
+            public Socket createSocket(String s, int i) throws IOException {
+                Socket sock = factory.createSocket(s, i);
+                sockets.add(sock);
+                return sock;
+            }
+            public Socket createSocket(String s, int i, InetAddress a, int i1) {
+                return null;
+            }
+            public Socket createSocket(InetAddress a, int i) {
+                return null;
+            }
+            public Socket createSocket(InetAddress a, int i, InetAddress a1, int i1) {
+                return null;
+            }
+            @Override
+            public Socket createSocket() {
+                Socket sock = new Socket();
+                sockets.add(sock);
+                return sock;
+            }
+        };
+
+        MqttConnectOptions clientOpts = new TestMqttConnectOptions();
+
+        MqttClient client = newClient("last-will-downgrades-qos");
+        clientOpts.setSocketFactory(testFactory);
+        MqttTopic willTopic = client.getTopic(lastWillTopic);
+        clientOpts.setWill(willTopic, payload, 2, false);
+        clientOpts.setCleanSession(false);
+        client.connect(clientOpts);
+
+        waitAtMost(() -> sockets.size() == 1);
+        expectConnectionFailure = true;
+        sockets.get(0).close();
+
+        // let some time after disconnection
+        waitAtMost(() -> receivedMessagesSize() == 1);
+        assertEquals(1, receivedMessages.size());
+        disconnect(client2);
     }
 
     @Test public void lastWillNotSentOnRestrictedTopic(TestInfo info) throws Exception {
