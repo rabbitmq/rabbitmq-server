@@ -1,5 +1,7 @@
 # vim:sw=2:et:
 
+dist: bionic
+
 sudo: false
 language: erlang
 notifications:
@@ -11,14 +13,14 @@ notifications:
 addons:
   apt:
     sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+      - sourceline: deb https://packages.erlang-solutions.com/ubuntu bionic contrib
         key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
       - awscli
       # Use Elixir from Erlang Solutions. The provided Elixir is
       # installed with kiex but is old. We also can't use kiex to
       # install a newer one because of GitHub API rate limiting.
-      - elixir=1.6.6-1
+      - elixir=1.8.1-1
       - maven
 cache:
   apt: true
@@ -29,7 +31,7 @@ env:
 
 otp_release:
   - "20.3"
-  - "21.2"
+  - "21.3"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -47,7 +49,7 @@ before_script:
   - |
     echo YES | kiex implode
     elixir --version
-    elixir --version | grep -q 'Elixir 1.6.6'
+    elixir --version | grep -q 'Elixir 1.8'
 
 script:
   - make xref

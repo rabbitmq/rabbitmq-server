@@ -716,7 +716,8 @@ supported_subs_qos(?QOS_1) -> ?QOS_1;
 supported_subs_qos(?QOS_2) -> ?QOS_1.
 
 delivery_mode(?QOS_0) -> 1;
-delivery_mode(?QOS_1) -> 2.
+delivery_mode(?QOS_1) -> 2;
+delivery_mode(?QOS_2) -> 2.
 
 %% different qos subscriptions are received in different queues
 %% with appropriate durability and timeout arguments
