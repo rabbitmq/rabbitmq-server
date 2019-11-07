@@ -28,9 +28,39 @@
          get_topic_translation_funs/0
         ]).
 
+-define(MAX_TOPIC_TRANSLATION_CACHE_SIZE, 12).
+
 subcription_queue_name(ClientId) ->
     Base = "mqtt-subscription-" ++ ClientId ++ "qos",
     {list_to_binary(Base ++ "0"), list_to_binary(Base ++ "1")}.
+
+cached(CacheName, Fun, Arg) ->
+    Cache =
+        case get(CacheName) of
+            undefined ->
+                [];
+            Other ->
+                Other
+        end,
+    case lists:keyfind(Arg, 1, Cache) of
+        {_, V} ->
+            V;
+        false ->
+            V = Fun(Arg),
+            CacheTail = lists:sublist(Cache, ?MAX_TOPIC_TRANSLATION_CACHE_SIZE - 1),
+            put(CacheName, [{Arg, V} | CacheTail]),
+            V
+    end.
+
+to_amqp(T0) ->
+    T1 = string:replace(T0, "/", ".", all),
+    T2 = string:replace(T1, "+", "*", all),
+    erlang:iolist_to_binary(T2).
+
+to_mqtt(T0) ->
+    T1 = string:replace(T0, "*", "+", all),
+    T2 = string:replace(T1, ".", "/", all),
+    erlang:iolist_to_binary(T2).
 
 %% amqp mqtt descr
 %% *    +    match one topic level
@@ -38,15 +68,11 @@ subcription_queue_name(ClientId) ->
 %% .    /    topic level separator
 get_topic_translation_funs() ->
     SparkplugB = env(sparkplug),
-    ToAmqpFun = fun(T0) ->
-                    T1 = string:replace(T0, "/", ".", all),
-                    T2 = string:replace(T1, "+", "*", all),
-                    erlang:iolist_to_binary(T2)
+    ToAmqpFun = fun(Topic) ->
+                        cached(mta_cache, fun to_amqp/1, Topic)
                 end,
-    ToMqttFun = fun(T0) ->
-                    T1 = string:replace(T0, "*", "+", all),
-                    T2 = string:replace(T1, ".", "/", all),
-                    erlang:iolist_to_binary(T2)
+    ToMqttFun = fun(Topic) ->
+                        cached(atm_cache, fun to_mqtt/1, Topic)
                 end,
     {M2AFun, A2MFun} = case SparkplugB of
         true ->
