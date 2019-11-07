@@ -18,7 +18,7 @@
 
 -export([info/2, initial_state/2, initial_state/5,
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
-         close_connection/1]).
+         close_connection/1, handle_pre_hibernate/0]).
 
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2,
@@ -31,6 +31,7 @@
 -define(APP, rabbitmq_mqtt).
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
+-define(MAX_TOPIC_PERMISSION_CACHE_SIZE, 12).
 
 initial_state(Socket, SSLLoginName) ->
     RealSocket = rabbit_net:unwrap_socket(Socket),
@@ -903,6 +904,10 @@ close_connection(PState = #proc_state{ connection = Connection,
     PState #proc_state{ channels   = {undefined, undefined},
                         connection = undefined }.
 
+handle_pre_hibernate() ->
+    erase(topic_permission_cache),
+    ok.
+
 %% NB: check_*: MQTT spec says we should ack normally, ie pretend there
 %% was no auth error, but here we are closing the connection with an error. This
 %% is what happens anyway if there is an authorization failure at the AMQP 0-9-1 client level.
@@ -929,28 +934,46 @@ check_topic_access(TopicName, Access,
                         exchange = Exchange,
                         client_id = ClientId,
                         mqtt2amqp_fun = Mqtt2AmqpFun }) ->
-  Resource = #resource{virtual_host = VHost,
-                       kind = topic,
-                       name = Exchange},
-  RoutingKey = Mqtt2AmqpFun(TopicName),
-  Context = #{routing_key  => RoutingKey,
-              variable_map => #{
-                  <<"username">>  => Username,
-                  <<"vhost">>     => VHost,
-                  <<"client_id">> => rabbit_data_coercion:to_binary(ClientId)
-              }
-  },
+    Cache =
+        case get(topic_permission_cache) of
+            undefined -> [];
+            Other     -> Other
+        end,
 
-  try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
-    R -> R
-  catch
-    _:{amqp_error, access_refused, Msg, _} ->
-      rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
-        {error, access_refused};
-    _:Error ->
-      rabbit_log:error("~p~n", [Error]),
-        {error, access_refused}
-  end.
+    Key = {TopicName, Username, ClientId, VHost, Exchange, Access},
+    case lists:member(Key, Cache) of
+        true ->
+            ok;
+        false ->
+            Resource = #resource{virtual_host = VHost,
+                                 kind = topic,
+                                 name = Exchange},
+
+            RoutingKey = Mqtt2AmqpFun(TopicName),
+            Context = #{routing_key  => RoutingKey,
+                        variable_map => #{
+                                          <<"username">>  => Username,
+                                          <<"vhost">>     => VHost,
+                                          <<"client_id">> => rabbit_data_coercion:to_binary(ClientId)
+                                         }
+                       },
+
+            try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
+                ok ->
+                    CacheTail = lists:sublist(Cache, ?MAX_TOPIC_PERMISSION_CACHE_SIZE - 1),
+                    put(topic_permission_cache, [Key | CacheTail]),
+                    ok;
+                R ->
+                    R
+            catch
+                _:{amqp_error, access_refused, Msg, _} ->
+                    rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
+                    {error, access_refused};
+                _:Error ->
+                    rabbit_log:error("~p~n", [Error]),
+                    {error, access_refused}
+            end
+    end.
 
 info(consumer_tags, #proc_state{consumer_tags = Val}) -> Val;
 info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;

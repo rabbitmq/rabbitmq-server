@@ -24,7 +24,7 @@
 
 -export([start_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         code_change/3, terminate/2]).
+         code_change/3, terminate/2, handle_pre_hibernate/1]).
 
 -export([conserve_resources/3, start_keepalive/2]).
 
@@ -196,6 +196,10 @@ handle_info(Msg, State) ->
 terminate(Reason, State) ->
     maybe_emit_stats(State),
     do_terminate(Reason, State).
+
+handle_pre_hibernate(State) ->
+    rabbit_mqtt_processor:handle_pre_hibernate(),
+    {hibernate, State}.
 
 do_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
     rabbit_log_connection:error("MQTT detected TLS upgrade error on ~s: connection closed~n",
