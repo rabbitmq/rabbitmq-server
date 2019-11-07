@@ -885,11 +885,6 @@ close_connection(PState = #proc_state{ connection = Connection,
     PState #proc_state{ channels   = {undefined, undefined},
                         connection = undefined }.
 
-<<<<<<< HEAD
-% NB: check_*: MQTT spec says we should ack normally, ie pretend there
-% was no auth error, but here we are closing the connection with an error. This
-% is what happens anyway if there is an authorization failure at the AMQP level.
-=======
 handle_pre_hibernate() ->
     erase(topic_permission_cache),
     ok.
@@ -897,7 +892,6 @@ handle_pre_hibernate() ->
 %% NB: check_*: MQTT spec says we should ack normally, ie pretend there
 %% was no auth error, but here we are closing the connection with an error. This
 %% is what happens anyway if there is an authorization failure at the AMQP 0-9-1 client level.
->>>>>>> 1c9e9d7... Merge pull request #217 from velimir/cache-topic-access
 
 check_publish(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
