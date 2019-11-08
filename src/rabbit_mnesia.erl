@@ -59,8 +59,6 @@
 -export([init_with_lock/3]).
 -endif.
 
--include("rabbit.hrl").
-
 %%----------------------------------------------------------------------------
 
 -export_type([node_type/0, cluster_status/0]).
