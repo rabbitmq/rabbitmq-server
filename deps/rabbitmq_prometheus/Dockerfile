@@ -298,21 +298,32 @@ RUN rabbitmq-plugins enable --offline rabbitmq_top && \
 # rabbitmq_prometheus
 RUN rm /plugins/rabbit_common*.ez
 COPY plugins/rabbit_common*.ez  /plugins/
-RUN rm /plugins/accept*.ez
+RUN rm -f /plugins/accept*.ez
 COPY plugins/accept*.ez /plugins/
-RUN rm /plugins/prometheus*.ez
+RUN rm -f /plugins/prometheus*.ez
 COPY plugins/prometheus*.ez /plugins/
-RUN rm /plugins/rabbitmq_management*.ez
+RUN rm -f /plugins/rabbitmq_management*.ez
 COPY plugins/rabbitmq_management*.ez  /plugins/
-RUN rm /plugins/rabbitmq_prometheus*.ez
+RUN rm -f /plugins/rabbitmq_prometheus*.ez
 COPY plugins/rabbitmq_prometheus*.ez  /plugins/
-RUN rm /plugins/ra-*.ez
-COPY plugins/ra-*.ez  /plugins/
+
+# prometheus_rabbitmq_exporter
+# For manually testing the upgrade path to rabbitmq_prometheus
+#
+# mkdir deps
+# cd deps
+# wget https://github.com/deadtrickster/prometheus_rabbitmq_exporter/releases/download/v3.7.9.1/accept-0.3.5.ez
+# wget https://github.com/deadtrickster/prometheus_rabbitmq_exporter/releases/download/v3.7.9.1/prometheus-4.3.0.ez
+# wget https://github.com/deadtrickster/prometheus_rabbitmq_exporter/releases/download/v3.7.9.1/prometheus_cowboy-0.1.7.ez
+# wget https://github.com/deadtrickster/prometheus_rabbitmq_exporter/releases/download/v3.7.9.1/prometheus_httpd-2.1.10.ez
+# wget https://github.com/deadtrickster/prometheus_rabbitmq_exporter/releases/download/v3.7.9.1/prometheus_rabbitmq_exporter-3.7.9.1.ez
+COPY deps/accept-0.3.5.ez /plugins/
+COPY deps/prometheus-4.3.0.ez /plugins/
+COPY deps/prometheus_cowboy-0.1.7.ez /plugins/
+COPY deps/prometheus_httpd-2.1.10.ez /plugins/
+COPY deps/prometheus_rabbitmq_exporter-3.7.9.1.ez /plugins/
 
 ARG RABBITMQ_PROMETHEUS_VERSION
 RUN chmod --recursive --verbose a+r /plugins/*.ez && \
-    chown --recursive --verbose rabbitmq:rabbitmq /plugins && \
-    rabbitmq-plugins enable --offline rabbitmq_prometheus && \
-    rabbitmq-plugins is_enabled rabbitmq_prometheus --offline && \
-    rabbitmq-plugins list | grep "rabbitmq_prometheus.*${RABBITMQ_PROMETHEUS_VERSION}"
+    chown --recursive --verbose rabbitmq:rabbitmq /plugins
 EXPOSE 15692
