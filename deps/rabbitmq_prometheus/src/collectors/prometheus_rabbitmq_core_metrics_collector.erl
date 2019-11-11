@@ -66,8 +66,7 @@
     {channel_exchange_metrics, [
         {2, channel_messages_published_total, counter, "Total number of messages published into an exchange on a channel"},
         {3, channel_messages_confirmed_total, counter, "Total number of messages published into an exchange and confirmed on the channel"},
-        {4, channel_messages_unroutable_returned_total, counter, "Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable"},
-        {5, channel_messages_unroutable_dropped_total, counter, "Total number of messages published as non-mandatory into an exchange and dropped as unroutable"}
+        {4, channel_messages_unroutable_returned_total, counter, "Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable"}
     ]},
 
     {channel_process_metrics, [
@@ -148,15 +147,6 @@
         {2, queue_index_read_ops_total, counter, "Total number of Queue Index read operations", queue_index_read_count},
         {2, queue_index_write_ops_total, counter, "Total number of Queue Index write operations", queue_index_write_count},
         {2, queue_index_journal_write_ops_total, counter, "Total number of Queue Index Journal write operations", queue_index_journal_write_count}
-    ]},
-
-    {ra_metrics, [
-        {2, raft_term_total, counter, "Current Raft term number"},
-        {3, raft_log_snapshot_index, gauge, "Raft log snapshot index"},
-        {4, raft_log_last_applied_index, gauge, "Raft log last applied index"},
-        {5, raft_log_commit_index, gauge, "Raft log commit index"},
-        {6, raft_log_last_written_index, gauge, "Raft log last written index"},
-        {7, raft_entry_commit_latency, gauge, "Time taken for an entry to be committed"}
     ]},
 
     {queue_coarse_metrics, [

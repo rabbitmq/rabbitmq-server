@@ -66,7 +66,6 @@ init_per_group(with_metrics, Config0) ->
         [{rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]}]
     ),
     Config2 = init_per_group(with_metrics, Config1, []),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue),
 
     A = rabbit_ct_broker_helpers:get_node_config(Config2, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config2, A),
@@ -75,7 +74,7 @@ init_per_group(with_metrics, Config0) ->
     amqp_channel:call(Ch,
                       #'queue.declare'{queue = Q,
                                        durable = true,
-                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
+                                       arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]
                                       }),
     amqp_channel:cast(Ch,
                       #'basic.publish'{routing_key = Q},
@@ -168,7 +167,6 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
     %% This metric has no value, we are checking just that it is defined
     ?assertEqual(match, re:run(Body, " rabbitmq_queue_consumers ", [{capture, none}])),
