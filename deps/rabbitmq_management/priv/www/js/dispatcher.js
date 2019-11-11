@@ -14,7 +14,6 @@ dispatcher_add(function(sammy) {
             }
             render(reqs, 'overview', '#/');
         });
-    sammy.get('#/login/:username/:password', login_route);
 
     path('#/cluster-name', {'cluster_name': '/cluster-name'}, 'cluster-name');
     sammy.put('#/cluster-name', function() {
