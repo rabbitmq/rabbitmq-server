@@ -44,31 +44,6 @@ function set_auth_pref(userinfo) {
     store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
 }
 
-function login_route () {
-    var userpass = '' + this.params['username'] + ':' + this.params['password'],
-        location = window.location.href,
-        hash = window.location.hash;
-    set_auth_pref(decodeURIComponent(userpass));
-    location = location.substr(0, location.length - hash.length);
-    window.location.replace(location);
-    // because we change url, we don't need to hit check_login as
-    // we'll end up doing that at the bottom of start_app_login after
-    // we've changed url.
-}
-
-function login_route_with_path() {
-  var params = ('' + this.params['splat']).split('/');
-  var user = params.shift();
-  var pass = params.shift();
-  var userpass = '' + user + ':' + pass,
-        location = window.location.href,
-        hash = window.location.hash;
-    set_auth_pref(decodeURIComponent(userpass));
-    location = location.substr(0, location.length - hash.length) + '#/' + params.join('/');
-    check_login();
-    window.location.replace(location);
-}
-
 function getParameterByName(name) {
     var match = RegExp('[#&]' + name + '=([^&]*)').exec(window.location.hash);
     return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
@@ -87,8 +62,6 @@ function start_app_login() {
             set_auth_pref(username + ':' + password);
             check_login();
         });
-        this.get('#/login/:username/:password', login_route);
-        this.get(/\#\/login\/(.*)/, login_route_with_path);
     });
     if (enable_uaa) {
         var token = getAccessToken();
