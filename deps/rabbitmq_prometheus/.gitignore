@@ -16,4 +16,4 @@
 erl_crash.dump
 prometheus/data
 
-test/config_schema_SUITE_data/schema/rabbit.schema
+test/config_schema_SUITE_data/schema/
