@@ -7,7 +7,7 @@ It is largely a "clean room" design that reuses some prior work from Prometheus 
 
 ## Project Maturity
 
-This plugin is reasonably mature and will ship in the RabbitMQ distribution as of `3.8.0`.
+This plugin is new and relatively immature. It shipped in the RabbitMQ distribution starting with `3.8.0`.
 
 ## Documentation
 
