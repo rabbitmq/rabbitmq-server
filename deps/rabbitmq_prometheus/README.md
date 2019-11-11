@@ -2,13 +2,16 @@
 
 ## Getting Started
 
-This is a Prometheus exporter of core (raw, unaggregated) RabbitMQ metrics.
+This is a Prometheus exporter of core (raw, unaggregated) RabbitMQ metrics, developed by the RabbitMQ core team.
+It is largely a "clean room" design that reuses some prior work from Prometheus exporters done by the community.
 
 ## Project Maturity
 
-This plugin is currently very immature and not ready for public consumption. The plan is to include
-it into a future RabbitMQ release.
+This plugin is new and relatively immature. It shipped in the RabbitMQ distribution starting with `3.8.0`.
 
+## Documentation
+
+See [Monitoring RabbitMQ with Prometheus and Grafana](https://www.rabbitmq.com/prometheus.html).
 
 ## Enable the Plugin
 
@@ -19,7 +22,10 @@ To enable it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugin
 
 ## Usage
 
-Default port used by the plugin is `15692`.
+See the [documentation guide](https://www.rabbitmq.com/prometheus.html).
+
+Default port used by the plugin is `15692`. In most environments there would be no configuration
+necessary.
 
 
 ## Configuration
