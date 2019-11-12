@@ -102,43 +102,5 @@ id(ReqData) ->
       Value   -> Value
     end.
 
-put_vhost(Name, Description, Tags0, Trace, Username) ->
-    Tags = case Tags0 of
-      undefined   -> <<"">>;
-      null        -> <<"">>;
-      "undefined" -> <<"">>;
-      "null"      -> <<"">>;
-      Other       -> Other
-    end,
-    Result = case rabbit_vhost:exists(Name) of
-        true  -> ok;
-        false -> rabbit_vhost:add(Name, Description, rabbit_vhost:parse_tags(Tags), Username),
-                 %% wait for up to 45 seconds for the vhost to initialise
-                 %% on all nodes
-                 case rabbit_vhost:await_running_on_all_nodes(Name, 45000) of
-                     ok               ->
-                         maybe_grant_full_permissions(Name, Username);
-                     {error, timeout} ->
-                         {error, timeout}
-                 end
-    end,
-    case Trace of
-        true      -> rabbit_trace:start(Name);
-        false     -> rabbit_trace:stop(Name);
-        undefined -> ok
-    end,
-    Result.
-
-%% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
-%% which does not actually exist
-maybe_grant_full_permissions(_Name, ?INTERNAL_USER) ->
-    ok;
-maybe_grant_full_permissions(Name, Username) ->
-    U = rabbit_auth_backend_internal:lookup_user(Username),
-    maybe_grant_full_permissions(U, Name, Username).
-
-maybe_grant_full_permissions({ok, _}, Name, Username) ->
-    rabbit_auth_backend_internal:set_permissions(
-      Username, Name, <<".*">>, <<".*">>, <<".*">>, Username);
-maybe_grant_full_permissions(_, _Name, _Username) ->
-    ok.
+put_vhost(Name, Description, Tags, Trace, Username) ->
+    rabbit_vhost:put_vhost(Name, Description, Tags, Trace, Username).

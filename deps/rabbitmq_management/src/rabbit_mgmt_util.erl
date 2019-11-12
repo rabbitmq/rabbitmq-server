@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Management Plugin.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_util).
@@ -791,20 +791,19 @@ with_decode(Keys, Body, ReqData, Context, Fun) ->
 decode(Keys, Body) ->
     case decode(Body) of
         {ok, J0} ->
-                    J = maps:fold(fun(K, V, Acc) ->
-                        Acc#{binary_to_atom(K, utf8) => V}
-                    end, J0, J0),
-                    Results = [get_or_missing(K, J) || K <- Keys],
-                    case [E || E = {key_missing, _} <- Results] of
-                        []      -> {ok, Results, J};
-                        Errors  -> {error, Errors}
-                    end;
-        Else     -> Else
+            J = maps:fold(fun(K, V, Acc) ->
+                    Acc#{binary_to_atom(K, utf8) => V}
+                end, J0, J0),
+                Results = [get_or_missing(K, J) || K <- Keys],
+                case [E || E = {key_missing, _} <- Results] of
+                    []      -> {ok, Results, J};
+                    Errors  -> {error, Errors}
+                end;
+        Else -> Else
     end.
 
 decode(<<"">>) ->
     {ok, #{}};
-
 decode(Body) ->
     try
         {ok, rabbit_json:decode(Body)}
@@ -1094,14 +1093,10 @@ list_login_vhosts(User, AuthzData) ->
               _  -> false
           end].
 
-%% Wow, base64:decode throws lots of weird errors. Catch and convert to one
+%% base64:decode throws lots of weird errors. Catch and convert to one
 %% that will cause a bad_request.
 b64decode_or_throw(B64) ->
-    try
-        base64:decode(B64)
-    catch error:_ ->
-            throw({error, {not_base64, B64}})
-    end.
+    rabbit_misc:b64decode_or_throw(B64).
 
 no_range() -> {no_range, no_range, no_range, no_range}.
 
