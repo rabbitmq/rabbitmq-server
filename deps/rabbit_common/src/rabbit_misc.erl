@@ -31,7 +31,7 @@
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
 -export([dirty_read/1]).
--export([table_lookup/2, set_table_value/4]).
+-export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -45,7 +45,7 @@
 -export([execute_mnesia_tx_with_tail/1]).
 -export([ensure_ok/2]).
 -export([tcp_name/3, format_inet_error/1]).
--export([upmap/2, map_in_order/2]).
+-export([upmap/2, map_in_order/2, utf8_safe/1]).
 -export([table_filter/3]).
 -export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
@@ -78,6 +78,7 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2, get_proc_name/0]).
 -export([moving_average/4]).
+-export([escape_html_tags/1, b64decode_or_throw/1]).
 -export([get_env/3]).
 -export([get_channel_operation_timeout/0]).
 -export([random/1]).
@@ -370,6 +371,10 @@ dirty_read({Table, Key}) ->
         []       -> {error, not_found}
     end.
 
+%%
+%% Attribute Tables
+%%
+
 table_lookup(Table, Key) ->
     case lists:keysearch(Key, 1, Table) of
         {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
@@ -379,6 +384,49 @@ table_lookup(Table, Key) ->
 set_table_value(Table, Key, Type, Value) ->
     sort_field_table(
       lists:keystore(Key, 1, Table, {Key, Type, Value})).
+
+to_amqp_table(M) when is_map(M) ->
+    lists:reverse(maps:fold(fun(K, V, Acc) -> [to_amqp_table_row(K, V)|Acc] end,
+                            [], M));
+to_amqp_table(L) when is_list(L) ->
+    L.
+
+to_amqp_table_row(K, V) ->
+    {T, V2} = type_val(V),
+    {K, T, V2}.
+
+to_amqp_array(L) ->
+    [type_val(I) || I <- L].
+
+type_val(M) when is_map(M)     -> {table,   to_amqp_table(M)};
+type_val(L) when is_list(L)    -> {array,   to_amqp_array(L)};
+type_val(X) when is_binary(X)  -> {longstr, X};
+type_val(X) when is_integer(X) -> {long,    X};
+type_val(X) when is_number(X)  -> {double,  X};
+type_val(true)                 -> {bool, true};
+type_val(false)                -> {bool, false};
+type_val(null)                 -> throw({error, null_not_allowed});
+type_val(X)                    -> throw({error, {unhandled_type, X}}).
+
+amqp_table(unknown)   -> unknown;
+amqp_table(undefined) -> amqp_table([]);
+amqp_table([])        -> #{};
+amqp_table(#{})       -> #{};
+amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
+                                            {Name, Type, Value} <- Table]).
+
+amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
+amqp_value(table, V)                   -> amqp_table(V);
+amqp_value(decimal, {Before, After})   ->
+    erlang:list_to_float(
+      lists:flatten(io_lib:format("~p.~p", [Before, After])));
+amqp_value(_Type, V) when is_binary(V) -> utf8_safe(V);
+amqp_value(_Type, V)                   -> V.
+
+
+%%
+%% Resources
+%%
 
 r(#resource{virtual_host = VHostPath}, Kind, Name) ->
     #resource{virtual_host = VHostPath, kind = Kind, name = Name};
@@ -570,6 +618,31 @@ format_inet_error(E) -> format("~w (~s)", [E, format_inet_error0(E)]).
 format_inet_error0(address) -> "cannot connect to host/port";
 format_inet_error0(timeout) -> "timed out";
 format_inet_error0(Error)   -> inet:format_error(Error).
+
+%% base64:decode throws lots of weird errors. Catch and convert to one
+%% that will cause a bad_request.
+b64decode_or_throw(B64) ->
+    try
+        base64:decode(B64)
+    catch error:_ ->
+            throw({error, {not_base64, B64}})
+    end.
+
+utf8_safe(V) ->
+    try
+        _ = xmerl_ucs:from_utf8(V),
+        V
+    catch exit:{ucs, _} ->
+            Enc = split_lines(base64:encode(V)),
+            <<"Not UTF-8, base64 is: ", Enc/binary>>
+    end.
+
+%% MIME enforces a limit on line length of base 64-encoded data to 76 characters.
+split_lines(<<Text:76/binary, Rest/binary>>) ->
+    <<Text/binary, $\n, (split_lines(Rest))/binary>>;
+split_lines(Text) ->
+    Text.
+
 
 %% This is a modified version of Luke Gorrie's pmap -
 %% https://lukego.livejournal.com/6753.html - that doesn't care about
@@ -1207,6 +1280,26 @@ moving_average(Time,  HalfLife,  Next, Current) ->
 
 random(N) ->
     rand:uniform(N).
+
+-spec escape_html_tags(string()) -> binary().
+
+escape_html_tags(S) ->
+    escape_html_tags(rabbit_data_coercion:to_list(S), []).
+
+
+-spec escape_html_tags(string(), string()) -> binary().
+
+escape_html_tags([], Acc) ->
+    rabbit_data_coercion:to_binary(lists:reverse(Acc));
+escape_html_tags("<" ++ Rest, Acc) ->
+    escape_html_tags(Rest, lists:reverse("&lt;", Acc));
+escape_html_tags(">" ++ Rest, Acc) ->
+    escape_html_tags(Rest, lists:reverse("&gt;", Acc));
+escape_html_tags("&" ++ Rest, Acc) ->
+    escape_html_tags(Rest, lists:reverse("&amp;", Acc));
+escape_html_tags([C | Rest], Acc) ->
+    escape_html_tags(Rest, [C | Acc]).
+
 
 %% Moved from rabbit/src/rabbit_cli.erl
 %% If the server we are talking to has non-standard net_ticktime, and
