@@ -1,0 +1,398 @@
+
+
+{
+  "rabbit_version": "3.7.4",
+  "users": [
+    {
+      "name": "bunny_reader",
+      "password_hash": "rgJkcwpypdpIVhbLDj7CaCtFVg6Dyj3yQDcCbhyn29u49c88",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ""
+    },
+    {
+      "name": "bunny_gem",
+      "password_hash": "fHFOkIlJ8iohrhN4IQXIzIDrxsOfaekv97wA1W\/0N\/uxTWjE",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ""
+    },
+    {
+      "name": "guest",
+      "password_hash": "ujflQBzsAaAfbNSLAy4y2iG9mMpgATaH5oXQfPLkxOhE1yzH",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "bunny_testbed"
+    },
+    {
+      "name": "\/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "bunny_reader",
+      "vhost": "bunny_testbed",
+      "configure": "^---$",
+      "write": "^---$",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "\/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "bunny_gem",
+      "vhost": "bunny_testbed",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "bunny_testbed",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "topic_permissions": [
+    
+  ],
+  "parameters": [
+    {
+      "value": {
+        "pattern": "^apd\\\\.mce\\\\.estarchive.*$",
+        "definition": {
+          "max-length-bytes": 200000000
+        },
+        "priority": 0,
+        "apply-to": "queues"
+      },
+      "vhost": "\/",
+      "component": "operator_policy",
+      "name": "apd-mce-estarchive"
+    }
+  ],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "rabbit@warp10"
+    }
+  ],
+  "policies": [
+    
+  ],
+  "queues": [
+    {
+      "name": "test",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "reply",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "ack-test",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "nack-test",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "redelivered-test",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "unsub02",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "known3",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "ack-test-tx",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "stomp-subscription-As-CQ37wutHLc9H0PmjIPw",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "unsub01",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "test-receipt-tx",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "unsub03",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "test2",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "known",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "unsub04",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "stomp-subscription-j7FLeUn7ehTatYVNiBy6UA",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "ir",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "nack-multi",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "test-receipt",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "reliability",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "duplicate-consumer-tag-test2",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "test-multi",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "test3",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "stomp-subscription-tMbeqL30tjlgaXMmaFM6Ew",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "nack-test-no-requeue",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "ack-test-individual",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "known2",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "custom-header",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    },
+    {
+      "name": "stomp-subscription-eWSXV2ty1R7VqfsnULKEkA",
+      "vhost": "\/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        
+      }
+    }
+  ],
+  "exchanges": [
+    
+  ],
+  "bindings": [
+    {
+      "source": "amq.topic",
+      "vhost": "\/",
+      "destination": "stomp-subscription-tMbeqL30tjlgaXMmaFM6Ew",
+      "destination_type": "queue",
+      "routing_key": "durable",
+      "arguments": {
+        
+      }
+    },
+    {
+      "source": "amq.topic",
+      "vhost": "\/",
+      "destination": "stomp-subscription-eWSXV2ty1R7VqfsnULKEkA",
+      "destination_type": "queue",
+      "routing_key": "durable-separate",
+      "arguments": {
+        
+      }
+    },
+    {
+      "source": "amq.topic",
+      "vhost": "\/",
+      "destination": "stomp-subscription-j7FLeUn7ehTatYVNiBy6UA",
+      "destination_type": "queue",
+      "routing_key": "durable-separate",
+      "arguments": {
+        
+      }
+    },
+    {
+      "source": "amq.topic",
+      "vhost": "\/",
+      "destination": "stomp-subscription-As-CQ37wutHLc9H0PmjIPw",
+      "destination_type": "queue",
+      "routing_key": "durable-shared",
+      "arguments": {
+        
+      }
+    }
+  ]
+}

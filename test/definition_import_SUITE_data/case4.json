@@ -1,0 +1,49 @@
+{
+    "bindings": [],
+    "exchanges": [],
+    "parameters": [],
+    "permissions": [
+        {
+            "configure": ".*",
+            "read": ".*",
+            "user": "guest",
+            "vhost": "/",
+            "write": ".*"
+        }
+    ],
+    "policies": [
+        {
+            "apply-to": "all",
+            "definition": {
+                "queue-master-locator": "client-local"
+            },
+            "name": "abc",
+            "pattern": "^abc\\.",
+            "priority": 0,
+            "vhost": "/"
+        }
+    ],
+    "queues": [
+        {
+            "arguments": {},
+            "auto_delete": false,
+            "durable": false,
+            "name": "abc.def",
+            "vhost": "/"
+        }
+    ],
+    "rabbit_version": "0.0.0",
+    "users": [
+        {
+            "hashing_algorithm": "rabbit_password_hashing_sha256",
+            "name": "guest",
+            "password_hash": "QM532K822VTbYBFbwSZEnT8jkH8TT0dPsUtja6vL0myfsrmk",
+            "tags": "administrator"
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "/"
+        }
+    ]
+}
