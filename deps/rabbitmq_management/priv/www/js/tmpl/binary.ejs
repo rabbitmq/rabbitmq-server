@@ -7,7 +7,7 @@
 <% } else { %>
 <%
   var sections = {'queue_procs'         : ['queue',  'Classic queues'],
-                  'queue_slave_procs'   : ['queue',  'Classic queues (slaves)'],
+                  'queue_slave_procs'   : ['queue',  'Classic queues (mirrors)'],
                   'quorum_queue_procs'  : ['queue',  'Quorum queues'],
                   'connection_readers'  : ['conn',   'Connection readers'],
                   'connection_writers'  : ['conn',   'Connection writers'],
@@ -25,7 +25,7 @@
 <%
 var key = [[{name: 'Queues', colour: 'queue',
              keys: [['queue_procs',         'queues'],
-                    ['queue_slave_procs',   'slaves'],
+                    ['queue_slave_procs',   'mirrors'],
                     ['quorum_queue_procs',  'quorum']]}],
 
            [{name: 'Connections', colour: 'conn',
