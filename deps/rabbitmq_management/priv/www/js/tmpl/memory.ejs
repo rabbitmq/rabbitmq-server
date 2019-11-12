@@ -7,7 +7,7 @@
 <% } else { %>
 <%
   var sections = {'queue_procs'         : ['queue',  'Queues'],
-                  'queue_slave_procs'   : ['queue',  'Queues (slaves)'],
+                  'queue_slave_procs'   : ['queue',  'Queues (mirrors)'],
                   'binary'              : ['binary', 'Binaries'],
                   'connection_readers'  : ['conn',   'Connection readers'],
                   'connection_writers'  : ['conn',   'Connection writers'],
@@ -31,7 +31,7 @@
 <%
 var key = [[{name: 'Queues', colour: 'queue',
              keys: [['queue_procs',         'queues'],
-                    ['queue_slave_procs',   'slaves']]},
+                    ['queue_slave_procs',   'mirrors']]},
             {name: 'Binaries', colour: 'binary',
              keys: [['binary',              '']]}],
 
