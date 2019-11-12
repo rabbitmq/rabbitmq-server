@@ -22,7 +22,10 @@
 -export([decode/1, decode/2, args/1]).
 
 maybe_load_definitions() ->
-    case application:get_env(rabbit, load_definitions) of
+    %% this feature was a part of rabbitmq-management for a long time,
+    %% so we check rabbit_management.load_definitions for backward compatibility.
+    Fallback = application:get_env(rabbitmq_management, load_definitions),
+    case application:get_env(rabbit, load_definitions, Fallback) of
         undefined  -> ok;
         {ok, none} -> ok;
         {ok, FileOrDir} ->

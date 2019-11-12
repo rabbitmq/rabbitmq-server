@@ -641,6 +641,15 @@ credential_validator.regexp = ^abc\\d+",
   []},
 
   %%
+  %% Definitions
+  %%
+
+ {definition_files, "load_definitions = test/definition_import_SUITE_data/case1.json",
+  [{rabbit,
+       [{load_definitions, "test/definition_import_SUITE_data/case1.json"}]}],
+  []},
+
+  %%
   %% Raft
   %%
 

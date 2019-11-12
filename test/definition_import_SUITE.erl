@@ -8,7 +8,7 @@
 %% License for the specific language governing rights and limitations
 %% under the License.
 %%
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 %% This test suite covers the definitions import function
