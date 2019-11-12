@@ -24,8 +24,18 @@
 maybe_load_definitions() ->
     %% this feature was a part of rabbitmq-management for a long time,
     %% so we check rabbit_management.load_definitions for backward compatibility.
-    Fallback = application:get_env(rabbitmq_management, load_definitions),
-    case application:get_env(rabbit, load_definitions, Fallback) of
+    maybe_load_management_definitions(),
+    %% this backs "core" load_definitions
+    maybe_load_core_definitions().
+
+maybe_load_core_definitions() ->
+    maybe_load_definitions(rabbit, load_definitions).
+
+maybe_load_management_definitions() ->
+    maybe_load_definitions(rabbitmq_management, load_definitions).
+
+maybe_load_definitions(App, Key) ->
+    case application:get_env(App, Key) of
         undefined  -> ok;
         {ok, none} -> ok;
         {ok, FileOrDir} ->

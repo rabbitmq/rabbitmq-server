@@ -97,7 +97,12 @@ add(Name, Description, Tags, ActingUser) ->
     end.
 
 do_add(Name, Description, Tags, ActingUser) ->
-    rabbit_log:info("Adding vhost '~s' (description: '~s')", [Name, Description]),
+    case Description of
+        undefined ->
+            rabbit_log:info("Adding vhost '~s' without a description", [Name]);
+        Value ->
+            rabbit_log:info("Adding vhost '~s' (description: '~s')", [Name, Value])
+    end,
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of

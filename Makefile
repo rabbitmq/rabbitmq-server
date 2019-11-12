@@ -109,10 +109,6 @@ define PROJECT_ENV
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
-        %% matches original default in rabbitmq-management.
-        %% See rabbitmq/rabbitmq-management#749
-        {load_definitions,  none},
-
 	    {config_entry_decoder, [{passphrase, undefined}]},
 
 	    %% rabbitmq-server#973
