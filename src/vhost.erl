@@ -117,7 +117,7 @@ upgrade(OldVHost)         -> upgrade_to(record_version_to_use(), OldVHost).
 upgrade_to(?record_version, #vhost{} = VHost) ->
     VHost;
 upgrade_to(?record_version, OldVHost) ->
-    Fields = erlang:tuple_to_list(OldVHost) ++ [#{}],
+    Fields = erlang:tuple_to_list(OldVHost) ++ [#{description => <<"">>, tags => []}],
     #vhost{} = erlang:list_to_tuple(Fields);
 upgrade_to(Version, OldVHost) ->
     vhost_v1:upgrade_to(Version, OldVHost).
