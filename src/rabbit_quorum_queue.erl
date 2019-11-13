@@ -519,25 +519,31 @@ basic_consume(Q, NoAck, ChPid,
                                                Prefetch,
                                                ConsumerMeta,
                                                QState0),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, SacResult}, _} ->
 
-    SingleActiveConsumerOn = single_active_consumer_on(Q),
-    {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
-                                                   {false, _} ->
-                                                       {true, up};
-                                                   {true, {value, {ConsumerTag, ChPid}}} ->
-                                                       {true, single_active};
-                                                   _ ->
-                                                       {false, waiting}
-                                               end,
+            SingleActiveConsumerOn = single_active_consumer_on(Q),
+            {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
+                                                           {false, _} ->
+                                                               {true, up};
+                                                           {true, {value, {ConsumerTag, ChPid}}} ->
+                                                               {true, single_active};
+                                                           _ ->
+                                                               {false, waiting}
+                                                       end,
 
-    %% TODO: emit as rabbit_fifo effect
-    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                         not NoAck, QName,
-                                         ConsumerPrefetchCount, IsSingleActiveConsumer,
-                                         ActivityStatus, Args),
-    {ok, QState}.
+            %% TODO: emit as rabbit_fifo effect
+            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                                 not NoAck, QName,
+                                                 ConsumerPrefetchCount, IsSingleActiveConsumer,
+                                                 ActivityStatus, Args),
+            {ok, QState};
+        {error, Error} ->
+            Error;
+        {timeout, _} ->
+            {error, timeout}
+    end.
 
 -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
                           {'ok', rabbit_fifo_client:state()}.
@@ -1052,35 +1058,52 @@ i(open_files, Q) when ?is_amqqueue(Q) ->
     lists:flatten(Data);
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
-    case SacResult of
-        {value, {_ConsumerTag, ChPid}} ->
+    case ra:local_query(QPid, fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, {value, {_ConsumerTag, ChPid}}}, _} ->
             ChPid;
-        _ ->
+        {ok, _, _} ->
+            '';
+        {error, _} ->
+            '';
+        {timeout, _} ->
             ''
     end;
 i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
-    case SacResult of
-        {value, {ConsumerTag, _ChPid}} ->
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, {value, {ConsumerTag, _ChPid}}}, _} ->
             ConsumerTag;
-        _ ->
+        {ok, _, _} ->
+            '';
+        {error, _} ->
+            '';
+        {timeout, _} ->
             ''
     end;
 i(type, _) -> quorum;
 i(messages_ram, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, {Length, _}}, _} = ra:local_query(QPid,
-                                          fun rabbit_fifo:query_in_memory_usage/1),
-    Length;
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_in_memory_usage/1) of
+        {ok, {_, {Length, _}}, _} ->
+            Length;
+        {error, _} ->
+            0;
+        {timeout, _} ->
+            0
+    end;
 i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, {_, Bytes}}, _} = ra:local_query(QPid,
-                                         fun rabbit_fifo:query_in_memory_usage/1),
-    Bytes;
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_in_memory_usage/1) of
+        {ok, {_, {_, Bytes}}, _} ->
+            Bytes;
+        {error, _} ->
+            0;
+        {timeout, _} ->
+            0
+    end;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->

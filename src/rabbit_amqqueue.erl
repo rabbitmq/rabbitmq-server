@@ -1582,13 +1582,19 @@ basic_consume(Q,
     QName = amqqueue:get_name(Q),
     ok = check_consume_arguments(QName, Args),
     QState0 = get_quorum_state(Id, QName, QStates),
-    {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
-                                                     ConsumerPrefetchCount,
-                                                     ConsumerTag,
-                                                     ExclusiveConsume, Args,
-                                                     ActingUser,
-                                                     OkMsg, QState0),
-    {ok, maps:put(Name, QState, QStates)}.
+    case rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
+                                           ConsumerPrefetchCount,
+                                           ConsumerTag,
+                                           ExclusiveConsume, Args,
+                                           ActingUser,
+                                           OkMsg, QState0) of
+        {ok, QState} ->
+            {ok, maps:put(Name, QState, QStates)};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot consume a message from quorum queue '~s': ~w",
+                                       [rabbit_misc:rs(QName), Reason])
+    end.
 
 -spec basic_cancel
         (amqqueue:amqqueue(), pid(), rabbit_types:ctag(), any(),
