@@ -713,8 +713,18 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     Query = fun (State) ->
                     rabbit_fifo:get_checked_out(ConsumerId, From, To, State)
             end,
-    {ok, {_, Missing}, _} = ra:local_query(Leader, Query),
-    Missing.
+    case ra:local_query(Leader, Query) of
+        {ok, {_, Missing}, _} ->
+            Missing;
+        {error, Error} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot query missing deliveries from ~p: ~p",
+                                       [Leader, Error]);
+        {timeout, _} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot query missing deliveries from ~p: timeout",
+                                       [Leader])
+    end.
 
 pick_node(#state{leader = undefined, servers = [N | _]}) ->
     %% TODO: pick random rather that first?
