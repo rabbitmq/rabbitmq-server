@@ -1074,7 +1074,8 @@ end}.
 %% {consumer_timeout, 10000},
 
 {mapping, "consumer_timeout", "rabbit.consumer_timeout", [
-    {datatype, integer}
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
 ]}.
 
 % ==========================
