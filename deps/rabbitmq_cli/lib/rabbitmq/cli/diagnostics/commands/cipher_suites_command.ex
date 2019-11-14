@@ -62,7 +62,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def description(), do: "Lists cipher suites enabled by default. To list all available cipher suites, add the --all argument."
 
-  def usage, do: "cipher_suites [--format (openssl | erlang | map)] [--all]"
+  def usage, do: "cipher_suites [--format <openssl | erlang | map>] [--all]"
 
   def usage_additional() do
     [
