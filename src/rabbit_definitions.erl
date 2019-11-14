@@ -17,9 +17,16 @@
 -module(rabbit_definitions).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([maybe_load_definitions/0, maybe_load_definitions_from/2]).
--export([apply_defs/4, apply_defs/5]).
+-export([maybe_load_definitions/0, maybe_load_definitions_from/2,
+         apply_defs/4, apply_defs/5]).
+-export([all_definitions/0]).
 -export([decode/1, decode/2, args/1]).
+
+-import(rabbit_misc, [pget/2]).
+
+%%
+%% API
+%%
 
 maybe_load_definitions() ->
     %% this feature was a part of rabbitmq-management for a long time,
@@ -33,6 +40,41 @@ maybe_load_core_definitions() ->
 
 maybe_load_management_definitions() ->
     maybe_load_definitions(rabbitmq_management, load_definitions).
+
+load_definitions(Body) ->
+    apply_defs(
+        Body, ?INTERNAL_USER,
+        fun () -> ok end,
+        fun (E) -> {error, E} end).
+
+all_definitions() ->
+    Xs = list_exchanges(),
+    Qs = list_queues(),
+%%    QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
+%%    Bs = [binding_definition(B) || B <- list_bindings()],
+%%
+    Users  = list_users(),
+    VHosts = list_vhosts(),
+
+    {ok, Vsn} = application:get_key(rabbit, vsn),
+    #{
+        rabbit_version    => rabbit_data_coercion:to_binary(Vsn),
+        users             => Users,
+        vhosts            => VHosts,
+%%        permissions       => Perms,
+%%        topic_permissions => TPerms,
+%%        parameters        => Params,
+%%        global_parameters => GParams,
+%%        policies          => Pols,
+        queues            => Qs,
+%%        bindings          => Bs,
+        exchanges         => Xs
+
+    }.
+
+%%
+%% Implementation
+%%
 
 maybe_load_definitions(App, Key) ->
     case application:get_env(App, Key) of
@@ -74,12 +116,6 @@ load_definitions_from_file(File) ->
             rabbit_log:error("Could not read definitions from ~s, Error: ~p", [File, E]),
             {error, {could_not_read_defs, {File, E}}}
     end.
-
-load_definitions(Body) ->
-    apply_defs(
-        Body, ?INTERNAL_USER,
-        fun () -> ok end,
-        fun (E) -> {error, E} end).
 
 decode(Keys, Body) ->
     case decode(Body) of
@@ -433,3 +469,73 @@ get_or_missing(K, L) ->
 
 args([]) -> args(#{});
 args(L)  -> rabbit_misc:to_amqp_table(L).
+
+%%
+%% Export
+%%
+
+list_exchanges() ->
+    %% exclude internal exchanges, they are not meant to be declared or used by
+    %% applications
+    [exchange_definition(X) || X <- lists:filter(fun(#exchange{internal = true}) -> false;
+                                                    (#exchange{}) -> true
+                                                 end,
+                                                 rabbit_exchange:list())].
+
+exchange_definition(#exchange{name = #resource{virtual_host = VHost, name = Name},
+                              type = Type,
+                              durable = Durable, auto_delete = AD, arguments = Args}) ->
+    #{<<"vhost">> => VHost,
+      <<"name">> => Name,
+      <<"type">> => Type,
+      <<"durable">> => Durable,
+      <<"auto_delete">> => AD,
+      <<"arguments">> => Args}.
+
+list_queues() ->
+    %% exclude exclusive queues, they cannot be restored
+    [queue_definition(Q) || Q <- lists:filter(fun(Q0) ->
+                                                amqqueue:get_exclusive_owner(Q0) =:= none
+                                              end,
+                                              rabbit_amqqueue:list())].
+
+queue_definition(Q) ->
+    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
+    Type = case amqqueue:get_type(Q) of
+               rabbit_classic_queue -> classic;
+               rabbit_quorum_queue -> quorum;
+               T -> T
+           end,
+    Arguments = [{Key, Value} || {Key, _Type, Value} <- amqqueue:get_arguments(Q)],
+    #{
+        <<"vhost">> => VHost,
+        <<"name">> => Name,
+        <<"type">> => Type,
+        <<"durable">> => amqqueue:is_durable(Q),
+        <<"auto_delete">> => amqqueue:is_auto_delete(Q),
+        <<"arguments">> => maps:from_list(Arguments)
+    }.
+
+
+list_vhosts() ->
+    [vhost_definition(V) || V <- rabbit_vhost:all()].
+
+vhost_definition(VHost) ->
+    #{
+        <<"name">> => vhost:get_name(VHost),
+        <<"limits">> => vhost:get_limits(VHost),
+        <<"metadata">> => vhost:get_metadata(VHost)
+    }.
+
+list_users() ->
+    [begin
+         {ok, User} = rabbit_auth_backend_internal:lookup_user(pget(user, U)),
+         #{name              => User#internal_user.username,
+           password_hash     => base64:encode(User#internal_user.password_hash),
+           hashing_algorithm => rabbit_auth_backend_internal:hashing_module_for_user(User),
+           tags              => tags_as_binaries(User#internal_user.tags)
+         }
+     end || U <- rabbit_auth_backend_internal:list_users()].
+
+tags_as_binaries(Tags) ->
+    list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
