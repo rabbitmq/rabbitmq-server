@@ -64,6 +64,7 @@ all_definitions() ->
     {ok, Vsn} = application:get_key(rabbit, vsn),
     #{
         rabbit_version    => rabbit_data_coercion:to_binary(Vsn),
+        rabbitmq_version  => rabbit_data_coercion:to_binary(Vsn),
         users             => Users,
         vhosts            => VHosts,
         permissions       => Perms,
