@@ -588,6 +588,13 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {rabbit_consumer_timeout,
+   "consumer_timeout = 20000",
+   [{rabbit, [
+      {consumer_timeout, 20000}
+     ]}],
+   []},
+
   {log_syslog_settings,
    "log.syslog = true
     log.syslog.identity = rabbitmq
