@@ -58,13 +58,16 @@ all_definitions() ->
     GParams = list_global_runtime_parameters(),
     Pols    = list_policies(),
 
+    Perms   = list_permissions(),
+    TPerms  = list_topic_permissions(),
+
     {ok, Vsn} = application:get_key(rabbit, vsn),
     #{
         rabbit_version    => rabbit_data_coercion:to_binary(Vsn),
         users             => Users,
         vhosts            => VHosts,
-%%        permissions       => Perms,
-%%        topic_permissions => TPerms,
+        permissions       => Perms,
+        topic_permissions => TPerms,
         parameters        => Params,
         global_parameters => GParams,
         policies          => Pols,
@@ -584,6 +587,18 @@ policy_definition(Policy) ->
         <<"priority">> => pget(priority, Policy),
         <<"definition">> => maps:from_list(pget(definition, Policy))
     }.
+
+list_permissions() ->
+    [permission_definition(P) || P <- rabbit_auth_backend_internal:list_permissions()].
+
+permission_definition(P) ->
+    maps:from_list(P).
+
+list_topic_permissions() ->
+    [topic_permission_definition(P) || P <- rabbit_auth_backend_internal:list_topic_permissions()].
+
+topic_permission_definition(P) ->
+    maps:from_list(P).
 
 tags_as_binaries(Tags) ->
     list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
