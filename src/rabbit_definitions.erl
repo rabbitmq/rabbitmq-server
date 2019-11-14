@@ -50,9 +50,8 @@ load_definitions(Body) ->
 all_definitions() ->
     Xs = list_exchanges(),
     Qs = list_queues(),
-%%    QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
-%%    Bs = [binding_definition(B) || B <- list_bindings()],
-%%
+    Bs = list_bindings(),
+
     Users  = list_users(),
     VHosts = list_vhosts(),
     Params  = list_runtime_parameters(),
@@ -70,7 +69,7 @@ all_definitions() ->
         global_parameters => GParams,
         policies          => Pols,
         queues            => Qs,
-%%        bindings          => Bs,
+        bindings          => Bs,
         exchanges         => Xs
 
     }.
@@ -519,6 +518,22 @@ queue_definition(Q) ->
         <<"arguments">> => maps:from_list(Arguments)
     }.
 
+list_bindings() ->
+    [binding_definition(B) || B <- rabbit_binding:list_explicit()].
+
+binding_definition(#binding{source      = S,
+                            key         = RoutingKey,
+                            destination = D,
+                            args        = Args}) ->
+    Arguments = [{Key, Value} || {Key, _Type, Value} <- Args],
+    #{
+        <<"source">> => S#resource.name,
+        <<"vhost">> => S#resource.virtual_host,
+        <<"destination">> => D#resource.name,
+        <<"destination_type">> => D#resource.kind,
+        <<"routing_key">> => RoutingKey,
+        <<"arguments">> => maps:from_list(Arguments)
+    }.
 
 list_vhosts() ->
     [vhost_definition(V) || V <- rabbit_vhost:all()].
