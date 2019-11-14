@@ -55,6 +55,9 @@ all_definitions() ->
 %%
     Users  = list_users(),
     VHosts = list_vhosts(),
+    Params  = list_runtime_parameters(),
+    GParams = list_global_runtime_parameters(),
+    Pols    = list_policies(),
 
     {ok, Vsn} = application:get_key(rabbit, vsn),
     #{
@@ -63,9 +66,9 @@ all_definitions() ->
         vhosts            => VHosts,
 %%        permissions       => Perms,
 %%        topic_permissions => TPerms,
-%%        parameters        => Params,
-%%        global_parameters => GParams,
-%%        policies          => Pols,
+        parameters        => Params,
+        global_parameters => GParams,
+        policies          => Pols,
         queues            => Qs,
 %%        bindings          => Bs,
         exchanges         => Xs
@@ -536,6 +539,36 @@ list_users() ->
            tags              => tags_as_binaries(User#internal_user.tags)
          }
      end || U <- rabbit_auth_backend_internal:list_users()].
+
+list_runtime_parameters() ->
+    [runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list()].
+
+runtime_parameter_definition(Param) ->
+    #{
+        <<"vhost">> => pget(vhost, Param),
+        <<"component">> => pget(component, Param),
+        <<"name">> => pget(name, Param),
+        <<"value">> => maps:from_list(pget(value, Param))
+    }.
+
+list_global_runtime_parameters() ->
+    [global_runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list_global()].
+
+global_runtime_parameter_definition(Param) ->
+    maps:from_list(Param).
+
+list_policies() ->
+    [policy_definition(P) || P <- rabbit_policy:list()].
+
+policy_definition(Policy) ->
+    #{
+        <<"vhost">> => pget(vhost, Policy),
+        <<"name">> => pget(name, Policy),
+        <<"pattern">> => pget(pattern, Policy),
+        <<"apply-to">> => pget('apply-to', Policy),
+        <<"priority">> => pget(priority, Policy),
+        <<"definition">> => maps:from_list(pget(definition, Policy))
+    }.
 
 tags_as_binaries(Tags) ->
     list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
