@@ -68,7 +68,8 @@ all_definitions(ReqData, Context) ->
                export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
-      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
+      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
+       {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)}] ++
       filter(
         [{users,             rabbit_mgmt_wm_users:users(all)},
          {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
@@ -126,8 +127,8 @@ vhost_definitions(ReqData, VHost, Context) ->
 accept_multipart(ReqData0, Context) ->
     {Parts, ReqData} = get_all_parts(ReqData0),
     Redirect = get_part(<<"redirect">>, Parts),
-    Json = get_part(<<"file">>, Parts),
-    Resp = {Res, _, _} = accept(Json, ReqData, Context),
+    Payload = get_part(<<"file">>, Parts),
+    Resp = {Res, _, _} = accept(Payload, ReqData, Context),
     case {Res, Redirect} of
         {true, unknown} -> {true, ReqData, Context};
         {true, _}       -> {{true, Redirect}, ReqData, Context};
@@ -158,31 +159,57 @@ is_authorized_qs(ReqData, Context, Auth) ->
 
 %%--------------------------------------------------------------------
 
+decode(<<"">>) ->
+    {ok, #{}};
+decode(Body) ->
+    try
+      Decoded = rabbit_json:decode(Body),
+      Normalised = maps:fold(fun(K, V, Acc) ->
+                     Acc#{binary_to_atom(K, utf8) => V}
+                   end, Decoded, Decoded),
+      {ok, Normalised}
+    catch error:_ -> {error, not_json}
+    end.
+
 accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     %% At this point the request was fully received.
     %% There is no point in the idle_timeout anymore.
     disable_idle_timeout(ReqData),
-    SuccessFun =
-        fun() ->
-            {true, ReqData, Context}
-        end,
-    ErrorFun =
-        fun(E) ->
-            rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
-            rabbit_mgmt_util:bad_request(E, ReqData, Context)
-        end,
-    case rabbit_mgmt_util:vhost(ReqData) of
-        none ->
-            apply_defs(Body, Username, SuccessFun, ErrorFun);
-        not_found ->
-            rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
-                                         ReqData, Context);
-        VHost ->
-            apply_defs(Body, Username, SuccessFun, ErrorFun, VHost)
+    case decode(Body) of
+      {error, E} ->
+        rabbit_log:error("Encountered an error when parsing definitions: ~p", [E]),
+        rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("failed_to_parse_json"),
+                                    ReqData, Context);
+      {ok, Map} ->
+        case rabbit_mgmt_util:vhost(ReqData) of
+            none ->
+                case apply_defs(Map, Username) of
+                  {error, E} ->
+                        rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
+                        rabbit_mgmt_util:bad_request(E, ReqData, Context);
+                  ok -> {true, ReqData, Context}
+                end;
+            not_found ->
+                rabbit_mgmt_util:not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
+                                           ReqData, Context);
+            VHost when is_binary(VHost) ->
+                case apply_defs(Map, Username, VHost) of
+                    {error, E} ->
+                        rabbit_log:error("Encountered an error when importing definitions: ~p", [E]),
+                        rabbit_mgmt_util:bad_request(E, ReqData, Context);
+                    ok -> {true, ReqData, Context}
+                end
+        end
     end.
 
 disable_idle_timeout(#{pid := Pid, streamid := StreamID}) ->
     Pid ! {{Pid, StreamID}, {set_options, #{idle_timeout => infinity}}}.
+
+apply_defs(Body, ActingUser) ->
+    rabbit_definitions:apply_defs(Body, ActingUser).
+
+apply_defs(Body, ActingUser, VHost) ->
+    rabbit_definitions:apply_defs(Body, ActingUser, VHost).
 
 apply_defs(Body, ActingUser, SuccessFun, ErrorFun) ->
     rabbit_definitions:apply_defs(Body, ActingUser, SuccessFun, ErrorFun).
