@@ -101,7 +101,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
 
   def printer(), do: RabbitMQ.CLI.Printers.StdIORaw
 
-  def usage, do: "export_definitions <file_path | \"-\"> [--formatter <json | erlang>]"
+  def usage, do: "export_definitions <file_path | \"-\"> [--format <json | erlang>]"
 
   def usage_additional() do
     [
