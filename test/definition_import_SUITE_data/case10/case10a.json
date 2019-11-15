@@ -31,13 +31,12 @@
     "topic_permissions": [],
     "parameters": [
         {
-            "value": {
-                "expires": 3600000,
-                "uri": "amqp://localhost:5673"
-            },
-            "vhost": "/",
-            "component": "federation-upstream",
-            "name": "up-hare"
+          "component": "vhost-limits",
+          "name": "limits",
+          "value": {
+            "max-connections": 14000
+          },
+          "vhost": "/"
         }
     ],
     "global_parameters": [
