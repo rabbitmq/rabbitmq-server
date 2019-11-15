@@ -180,7 +180,6 @@ apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     rabbit_log:info("Asked to import definitions for multiple virtual hosts. Acting user: ~p",
                     [ActingUser]),
-    rabbit_log:info("Map: ~p", [Map]),
     Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
     try
         rabbit_log:info("Importing users..."),
