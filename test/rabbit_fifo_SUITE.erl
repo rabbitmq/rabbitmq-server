@@ -306,10 +306,10 @@ return_checked_out_test(_) ->
     Cid = {<<"cid">>, self()},
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, [_Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
               {aux, active} | _ ]} = check_auto(Cid, 2, State0),
     % returning immediately checks out the same message again
-    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, ra_event},
+    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, _},
              {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     ok.
@@ -323,10 +323,10 @@ return_checked_out_limit_test(_) ->
                   delivery_limit => 1}),
     {State0, [_, _]} = enq(1, 1, first, Init),
     {State1, [_Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
               {aux, active} | _ ]} = check_auto(Cid, 2, State0),
     % returning immediately checks out the same message again
-    {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, ra_event},
+    {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _},
                   {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     {#rabbit_fifo{ra_indexes = RaIdxs}, ok, []} =
