@@ -62,11 +62,18 @@ start_link() ->
 %%--------------------------------------------------------------------
 
 get_used_fd() ->
-    case get_used_fd(os:type()) of
-        Fd when is_number(Fd) ->
-            Fd;
-        _Other ->
-            %% Defaults to 0 if data is not available
+    try
+        case get_used_fd(os:type()) of
+            Fd when is_number(Fd) ->
+                Fd;
+            _Other ->
+                %% Defaults to 0 if data is not available
+                0
+        end
+    catch
+        _:Error ->
+            log_fd_error("Could not infer the number of file handles used: ~p~n",
+                         [Error]),
             0
     end.
 
@@ -171,11 +178,7 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
 
 log_fd_error(Fmt, Args) ->
-    case get(logged_used_fd_error) of
-        undefined -> rabbit_log:warning(Fmt, Args),
-                     put(logged_used_fd_error, true);
-        _         -> ok
-    end.
+    rabbit_log:error(Fmt, Args).
 %%--------------------------------------------------------------------
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
