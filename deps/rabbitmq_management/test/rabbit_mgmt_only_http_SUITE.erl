@@ -66,6 +66,7 @@ all_tests() -> [
     connections_test,
     exchanges_test,
     queues_test,
+    mirrored_queues_test,
     quorum_queues_test,
     queues_well_formed_json_test,
     permissions_vhost_test,
@@ -354,9 +355,10 @@ exchanges_test(Config) ->
 
 queues_test(Config) ->
     Good = [{durable, true}],
+    GoodQQ = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
     http_get(Config, "/queues/%2F/foo", ?NOT_FOUND),
-    http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/foo", GoodQQ, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/foo", GoodQQ, {group, '2xx'}),
 
     rabbit_ct_broker_helpers:add_vhost(Config, <<"downvhost">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"downvhost">>),
@@ -402,31 +404,46 @@ queues_test(Config) ->
              [{durable, false}],
              ?BAD_REQUEST),
 
+    Policy = [{pattern,    <<"baz">>},
+              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+    http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
     Queues = http_get(Config, "/queues/%2F"),
     Queue = http_get(Config, "/queues/%2F/foo"),
+
+    NodeBin = atom_to_binary(Node, utf8),
     assert_list([#{name        => <<"baz">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}},
+                   arguments   => #{},
+                   node        => NodeBin,
+                   slave_nodes => [],
+                   synchronised_slave_nodes => []},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}}], Queues),
+                   arguments   => #{'x-queue-type' => <<"quorum">>},
+                   leader      => NodeBin,
+                   members     => [NodeBin]}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{}}, Queue),
+                  arguments   => #{'x-queue-type' => <<"quorum">>},
+                  leader      => NodeBin,
+                  members     => [NodeBin]}, Queue),
 
     ?assert(not maps:is_key(message_stats, Queue)),
     ?assert(not maps:is_key(messages_details, Queue)),
     ?assert(not maps:is_key(reductions_details, Queue)),
+    ?assertEqual(NodeBin, maps:get(leader, Queue)),
+    ?assertEqual([NodeBin], maps:get(members, Queue)),
+    ?assertEqual([NodeBin], maps:get(online, Queue)),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
@@ -436,6 +453,41 @@ queues_test(Config) ->
     http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
     passed.
+
+mirrored_queues_test(Config) ->
+    Policy = [{pattern,    <<".*">>},
+              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+    http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
+
+    Good = [{durable, true}, {arguments, []}],
+    http_get(Config, "/queues/%2f/ha", ?NOT_FOUND),
+    http_put(Config, "/queues/%2f/ha", Good, {group, '2xx'}),
+
+    {Conn, Ch} = open_connection_and_channel(Config),
+    Publish = fun() ->
+                      amqp_channel:call(
+                        Ch, #'basic.publish'{exchange = <<"">>,
+                                             routing_key = <<"ha">>},
+                        #amqp_msg{payload = <<"message">>})
+              end,
+    Publish(),
+    Publish(),
+
+    Queue = http_get(Config, "/queues/%2f/ha?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"),
+
+    %% It's really only one node, but the only thing that matters in this test is to verify the
+    %% key exists
+    Nodes = lists:sort(rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+
+    ?assert(not maps:is_key(messages, Queue)),
+    ?assert(not maps:is_key(messages_details, Queue)),
+    ?assert(not maps:is_key(reductions_details, Queue)),
+    ?assert(true, lists:member(maps:get(node, Queue), Nodes)),
+    ?assertEqual([], get_nodes(slave_nodes, Queue)),
+    ?assertEqual([], get_nodes(synchronised_slave_nodes, Queue)),
+
+    http_delete(Config, "/queues/%2f/ha", {group, '2xx'}),
+    close_connection(Conn).
 
 quorum_queues_test(Config) ->
     Good = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
@@ -454,12 +506,22 @@ quorum_queues_test(Config) ->
 
     Queue = http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"),
 
+    %% It's really only one node, but the only thing that matters in this test is to verify the
+    %% key exists
+    Nodes = lists:sort(rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+
     ?assert(not maps:is_key(messages, Queue)),
     ?assert(not maps:is_key(messages_details, Queue)),
     ?assert(not maps:is_key(reductions_details, Queue)),
+    ?assert(true, lists:member(maps:get(leader, Queue, undefined), Nodes)),
+    ?assertEqual(Nodes, get_nodes(members, Queue)),
+    ?assertEqual(Nodes, get_nodes(online, Queue)),
 
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
     close_connection(Conn).
+
+get_nodes(Tag, Queue) ->
+    lists:sort([binary_to_atom(B, utf8) || B <- maps:get(Tag, Queue)]).
 
 queues_well_formed_json_test(Config) ->
     %% TODO This test should be extended to the whole API

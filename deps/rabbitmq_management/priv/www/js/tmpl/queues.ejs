@@ -107,7 +107,11 @@
    <td><%= link_queue(queue.vhost, queue.name, queue.arguments) %></td>
 <% if (nodes_interesting) { %>
    <td>
-     <%= fmt_node(queue.node) %>
+     <% if (queue.node) { %>
+      <%= fmt_node(queue.node) %>
+     <% } else { %>
+      <%= fmt_node(queue.leader) %>
+     <% } %>
      <% if (queue.hasOwnProperty('members')) { %>
       <%= fmt_members(queue) %>
      <% } else { %>

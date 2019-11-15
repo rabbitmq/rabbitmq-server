@@ -1,12 +1,13 @@
 <h1>Queue <b><%= fmt_string(highlight_extra_whitespace(queue.name)) %></b><%= fmt_maybe_vhost(queue.vhost) %></h1>
 
-<% if(!disable_stats) { %>
 <div class="section">
   <h2>Overview</h2>
+<% if(!disable_stats) { %>
   <div class="hider updatable">
     <%= queue_lengths('lengths-q', queue) %>
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-q', queue.message_stats) %>
+<% } %>
 <% } %>
 
     <h3>Details</h3>
@@ -15,6 +16,7 @@
         <th>Features</th>
         <td><%= fmt_features(queue) %></td>
       </tr>
+<% if(!disable_stats) { %>
       <tr>
         <th>Policy</th>
         <td><%= link_policy(queue.vhost, queue.policy) %></td>
@@ -33,6 +35,7 @@
         <th>Effective policy definition</th>
         <td><%= fmt_table_short(queue.effective_policy_definition) %></td>
       </tr>
+<% } %>
 <% if (nodes_interesting) { %>
       <tr>
       <% if (is_quorum(queue)) { %>
@@ -40,7 +43,11 @@
       <% } else { %>
         <th>Node</th>
       <% } %>
+      <% if (queue.leader) { %>
+        <td><%= fmt_node(queue.leader) %></td>
+      <% } else { %>
         <td><%= fmt_node(queue.node) %></td>
+      <% } %>
       </tr>
   <% if (is_quorum(queue)) { %>
       <tr>
@@ -115,6 +122,7 @@
 <% } %>
     </table>
 
+<% if(!disable_stats) { %>
     <table class="facts facts-l">
       <tr>
         <th>State</th>
@@ -211,6 +219,7 @@
         <td class="r"><%= fmt_bytes(queue.memory) %></td>
       </tr>
     </table>
+    <% } %>
   </div>
 </div>
 
@@ -236,7 +245,6 @@
 </table>
 </div>
 </div>
-<% } %>
 
 <div class="section-hidden">
   <h2>Consumers</h2>
