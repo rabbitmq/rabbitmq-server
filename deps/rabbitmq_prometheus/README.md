@@ -27,6 +27,7 @@ See the [documentation guide](https://www.rabbitmq.com/prometheus.html).
 Default port used by the plugin is `15692`. In most environments there would be no configuration
 necessary.
 
+See the entire list of [metrics](metrics.md) exposed via the default port. 
 
 ## Configuration
 
