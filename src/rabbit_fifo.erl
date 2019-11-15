@@ -1418,7 +1418,7 @@ take_next_msg(#?MODULE{returns = Returns,
     end.
 
 send_msg_effect({CTag, CPid}, Msgs) ->
-    {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}.
+    {send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}.
 
 send_log_effect({CTag, CPid}, IdxMsgs) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
@@ -1427,8 +1427,9 @@ send_log_effect({CTag, CPid}, IdxMsgs) ->
              Msgs = lists:zipwith(fun({enqueue, _, _, Msg}, {MsgId, Header}) ->
                                           {MsgId, {Header, Msg}}
                                   end, Log, Data),
-             [{send_msg, CPid, {delivery, CTag, Msgs}, ra_event}]
-     end}.
+             [{send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}]
+     end,
+     {local, node(CPid)}}.
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
     {log, [RaftIdx],
