@@ -72,7 +72,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
          case File.write(abs_path, body) do
            # no output
            :ok -> {:ok, nil}
-           {:badrpc, _} = err -> err
            {:error, :enoent}  ->
              {:error, ExitCodes.exit_dataerr(), "Parent directory or file #{path} does not exist"}
            {:error, :enotdir} ->
