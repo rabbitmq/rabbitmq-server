@@ -61,13 +61,17 @@ import_raw(Body, VHost) ->
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER, fun() -> ok end, VHost)
     end.
 
--spec import_parsed(Defs :: #{any() => any()}) -> ok | {error, term()}.
-import_parsed(Body0) ->
+-spec import_parsed(Defs :: #{any() => any()} | list()) -> ok | {error, term()}.
+import_parsed(Body0) when is_list(Body0) ->
+    import_parsed(maps:from_list(Body0));
+import_parsed(Body0) when is_map(Body0) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER).
 
--spec import_parsed(Defs :: #{any() => any()}, VHost :: vhost:name()) -> ok | {error, term()}.
+-spec import_parsed(Defs :: #{any() => any() | list()}, VHost :: vhost:name()) -> ok | {error, term()}.
+import_parsed(Body0, VHost) when is_list(Body0) ->
+    import_parsed(maps:from_list(Body0), VHost);
 import_parsed(Body0, VHost) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     Body = atomise_map_keys(Body0),
