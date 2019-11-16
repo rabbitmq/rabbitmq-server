@@ -53,12 +53,12 @@ defmodule RabbitMQ.CLI.DefaultOutput do
     {:error, to_string(:rabbit_misc.format(format, args))}
   end
   defp normalize_output({:error, _} = input), do: input
-  defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
-  defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
-  defp normalize_output(result) when not is_atom(result), do: {:ok, result}
   defp normalize_output({:error_string, string}) do
     {:error, to_string(string)}
   end
+  defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
+  defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
+  defp normalize_output(result) when not is_atom(result), do: {:ok, result}
 
   defp format_output({:error, _} = result) do
     result

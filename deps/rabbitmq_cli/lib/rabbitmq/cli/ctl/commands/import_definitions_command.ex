@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
+  alias RabbitMQ.CLI.Core.{Config, DocGuide, ExitCodes, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -35,10 +35,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
-  # output to stdout
-  def validate(["-"], _) do
-    :ok
-  end
   def validate([path], _) do
     dir = Path.dirname(path)
     case File.exists?(dir, [raw: true]) do
@@ -50,13 +46,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, format: format, timeout: timeout} = opts) do
-#    case Input.consume_stdio do
-#      :eof -> {:error, :not_enough_args}
-#      bin  ->
-#        {:ok, map} = deserialise(bin, format)
-#        :rabbit_misc.rpc_call(node_name, :rabbit_definition, :import_parsed, [map], timeout)
-#    end
+  def run([], %{node: node_name, format: format, timeout: timeout}) do
+    case IO.read(:stdio, :all) do
+      :eof -> {:error, :not_enough_args}
+      bin  ->
+        case deserialise(bin, format) do
+          {:error, _} ->
+            {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)})"}
+          {:ok, map} ->
+            :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
+        end
+    end
   end
   def run([path], %{node: node_name, timeout: timeout, format: format}) do
     abs_path = Path.absname(path)
@@ -64,8 +64,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
     case File.read(abs_path) do
       # no output
       {:ok, bin} ->
-        {:ok, map} = deserialise(bin, format)
-        :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
+        case deserialise(bin, format) do
+          {:error, _} ->
+            {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)})"}
+          {:ok, map} ->
+            :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
+        end
       {:error, :enoent}  ->
         {:error, ExitCodes.exit_dataerr(), "Parent directory or file #{path} does not exist"}
       {:error, :enotdir} ->
@@ -82,13 +86,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   def output(:ok, %{node: node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "node" => node_name}}
   end
-  def output(:ok, %{silent: silent}) when silent == false do
-    {:ok, "Successfully started definition import. " <>
-          "This process is asynchronous and can take some time."}
-  end
-  def output(:ok, %{quiet: quiet}) when quiet == false do
-    {:ok, "Successfully started definition import. " <>
-          "This process is asynchronous and can take some time."}
+  def output(:ok, opts) do
+    case Config.output_less?(opts) do
+      true  -> :ok
+      false -> {:ok, "Successfully started definition import. " <>
+                     "This process is asynchronous and can take some time."}
+    end
   end
   use RabbitMQ.CLI.DefaultOutput
 
@@ -114,10 +117,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   def description(), do: "Imports definitions in JSON or compressed Erlang Term Format."
 
   def banner([], %{format: fmt}) do
-    "Importing definitions in #{human_fiendly_format(fmt)} from standard input ..."
+    "Importing definitions in #{human_friendly_format(fmt)} from standard input ..."
   end
   def banner([path], %{format: fmt}) do
-    "Importing definitions in #{human_fiendly_format(fmt)} from a file at \"#{path}\" ..."
+    "Importing definitions in #{human_friendly_format(fmt)} from a file at \"#{path}\" ..."
   end
 
   #
@@ -132,7 +135,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
     {:ok, :erlang.binary_to_term(bin)}
   end
 
-  defp human_fiendly_format("JSON"), do: "JSON"
-  defp human_fiendly_format("json"), do: "JSON"
-  defp human_fiendly_format("erlang"), do: "Erlang term format"
+  defp human_friendly_format("JSON"), do: "JSON"
+  defp human_friendly_format("json"), do: "JSON"
+  defp human_friendly_format("erlang"), do: "Erlang term format"
 end

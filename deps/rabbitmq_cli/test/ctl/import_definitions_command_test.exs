@@ -14,11 +14,11 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ExportDefinitionsCommandTest do
+defmodule ImportDefinitionsCommandTest do
   use ExUnit.Case
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -59,10 +59,6 @@ defmodule ExportDefinitionsCommandTest do
     assert @command.validate([valid_file_path()], context[:opts]) == :ok
   end
 
-  test "validate: accepts a dash for stdout", context do
-    assert @command.validate(["-"], context[:opts]) == :ok
-  end
-
   test "validate: unsupported format fails validation", context do
     assert match?({:validation_failure, {:bad_argument, _}},
                   @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "yolo"})))
@@ -88,36 +84,11 @@ defmodule ExportDefinitionsCommandTest do
   end
 
   @tag format: "json"
-  test "run: returns a list of definitions when target is stdout and format is JSON", context do
-    {:ok, map} = @command.run(["-"], context[:opts])
-    assert Map.has_key?(map, :rabbitmq_version)
+  test "run: imports definitions from a file", context do
+    assert :ok == @command.run([valid_file_path()], context[:opts])
   end
 
-  @tag format: "erlang"
-  test "run: returns a list of definitions when target is stdout and format is Erlang Terms", context do
-    {:ok, map} = @command.run(["-"], context[:opts])
-    assert Map.has_key?(map, :rabbitmq_version)
+  defp valid_file_path() do
+    Path.join([File.cwd!(), "test", "fixtures", "files", "definitions.json"])
   end
-
-  @tag format: "json"
-  test "run: writes to a file and returns nil when target is a file and format is JSON", context do
-    File.rm(valid_file_path())
-    {:ok, nil} = @command.run([valid_file_path()], context[:opts])
-
-    {:ok, bin} = File.read(valid_file_path())
-    {:ok, map} = JSON.decode(bin)
-    assert Map.has_key?(map, "rabbitmq_version")
-  end
-
-  @tag format: "erlang"
-  test "run: writes to a file and returns nil when target is a file and format is Erlang Terms", context do
-    File.rm(valid_file_path())
-    {:ok, nil} = @command.run([valid_file_path()], context[:opts])
-
-    {:ok, bin} = File.read(valid_file_path())
-    map = :erlang.binary_to_term(bin)
-    assert Map.has_key?(map, :rabbitmq_version)
-  end
-
-  defp valid_file_path(), do: "#{System.tmp_dir()}/definitions"
 end

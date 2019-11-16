@@ -120,7 +120,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
 
   def description(), do: "Exports definitions in JSON or compressed Erlang Term Format."
 
-  def banner([path], %{format: fmt}), do: "Exporting definitions in #{human_fiendly_format(fmt)} to a file at \"#{path}\" ..."
+  def banner([path], %{format: fmt}), do: "Exporting definitions in #{human_friendly_format(fmt)} to a file at \"#{path}\" ..."
 
   #
   # Implementation
@@ -135,7 +135,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
     :erlang.term_to_binary(map, [{:compressed, 9}])
   end
 
-  defp human_fiendly_format("JSON"), do: "JSON"
-  defp human_fiendly_format("json"), do: "JSON"
-  defp human_fiendly_format("erlang"), do: "Erlang term format"
+  defp human_friendly_format("JSON"), do: "JSON"
+  defp human_friendly_format("json"), do: "JSON"
+  defp human_friendly_format("erlang"), do: "Erlang term format"
 end
