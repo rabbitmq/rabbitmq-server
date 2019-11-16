@@ -151,7 +151,12 @@ var DISABLED_STATS_COLUMNS =
                    ['features',             'Features (with policy)', true],
                    ['features_no_policy',   'Features (no policy)',   false],
                    ['policy',               'Policy',                 false],
-                   ['state',                'State',                  true]]},
+                   ['state',                'State',                  true]],
+      'Messages': [['msgs-ready',      'Ready',          true],
+                   ['msgs-unacked',    'Unacknowledged', true],
+                   ['msgs-ram',        'In memory',      false],
+                   ['msgs-persistent', 'Persistent',     false],
+                   ['msgs-total',      'Total',          true]]},
      'connections':
      {'Overview': [['user',   'User name', true],
                    ['state',  'State',     true]]},
@@ -653,6 +658,7 @@ function setup_global_vars() {
     exchange_types = overview.exchange_types;
 
     disable_stats = overview.disable_stats;
+    enable_queue_totals = overview.enable_queue_totals;
     COLUMNS = disable_stats?DISABLED_STATS_COLUMNS:ALL_COLUMNS;
     
     setup_chart_ranges(overview.sample_retention_policies);

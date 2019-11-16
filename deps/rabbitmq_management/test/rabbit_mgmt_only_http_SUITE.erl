@@ -85,7 +85,8 @@ all_tests() -> [
     samples_range_test,
     sorting_test,
     columns_test,
-    if_empty_unused_test].
+    if_empty_unused_test,
+    queues_enable_totals_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -187,6 +188,10 @@ end_per_testcase(Testcase, Config) ->
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
+end_per_testcase0(Testcase = queues_enable_totals_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, enable_queue_totals]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase0(Testcase = queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
@@ -438,6 +443,7 @@ queues_test(Config) ->
                   leader      => NodeBin,
                   members     => [NodeBin]}, Queue),
 
+    ?assert(not maps:is_key(messages, Queue)),
     ?assert(not maps:is_key(message_stats, Queue)),
     ?assert(not maps:is_key(messages_details, Queue)),
     ?assert(not maps:is_key(reductions_details, Queue)),
@@ -452,6 +458,87 @@ queues_test(Config) ->
 
     http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
+    passed.
+
+queues_enable_totals_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, enable_queue_totals, true]),
+
+    Good = [{durable, true}],
+    GoodQQ = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
+    http_get(Config, "/queues/%2F/foo", ?NOT_FOUND),
+    http_put(Config, "/queues/%2F/foo", GoodQQ, {group, '2xx'}),
+
+    Policy = [{pattern,    <<"baz">>},
+              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+    http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
+
+    {Conn, Ch} = open_connection_and_channel(Config),
+    Publish = fun(Q) ->
+                      amqp_channel:call(
+                        Ch, #'basic.publish'{exchange = <<"">>,
+                                             routing_key = Q},
+                        #amqp_msg{payload = <<"message">>})
+              end,
+    Publish(<<"baz">>),
+    Publish(<<"foo">>),
+    Publish(<<"foo">>),
+
+    Fun = fun() ->
+                  length(rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list,
+                                                      [queue_coarse_metrics])) == 2
+          end,
+    wait_until(Fun, 60),
+
+    Queues = http_get(Config, "/queues/%2F"),
+    Queue = http_get(Config, "/queues/%2F/foo"),
+
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    NodeBin = atom_to_binary(Node, utf8),
+    assert_list([#{name        => <<"baz">>,
+                   vhost       => <<"/">>,
+                   durable     => true,
+                   auto_delete => false,
+                   exclusive   => false,
+                   arguments   => #{},
+                   node        => NodeBin,
+                   slave_nodes => [],
+                   messages    => 1,
+                   messages_ready => 1,
+                   messages_unacknowledged => 0,
+                   synchronised_slave_nodes => []},
+                 #{name        => <<"foo">>,
+                   vhost       => <<"/">>,
+                   durable     => true,
+                   auto_delete => false,
+                   exclusive   => null,
+                   arguments   => #{'x-queue-type' => <<"quorum">>},
+                   leader      => NodeBin,
+                   messages    => 2,
+                   messages_ready => 2,
+                   messages_unacknowledged => 0,
+                   members     => [NodeBin]}], Queues),
+    assert_item(#{name        => <<"foo">>,
+                  vhost       => <<"/">>,
+                  durable     => true,
+                  auto_delete => false,
+                  exclusive   => false,
+                  arguments   => #{'x-queue-type' => <<"quorum">>},
+                  leader      => NodeBin,
+                  members     => [NodeBin]}, Queue),
+
+    ?assert(not maps:is_key(messages, Queue)),
+    ?assert(not maps:is_key(messages_ready, Queue)),
+    ?assert(not maps:is_key(messages_unacknowledged, Queue)),
+    ?assert(not maps:is_key(message_stats, Queue)),
+    ?assert(not maps:is_key(messages_details, Queue)),
+    ?assert(not maps:is_key(reductions_details, Queue)),
+
+    http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
+    close_connection(Conn),
+
     passed.
 
 mirrored_queues_test(Config) ->

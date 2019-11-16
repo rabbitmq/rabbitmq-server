@@ -371,6 +371,9 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
+{mapping, "management.enable_queue_totals", "rabbitmq_management.enable_queue_totals", [
+    {datatype, {enum, [true, false]}}]}.
+
 %% ===========================================================================
 %% Authorization
 
