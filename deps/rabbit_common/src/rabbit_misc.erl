@@ -333,7 +333,16 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
             assert_field_equivalence(OrigTypeVal, NewTypeVal, Name, Key)
     end.
 
+%% Classic queues do not necessarily have an x-queue-type field associated with them
+%% so we special-case that scenario here
+%%
+%% Fixes rabbitmq/rabbitmq-common#341
+%%
 assert_field_equivalence(_Orig, _Orig, _Name, _Key) ->
+    ok;
+assert_field_equivalence(undefined, {longstr, <<"classic">>}, _Name, <<"x-queue-type">>) ->
+    ok;
+assert_field_equivalence({longstr, <<"classic">>}, undefined, _Name, <<"x-queue-type">>) ->
     ok;
 assert_field_equivalence(Orig, New, Name, Key) ->
     equivalence_fail(Orig, New, Name, Key).
