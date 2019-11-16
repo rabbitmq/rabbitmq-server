@@ -20,7 +20,7 @@
 %% automatic import on boot
 -export([maybe_load_definitions/0, maybe_load_definitions_from/2]).
 %% import
--export([import_definitions/1, import_definitions/2,
+-export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5]).
 %% export
 -export([all_definitions/0]).
@@ -45,22 +45,33 @@ maybe_load_core_definitions() ->
 maybe_load_management_definitions() ->
     maybe_load_definitions(rabbitmq_management, load_definitions).
 
--spec import_definitions(Body :: binary() | iolist()) -> ok | {error, term()}.
-import_definitions(Body) ->
+-spec import_raw(Body :: binary() | iolist()) -> ok | {error, term()}.
+import_raw(Body) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     case decode([], Body) of
         {error, E}   -> {error, E};
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER)
     end.
 
--spec import_definitions(Body :: binary() | iolist(), VHost :: vhost:name()) -> ok | {error, term()}.
-import_definitions(Body, VHost) ->
+-spec import_raw(Body :: binary() | iolist(), VHost :: vhost:name()) -> ok | {error, term()}.
+import_raw(Body, VHost) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     case decode([], Body) of
         {error, E}   -> {error, E};
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER, fun() -> ok end, VHost)
     end.
 
+-spec import_parsed(Defs :: #{any() => any()}) -> ok | {error, term()}.
+import_parsed(Body0) ->
+    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    Body = atomise_map_keys(Body0),
+    apply_defs(Body, ?INTERNAL_USER).
+
+-spec import_parsed(Defs :: #{any() => any()}, VHost :: vhost:name()) -> ok | {error, term()}.
+import_parsed(Body0, VHost) ->
+    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    Body = atomise_map_keys(Body0),
+    apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost).
 
 -spec all_definitions() -> map().
 all_definitions() ->
@@ -132,7 +143,7 @@ load_definitions_from_file(File) ->
     case file:read_file(File) of
         {ok, Body} ->
             rabbit_log:info("Applying definitions from ~s", [File]),
-            import_definitions(Body);
+            import_raw(Body);
         {error, E} ->
             rabbit_log:error("Could not read definitions from ~s, Error: ~p", [File, E]),
             {error, {could_not_read_defs, {File, E}}}
@@ -157,12 +168,15 @@ decode(<<"">>) ->
 decode(Body) ->
     try
       Decoded = rabbit_json:decode(Body),
-      Normalised = maps:fold(fun(K, V, Acc) ->
-                     Acc#{binary_to_atom(K, utf8) => V}
-                   end, Decoded, Decoded),
+      Normalised = atomise_map_keys(Decoded),
       {ok, Normalised}
     catch error:_ -> {error, not_json}
     end.
+
+atomise_map_keys(Decoded) ->
+    maps:fold(fun(K, V, Acc) ->
+        Acc#{rabbit_data_coercion:to_atom(K, utf8) => V}
+              end, Decoded, Decoded).
 
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok'.
 
@@ -178,8 +192,6 @@ apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
     apply_defs(Map, ActingUser, fun () -> ok end, VHost);
 
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
-    rabbit_log:info("Asked to import definitions for multiple virtual hosts. Acting user: ~p",
-                    [ActingUser]),
     Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
     try
         rabbit_log:info("Importing users..."),
@@ -427,7 +439,7 @@ add_binding_int(Binding, Source, Destination, ActingUser) ->
       ActingUser).
 
 dest_type(Binding) ->
-    list_to_atom(binary_to_list(maps:get(destination_type, Binding, undefined))).
+    rabbit_data_coercion:to_atom(maps:get(destination_type, Binding, undefined)).
 
 r(Type, Props) -> r(Type, name, Props).
 

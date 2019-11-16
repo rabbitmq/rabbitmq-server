@@ -146,7 +146,7 @@ merge_policy_value(Name, PolicyVal, OpVal) ->
     end.
 
 policy_merge_strategy(Name) ->
-    case rabbit_registry:binary_to_type(Name) of
+    case rabbit_registry:binary_to_type(rabbit_data_coercion:to_binary(Name)) of
         {error, not_found} ->
             {error, not_found};
         T                  ->

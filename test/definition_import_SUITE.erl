@@ -135,7 +135,7 @@ run_directory_import_case(Path, Expected) ->
 run_import_case(Path) ->
    {ok, Body} = file:read_file(Path),
    ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
-   case rabbit_definitions:import_definitions(Body) of
+   case rabbit_definitions:import_raw(Body) of
      ok -> ok;
      {error, E} ->
        ct:pal("Import case ~p failed: ~p~n", [Path, E]),
