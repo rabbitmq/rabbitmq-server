@@ -83,7 +83,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
            {:error, :eisdir} ->
              {:error, ExitCodes.exit_dataerr(), "Path #{path} is a directory"}
            {:error, err}     ->
-             {:error, ExitCodes.exit_dataerr(), "Could not write to file: #{err}"}
+             {:error, ExitCodes.exit_dataerr(), "Could not write to file #{path}: #{err}"}
          end
     end
   end
