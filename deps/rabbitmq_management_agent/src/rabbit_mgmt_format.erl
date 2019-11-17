@@ -18,7 +18,7 @@
 
 -export([format/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/1, now_to_str_ms/1, strip_pids/1]).
--export([protocol/1, resource/1, queue/1, queue_state/1]).
+-export([protocol/1, resource/1, queue/1, queue_state/1, queue_info/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
@@ -408,6 +408,9 @@ queue(Q) when ?is_amqqueue(Q) ->
        {type,        Type},
        {state,       State}] ++ rabbit_amqqueue:format(Q),
       {fun format_exchange_and_queue/1, false}).
+
+queue_info(List) ->
+    format(List, {fun format_exchange_and_queue/1, false}).
 
 queue_state({syncing, Msgs}) -> [{state,         syncing},
                                  {sync_messages, Msgs}];
