@@ -32,6 +32,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
+-export([format/1]).
 
 %% Queue's state
 -record(q, {
@@ -1066,7 +1067,16 @@ stop(State) -> stop(noreply, State).
 stop(noreply, State) -> {stop, normal, State};
 stop(Reply,   State) -> {stop, normal, Reply, State}.
 
-infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+infos(Items, #q{q = Q} = State) ->
+    lists:foldr(fun(totals, Acc) ->
+                        [{messages_ready, i(messages_ready, State)},
+                         {messages, i(messages, State)},
+                         {messages_unacknowledged, i(messages_unacknowledged, State)}] ++ Acc;
+                   (type_specific, Acc) ->
+                        format(Q) ++ Acc;
+                   (Item, Acc) ->
+                        [{Item, i(Item, State)} | Acc]
+                end, [], Items).
 
 i(name,        #q{q = Q}) -> amqqueue:get_name(Q);
 i(durable,     #q{q = Q}) -> amqqueue:is_durable(Q);
@@ -1760,6 +1770,18 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     {hibernate, stop_rate_timer(State1)}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+format(Q) when ?is_amqqueue(Q) ->
+    case rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false ->
+            [{node, node(amqqueue:get_pid(Q))}];
+        true ->
+            Slaves = amqqueue:get_slave_pids(Q),
+            SSlaves = amqqueue:get_sync_slave_pids(Q),
+            [{slave_nodes, [node(S) || S <- Slaves]},
+             {synchronised_slave_nodes, [node(S) || S <- SSlaves]},
+             {node, node(amqqueue:get_pid(Q))}]
+    end.
 
 log_delete_exclusive({ConPid, _ConRef}, State) ->
     log_delete_exclusive(ConPid, State);

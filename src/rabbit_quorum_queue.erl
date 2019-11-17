@@ -587,7 +587,13 @@ infos(QName) ->
 -spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
 
 info(Q, Items) ->
-    [{Item, i(Item, Q)} || Item <- Items].
+    lists:foldr(fun(totals, Acc) ->
+                        i_totals(Q) ++ Acc;
+                   (type_specific, Acc) ->
+                        format(Q) ++ Acc;
+                   (Item, Acc) ->
+                        [{Item, i(Item, Q)} | Acc]
+                end, [], Items).
 
 -spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 
@@ -967,6 +973,19 @@ find_quorum_queues(VHost) ->
                                 amqqueue:get_vhost(Q) =:= VHost,
                                 amqqueue:qnode(Q) == Node]))
       end).
+
+i_totals(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    case ets:lookup(queue_coarse_metrics, QName) of
+        [{_, MR, MU, M, _}] ->
+            [{messages_ready, MR},
+             {messages_unacknowledged, MU},
+             {messages, M}];
+        [] ->
+            [{messages_ready, 0},
+             {messages_unacknowledged, 0},
+             {messages, 0}]
+    end.
 
 i(name,        Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q);
 i(durable,     Q) when ?is_amqqueue(Q) -> amqqueue:is_durable(Q);
