@@ -44,6 +44,11 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def case_insensitive_format(%{format: format} = opts) do
+    %{opts | format: String.downcase(format)}
+  end
+  def case_insensitive_format(opts), do: opts
+
   def nodes_in_cluster(node, timeout \\ :infinity) do
     with_nodes_in_cluster(node, fn nodes -> nodes end, timeout)
   end

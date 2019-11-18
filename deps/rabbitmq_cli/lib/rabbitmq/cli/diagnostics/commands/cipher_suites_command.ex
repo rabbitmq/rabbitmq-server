@@ -14,17 +14,13 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
+  alias RabbitMQ.CLI.Core.Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{all: false, format: "openssl"}, case_insensitive_format(opts))}
+    {args, Map.merge(%{all: false, format: "openssl"}, Helpers.case_insensitive_format(opts))}
   end
-
-  defp case_insensitive_format(%{format: format} = opts) do
-    %{ opts | format: String.downcase(format) }
-  end
-  defp case_insensitive_format(opts), do: opts
 
   def switches(), do: [timeout: :integer,
                        format: :string,
@@ -54,6 +50,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     :rabbit_misc.rpc_call(node_name, mod, function, args, timeout)
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
   def banner([], %{format: "openssl"}),  do: "Listing available cipher suites in OpenSSL format"
   def banner([], %{format: "erlang"}), do: "Listing available cipher suites in Erlang term format"
   def banner([], %{format: "map"}), do: "Listing available cipher suites in map format"
@@ -62,7 +60,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def description(), do: "Lists cipher suites enabled by default. To list all available cipher suites, add the --all argument."
 
-  def usage, do: "cipher_suites [--format (openssl | erlang | map)] [--all]"
+  def usage, do: "cipher_suites [--format <openssl | erlang | map>] [--all]"
 
   def usage_additional() do
     [
