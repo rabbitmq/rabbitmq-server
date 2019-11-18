@@ -44,5 +44,4 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 topic_permissions() ->
-    List = rabbit_auth_backend_internal:list_topic_permissions(),
-    List.
+    rabbit_auth_backend_internal:list_topic_permissions().

@@ -1,17 +1,17 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   https://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% https://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%% The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_unit_SUITE).
@@ -31,13 +31,12 @@ groups() ->
      {parallel_tests, [parallel], [
                                    tokenise_test,
                                    pack_binding_test,
-                                   amqp_table_test,
                                    path_prefix_test
                                   ]}
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Setup/teardown.
 %% -------------------------------------------------------------------
 
 init_per_group(_, Config) ->
@@ -47,7 +46,7 @@ end_per_group(_, Config) ->
     Config.
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases.
 %% -------------------------------------------------------------------
 
 tokenise_test(_Config) ->
@@ -67,20 +66,6 @@ pack_binding_test(_Config) ->
     assert_binding(<<"foo%7Ebar%7Ebash">>,
                    <<"foo~bar~bash">>, []),
     ok.
-
-amqp_table_test(_Config) ->
-    assert_table(#{}, []),
-    assert_table(#{<<"x-expires">> => 1000},
-                 [{<<"x-expires">>, long, 1000}]),
-    assert_table(#{<<"x-forwarding">> =>
-                   [#{<<"uri">> => <<"amqp://localhost/%2F/upstream">>}]},
-                 [{<<"x-forwarding">>, array,
-                   [{table, [{<<"uri">>, longstr,
-                              <<"amqp://localhost/%2F/upstream">>}]}]}]).
-
-assert_table(JSON, AMQP) ->
-    ?assertEqual(JSON, rabbit_mgmt_format:amqp_table(AMQP)),
-    ?assertEqual(AMQP, rabbit_mgmt_format:to_amqp_table(JSON)).
 
 path_prefix_test(_Config) ->
     Got0 = rabbit_mgmt_util:get_path_prefix(),
