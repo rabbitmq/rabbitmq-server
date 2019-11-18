@@ -90,7 +90,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
     case Config.output_less?(opts) do
       true  -> :ok
       false -> {:ok, "Successfully started definition import. " <>
-                     "This process is asynchronous and can take some time."}
+                     "This process is asynchronous and can take some time.\n"}
     end
   end
   use RabbitMQ.CLI.DefaultOutput
