@@ -1,0 +1,27 @@
+{
+  "rabbit_version": "3.7.21",
+  "vhosts": [
+    {
+      "name": "\/"
+    }
+  ],
+  "queues": [
+    
+  ],
+  "exchanges": [
+    {
+      "name": "project.topic.default",
+      "vhost": "\/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {
+        
+      }
+    }
+  ],
+  "bindings": [
+    
+  ]
+}

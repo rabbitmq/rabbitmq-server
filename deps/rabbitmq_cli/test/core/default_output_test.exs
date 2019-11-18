@@ -55,13 +55,12 @@ defmodule DefaultOutputTest do
   end
 
   test "error_string is error" do
-    {:error, "I am string"} =
-      ExampleCommand.output({:error_string, "I am string"}, %{})
+    assert {:error, "I am string"} == ExampleCommand.output({:error_string, "I am string"}, %{})
   end
 
   test "error_string is converted to string" do
-    {:error, "I am charlist"} =
-      ExampleCommand.output({:error_string, 'I am charlist'}, %{})
+    assert match?({:error, "I am charlist"},
+                  ExampleCommand.output({:error_string, 'I am charlist'}, %{}))
   end
 
   test "error is formatted" do
@@ -81,28 +80,25 @@ defmodule DefaultOutputTest do
   end
 
   test "custom output function can be defined" do
-    assert match?({:error, 125, "Non standard"},
-                  ExampleCommandWithCustomOutput.output(:non_standard_output, %{}))
+    assert {:error, 125, "Non standard"} == ExampleCommandWithCustomOutput.output(:non_standard_output, %{})
   end
 
   test "default output works even if custom output is defined" do
-    assert match?(:ok, ExampleCommandWithCustomOutput.output(:ok, %{}))
-    assert match?({:ok, {:complex, "message"}},
-                  ExampleCommandWithCustomOutput.output({:ok, {:complex, "message"}}, %{}))
+    assert :ok == ExampleCommandWithCustomOutput.output(:ok, %{})
+    assert {:ok, {:complex, "message"}} == ExampleCommandWithCustomOutput.output({:ok, {:complex, "message"}}, %{})
 
-    assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output({:ok, [1,2,3]}, %{}))
-    assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output([1,2,3], %{}))
+    assert {:stream, [1,2,3]} == ExampleCommandWithCustomOutput.output({:ok, [1,2,3]}, %{})
+    assert {:stream, [1,2,3]} == ExampleCommandWithCustomOutput.output([1,2,3], %{})
 
-    {:error, {:badrpc, :nodedown}} =
+    assert {:error, {:badrpc, :nodedown}} ==
       ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{})
-    {:error, {:badrpc, :timeout}} =
+    assert {:error, {:badrpc, :timeout}} ==
       ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{})
 
     error = %{i: [am: "arbitrary", error: 1]}
     {:error, ^error} = ExampleCommandWithCustomOutput.output({:error, error}, %{})
 
-    {:error, "I am string"} =
-      ExampleCommandWithCustomOutput.output({:error_string, "I am string"}, %{})
+    assert {:error, "I am string"} == ExampleCommandWithCustomOutput.output({:error_string, "I am string"}, %{})
 
     val = "foo"
     assert match?({:ok, ^val}, ExampleCommandWithCustomOutput.output(val, %{}))

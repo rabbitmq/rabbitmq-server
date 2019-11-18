@@ -52,6 +52,7 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("connections")
   Macros.defguide("configuration", path_segment: "configure")
   Macros.defguide("consumers")
+  Macros.defguide("definitions")
   Macros.defguide("erlang_versions", path_segment: "which-erlang")
   Macros.defguide("feature_flags", domain: "next.rabbitmq.com")
   Macros.defguide("firehose")
