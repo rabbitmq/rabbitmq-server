@@ -1,0 +1,63 @@
+{
+  "rabbit_version": "3.7.2",
+  "users": [
+    {
+      "name": "guest",
+      "password_hash": "PD4MQV8Ivcprh1\/yUS9x7jkpbXtWIZLTQ0tvnZPncpI6Ui0a",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "\/"
+    },
+    {
+      "name": "vhost2"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "guest",
+      "vhost": "\/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "vhost2",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "topic_permissions": [
+    
+  ],
+  "parameters": [
+    
+  ],
+  "global_parameters": [
+    {
+      "name": "mqtt_port_to_vhost_mapping",
+      "value": {
+        "1883": "\/",
+        "1884": "vhost2"
+      }
+    },
+    {
+      "name": "cluster_name",
+      "value": "rabbitmq@localhost"
+    }
+  ],
+  "policies": [
+  ],
+  "queues": [
+  ],
+  "exchanges": [
+  ],
+  "bindings": [
+    
+  ]
+}

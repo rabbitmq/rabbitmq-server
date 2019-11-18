@@ -49,6 +49,7 @@ groups() ->
           rabbitmqctl_encode,
           pmerge,
           plmerge,
+          merge_operator_policy_definitions,
           priority_queue,
           rabbit_direct_extract_extra_auth_props,
           {resource_monitor, [parallel], [
@@ -807,6 +808,76 @@ plmerge(_Config) ->
     P1 = [{a, 1}, {b, 2}, {c, 3}],
     P2 = [{a, 2}, {d, 4}],
     [{a, 1}, {b, 2}, {c, 3}, {d, 4}] = rabbit_misc:plmerge(P1, P2),
+    passed.
+
+merge_operator_policy_definitions(_Config) ->
+    P1 = undefined,
+    P2 = [{definition, [{<<"message-ttl">>, 3000}]}],
+    ?assertEqual([{<<"message-ttl">>, 3000}], rabbit_policy:merge_operator_definitions(P1, P2)),
+    ?assertEqual([{<<"message-ttl">>, 3000}], rabbit_policy:merge_operator_definitions(P2, P1)),
+
+    ?assertEqual([{<<"message-ttl">>, 3000}], rabbit_policy:merge_operator_definitions(P1, rabbit_data_coercion:to_map(P2))),
+    ?assertEqual([{<<"message-ttl">>, 3000}], rabbit_policy:merge_operator_definitions(rabbit_data_coercion:to_map(P2), P1)),
+
+    ?assertEqual(undefined, rabbit_policy:merge_operator_definitions(undefined, undefined)),
+
+    ?assertEqual([], rabbit_policy:merge_operator_definitions([],  [])),
+    ?assertEqual([], rabbit_policy:merge_operator_definitions(#{}, [])),
+    ?assertEqual([], rabbit_policy:merge_operator_definitions(#{}, #{})),
+    ?assertEqual([], rabbit_policy:merge_operator_definitions([],  #{})),
+
+    %% operator policy takes precedence
+    ?assertEqual([{<<"message-ttl">>, 3000}], rabbit_policy:merge_operator_definitions(
+      [{definition, [
+        {<<"message-ttl">>, 5000}
+      ]}],
+      [{definition, [
+        {<<"message-ttl">>, 3000}
+      ]}]
+    )),
+
+    ?assertEqual([{<<"delivery-limit">>, 20},
+                  {<<"message-ttl">>, 3000}],
+                  rabbit_policy:merge_operator_definitions(
+                    [{definition, [
+                      {<<"message-ttl">>, 5000},
+                      {<<"delivery-limit">>, 20}
+                    ]}],
+                    [{definition, [
+                      {<<"message-ttl">>, 3000}
+                    ]}])
+    ),
+
+    ?assertEqual(
+                 [{<<"delivery-limit">>, 20},
+                  {<<"message-ttl">>,    3000},
+                  {<<"unknown">>,        <<"value">>}],
+
+                  rabbit_policy:merge_operator_definitions(
+                    #{definition => #{
+                      <<"message-ttl">> => 5000,
+                      <<"delivery-limit">> => 20
+                    }},
+                    #{definition => #{
+                      <<"message-ttl">> => 3000,
+                      <<"unknown">> => <<"value">>
+                    }})
+    ),
+
+    ?assertEqual(
+                 [{<<"delivery-limit">>, 20},
+                  {<<"message-ttl">>, 3000}],
+
+                  rabbit_policy:merge_operator_definitions(
+                    #{definition => #{
+                      <<"message-ttl">> => 5000,
+                      <<"delivery-limit">> => 20
+                    }},
+                    [{definition, [
+                      {<<"message-ttl">>, 3000}
+                    ]}])
+    ),
+
     passed.
 
 table_codec(_Config) ->
