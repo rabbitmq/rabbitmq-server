@@ -44,7 +44,8 @@ groups() ->
             version_equivalence,
             pid_decompose_compose,
             platform_and_version,
-            frame_encoding_does_not_fail_with_empty_binary_payload
+            frame_encoding_does_not_fail_with_empty_binary_payload,
+            amqp_table_conversion
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -411,6 +412,21 @@ frame_encoding_does_not_fail_with_empty_binary_payload(_Config) ->
                                        [<<3,0,1,0,0,0,7>>,[<<"payload">>],206]]}
                     ]],
     ok.
+
+amqp_table_conversion(_Config) ->
+    assert_table(#{}, []),
+    assert_table(#{<<"x-expires">> => 1000},
+                 [{<<"x-expires">>, long, 1000}]),
+    assert_table(#{<<"x-forwarding">> =>
+                   [#{<<"uri">> => <<"amqp://localhost/%2F/upstream">>}]},
+                 [{<<"x-forwarding">>, array,
+                   [{table, [{<<"uri">>, longstr,
+                              <<"amqp://localhost/%2F/upstream">>}]}]}]).
+
+assert_table(JSON, AMQP) ->
+    ?assertEqual(JSON, rabbit_misc:amqp_table(AMQP)),
+    ?assertEqual(AMQP, rabbit_misc:to_amqp_table(JSON)).
+
 
 set_stats_interval(Interval) ->
     application:set_env(rabbit, collect_statistics, coarse),
