@@ -36,10 +36,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
     {:validation_failure, :too_many_args}
   end
   def validate([path], _) do
-    dir = Path.dirname(path)
-    case File.exists?(dir, [raw: true]) do
+    case File.exists?(path, [raw: true]) do
       true  -> :ok
-      false -> {:validation_failure, {:bad_argument, "Directory #{dir} does not exist"}}
+      false -> {:validation_failure, {:bad_argument, "File #{path} does not exist"}}
     end
   end
   def validate(_, _), do: :ok
@@ -62,7 +61,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
     abs_path = Path.absname(path)
 
     case File.read(abs_path) do
-      # no output
+      {:ok, ""} ->
+        {:error, ExitCodes.exit_dataerr(), "File #{path} is zero-sized"}
       {:ok, bin} ->
         case deserialise(bin, format) do
           {:error, _} ->
@@ -132,7 +132,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   end
 
   defp deserialise(bin, "erlang") do
-    {:ok, :erlang.binary_to_term(bin)}
+    try do
+      {:ok, :erlang.binary_to_term(bin)}
+    rescue e in ArgumentError ->
+      {:error, :unused}
+    end
   end
 
   defp human_friendly_format("JSON"), do: "JSON"
