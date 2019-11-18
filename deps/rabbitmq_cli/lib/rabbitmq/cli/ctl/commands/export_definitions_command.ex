@@ -32,6 +32,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
       when format != "json" and format != "JSON" and format != "erlang" do
     {:validation_failure, {:bad_argument, "Format should be either json or erlang"}}
   end
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
+  end
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end

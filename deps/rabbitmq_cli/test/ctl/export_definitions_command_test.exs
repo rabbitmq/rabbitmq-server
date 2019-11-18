@@ -68,6 +68,11 @@ defmodule ExportDefinitionsCommandTest do
                   @command.validate([valid_file_path()], Map.merge(context[:opts], %{format: "yolo"})))
   end
 
+    test "validate: no positional arguments fails validation", context do
+    assert @command.validate([], context[:opts]) ==
+             {:validation_failure, :not_enough_args}
+  end
+
   test "validate: more than one positional argument fails validation", context do
     assert @command.validate([valid_file_path(), "extra-arg"], context[:opts]) ==
              {:validation_failure, :too_many_args}
