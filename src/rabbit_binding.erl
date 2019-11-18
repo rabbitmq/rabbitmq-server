@@ -18,9 +18,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
--export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/3, list/1]).
--export([list_for_source/1, list_for_destination/1,
-         list_for_source_and_destination/2]).
+-export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/3]).
+-export([list/1, list_for_source/1, list_for_destination/1,
+         list_for_source_and_destination/2, list_explicit/0]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
          process_deletions/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
@@ -235,6 +235,20 @@ remove_default_exchange_binding_rows_of(Dst = #resource{}) ->
             ok
     end,
     ok.
+
+-spec list_explicit() -> bindings().
+
+list_explicit() ->
+    mnesia:async_dirty(
+        fun () ->
+            AllRoutes = mnesia:dirty_match_object(rabbit_route, #route{_ = '_'}),
+            %% if there are any default exchange bindings left after an upgrade
+            %% of a pre-3.8 database, filter them out
+            AllBindings = [B || #route{binding = B} <- AllRoutes],
+            lists:filter(fun(#binding{source = S}) ->
+                            not (S#resource.kind =:= exchange andalso S#resource.name =:= <<>>)
+                         end, AllBindings)
+            end).
 
 -spec list(rabbit_types:vhost()) -> bindings().
 

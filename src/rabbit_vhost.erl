@@ -27,6 +27,7 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
+-export([put_vhost/5]).
 
 %%
 %% API
@@ -96,7 +97,12 @@ add(Name, Description, Tags, ActingUser) ->
     end.
 
 do_add(Name, Description, Tags, ActingUser) ->
-    rabbit_log:info("Adding vhost '~s' (description: '~s')", [Name, Description]),
+    case Description of
+        undefined ->
+            rabbit_log:info("Adding vhost '~s' without a description", [Name]);
+        Value ->
+            rabbit_log:info("Adding vhost '~s' (description: '~s')", [Name, Value])
+    end,
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
@@ -170,6 +176,48 @@ delete(VHost, ActingUser) ->
     %% on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     ok.
+
+put_vhost(Name, Description, Tags0, Trace, Username) ->
+    Tags = case Tags0 of
+      undefined   -> <<"">>;
+      null        -> <<"">>;
+      "undefined" -> <<"">>;
+      "null"      -> <<"">>;
+      Other       -> Other
+    end,
+    Result = case exists(Name) of
+        true  -> ok;
+        false -> add(Name, Description, parse_tags(Tags), Username),
+                 %% wait for up to 45 seconds for the vhost to initialise
+                 %% on all nodes
+                 case await_running_on_all_nodes(Name, 45000) of
+                     ok               ->
+                         maybe_grant_full_permissions(Name, Username);
+                     {error, timeout} ->
+                         {error, timeout}
+                 end
+    end,
+    case Trace of
+        true      -> rabbit_trace:start(Name);
+        false     -> rabbit_trace:stop(Name);
+        undefined -> ok
+    end,
+    Result.
+
+%% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
+%% which does not actually exist
+maybe_grant_full_permissions(_Name, ?INTERNAL_USER) ->
+    ok;
+maybe_grant_full_permissions(Name, Username) ->
+    U = rabbit_auth_backend_internal:lookup_user(Username),
+    maybe_grant_full_permissions(U, Name, Username).
+
+maybe_grant_full_permissions({ok, _}, Name, Username) ->
+    rabbit_auth_backend_internal:set_permissions(
+      Username, Name, <<".*">>, <<".*">>, <<".*">>, Username);
+maybe_grant_full_permissions(_, _Name, _Username) ->
+    ok.
+
 
 %% 50 ms
 -define(AWAIT_SAMPLE_INTERVAL, 50).

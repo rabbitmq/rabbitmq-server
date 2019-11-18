@@ -174,7 +174,7 @@ store_ram(X) ->
         (binary()) -> atom() | rabbit_types:connection_exit().
 
 check_type(TypeBin) ->
-    case rabbit_registry:binary_to_type(TypeBin) of
+    case rabbit_registry:binary_to_type(rabbit_data_coercion:to_binary(TypeBin)) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
               command_invalid, "unknown exchange type '~s'", [TypeBin]);
