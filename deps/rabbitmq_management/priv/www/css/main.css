@@ -86,6 +86,7 @@ table.legend td { padding: 4px 0 4px 10px; width: 130px; }
 .filter input#filter-regex-mode { vertical-align: middle; }
 .filter p#filter-truncate { float: right; padding: 4px; margin: 0; }
 .filter p.filter-warning { border-radius: 5px; background: #ff8; }
+.filter p.filter-success { border-radius: 5px; background: rgb(75, 250, 5); }
 .filter-active { background: #99EBFF; border-radius: 5px; }
 .filter-highlight { background: #99EBFF; }
 
@@ -225,6 +226,7 @@ div.form-popup-help {
   z-index: 2;
 }
 p.warning, div.form-popup-warn { background: #FF9; }
+p.success, div.form-popup-warn { background: rgb(5, 250, 107); }
 
 div.form-popup-options { z-index: 3; }
 
@@ -248,6 +250,7 @@ div.form-popup-options span:hover {
 }
 
 p.warning { padding: 15px; border-radius: 5px; -moz-border-radius: 5px; text-align: center; }
+p.success { padding: 15px; border-radius: 5px; -moz-border-radius: 5px; text-align: center; }
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 5px; -moz-border-radius: 5px; }
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }

@@ -793,6 +793,16 @@ var chart_data = {};
 // because things were deleted between refreshes
 var last_page_out_of_range_error = 0;
 
-var enable_uaa;
-var uaa_client_id;
-var uaa_location;
+var enable_oauth2;
+var oauth2_implementation;
+var oauth2_client_id;
+var oauth2_location;
+var oauth2_scopes;
+
+var oauth2_Uaa = 'uaa';
+var oauth2_IdentityServer = 'identityserver';
+
+var oidcClientSettings;
+var oidcClientEventInitialized = false;
+var oauth2_logout_invoked = false;
+var oidcClient;
