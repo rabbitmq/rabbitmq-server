@@ -172,35 +172,7 @@ properties(unknown) -> unknown;
 properties(Table)   -> maps:from_list([{Name, tuple(Value)} ||
                                           {Name, Value} <- Table]).
 
-amqp_table(unknown)   -> unknown;
-amqp_table(undefined) -> amqp_table([]);
-amqp_table([])        -> #{};
-amqp_table(#{})       -> #{};
-amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
-                                            {Name, Type, Value} <- Table]).
-
-amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
-amqp_value(table, V)                   -> amqp_table(V);
-amqp_value(decimal, {Before, After})   ->
-    erlang:list_to_float(
-      lists:flatten(io_lib:format("~p.~p", [Before, After])));
-amqp_value(_Type, V) when is_binary(V) -> utf8_safe(V);
-amqp_value(_Type, V)                   -> V.
-
-utf8_safe(V) ->
-    try
-        _ = xmerl_ucs:from_utf8(V),
-        V
-    catch exit:{ucs, _} ->
-            Enc = split_lines(base64:encode(V)),
-            <<"Not UTF-8, base64 is: ", Enc/binary>>
-    end.
-
-% MIME enforces a limit on line length of base 64-encoded data to 76 characters.
-split_lines(<<Text:76/binary, Rest/binary>>) ->
-    <<Text/binary, $\n, (split_lines(Rest))/binary>>;
-split_lines(Text) ->
-    Text.
+amqp_table(Value)   -> rabbit_misc:amqp_table(Value).
 
 parameter(P) -> pset(value, pget(value, P), P).
 
@@ -349,28 +321,7 @@ tokenise(Str) ->
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 
-to_amqp_table(M) when is_map(M) ->
-    lists:reverse(maps:fold(fun(K, V, Acc) -> [to_amqp_table_row(K, V)|Acc] end,
-                            [], M));
-to_amqp_table(L) when is_list(L) ->
-    L.
-
-to_amqp_table_row(K, V) ->
-    {T, V2} = type_val(V),
-    {K, T, V2}.
-
-to_amqp_array(L) ->
-    [type_val(I) || I <- L].
-
-type_val(M) when is_map(M)     -> {table,   to_amqp_table(M)};
-type_val(L) when is_list(L)    -> {array,   to_amqp_array(L)};
-type_val(X) when is_binary(X)  -> {longstr, X};
-type_val(X) when is_integer(X) -> {long,    X};
-type_val(X) when is_number(X)  -> {double,  X};
-type_val(true)                 -> {bool, true};
-type_val(false)                -> {bool, false};
-type_val(null)                 -> throw({error, null_not_allowed});
-type_val(X)                    -> throw({error, {unhandled_type, X}}).
+to_amqp_table(V) -> rabbit_misc:to_amqp_table(V).
 
 url(Fmt, Vals) ->
     print(Fmt, [rabbit_http_util:quote_plus(V) || V <- Vals]).
