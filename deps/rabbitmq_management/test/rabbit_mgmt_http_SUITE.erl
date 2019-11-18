@@ -1753,7 +1753,7 @@ definitions_vhost_test(Config) ->
           policies   => [],
           parameters => [],
           bindings   => []},
-    http_post(Config, "/definitions/othervhost", Upload, ?BAD_REQUEST),
+    http_post(Config, "/definitions/othervhost", Upload, ?NOT_FOUND),
 
     unregister_parameters_and_policy_validator(Config),
     passed.
@@ -1771,6 +1771,7 @@ definitions_password_test(Config) ->
                    tags              => <<"management">>},
     http_post(Config, "/definitions", Config35, {group, '2xx'}),
     Definitions35 = http_get(Config, "/definitions", ?OK),
+    ct:pal("Definitions35: ~p", [Definitions35]),
     Users35 = maps:get(users, Definitions35),
     true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
 
