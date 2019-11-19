@@ -104,8 +104,9 @@ defmodule RabbitMQCtl do
 
         try do
           do_exec_parsed_command(unparsed_command, output_fun, arguments, command, options)
-        catch _error_type, err ->
-          format_error(err, options, command)
+        catch error_type, error ->
+          maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
+          format_error(error, options, command)
         end
     end
   end
@@ -169,15 +170,31 @@ defmodule RabbitMQCtl do
     end
   end
 
+  def maybe_print_stacktrace(error_type, :undef = error, stacktrace, _opts) do
+    do_print_stacktrace(error_type, error, stacktrace)
+  end
+  def maybe_print_stacktrace(error_type, :function_clause = error, stacktrace, _opts) do
+    do_print_stacktrace(error_type, error, stacktrace)
+  end
+  def maybe_print_stacktrace(error_type, :badarg = error, stacktrace, _opts) do
+    do_print_stacktrace(error_type, error, stacktrace)
+  end
+  def maybe_print_stacktrace(error_type, {:case_clause, _val} = error, stacktrace, _opts) do
+    do_print_stacktrace(error_type, error, stacktrace)
+  end
   def maybe_print_stacktrace(error_type, error, stacktrace, %{print_stacktrace: true}) do
-    IO.puts("Stack trace: \n")
-    IO.puts(Exception.format(error_type, error, stacktrace))
+    do_print_stacktrace(error_type, error, stacktrace)
   end
   def maybe_print_stacktrace(_error_type, _error, _stacktrace, %{print_stacktrace: false}) do
     nil
   end
   def maybe_print_stacktrace(_error_type, _error, _stacktrace, _opts) do
     nil
+  end
+
+  defp do_print_stacktrace(error_type, error, stacktrace) do
+    IO.puts("Stack trace: \n")
+    IO.puts(Exception.format(error_type, error, stacktrace))
   end
 
   def handle_command_output(output, command, options, output_fun) do
@@ -377,14 +394,6 @@ defmodule RabbitMQCtl do
     exit({:shutdown, code})
   end
 
-  defp format_error(:undef, _opts, _module) do
-    {:error, ExitCodes.exit_software(),
-      "\n:undef error!\nRe-run with --print-stacktrace to see stacktrace.\n"}
-  end
-  defp format_error(:function_clause, _opts, _module) do
-    {:error, ExitCodes.exit_software(),
-      "\n:function_clause error!\nRe-run with --print-stacktrace to see stacktrace.\n"}
-  end
   defp format_error({:error, {:node_name, :hostname_not_allowed}}, _, _) do
     {:error, ExitCodes.exit_dataerr(),
       "Unsupported node name: hostname is invalid (possibly contains unsupported characters).\nIf using FQDN node names, use the -l / --longnames argument."}
@@ -523,7 +532,7 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_unavailable(), nil}
   end
 
-  # Catch all
+  # Catch all clauses
   defp format_error({:error, exit_code, err}, _, _) do
     string_err = Helpers.string_or_inspect(err)
 
@@ -534,6 +543,10 @@ defmodule RabbitMQCtl do
     string_err = Helpers.string_or_inspect(err)
 
     {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
+  end
+
+  defp format_error(error, _opts, _module) do
+    {:error, ExitCodes.exit_software(), "#{inspect(error)}\n"}
   end
 
   defp get_node_diagnostics(nil) do
@@ -573,9 +586,9 @@ defmodule RabbitMQCtl do
   defp maybe_with_distribution(command, options, code) do
     try do
       maybe_with_distribution_without_catch(command, options, code)
-    catch
-      _error_type, error ->
-        format_error(error, options, command)
+    catch error_type, error ->
+      maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
+      format_error(error, options, command)
     end
   end
 
