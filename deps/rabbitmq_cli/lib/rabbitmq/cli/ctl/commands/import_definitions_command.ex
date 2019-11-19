@@ -50,8 +50,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
       :eof -> {:error, :not_enough_args}
       bin  ->
         case deserialise(bin, format) do
-          {:error, _} ->
-            {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)})"}
+          {:error, error} ->
+            {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)}) (error: #{inspect(error)})"}
           {:ok, map} ->
             :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
         end
@@ -65,8 +65,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
         {:error, ExitCodes.exit_dataerr(), "File #{path} is zero-sized"}
       {:ok, bin} ->
         case deserialise(bin, format) do
-          {:error, _} ->
-            {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)})"}
+          {:error, error} ->
+            {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)}) (error: #{inspect(error)})"}
           {:ok, map} ->
             :rabbit_misc.rpc_call(node_name, :rabbit_definitions, :import_parsed, [map], timeout)
         end
@@ -135,7 +135,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
     try do
       {:ok, :erlang.binary_to_term(bin)}
     rescue e in ArgumentError ->
-      {:error, :unused}
+      {:error, e.message}
     end
   end
 
