@@ -51,7 +51,7 @@
 -export([format/2, format_many/1, format_stderr/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
--export([atom_to_binary/1]).
+-export([atom_to_binary/1, parse_bool/1, parse_int/1]).
 -export([pid_to_string/1, string_to_pid/1,
          pid_change_node/2, node_to_fake_pid/1]).
 -export([version_compare/2, version_compare/3]).
@@ -744,6 +744,22 @@ ceil(N) ->
         true  -> T;
         false -> 1 + T
     end.
+
+parse_bool(<<"true">>)  -> true;
+parse_bool(<<"false">>) -> false;
+parse_bool(true)        -> true;
+parse_bool(false)       -> false;
+parse_bool(undefined)   -> undefined;
+parse_bool(V)           -> throw({error, {not_boolean, V}}).
+
+parse_int(I) when is_integer(I) -> I;
+parse_int(F) when is_number(F)  -> trunc(F);
+parse_int(S)                    -> try
+                                       list_to_integer(binary_to_list(S))
+                                   catch error:badarg ->
+                                           throw({error, {not_integer, S}})
+                                   end.
+
 
 queue_fold(Fun, Init, Q) ->
     case queue:out(Q) of
