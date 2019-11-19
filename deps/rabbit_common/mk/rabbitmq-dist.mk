@@ -5,6 +5,12 @@ CLI_SCRIPTS_DIR = sbin
 CLI_ESCRIPTS_DIR = escript
 MIX = echo y | mix
 
+ifeq ($(USE_RABBIT_BOOT_SCRIPT),)
+DIST_AS_EZS ?= true
+else
+DIST_AS_EZS ?=
+endif
+
 dist_verbose_0 = @echo " DIST  " $@;
 dist_verbose_2 = set -x;
 dist_verbose = $(dist_verbose_$(V))
@@ -50,7 +56,11 @@ endef
 define do_ez_target_erlangmk
 dist_$(1)_ez_dir = $$(if $(2),$(DIST_DIR)/$(1)-$(2), \
 	$$(if $$(VERSION),$(DIST_DIR)/$(1)-$$(VERSION),$(DIST_DIR)/$(1)))
+ifeq ($(DIST_AS_EZS),)
+dist_$(1)_ez = $$(dist_$(1)_ez_dir)
+else
 dist_$(1)_ez = $$(dist_$(1)_ez_dir).ez
+endif
 
 $$(dist_$(1)_ez): APP     = $(1)
 $$(dist_$(1)_ez): VSN     = $(2)
@@ -176,12 +186,14 @@ $(ERLANGMK_DIST_EZS):
 		&& grep -q '^prepare-dist::' $(SRC_DIR)/Makefile) || \
 		$(MAKE) --no-print-directory -C $(SRC_DIR) prepare-dist \
 		APP=$(APP) VSN=$(VSN) EZ_DIR=$(EZ_DIR)
+ifneq ($(DIST_AS_EZS),)
 	$(verbose) (cd $(DIST_DIR) && \
 		find "$(basename $(notdir $@))" | LC_COLLATE=C sort \
 		> "$(basename $(notdir $@)).manifest" && \
 		$(ZIP) $(ZIP_V) --names-stdin "$(notdir $@)" \
 		< "$(basename $(notdir $@)).manifest")
 	$(verbose) rm -rf $(EZ_DIR) $(EZ_DIR).manifest
+endif
 
 $(MIX_DIST_EZS): $(mix_task_archive_deps)
 	$(verbose) cd $(SRC_DIR) && \
@@ -240,8 +252,8 @@ DIST_EZS = $(ERLANGMK_DIST_EZS) $(MIX_DIST_EZS)
 
 do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS) $(EXTRA_DIST_EZS), \
-		$(wildcard $(DIST_DIR)/*.ez))'; \
-	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -f $$unwanted)
+		$(wildcard $(DIST_DIR)/*))'; \
+	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -rf $$unwanted)
 
 test-build:: install-cli
 
