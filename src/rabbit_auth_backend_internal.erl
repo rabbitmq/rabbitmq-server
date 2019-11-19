@@ -484,7 +484,7 @@ put_user(User, Version, ActingUser) ->
                           {undefined, undefined} ->
                               throw({error, tags_not_present});
                           {undefined, AdminS} ->
-                              case rabbit_mgmt_util:parse_bool(AdminS) of
+                              case rabbit_misc:parse_bool(AdminS) of
                                   true  -> [administrator];
                                   false -> []
                               end;
