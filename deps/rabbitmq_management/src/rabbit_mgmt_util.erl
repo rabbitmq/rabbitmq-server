@@ -908,20 +908,9 @@ props_to_method(MethodName, Props) ->
                     FieldNames),
     Res.
 
-parse_bool(<<"true">>)  -> true;
-parse_bool(<<"false">>) -> false;
-parse_bool(true)        -> true;
-parse_bool(false)       -> false;
-parse_bool(undefined)   -> undefined;
-parse_bool(V)           -> throw({error, {not_boolean, V}}).
+parse_bool(V) -> rabbit_misc:parse_bool(V).
 
-parse_int(I) when is_integer(I) -> I;
-parse_int(F) when is_number(F)  -> trunc(F);
-parse_int(S)                    -> try
-                                       list_to_integer(binary_to_list(S))
-                                   catch error:badarg ->
-                                           throw({error, {not_integer, S}})
-                                   end.
+parse_int(V) -> rabbit_misc:parse_int(V).
 
 with_channel(VHost, ReqData, Context, Fun) ->
     with_channel(VHost, ReqData, Context, node(), Fun).
