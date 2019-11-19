@@ -82,8 +82,9 @@ do_ensure_epmd(Exe, _) ->
     ID = rabbit_misc:random(1000000000),
     Port = open_port(
              {spawn_executable, Exe},
-             [{args, ["-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
-                      "-noshell", "-eval", "halt()."]},
+             [{args, ["-boot", "no_dot_erlang",
+                      "-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
+                      "-noinput", "-s", "erlang", "halt"]},
               exit_status, stderr_to_stdout, use_stdio]),
     port_shutdown_loop(Port).
 
