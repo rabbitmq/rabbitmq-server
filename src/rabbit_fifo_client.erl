@@ -199,6 +199,8 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
             {ok, empty, State0#state{leader = Leader}};
         {ok, {dequeue, Msg, NumReady}, Leader} ->
             {ok, {Msg, NumReady}, State0#state{leader = Leader}};
+        {ok, {error, _} = Err, _Leader} ->
+            Err;
         Err ->
             Err
     end.

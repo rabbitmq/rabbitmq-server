@@ -482,6 +482,11 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
             IsDelivered = Count > 0,
             Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
             {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
+        {error, unsupported} ->
+            rabbit_misc:protocol_error(
+              resource_locked,
+              "cannot obtain access to locked ~s. basic.get operations are not supported by quorum queues with single active consumer",
+              [rabbit_misc:rs(QName)]);
         {error, _} = Err ->
             Err;
         {timeout, _} ->
