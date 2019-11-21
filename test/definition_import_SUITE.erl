@@ -44,7 +44,8 @@ groups() ->
                                import_case7,
                                import_case8,
                                import_case9,
-                               import_case10
+                               import_case10,
+                               import_case11
                               ]}
     ].
 
@@ -102,6 +103,8 @@ import_case5(Config) ->
                  %% expect a proplist, see rabbitmq/rabbitmq-management#528
                  [{<<"1883">>,<<"/">>},
                   {<<"1884">>,<<"vhost2">>}]).
+
+import_case11(Config) -> import_file_case(Config, "case11").
 
 import_file_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
