@@ -397,6 +397,11 @@ add_queue(Queue, ActingUser) ->
 add_queue(VHost, Queue, ActingUser) ->
     add_queue_int(Queue, rv(VHost, queue, Queue), ActingUser).
 
+add_queue_int(_Queue, R = #resource{kind = queue,
+                                    name = <<"amq.", _/binary>>}, ActingUser) ->
+    Name = R#resource.name,
+    rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
+                       "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
     rabbit_amqqueue:declare(Name,
                             maps:get(durable,                         Queue, undefined),
@@ -411,6 +416,13 @@ add_exchange(Exchange, ActingUser) ->
 add_exchange(VHost, Exchange, ActingUser) ->
     add_exchange_int(Exchange, rv(VHost, exchange, Exchange), ActingUser).
 
+add_exchange_int(_Exchange, #resource{kind = exchange, name = <<"">>}, ActingUser) ->
+    rabbit_log:warning("Not importing the default exchange, acting user: ~s", [ActingUser]);
+add_exchange_int(_Exchange, R = #resource{kind = exchange,
+                                          name = <<"amq.", _/binary>>}, ActingUser) ->
+    Name = R#resource.name,
+    rabbit_log:warning("Skipping import of an exchange whose name begins with 'amq.', "
+                       "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_exchange_int(Exchange, Name, ActingUser) ->
     Internal = case maps:get(internal, Exchange, undefined) of
                    undefined -> false; %% =< 2.2.0
