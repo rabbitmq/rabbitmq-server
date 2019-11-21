@@ -664,6 +664,14 @@ rebalance_exactly(Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"q.*">>, {<<"exactly">>, 2}),
     timer:sleep(1000),
 
+    %% Rebalancing happens with existing mirrors. Thus, before we
+    %% can verify it works as expected, we need the queues to be on
+    %% different mirrors.
+    %%
+    %% We only test Q3, Q4 and Q5 because the first two are expected to
+    %% stay where they are.
+    ensure_queues_are_mirrored_on_different_mirrors([Q3, Q4, Q5], A, ACh),
+
     rabbit_ct_client_helpers:publish(ACh, Q1, 5),
     rabbit_ct_client_helpers:publish(ACh, Q2, 3),
 
@@ -693,6 +701,23 @@ rebalance_exactly(Config) ->
     rabbit_ct_helpers:await_condition(Condition2, 40000),
 
     ok.
+
+ensure_queues_are_mirrored_on_different_mirrors(Queues, Master, Ch) ->
+    SNodes = [node(SPid)
+              || Q <- Queues,
+                 SPid <- proplists:get_value(slave_pids, find_queue(Q, Master))],
+    UniqueSNodes = lists:usort(SNodes),
+    case UniqueSNodes of
+        [_] ->
+            %% All passed queues are on the same mirror. Let's redeclare
+            %% one of them and test again.
+            Q = hd(Queues),
+            amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
+            amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+            ensure_queues_are_mirrored_on_different_mirrors(Queues, Master, Ch);
+        _ ->
+            ok
+    end.
 
 rebalance_nodes(Config) ->
     [A, B, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
