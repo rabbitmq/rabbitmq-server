@@ -1619,7 +1619,7 @@ definitions_test(Config) ->
           vhosts      => [],
           permissions => [],
           queues      => [],
-          exchanges   => [#{name      =>  <<"amq.direct">>,
+          exchanges   => [#{name      =>  <<"not.direct">>,
                           vhost       => <<"/">>,
                           type        => <<"definitely not direct">>,
                           durable     => true,
