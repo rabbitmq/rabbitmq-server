@@ -377,13 +377,13 @@ end}.
 %% ===========================================================================
 %% Authorization
 
-{mapping, "management.enable_oauth2", "rabbitmq_management.enable_oauth2",
+{mapping, "management.enable_uaa", "rabbitmq_management.enable_uaa",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.oauth2_client_id", "rabbitmq_management.oauth2_client_id",
+{mapping, "management.uaa_client_id", "rabbitmq_management.uaa_client_id",
     [{datatype, string}]}.
 
-{mapping, "management.oauth2_location", "rabbitmq_management.oauth2_location",
+{mapping, "management.uaa_location", "rabbitmq_management.uaa_location",
     [{datatype, string}]}.
 
 {mapping, "management.oauth2_scopes", "rabbitmq_management.oauth2_scopes",

@@ -1,25 +1,24 @@
 $(document).ready(function() {
-    if (enable_oauth2) {
+    if (enable_uaa) {
         switch (oauth2_implementation) {
-          case oauth2_Uaa:
-            get(oauth2_location + "/info", "application/json", function(req) {
+          case uaa_oauth2_implementation:
+            get(uaa_location + "/info", "application/json", function(req) {
                 if (req.status !== 200) {
                     replace_content('outer', format('login_uaa', {}));
-                    replace_content('login-status', '<p class="warning">' + oauth2_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + 
+                    replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + 
                                                     '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Single Log On</button>');
                 } else {
                     replace_content('outer', format('login_uaa', {}));
                 }
             });
             break;
-          case oauth2_IdentityServer:
-
+          case identityServer_oauth2_implementation:
             siteURI = new URL(window.location.href);
             hostOrigin = siteURI.origin;
 
             oidcClientSettings = {
-                authority: oauth2_location,
-                client_id: oauth2_client_id,
+                authority: uaa_location,
+                client_id: uaa_client_id,
                 redirect_uri: hostOrigin + "/callback.html",
                 response_type: "id_token token",
                 scope: oauth2_scopes,
@@ -36,7 +35,6 @@ $(document).ready(function() {
 
                 oidcClientEventInitialized = true;
                 oidcClient.events.addAccessTokenExpiring(function (e) {
-                    console.log("Access token expiring...");
                     oidcClient.signinSilentCallback();
                 });
                 oidcClient.events.addAccessTokenExpired(function (e) {
@@ -52,7 +50,7 @@ $(document).ready(function() {
                 });
                 oidcClient.events.addUserLoaded(function (user) {
                     console.log("check this: user loaded");
-                    set_auth_pref(oauth2_client_id + ':' + user.access_token);
+                    set_auth_pref(uaa_client_id + ':' + user.access_token);
                     store_pref('jwt_token', user.access_token);
                 });
                 oidcClient.events.addUserUnloaded(function (e) {
@@ -65,14 +63,14 @@ $(document).ready(function() {
                     console.log("User unloaded. Token cleared.");
                 });               
                 oidcClient.events.addSilentRenewError(function (e) {
-                    console.log("silent renew error", e.message);
+                    console.log("Silent renew error", e.message);
                 });
             }
 
-            get(oauth2_location + "/.well-known/openid-configuration", "application/json", function(req) {
+            get(uaa_location + "/.well-known/openid-configuration", "application/json", function(req) {
                 if (req.status !== 200) {
                     replace_content('outer', format('login_uaa', {}));
-                    replace_content('login-status', '<p class="warning">' + oauth2_location + " does not appear to be a running IdentityServer instance!" + '</p>');
+                    replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running IdentityServer instance!" + '</p>');
                 } else {
                     oidcClient.getUser().then(function(user) {
                         if (user) {
@@ -81,12 +79,10 @@ $(document).ready(function() {
                             }
                         }
                         if(user){
-                            //console.log("main.js - ready - User logged in.", user.profile);
                             oauth2_login();
                         } else {
-                            console.log("User not logged in!");
                             replace_content('outer', format('login_uaa', {}));
-                            replace_content('login-status', '<p class="success">' + oauth2_location + " appear to be a running IdentityServer instance."  + 
+                            replace_content('login-status', '<p class="success">' + uaa_location + " appear to be a running IdentityServer instance."  + 
                                                             '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
                         };
                     });
@@ -177,10 +173,10 @@ function start_app_login() {
         this.get('#/login/:username/:password', login_route);
         this.get(/\#\/login\/(.*)/, login_route_with_path);
     });
-    if (enable_oauth2) {
+    if (enable_uaa) {
         var token = getAccessToken();
         if (token != null) {
-            set_auth_pref(oauth2_client_id + ':' + token);
+            set_auth_pref(uaa_client_id + ':' + token);
             store_pref('jwt_token', token);
             check_login();
         } else if(has_auth_cookie_value()) {
@@ -201,7 +197,7 @@ function oauth2_logout() {
 
 function oauth2_login() {
     switch (oauth2_implementation) {
-        case oauth2_Uaa:
+        case uaa_oauth2_implementation:
             var redirect;
             if (window.location.hash != "") {
                 redirect = window.location.href.split(window.location.hash)[0];
@@ -216,31 +212,27 @@ function oauth2_login() {
             };
             window.open(loginRedirectUrl, "LOGIN_WINDOW");
             break;
-        case oauth2_IdentityServer:
+        case identityServer_oauth2_implementation:
             oidcClient.getUser().then(function(user) {
                 if (user) {
                     if (oauth2_logout_invoked){
                         oidcClient.removeUser().then(function() {
-                            console.log("oauth2_login - User removed (remove cookies)");
                             oauth2_logout_invoked = false;
                         }).then().catch(function(err) {
                             console.log(err);
                         });
-                    } else {
-                        //console.log("oauth2_login - User logged in", user.profile);     
+                    } else {  
                         oauth2_user_logged_in = true;              
                         var token = user.access_token;
                         if (token != null) {
-                            set_auth_pref(oauth2_client_id + ':' + token);
+                            set_auth_pref(uaa_client_id + ':' + token);
                             store_pref('jwt_token', token);
                             check_login();
                         };
                     }
                 }
                 else {
-                    console.log("oauth2_login - User not logged in");
                     oidcClient.signinRedirect({state:'some data'}).then(function() {
-                        console.log("oauth2_login - signinRedirect done");
                     }).catch(function(err) {
                         console.log(err);
                     });
@@ -250,7 +242,7 @@ function oauth2_login() {
             });
             break;
         default:
-        enable_oauth2 = false;
+        enable_uaa = false;
     }
 }
 
@@ -262,29 +254,22 @@ function check_login() {
         clear_pref('jwt_token');
         clear_cookie_value('auth');
 
-        if (enable_oauth2) {
+        if (enable_uaa) {
             oauth2_logout_invoked = true;
             switch (oauth2_implementation) {
-                case oauth2_Uaa:
+                case uaa_oauth2_implementation:
                     replace_content('login-status', '<button id="loginWindow" onclick="oauth2_login()">Log out</button>');
                 break;
-                case oauth2_IdentityServer:
-                    // todo: OpenId client logoout!
+                case identityServer_oauth2_implementation:
+                    // todo: OpenId client logout!
                     replace_content('login-status', '<p>Login failed</p>');
                 break;
                 default:
-                enable_oauth2 = false;
+                enable_uaa = false;
             }
         } else {
             replace_content('login-status', '<p>Login failed</p>');
         }
-
-        // if (enable_uaa) {
-        //     oauth2_logout_invoked = true;
-        //     replace_content('login-status', '<button id="loginWindow" onclick="oauth2_login()">Log out</button>');
-        // } else {
-        //     replace_content('login-status', '<p>Login failed</p>');
-        // }
     }
     else {
         hide_popup_warn();
@@ -770,7 +755,7 @@ function submit_import(form) {
                 vhost_part = '/' + esc(vhost_name);
             }
 
-            if (enable_oauth2) {
+            if (enable_uaa) {
                 var form_action = "/definitions" + vhost_part + '?token=' + get_pref('jwt_token');
             } else {
                 var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
@@ -814,7 +799,7 @@ function postprocess() {
     $('#download-definitions').on('click', function() {
             var idx = $("select[name='vhost-download'] option:selected").index();
             var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
-        if (enable_oauth2) {
+        if (enable_uaa) {
             var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
                 '&token=' + get_pref('jwt_token');
@@ -1334,7 +1319,7 @@ function has_auth_cookie_value() {
 }
 
 function auth_header() {
-    if(has_auth_cookie_value() && enable_oauth2) {
+    if(has_auth_cookie_value() && enable_uaa) {
         return "Bearer " + decodeURIComponent(get_pref('jwt_token'));
     } else {
         if(has_auth_cookie_value()) {

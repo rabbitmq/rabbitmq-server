@@ -25,21 +25,20 @@
       var oauth2_user_logged_in = false;
       var uaa_invalid = false;
       var auth = JSON.parse(sync_get('/auth'));
-      enable_oauth2 = auth.enable_oauth2;
+      enable_uaa = auth.enable_uaa;
       oauth2_implementation = auth.oauth2_implementation;
-      oauth2_client_id = auth.oauth2_client_id;
-      oauth2_location = auth.oauth2_location;
+      uaa_client_id = auth.uaa_client_id;
+      uaa_location = auth.uaa_location;
       oauth2_scopes = auth.oauth2_scopes;
-
       oauth2_implementation = oauth2_implementation.toLowerCase()
       
-      if (enable_oauth2) {
+      if (enable_uaa) {
         switch (oauth2_implementation) {
-          case oauth2_Uaa:
+          case uaa_oauth2_implementation:
             Singular.init({
             singularLocation: './js/singular/',
-            uaaLocation: oauth2_location,
-            clientId: oauth2_client_id,
+            uaaLocation: uaa_location,
+            clientId: uaa_client_id,
             onIdentityChange: function (identity) {
               oauth2_user_logged_in = true;
               start_app_login();
@@ -61,10 +60,10 @@
               }
             });
             break;
-          case oauth2_IdentityServer:
+          case identityServer_oauth2_implementation:
             break;
           default:
-            enable_oauth2 = false;
+            enable_uaa = false;
         }
       }
     </script>
