@@ -63,7 +63,7 @@
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
--export([source/2, update_user_state/2]).
+-export([update_user_state/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
@@ -461,15 +461,6 @@ force_event_refresh(Ref) ->
 list_queue_states(Pid) ->
     gen_server2:call(Pid, list_queue_states).
 
--spec source(pid(), any()) -> 'ok' | {error, channel_terminated}.
-
-source(Pid, Source) when is_pid(Pid) ->
-    case erlang:is_process_alive(Pid) of
-        true  -> Pid ! {channel_source, Source},
-                 ok;
-        false -> {error, channel_terminated}
-    end.
-
 -spec update_user_state(pid(), rabbit_types:auth_user()) -> 'ok' | {error, channel_terminated}.
 
 update_user_state(Pid, UserState) when is_pid(Pid) ->
@@ -505,7 +496,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     put(permission_cache_can_expire, rabbit_access_control:permission_cache_can_expire(User)),
     MaxMessageSize = get_max_message_size(),
     ConsumerTimeout = get_consumer_timeout(),
-    AuthzContext = extract_variable_map_from_amqp_params(AmqpParams),
+    OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
                             channel = Channel,
@@ -522,7 +513,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             consumer_prefetch = Prefetch,
                             max_message_size = MaxMessageSize,
                             consumer_timeout = ConsumerTimeout,
-                            authz_context = AuthzContext
+                            authz_context = OptionalVariables
                            },
                 limiter = Limiter,
                 tx                      = none,
@@ -877,8 +868,6 @@ handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
         Return ->
             Return
     end;
-handle_info({channel_source, Source}, State = #ch{cfg = Cfg}) ->
-    noreply(State#ch{cfg = Cfg#conf{source = Source}});
 handle_info({update_user_state, User}, State = #ch{cfg = Cfg}) ->
     noreply(State#ch{cfg = Cfg#conf{user = User}}).
 
@@ -1091,16 +1080,24 @@ check_topic_authorisation(_, _, _, _, _) ->
     ok.
 
 
+build_topic_variable_map(AuthzContext, VHost, Username) when is_map(AuthzContext) ->
+    maps:merge(AuthzContext, #{<<"vhost">> => VHost, <<"username">> => Username});
 build_topic_variable_map(AuthzContext, VHost, Username) ->
-    maps:merge(AuthzContext, #{<<"vhost">> => VHost, <<"username">> => Username}).
+    maps:merge(extract_variable_map_from_amqp_params(AuthzContext), #{<<"vhost">> => VHost, <<"username">> => Username}).
 
-%% use tuple representation of amqp_params to avoid coupling.
-%% get variable map only from amqp_params_direct, not amqp_params_network.
-%% amqp_params_direct are usually used from plugins (e.g. MQTT, STOMP)
-extract_variable_map_from_amqp_params([{amqp_params, {amqp_params_direct, _, _, _, _,
-                                             {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}]) ->
+%% Use tuple representation of amqp_params to avoid a dependency on amqp_client.
+%% Extracts variable map only from amqp_params_direct, not amqp_params_network.
+%% amqp_params_direct records are usually used by plugins (e.g. MQTT, STOMP)
+extract_variable_map_from_amqp_params({amqp_params, {amqp_params_direct, _, _, _, _,
+                                                        {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}) ->
     proplists:get_value(variable_map, AdditionalInfo, #{});
-extract_variable_map_from_amqp_params(_) ->
+extract_variable_map_from_amqp_params({amqp_params_direct, _, _, _, _,
+                                             {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}) ->
+    proplists:get_value(variable_map, AdditionalInfo, #{});
+extract_variable_map_from_amqp_params([Value]) ->
+    extract_variable_map_from_amqp_params(Value);
+extract_variable_map_from_amqp_params(Other) ->
+    ct:pal("extract_variable_map_from_amqp_params other: ~p", [Other]),
     #{}.
 
 check_msg_size(Content, MaxMessageSize) ->
@@ -2366,7 +2363,6 @@ i(user_who_performed_action, Ch) -> i(user, Ch);
 i(vhost,          #ch{cfg = #conf{virtual_host = VHost}}) -> VHost;
 i(transactional,  #ch{tx               = Tx})      -> Tx =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
-i(source,         #ch{cfg = #conf{source = ChSrc}})   -> ChSrc;
 i(name,           State)                           -> name(State);
 i(consumer_count,          #ch{consumer_mapping = CM})    -> maps:size(CM);
 i(messages_unconfirmed,    #ch{unconfirmed = UC})         -> unconfirmed_messages:size(UC);
