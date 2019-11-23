@@ -64,7 +64,6 @@
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
--export([source/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -424,14 +423,6 @@ force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
--spec source(pid(), any()) -> any().
-
-source(Pid, Source) when is_pid(Pid) ->
-    case erlang:is_process_alive(Pid) of
-        true  -> Pid ! {channel_source, Source};
-        false -> {error, channel_terminated}
-    end.
-
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
@@ -453,7 +444,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                   _ ->
                       Limiter0
               end,
-    AuthzContext = extract_topic_variable_map_from_amqp_params(AmqpParams),
+    OptionalVariables = extract_topic_variable_map_from_amqp_params(AmqpParams),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -486,7 +477,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 reply_consumer          = none,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
-                authz_context           = AuthzContext},
+                authz_context           = OptionalVariables},
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
     State2 = rabbit_event:init_stats_timer(State1, #ch.stats_timer),
@@ -726,10 +717,7 @@ handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
   when is_reference(Ref) ->
     rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
         [Channel, LateAnswer, Node]),
-    noreply(State);
-
-handle_info({channel_source, Source}, State = #ch{}) ->
-    noreply(State#ch{source = Source}).
+    noreply(State).
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -913,16 +901,24 @@ check_topic_authorisation(_, _, _, _, _) ->
     ok.
 
 
+build_topic_variable_map(AuthzContext, VHost, Username) when is_map(AuthzContext) ->
+    maps:merge(AuthzContext, #{<<"vhost">> => VHost, <<"username">> => Username});
 build_topic_variable_map(AuthzContext, VHost, Username) ->
-    maps:merge(AuthzContext, #{<<"vhost">> => VHost, <<"username">> => Username}).
+    maps:merge(extract_topic_variable_map_from_amqp_params(AuthzContext), #{<<"vhost">> => VHost, <<"username">> => Username}).
 
-%% use tuple representation of amqp_params to avoid coupling.
-%% get variable map only from amqp_params_direct, not amqp_params_network.
-%% amqp_params_direct are usually used from plugins (e.g. MQTT, STOMP)
-extract_topic_variable_map_from_amqp_params([{amqp_params, {amqp_params_direct, _, _, _, _,
-                                             {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}]) ->
+%% Use tuple representation of amqp_params to avoid a dependency on amqp_client.
+%% Extracts variable map only from amqp_params_direct, not amqp_params_network.
+%% amqp_params_direct records are usually used by plugins (e.g. MQTT, STOMP)
+extract_topic_variable_map_from_amqp_params({amqp_params, {amqp_params_direct, _, _, _, _,
+                                                                 {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}) ->
     proplists:get_value(variable_map, AdditionalInfo, #{});
-extract_topic_variable_map_from_amqp_params(_) ->
+extract_topic_variable_map_from_amqp_params({amqp_params_direct, _, _, _, _,
+                                                   {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}) ->
+    proplists:get_value(variable_map, AdditionalInfo, #{});
+extract_topic_variable_map_from_amqp_params([Value]) ->
+    extract_topic_variable_map_from_amqp_params(Value);
+extract_topic_variable_map_from_amqp_params(Other) ->
+    ct:pal("extract_topic_variable_map_from_amqp_params other: ~p", [Other]),
     #{}.
 
 check_msg_size(Content) ->
@@ -2064,7 +2060,6 @@ i(user_who_performed_action, Ch) -> i(user, Ch);
 i(vhost,          #ch{virtual_host     = VHost})   -> VHost;
 i(transactional,  #ch{tx               = Tx})      -> Tx =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
-i(source,         #ch{source           = ChSrc})   -> ChSrc;
 i(name,           State)                           -> name(State);
 i(consumer_count,          #ch{consumer_mapping = CM})    -> maps:size(CM);
 i(messages_unconfirmed,    #ch{unconfirmed = UC})         -> dtree:size(UC);

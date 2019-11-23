@@ -208,7 +208,6 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
           rabbit_direct_client_sup,
           [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector, AmqpParams}]),
-    _ = rabbit_channel:source(ChannelPid, ?MODULE),
     {ok, ChannelPid}.
 
 disconnect(Pid, Infos) ->
