@@ -1096,8 +1096,7 @@ extract_variable_map_from_amqp_params({amqp_params_direct, _, _, _, _,
     proplists:get_value(variable_map, AdditionalInfo, #{});
 extract_variable_map_from_amqp_params([Value]) ->
     extract_variable_map_from_amqp_params(Value);
-extract_variable_map_from_amqp_params(Other) ->
-    ct:pal("extract_variable_map_from_amqp_params other: ~p", [Other]),
+extract_variable_map_from_amqp_params(_) ->
     #{}.
 
 check_msg_size(Content, MaxMessageSize) ->
