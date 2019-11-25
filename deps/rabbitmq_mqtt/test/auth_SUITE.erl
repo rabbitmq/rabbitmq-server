@@ -394,8 +394,9 @@ connect_ssl(Config) ->
 client_id_propagation(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config,
       rabbit_auth_backend_mqtt_mock),
-    ClientId = <<"simpleClient">>,
-    {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>, Config),
+    ClientId = <<"client-id-propagation">>,
+    {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>,
+                           Config, ClientId),
     receive {mqttc, C, connected} -> ok
     after ?CONNECT_TIMEOUT -> exit(emqttc_connection_timeout)
     end,
@@ -416,6 +417,7 @@ client_id_propagation(Config) ->
                                                                      rabbit_auth_backend_mqtt_mock,
                                                                      get,
                                                                      [resource_access]),
+    ?assertEqual(true, maps:size(AuthzContext) > 0),
     ?assertEqual(ClientId, maps:get(<<"client_id">>, AuthzContext)),
 
     [{topic_access, TopicContext}] = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -428,6 +430,8 @@ client_id_propagation(Config) ->
     emqttc:disconnect(C).
 
 connect_user(User, Pass, Config) ->
+    connect_user(User, Pass, Config, User).
+connect_user(User, Pass, Config, ClientID) ->
     Creds = case User of
         undefined -> [];
         _         -> [{username, User}]
@@ -438,7 +442,7 @@ connect_user(User, Pass, Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     emqttc:start_link([{host, "localhost"},
                        {port, P},
-                       {client_id, <<"simpleClient">>},
+                       {client_id, ClientID},
                        {proto_ver, 3},
                        {logger, info}] ++ Creds).
 
