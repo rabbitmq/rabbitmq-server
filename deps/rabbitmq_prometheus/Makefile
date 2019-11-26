@@ -94,7 +94,7 @@ di: docker-image
 .PHONY: docker-image-build
 docker-image-build: ## dib | Build Docker image locally - make tests
 	@docker build --pull \
-	  --build-arg PGP_KEYSERVER=pgpkeys.eu \
+	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
 	  --build-arg RABBITMQ_VERSION=$(BASED_ON_RABBITMQ_VERSION) \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(RABBITMQ_VERSION) \
 	  --tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION) \
