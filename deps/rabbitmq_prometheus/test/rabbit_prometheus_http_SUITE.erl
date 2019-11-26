@@ -82,9 +82,15 @@ init_per_group(with_metrics, Config0) ->
                       #amqp_msg{payload = <<"msg">>}),
     timer:sleep(150),
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+    %% We want to check consumer metrics, so we need at least 1 consumer bound
+    %% but we don't care what it does if anything as long as the runner process does
+    %% not have to handle the consumer's messages.
+    ConsumerPid = sleeping_consumer(),
+    #'basic.consume_ok'{consumer_tag = CTag} =
+      amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q}, ConsumerPid),
     timer:sleep(10000),
 
-    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}].
+    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}].
 
 init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:log_environment(),
@@ -96,6 +102,10 @@ init_per_group(Group, Config0, Extra) ->
 
 end_per_group(with_metrics, Config) ->
     Ch = ?config(channel_pid, Config),
+    CTag = ?config(consumer_tag, Config),
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    ConsumerPid = ?config(consumer_pid, Config),
+    ConsumerPid ! stop,
     amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
     rabbit_ct_client_helpers:close_channel(Ch),
     end_per_group_(Config);
@@ -112,6 +122,20 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% a no-op consumer
+sleeping_consumer_loop() ->
+  receive
+    stop -> ok;
+    #'basic.consume_ok'{}          -> sleeping_consumer_loop();
+    #'basic.cancel'{}              -> sleeping_consumer_loop();
+    {#'basic.deliver'{}, _Payload} -> sleeping_consumer_loop()
+  end.
+
+sleeping_consumer() ->
+  spawn(fun() ->
+    sleeping_consumer_loop()
+  end).
 
 %% -------------------------------------------------------------------
 %% Testcases.
@@ -170,8 +194,7 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
-    %% This metric has no value, we are checking just that it is defined
-    ?assertEqual(match, re:run(Body, " rabbitmq_queue_consumers ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers{", [{capture, none}, multiline])),
     %% Checking the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
