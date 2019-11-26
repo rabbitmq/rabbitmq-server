@@ -66,7 +66,7 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
                       Protocol, User, VHost, Capabilities, Collector,
-                      LimiterPid, undefined]},
+                      LimiterPid]},
            intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
