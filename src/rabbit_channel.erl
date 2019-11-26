@@ -55,7 +55,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
+-export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
 -export([send_command/2, deliver/4, deliver_reply/2,
          send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
@@ -236,6 +236,17 @@
 -type channel() :: #ch{}.
 
 %%----------------------------------------------------------------------------
+
+-spec start_link
+        (channel_number(), pid(), pid(), pid(), string(), rabbit_types:protocol(),
+         rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
+         pid(), pid()) ->
+            rabbit_types:ok_pid_or_error().
+
+start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
+           VHost, Capabilities, CollectorPid, Limiter) ->
+    start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
+           VHost, Capabilities, CollectorPid, Limiter, undefined).
 
 -spec start_link
         (channel_number(), pid(), pid(), pid(), string(), rabbit_types:protocol(),
