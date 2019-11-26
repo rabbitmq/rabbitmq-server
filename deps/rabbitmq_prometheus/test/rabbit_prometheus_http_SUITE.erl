@@ -82,9 +82,11 @@ init_per_group(with_metrics, Config0) ->
                       #amqp_msg{payload = <<"msg">>}),
     timer:sleep(150),
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+    % We want to check consumer metrics, so we need at least 1 consumer bound
+    #'basic.consume_ok'{consumer_tag = CTag} = amqp_channel:call(Ch, #'basic.consume'{queue = Q}),
     timer:sleep(10000),
 
-    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}].
+    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}].
 
 init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:log_environment(),
@@ -96,6 +98,8 @@ init_per_group(Group, Config0, Extra) ->
 
 end_per_group(with_metrics, Config) ->
     Ch = ?config(channel_pid, Config),
+    CTag = ?config(consumer_tag, Config),
+    #'basic.cancel_ok'{} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
     rabbit_ct_client_helpers:close_channel(Ch),
     end_per_group_(Config);
@@ -170,8 +174,7 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
-    %% This metric has no value, we are checking just that it is defined
-    ?assertEqual(match, re:run(Body, " rabbitmq_queue_consumers ", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers{", [{capture, none}, multiline])),
     %% Checking the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),

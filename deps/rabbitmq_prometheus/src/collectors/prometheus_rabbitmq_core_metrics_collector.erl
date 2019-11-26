@@ -167,21 +167,24 @@
     ]},
 
     {queue_metrics, [
-        {2, queue_consumers, gauge, "Consumers on a queue", queue_consumers},
-        {2, queue_process_memory_bytes, gauge, "Memory in bytes used by the Erlang queue process", queue_memory},
-        {2, queue_messages_bytes, gauge, "Size in bytes of ready and unacknowledged messages", queue_messages_bytes},
-        {2, queue_messages_ram, gauge, "Ready and unacknowledged messages stored in memory", queue_messages_ram},
-        {2, queue_messages_ready_ram, gauge, "Ready messages stored in memory", queue_messages_ready_ram},
-        {2, queue_messages_ready_bytes, gauge, "Size in bytes of ready messages", queue_messages_bytes_ready},
-        {2, queue_messages_unacked_ram, gauge, "Unacknowledged messages stored in memory", queue_messages_unacknowledged_ram},
-        {2, queue_messages_unacked_bytes, gauge, "Size in bytes of all unacknowledged messages", queue_messages_bytes_unacknowledged},
-        {2, queue_messages_persistent, gauge, "Persistent messages", queue_messages_persistent},
-        {2, queue_messages_persistent_bytes, gauge, "Size in bytes of persistent messages", queue_messages_bytes_persistent},
-        {2, queue_messages_paged_out, gauge, "Messages paged out to disk", queue_messages_paged_out},
-        {2, queue_messages_paged_out_bytes, gauge, "Size in bytes of messages paged out to disk", queue_messages_bytes_paged_out},
+        {2, queue_consumers, gauge, "Consumers on a queue", consumers},
+        {2, queue_consumer_utilisation, gauge, "Consumer utilisation", consumer_utilisation},
+        {2, queue_process_memory_bytes, gauge, "Memory in bytes used by the Erlang queue process", memory},
+        {2, queue_messages_ram, gauge, "Ready and unacknowledged messages stored in memory", messages_ram},
+        {2, queue_messages_ram_bytes, gauge, "Size of ready and unacknowledged messages stored in memory", message_bytes_ram},
+        {2, queue_messages_ready_ram, gauge, "Ready messages stored in memory", messages_ready_ram},
+        {2, queue_messages_unacked_ram, gauge, "Unacknowledged messages stored in memory", messages_unacknowledged_ram},
+        {2, queue_messages_persistent, gauge, "Persistent messages", messages_persistent},
+        {2, queue_messages_persistent_bytes, gauge, "Size in bytes of persistent messages", message_bytes_persistent},
+        {2, queue_messages_bytes, gauge, "Size in bytes of ready and unacknowledged messages", message_bytes},
+        {2, queue_messages_ready_bytes, gauge, "Size in bytes of ready messages", message_bytes_ready},
+        {2, queue_messages_unacked_bytes, gauge, "Size in bytes of all unacknowledged messages", message_bytes_unacknowledged},
+        {2, queue_messages_paged_out, gauge, "Messages paged out to disk", messages_paged_out},
+        {2, queue_messages_paged_out_bytes, gauge, "Size in bytes of messages paged out to disk", message_bytes_paged_out},
         {2, queue_disk_reads_total, counter, "Total number of times queue read messages from disk", disk_reads},
         {2, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes}
     ]}
+
 ]).
 
 % Some metrics require to be converted, mostly those that represent time.
