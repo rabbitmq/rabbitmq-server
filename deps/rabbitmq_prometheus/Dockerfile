@@ -61,7 +61,7 @@ RUN set -eux; \
 	wget --progress dot:giga --output-document "$OPENSSL_PATH.tar.gz" "$OPENSSL_SOURCE_URL"; \
 	export GNUPGHOME="$(mktemp -d)"; \
 	for key in $OPENSSL_PGP_KEY_IDS; do \
-		gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$key"; \
+		gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$key" || true; \
 	done; \
 	gpg --batch --verify "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_PATH.tar.gz"; \
 	gpgconf --kill all; \
