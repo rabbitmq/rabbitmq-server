@@ -57,6 +57,16 @@ clean-docker: ## cd  | Clean all Docker containers & volumes
 .PHONY: cd
 cd: clean-docker
 
+.PHONY: preview-readme
+preview-readme: ## pre | Preview README & live reload on edit
+	@docker run --interactive --tty --rm --name changelog_md \
+	  --volume $(CURDIR):/data \
+	  --volume $(HOME)/.grip:/.grip \
+	  --expose 5000 --publish 5000:5000 \
+	  mbentley/grip --context=. 0.0.0.0:5000
+.PHONY: pre
+pre: preview-readme
+
 define CTOP_CONTAINER
 docker pull quay.io/vektorlab/ctop:latest && \
 docker run --rm --interactive --tty \
