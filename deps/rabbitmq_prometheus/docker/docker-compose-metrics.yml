@@ -13,7 +13,8 @@ volumes:
 services:
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:6.4.3
+    # flat-statusmap-panel does not work on Grafana >= 6.5.0
+    image: grafana/grafana:6.4.5
     ports:
       - "3000:3000"
     networks:
@@ -34,7 +35,7 @@ services:
       GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel"
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
-    image: prom/prometheus:v2.13.1
+    image: prom/prometheus:v2.14.0
     networks:
       - "rabbitmq-prometheus"
     ports:
