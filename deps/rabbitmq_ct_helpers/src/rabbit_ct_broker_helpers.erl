@@ -1619,7 +1619,7 @@ test_channel() ->
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
     {ok, Ch} = rabbit_channel:start_link(
                  1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], Me, Limiter),
+                 user(<<"guest">>), <<"/">>, [], Me, Limiter, undefined),
     {Writer, Limiter, Ch}.
 
 test_writer(Pid) ->
