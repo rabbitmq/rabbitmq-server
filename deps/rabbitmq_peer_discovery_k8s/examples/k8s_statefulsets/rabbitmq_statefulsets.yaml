@@ -51,7 +51,11 @@ data:
       cluster_partition_handling = autoheal
       ## See https://www.rabbitmq.com/ha.html#master-migration-data-locality
       queue_master_locator=min-masters
-      ## See https://www.rabbitmq.com/access-control.html#loopback-users
+      ## This is just an example.
+      ## This enables remote access for the default user with well known credentials.
+      ## Consider deleting the default user and creating a separate user with a set of generated
+      ## credentials instead.
+      ## Learn more at https://www.rabbitmq.com/access-control.html#loopback-users
       loopback_users.guest = false
 
 ---
@@ -63,6 +67,8 @@ metadata:
   namespace: test-rabbitmq
 spec:
   serviceName: rabbitmq
+  # Three nodes is the recommended minimum. Some features may require a majority of nodes
+  # to be available.
   replicas: 3
   selector:
     matchLabels:
@@ -84,6 +90,8 @@ spec:
         volumeMounts:
           - name: config-volume
             mountPath: /etc/rabbitmq
+        # Learn more about what ports various protocols use
+        # at https://www.rabbitmq.com/networking.html#ports
         ports:
           - name: http
             protocol: TCP
@@ -93,14 +101,28 @@ spec:
             containerPort: 5672
         livenessProbe:
           exec:
-            command: ["rabbitmqctl", "status"]
+            # This is just an example. There is no "one true health check" but rather
+            # several rabbitmq-diagnostics commands that can be combined to form increasingly comprehensive
+            # and intrusive health checks.
+            # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
+            #
+            # Stage 2 check:
+            command: ["rabbitmq-diagnostics", "status"]
           initialDelaySeconds: 60
           # See https://www.rabbitmq.com/monitoring.html for monitoring frequency recommendations.
           periodSeconds: 60
           timeoutSeconds: 15
         readinessProbe:
           exec:
-            command: ["rabbitmqctl", "status"]
+            # This is just an example. There is no "one true health check" but rather
+            # several rabbitmq-diagnostics commands that can be combined to form increasingly comprehensive
+            # and intrusive health checks.
+            # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
+            #
+            # Stage 2 check:
+            command: ["rabbitmq-diagnostics", "status"]
+            # To use a stage 4 check:
+            # command: ["rabbitmq-diagnostics", "check_port_connectivity"]
           initialDelaySeconds: 20
           periodSeconds: 60
           timeoutSeconds: 10
