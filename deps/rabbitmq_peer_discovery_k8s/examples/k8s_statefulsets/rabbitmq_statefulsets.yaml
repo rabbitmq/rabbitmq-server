@@ -55,7 +55,8 @@ data:
       loopback_users.guest = false
 
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
+# See the Prerequisites section of https://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s.
 kind: StatefulSet
 metadata:
   name: rabbitmq
@@ -63,6 +64,9 @@ metadata:
 spec:
   serviceName: rabbitmq
   replicas: 3
+  selector:
+    matchLabels:
+      app: rabbitmq
   template:
     metadata:
       labels:
