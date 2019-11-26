@@ -640,6 +640,21 @@ down_noconnection_returns_checked_out_test(_) ->
     ?assertEqual(lists:sort(Returns), Returns),
     ok.
 
+single_active_consumer_basic_get_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    ?assertEqual(single_active, State0#rabbit_fifo.cfg#cfg.consumer_strategy),
+    ?assertEqual(0, map_size(State0#rabbit_fifo.consumers)),
+    {State1, _} = enq(1, 1, first, State0),
+    {_State, {error, unsupported}} =
+        apply(meta(2), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State1),
+    ok.
+
 single_active_consumer_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,

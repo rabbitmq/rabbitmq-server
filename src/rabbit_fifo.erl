@@ -263,6 +263,9 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
             %% credit for unknown consumer - just ignore
             {State0, ok}
     end;
+apply(_, #checkout{spec = {dequeue, _}},
+      #?MODULE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
+    {State0, {error, unsupported}};
 apply(#{from := From} = Meta, #checkout{spec = {dequeue, Settlement},
                                         meta = ConsumerMeta,
                                         consumer_id = ConsumerId},
