@@ -40,7 +40,8 @@ groups() ->
             all_messages_go_to_one_consumer,
             fallback_to_another_consumer_when_first_one_is_cancelled,
             fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled,
-            fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks
+            fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks,
+            basic_get_is_unsupported
             %% amqp_exclusive_consume_fails_on_exclusive_consumer_queue % Exclusive consume not implemented in QQ
         ]}
     ].
@@ -265,6 +266,17 @@ fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled(Config
     ?assertEqual(1, maps:size(MessagesPerConsumer3)),
 
     [amqp_connection:close(Conn) || Conn <- [C1, C2, C3, C]],
+    ok.
+
+basic_get_is_unsupported(Config) ->
+    {C, Ch} = connection_and_channel(Config),
+    Q = queue_declare(Ch, Config),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 405, _}}, _},
+       amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = false})),
+
+    amqp_connection:close(C),
     ok.
 
 amqp_exclusive_consume_fails_on_exclusive_consumer_queue(Config) ->
