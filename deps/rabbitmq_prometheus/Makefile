@@ -186,11 +186,10 @@ dt: dist-tls
 qq: ##     | Make RabbitMQ-Quorum-Queues-Raft panels come alive - HIGH LOAD
 	@$(DOCKER_COMPOSE_UP)
 
-SEPARATOR := -------------------------------------------------------------------------------------------------
 .PHONY: h
 h:
-	@awk -F"[:#]" '/^[^\.][a-zA-Z\._\-]+:+.+##.+$$/ { printf "$(SEPARATOR)\n\033[36m%-24s\033[0m %s\n", $$1, $$4 }' $(MAKEFILE_LIST) ; \
-	echo $(SEPARATOR)
+	@awk -F"[:#]" '/^[^\.][a-zA-Z\._\-]+:+.+##.+$$/ { printf "\033[36m%-24s\033[0m %s\n", $$1, $$4 }' $(MAKEFILE_LIST) \
+	| sort
 # Continuous Feedback for the h target - run in a separate pane while iterating on it
 .PHONY: CFh
 CFh:
