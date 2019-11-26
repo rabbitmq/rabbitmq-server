@@ -127,8 +127,8 @@ end_per_testcase(Testcase, Config) ->
 sleeping_consumer_loop() ->
   receive
     stop -> ok;
-    #'basic.consume_ok'{} -> sleeping_consumer_loop();
-    #'basic.consume_ok'{} -> sleeping_consumer_loop();
+    #'basic.consume_ok'{}          -> sleeping_consumer_loop();
+    #'basic.cancel'{}              -> sleeping_consumer_loop();
     {#'basic.deliver'{}, _Payload} -> sleeping_consumer_loop()
   end.
 
