@@ -54,7 +54,7 @@
 -export([get_path_prefix/0]).
 -export([catch_no_such_user_or_vhost/2]).
 
--export([disable_stats/1]).
+-export([disable_stats/1, enable_queue_totals/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -132,6 +132,13 @@ disable_stats(ReqData) ->
                end,
     MgmtOnly orelse get_bool_env(rabbitmq_management, disable_management_stats, false)
         orelse get_bool_env(rabbitmq_management_agent, disable_metrics_collector, false).
+
+enable_queue_totals(ReqData) ->
+    EnableTotals = case qs_val(<<"enable_queue_totals">>, ReqData) of
+                       <<"true">> -> true;
+                       _ -> false
+                   end,
+    EnableTotals orelse get_bool_env(rabbitmq_management, enable_queue_totals, false).
 
 get_bool_env(Application, Par, Default) ->
     case application:get_env(Application, Par, Default) of

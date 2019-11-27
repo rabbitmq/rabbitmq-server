@@ -73,9 +73,16 @@ basic(ReqData) ->
                 [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
                     Q <- down_queues(ReqData)];
         true ->
-            [rabbit_mgmt_format:queue(Q) ++ policy(Q) || Q <- queues0(ReqData)] ++
-                [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
-                    Q <- down_queues(ReqData)]
+            case rabbit_mgmt_util:enable_queue_totals(ReqData) of
+                false ->
+                    [rabbit_mgmt_format:queue(Q) ++ policy(Q) || Q <- queues0(ReqData)] ++
+                        [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
+                            Q <- down_queues(ReqData)];
+                true ->
+                    [rabbit_mgmt_format:queue_info(Q) || Q <- queues_with_totals(ReqData)] ++
+                        [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
+                            Q <- down_queues(ReqData)]
+            end
     end.
 
 augmented(ReqData, Context) ->
@@ -98,6 +105,12 @@ basic_vhost_filtered(ReqData, Context) ->
 
 queues0(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).
+
+queues_with_totals(ReqData) ->
+    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun collect_info_all/1).
+
+collect_info_all(VHostPath) ->
+    rabbit_amqqueue:collect_info_all(VHostPath, [name, durable, auto_delete, exclusive, owner_pid, arguments, type, state, policy, totals, type_specific]).
 
 down_queues(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list_down/1).

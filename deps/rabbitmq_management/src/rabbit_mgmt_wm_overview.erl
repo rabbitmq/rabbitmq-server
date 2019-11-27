@@ -56,7 +56,8 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {cluster_name,              rabbit_nodes:cluster_name()},
                  {erlang_version,            erlang_version()},
                  {erlang_full_version,       erlang_full_version()},
-                 {disable_stats,             rabbit_mgmt_util:disable_stats(ReqData)}],
+                 {disable_stats,             rabbit_mgmt_util:disable_stats(ReqData)},
+                 {enable_queue_totals,       rabbit_mgmt_util:enable_queue_totals(ReqData)}],
     try
         case rabbit_mgmt_util:disable_stats(ReqData) of
             false ->
