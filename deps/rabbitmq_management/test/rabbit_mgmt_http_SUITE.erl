@@ -1838,7 +1838,8 @@ definitions_server_named_queue_test(Config) ->
     http_delete(Config, Path, {group, '2xx'}),
     http_get(Config, Path, ?NOT_FOUND),
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
-    http_get(Config, Path, ?OK),
+    %% amq.* entities are not imported
+    http_get(Config, Path, ?NOT_FOUND),
     http_delete(Config, Path, {group, '2xx'}),
     passed.
 
