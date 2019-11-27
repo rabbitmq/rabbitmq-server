@@ -95,7 +95,7 @@ kubectl create -f examples/minikube
 
 ### Check Cluster Status
 
-Wait 30-60 seconds then run
+Wait for a minute or so then run
 
 ```
 FIRST_POD=$(kubectl get pods --namespace test-rabbitmq -l 'app=rabbitmq' -o jsonpath='{.items[0].metadata.name }')
