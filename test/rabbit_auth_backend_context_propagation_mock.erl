@@ -22,9 +22,8 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([user_login_authentication/2, user_login_authorization/2,
-  check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-  state_can_expire/0,
+-export([user_login_authentication/2, user_login_authorization/1,
+  check_vhost_access/3, check_resource_access/3, check_topic_access/4,
   get/1, init/0]).
 
 init() ->
@@ -36,20 +35,17 @@ user_login_authentication(_, AuthProps) ->
     tags = [],
     impl = none}}.
 
-user_login_authorization(_, _) ->
+user_login_authorization(_) ->
   {ok, does_not_matter}.
 
-check_vhost_access(#auth_user{}, _VHostPath, AuthzData) ->
-  ets:insert(?MODULE, {vhost_access, AuthzData}),
+check_vhost_access(#auth_user{}, _VHostPath, Sock) ->
+  ets:insert(?MODULE, {vhost_access, Sock}),
   true.
-check_resource_access(#auth_user{}, #resource{}, _Permission, AuthzContext) ->
-  ets:insert(?MODULE, {resource_access, AuthzContext}),
+check_resource_access(#auth_user{}, #resource{}, _Permission) ->
   true.
 check_topic_access(#auth_user{}, #resource{}, _Permission, TopicContext) ->
   ets:insert(?MODULE, {topic_access, TopicContext}),
   true.
-
-state_can_expire() -> false.
 
 get(K) ->
   ets:lookup(?MODULE, K).

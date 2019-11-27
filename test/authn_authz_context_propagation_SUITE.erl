@@ -103,20 +103,16 @@ propagate_context_to_auth_backend1() ->
   [{authentication, AuthProps}] = rabbit_auth_backend_context_propagation_mock:get(authentication),
   ?assertEqual(<<"value1">>, proplists:get_value(key1, AuthProps)),
 
-  %% variable_map is propagated from rabbit_direct to the authorization backend
-  [{vhost_access, AuthzData}] = rabbit_auth_backend_context_propagation_mock:get(vhost_access),
-  ?assertEqual(<<"value1">>, maps:get(<<"key1">>, AuthzData)),
+  %% only socket info is transmitted to vhost access check
+  [{vhost_access, {authz_socket_info, _, _}}] =
+    rabbit_auth_backend_context_propagation_mock:get(vhost_access),
 
-  %% variable_map is extracted when the channel is created and kept in its state
   {ok, Ch} = amqp_connection:open_channel(Conn),
   QName = <<"channel_propagate_context_to_authz_backend-q">>,
   amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
-
   check_send_receive(Ch, <<"">>, QName, QName),
   amqp_channel:call(Ch, #'queue.bind'{queue = QName, exchange = <<"amq.topic">>, routing_key = <<"a.b">>}),
-  %% variable_map content is propagated from rabbit_channel to the authorization backend (resource check)
-  [{resource_access, AuthzContext}] = rabbit_auth_backend_context_propagation_mock:get(resource_access),
-  ?assertEqual(<<"value1">>, maps:get(<<"key1">>, AuthzContext)),
+  %% no context propagation in resource check, nothing to assert
 
   check_send_receive(Ch, <<"amq.topic">>, <<"a.b">>, QName),
   %% variable_map is propagated from rabbit_channel to the authorization backend (topic check)
