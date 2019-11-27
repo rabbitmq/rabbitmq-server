@@ -62,8 +62,9 @@ init() ->
 open_channel_args(#state{node = Node,
                          user = User,
                          vhost = VHost,
-                         collector = Collector}) ->
-    [self(), Node, User, VHost, Collector].
+                         collector = Collector,
+                         params = Params}) ->
+    [self(), Node, User, VHost, Collector, Params].
 
 do(_Method, _State) ->
     ok.

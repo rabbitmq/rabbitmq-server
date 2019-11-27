@@ -47,12 +47,12 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
-start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector],
+start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
     {ok, RabbitCh} =
         rpc:call(Node, rabbit_direct, start_channel,
                  [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
-                  VHost, ?CLIENT_CAPABILITIES, Collector]),
+                  VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]),
     RabbitCh;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     {ok, Writer} = supervisor2:start_child(
