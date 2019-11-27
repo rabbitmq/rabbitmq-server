@@ -75,18 +75,56 @@ to check cluster status. Note that nodes can take some time to start and discove
 The output should look something like this:
 
 ```
-Cluster status of node 'rabbit@172.17.0.2'
-[{nodes,[{disc,['rabbit@172.17.0.2','rabbit@172.17.0.4',
-                'rabbit@172.17.0.5']}]},
- {running_nodes,['rabbit@172.17.0.5','rabbit@172.17.0.4','rabbit@172.17.0.2']},
- {cluster_name,<<"rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local">>},
- {partitions,[]},
- {alarms,[{'rabbit@172.17.0.5',[]},
-          {'rabbit@172.17.0.4',[]},
-          {'rabbit@172.17.0.2',[]}]}]
+Cluster status of node rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local ...
+Basics
+
+Cluster name: rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local
+
+Disk Nodes
+
+rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local
+rabbit@rabbitmq-1.rabbitmq.test-rabbitmq.svc.cluster.local
+rabbit@rabbitmq-2.rabbitmq.test-rabbitmq.svc.cluster.local
+
+Running Nodes
+
+rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local
+rabbit@rabbitmq-1.rabbitmq.test-rabbitmq.svc.cluster.local
+rabbit@rabbitmq-2.rabbitmq.test-rabbitmq.svc.cluster.local
+
+Versions
+
+rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local: RabbitMQ 3.8.1 on Erlang 22.1.8
+rabbit@rabbitmq-1.rabbitmq.test-rabbitmq.svc.cluster.local: RabbitMQ 3.8.1 on Erlang 22.1.8
+rabbit@rabbitmq-2.rabbitmq.test-rabbitmq.svc.cluster.local: RabbitMQ 3.8.1 on Erlang 22.1.8
+
+Alarms
+
+(none)
+
+Network Partitions
+
+(none)
+
+Listeners
+
+Node: rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local, interface: [::], port: 25672, protocol: clustering, purpose: inter-node and CLI tool communication
+Node: rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local, interface: [::], port: 5672, protocol: amqp, purpose: AMQP 0-9-1 and AMQP 1.0
+Node: rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local, interface: [::], port: 15672, protocol: http, purpose: HTTP API
+Node: rabbit@rabbitmq-1.rabbitmq.test-rabbitmq.svc.cluster.local, interface: [::], port: 25672, protocol: clustering, purpose: inter-node and CLI tool communication
+Node: rabbit@rabbitmq-1.rabbitmq.test-rabbitmq.svc.cluster.local, interface: [::], port: 5672, protocol: amqp, purpose: AMQP 0-9-1 and AMQP 1.0
+Node: rabbit@rabbitmq-1.rabbitmq.test-rabbitmq.svc.cluster.local, interface: [::], port: 15672, protocol: http, purpose: HTTP API
+
+Feature flags
+
+Flag: drop_unroutable_metric, state: enabled
+Flag: empty_basic_get_metric, state: enabled
+Flag: implicit_default_bindings, state: enabled
+Flag: quorum_queue, state: enabled
+Flag: virtual_host_metadata, state: enabled
 ```
 
-### Use Public Minikube IP to Connect
+### Use Public Minikube IP Address to Connect
 
 Get the public `minikube` VM IP address:
 
@@ -97,10 +135,11 @@ minikube ip
 
 The [ports used](https://www.rabbitmq.com/networking.html#ports) by this example are:
 
-	* `http://<<minikube_ip>>:31672`: [HTTP API and management UI](https://www.rabbitmq.com/management.html)
-	* `amqp://guest:guest@<<minikube_ip>>:30672`: [AMQP 0-9-1 and AMQP 1.0](https://www.rabbitmq.com/networking.html#selinux-ports)
+	* `amqp://guest:guest@{minikube_ip}:30672`: [AMQP 0-9-1 and AMQP 1.0](https://www.rabbitmq.com/networking.html#ports) client connections
+	* `http://{minikube_ip}:31672`: [HTTP API and management UI](https://www.rabbitmq.com/management.html)
 
-## Scaling the Number of RabbitMQ Cluster Nodes (Kubernetes Pod Replicas)
+
+### Scaling the Number of RabbitMQ Cluster Nodes (Kubernetes Pod Replicas)
 
 ```
 # Odd numbers of nodes are necessary for a clear quorum: 3, 5, 7 and so on
