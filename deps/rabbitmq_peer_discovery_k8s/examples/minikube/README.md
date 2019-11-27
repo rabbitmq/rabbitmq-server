@@ -23,9 +23,7 @@ The example uses, targets or assumes:
  * A [StatefulSets controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 
 
-## Usage
-
-### Quick Start with Make
+## Quick Start with Make
 
 This example comes with a Make target that sets up VirtualBox, Minikube and an example cluster
 in a single command. It can be found under this directory. [Homebrew](https://brew.sh/) will be used to install
@@ -48,6 +46,8 @@ to start Minikube and `kubectl apply` the example.
 Once the changes are applied, follow the steps in the Check Cluster Status section below.
 
 In case you would prefer to install and run Minikube manually, see the following few sections.
+
+## Running the Example Manually with Minikube
 
 ### Preresuites
 
