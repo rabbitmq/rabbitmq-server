@@ -54,6 +54,7 @@
 -export([mark_local_durable_queues_stopped/1]).
 
 -export([rebalance/3]).
+-export([collect_info_all/2]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -1097,7 +1098,7 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_quorum(Q) ->
     end.
 
 format(Q) when ?amqqueue_is_quorum(Q) -> rabbit_quorum_queue:format(Q);
-format(_) -> [].
+format(Q) -> rabbit_amqqueue_process:format(Q).
 
 -spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
@@ -1128,7 +1129,7 @@ info_down(Q, DownReason) ->
     info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason).
 
 info_down(Q, Items, DownReason) ->
-    [{Item, i_down(Item, Q, DownReason)} || Item <- Items].
+    [{Item, i_down(Item, Q, DownReason)} || Item <- Items, Item =/= totals, Item =/= type_specific].
 
 i_down(name,               Q, _) -> amqqueue:get_name(Q);
 i_down(durable,            Q, _) -> amqqueue:is_durable(Q);
@@ -1164,6 +1165,26 @@ emit_info_local(VHostPath, Items, Ref, AggregatorPid) ->
 emit_info_all(Nodes, VHostPath, Items, Ref, AggregatorPid) ->
     Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, AggregatorPid]) || Node <- Nodes ],
     rabbit_control_misc:await_emitters_termination(Pids).
+
+collect_info_all(VHostPath, Items) ->
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Ref = make_ref(),
+    Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, self()]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    wait_for_queues(Ref, length(Pids), []).
+
+wait_for_queues(Ref, N, Acc) ->
+    receive
+        {Ref, finished} when N == 1 ->
+            Acc;
+        {Ref, finished} ->
+            wait_for_queues(Ref, N - 1, Acc);
+        {Ref, Items, continue} ->
+            wait_for_queues(Ref, N, [Items | Acc])
+    after
+        1000 ->
+            Acc
+    end.
 
 emit_info_down(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
