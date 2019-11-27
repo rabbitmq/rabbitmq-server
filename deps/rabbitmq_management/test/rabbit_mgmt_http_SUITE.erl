@@ -1828,19 +1828,19 @@ definitions_remove_things_test(Config) ->
 
 definitions_server_named_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
-    #'queue.declare_ok'{ queue = QName } =
-        amqp_channel:call(Ch, #'queue.declare'{}),
-    close_channel(Ch),
-    close_connection(Conn),
+    %% declares a durable server-named queue for the sake of exporting the definition
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = <<"">>, durable = true}),
     Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName),
     http_get(Config, Path, ?OK),
     Definitions = http_get(Config, "/definitions", ?OK),
+    close_channel(Ch),
+    close_connection(Conn),
     http_delete(Config, Path, {group, '2xx'}),
     http_get(Config, Path, ?NOT_FOUND),
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
     %% amq.* entities are not imported
     http_get(Config, Path, ?NOT_FOUND),
-    http_delete(Config, Path, {group, '2xx'}),
     passed.
 
 definitions_with_charset_test(Config) ->
