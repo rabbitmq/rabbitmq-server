@@ -29,8 +29,14 @@ This example comes with a Make target that sets up VirtualBox, Minikube and an e
 in a single command. It can be found under this directory. [Homebrew](https://brew.sh/) will be used to install
 packages and on macOS, VirtualBox [will need OS permissions to install its kernel module](https://developer.apple.com/library/archive/technotes/tn2459/_index.html).
 
-Please inspect it to be extra sure that you understand and agree to what it does. After enabling 3rd party
-kernel extensions in OS setings, use
+The Homebrew cask installer will ask for your password at some point with a prompt that looks like this:
+
+```
+Changing ownership of paths required by virtualbox; your password may be necessary
+```
+
+Please inspect the Make file to be extra sure that you understand and agree to what it does.
+After enabling 3rd party kernel extensions in OS setings, use
 
 ```
 make install-minikube
