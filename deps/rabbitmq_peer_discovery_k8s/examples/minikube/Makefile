@@ -22,7 +22,7 @@ $(KUBECTL):
 #
 .PHONY: install-minikube
 install-minikube: $(MINIKUBE)
-	@$(MINIKUBE) start --vm-driver=virtualbox
+	@$(MINIKUBE) start --vm-driver=virtualbox --disk-size "10 GB"
 
 .PHONY: run-in-minikube
 # run-in-minikube: minikube $(KUBECTL)
