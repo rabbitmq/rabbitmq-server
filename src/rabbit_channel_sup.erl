@@ -66,12 +66,12 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
           {channel, {rabbit_channel, start_link,
                      [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
                       Protocol, User, VHost, Capabilities, Collector,
-                      LimiterPid]},
+                      LimiterPid, undefined]},
            intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
-            User, VHost, Capabilities, Collector}) ->
+            User, VHost, Capabilities, Collector, AmqpParams}) ->
     {ok, SupPid} = supervisor2:start_link(
                      ?MODULE, {direct, {ConnName, Channel}}),
     [LimiterPid] = supervisor2:find_child(SupPid, limiter),
@@ -81,7 +81,7 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
           {channel, {rabbit_channel, start_link,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
                       ConnName, Protocol, User, VHost, Capabilities, Collector,
-                      LimiterPid]},
+                      LimiterPid, AmqpParams]},
            intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 
