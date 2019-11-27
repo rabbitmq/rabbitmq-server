@@ -857,7 +857,10 @@ close_connection(State = #proc_state{connection = none}) ->
 close_connection(State = #proc_state{connection = Connection}) ->
     %% ignore noproc or other exceptions to avoid debris
     catch amqp_connection:close(Connection),
-    State#proc_state{channel = none, connection = none, subscriptions = none}.
+    State#proc_state{channel = none, connection = none, subscriptions = none};
+close_connection(undefined) ->
+    rabbit_log:debug("~s:close_connection: undefined state", [?MODULE]),
+    #proc_state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
 %% Reply-To
