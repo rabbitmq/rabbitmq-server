@@ -95,7 +95,8 @@ kubectl create -f examples/minikube
 
 ### Check Cluster Status
 
-Wait for a a few minutes for pods to start. To monitor pod startup process, use
+Wait for a a few minutes for pods to start. Since this example uses a stateful set with ordered
+startup, the pods will be started one by one. To monitor pod startup process, use
 
 ``` sh
 kubectl --namespace="test-rabbitmq" get pods
