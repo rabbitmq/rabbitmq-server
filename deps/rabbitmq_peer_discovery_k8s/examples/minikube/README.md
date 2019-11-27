@@ -65,7 +65,7 @@ In case you would prefer to install and run Minikube manually, see the following
 
 Start a `minikube` virtual machine:
 
-```
+``` sh
 minikube start --cpus=2 --memory=2040 --disk-size "10 GB" --vm-driver=virtualbox
 ```
 
@@ -73,7 +73,7 @@ minikube start --cpus=2 --memory=2040 --disk-size "10 GB" --vm-driver=virtualbox
 
 Create a Kubernetes namespace for RabbitMQ tests:
 
-```
+``` sh
 kubectl create namespace test-rabbitmq
 ```
 
@@ -88,16 +88,22 @@ in the following step.
 
 Deploy the config map, services, a stateful set and so on:
 
-```
+``` sh
 # will apply all files under this directory
 kubectl create -f examples/minikube
 ```
 
 ### Check Cluster Status
 
-Wait for a minute or so then run
+Wait for a a few minutes for pods to start. To monitor pod startup process, use
 
+``` sh
+kubectl --namespace="test-rabbitmq" get pods
 ```
+
+To run `rabbitmq-diagnostics cluster_status`:
+
+``` sh
 FIRST_POD=$(kubectl get pods --namespace test-rabbitmq -l 'app=rabbitmq' -o jsonpath='{.items[0].metadata.name }')
 kubectl exec --namespace=test-rabbitmq $FIRST_POD rabbitmq-diagnostics cluster_status
 ```
@@ -160,7 +166,7 @@ Flag: virtual_host_metadata, state: enabled
 
 Get the public `minikube` VM IP address:
 
-```
+``` sh
 minikube ip
 # => 192.168.99.104
 ```
@@ -173,7 +179,7 @@ The [ports used](https://www.rabbitmq.com/networking.html#ports) by this example
 
 ### Scaling the Number of RabbitMQ Cluster Nodes (Kubernetes Pod Replicas)
 
-```
+``` sh
 # Odd numbers of nodes are necessary for a clear quorum: 3, 5, 7 and so on
 kubectl scale statefulset/rabbitmq --namespace=test-rabbitmq --replicas=5
 ```
