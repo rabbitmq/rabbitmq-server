@@ -49,18 +49,16 @@ kubectl create namespace test-rabbitmq
 
 In Kubernetes 1.6 or above, RBAC authorization is enabled by default.
 This example configures RBAC related bits so that the peer discovery plugin is allowed to access
-the nodes information it needs. So deploy RBAC `YAML` file():
-
-```
-kubectl create -f examples/k8s_statefulsets/rabbitmq_rbac.yaml
-```
+the nodes information it needs. The `ServiceAccount` and `Role` resources will be created
+in the following step.
 
 ### kubectl Apply Things
 
 Deploy the config map, services, a stateful set and so on:
 
 ```
-kubectl create -f examples/k8s_statefulsets/rabbitmq_statefulsets.yaml
+# will apply all files under this directory
+kubectl create -f examples/minikube
 ```
 
 ### Check Cluster Status
