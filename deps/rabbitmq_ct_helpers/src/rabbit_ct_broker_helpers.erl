@@ -615,9 +615,17 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     end,
     ExtraArgs0 = [],
     ExtraArgs1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
-                     undefined -> ExtraArgs0;
-                     Dir       -> [{"RABBITMQ_PLUGINS_DIR=~s", [Dir]}
-                                   | ExtraArgs0]
+                     undefined ->
+                         ExtraArgs0;
+                     ExtraPluginsDir ->
+                         PathSep = case os:type() of
+                                       {win32, _} -> ";";
+                                       _          -> ":"
+                                   end,
+                         RegularPluginsDir = filename:join(SrcDir, "plugins"),
+                         [{"RABBITMQ_PLUGINS_DIR=~s~s~s",
+                           [RegularPluginsDir, PathSep, ExtraPluginsDir]}
+                          | ExtraArgs0]
                  end,
     StartWithPluginsDisabled = rabbit_ct_helpers:get_config(
                                  Config, start_rmq_with_plugins_disabled),
