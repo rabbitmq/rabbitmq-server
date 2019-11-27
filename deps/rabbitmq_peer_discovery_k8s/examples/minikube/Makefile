@@ -20,8 +20,8 @@ $(KUBECTL):
 
 ### TARGETS ###
 #
-.PHONY: minikube
-minikube: $(MINIKUBE)
+.PHONY: install-minikube
+install-minikube: $(MINIKUBE)
 	@$(MINIKUBE) start --vm-driver=virtualbox
 
 .PHONY: run-in-minikube
