@@ -14,10 +14,7 @@ are not in scope for this plugin.
 
 ## Supported RabbitMQ Versions
 
-This plugin requires RabbitMQ 3.7.0 or later.
-
-For a K8s-based peer discovery and cluster formation
-mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster).
+This plugin ships with RabbitMQ 3.7.0 or later.
 
 
 ## Installation
@@ -40,7 +37,7 @@ of the peer discovery subsystem, general and Kubernetes-specific configurable va
 
 Example deployments that use this plugin can be found under [examples](./examples). Note that they
 are just that, examples, and won't be optimal for every use case or cover a lot of important production
-system concerns such as monitoring and sizing.
+system concerns such as monitoring, persistent volume settings, access control, sizing, and so on.
 
 
 ## Contributing
