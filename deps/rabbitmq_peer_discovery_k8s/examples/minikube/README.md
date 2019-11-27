@@ -25,6 +25,32 @@ The example uses, targets or assumes:
 
 ## Usage
 
+### Quick Start with Make
+
+This example comes with a Make target that sets up VirtualBox, Minikube and an example cluster
+in a single command. It can be found under this directory. [Homebrew](https://brew.sh/) will be used to install
+packages and on macOS, VirtualBox [will need OS permissions to install its kernel module](https://developer.apple.com/library/archive/technotes/tn2459/_index.html).
+
+Please inspect it to be extra sure that you understand and agree to what it does. After enabling 3rd party
+kernel extensions in OS setings, use
+
+```
+make install-minikube
+```
+
+to install VirtualBox and Minikube using Homebrew. Then run
+
+```
+make run-in-minikube
+```
+
+to start Minikube and `kubectl apply` the example.
+Once the changes are applied, follow the steps in the Check Cluster Status section below.
+
+In case you would prefer to install and run Minikube manually, see the following few sections.
+
+### Preresuites
+
  * Make sure that VirtualBox is installed
  * Install [`minikube`](https://kubernetes.io/docs/tasks/tools/install-minikube/) and start it with `--vm-driver=virtualbox`
  * Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -34,7 +60,7 @@ The example uses, targets or assumes:
 Start a `minikube` virtual machine:
 
 ```
-minikube start --cpus=2 --memory=2040 --vm-driver=virtualbox
+minikube start --cpus=2 --memory=2040 --disk-size "10 GB" --vm-driver=virtualbox
 ```
 
 ### Create a Namespace
