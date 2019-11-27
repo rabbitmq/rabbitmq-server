@@ -14,10 +14,7 @@ are not in scope for this plugin.
 
 ## Supported RabbitMQ Versions
 
-This plugin requires RabbitMQ 3.7.0 or later.
-
-For a K8s-based peer discovery and cluster formation
-mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster).
+This plugin ships with RabbitMQ 3.7.0 or later.
 
 
 ## Installation
