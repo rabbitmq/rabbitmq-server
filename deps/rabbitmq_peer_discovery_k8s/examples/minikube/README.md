@@ -174,8 +174,8 @@ minikube ip
 
 The [ports used](https://www.rabbitmq.com/networking.html#ports) by this example are:
 
-	* `amqp://guest:guest@{minikube_ip}:30672`: [AMQP 0-9-1 and AMQP 1.0](https://www.rabbitmq.com/networking.html#ports) client connections
-	* `http://{minikube_ip}:31672`: [HTTP API and management UI](https://www.rabbitmq.com/management.html)
+ * `amqp://guest:guest@{minikube_ip}:30672`: [AMQP 0-9-1 and AMQP 1.0](https://www.rabbitmq.com/networking.html#ports) client connections
+ * `http://{minikube_ip}:31672`: [HTTP API and management UI](https://www.rabbitmq.com/management.html)
 
 
 ### Scaling the Number of RabbitMQ Cluster Nodes (Kubernetes Pod Replicas)
