@@ -613,18 +613,26 @@ clustering_ok_with_ff_disabled_everywhere(Config) ->
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([false, false],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, ff_from_testsuite)),
+            ?assertEqual([false, false],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
 
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([false, false],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, ff_from_testsuite)),
+            ?assertEqual([false, false],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
     ok.
 
@@ -639,18 +647,24 @@ clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, false],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, ff_from_testsuite)),
+            ?assertEqual([true, false],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
 
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
     ok.
 
@@ -663,18 +677,22 @@ clustering_ok_with_ff_enabled_everywhere(Config) ->
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
 
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
     ok.
 
