@@ -637,11 +637,11 @@ clustering_ok_with_ff_disabled_everywhere(Config) ->
     ok.
 
 clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
-    %% All feature flags are enabled on node 1, but not on node 2.
+    %% The test feature flag is enabled on node 1, but not on node 2.
     %% Clustering the two nodes should be accepted because they are
-    %% compatible. Also, feature flags will be enabled on node 2 as a
+    %% compatible. Also, the feature flag will be enabled on node 2 as a
     %% consequence.
-    enable_all_feature_flags_on(Config, 0),
+    enable_feature_flag_on(Config, 0, ff_from_testsuite),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -669,9 +669,9 @@ clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
     ok.
 
 clustering_ok_with_ff_enabled_everywhere(Config) ->
-    %% All feature flags are enabled. Clustering the two nodes should be
-    %% accepted because they are compatible.
-    enable_all_feature_flags_everywhere(Config),
+    %% The test feature flags is enabled. Clustering the two nodes
+    %% should be accepted because they are compatible.
+    enable_feature_flag_everywhere(Config, ff_from_testsuite),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -805,7 +805,7 @@ clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes(Config) ->
     %% should be considered compatible and the clustering should be
     %% allowed.
     rabbit_ct_broker_helpers:enable_plugin(Config, 0, "my_plugin"),
-    enable_all_feature_flags_on(Config, 0),
+    enable_feature_flag_on(Config, 0, plugin_ff),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -919,13 +919,9 @@ enable_feature_flag_on(Config, Node, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(
       Config, Node, rabbit_feature_flags, enable, [FeatureName]).
 
-enable_all_feature_flags_on(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, Node, rabbit_feature_flags, enable_all, []).
-
-enable_all_feature_flags_everywhere(Config) ->
+enable_feature_flag_everywhere(Config, FeatureName) ->
     rabbit_ct_broker_helpers:rpc_all(
-      Config, rabbit_feature_flags, enable_all, []).
+      Config, rabbit_feature_flags, enable, [FeatureName]).
 
 is_feature_flag_supported(Config, FeatureName) ->
     rabbit_ct_broker_helpers:rpc_all(
