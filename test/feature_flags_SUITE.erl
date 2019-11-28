@@ -900,20 +900,37 @@ build_my_plugin(Config) ->
     PluginsDir = filename:join(PluginSrcDir, "plugins"),
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_plugins_dir, PluginsDir}]),
-    case filelib:wildcard("plugins/my_plugin-*", PluginSrcDir) of
+    {MyPlugin, OtherPlugins} = list_my_plugin_plugins(PluginSrcDir),
+    case MyPlugin of
         [] ->
             DepsDir = ?config(erlang_mk_depsdir, Config),
             Args = ["test-dist",
                     {"DEPS_DIR=~s", [DepsDir]}],
             case rabbit_ct_helpers:make(Config1, PluginSrcDir, Args) of
                 {ok, _} ->
+                    {_, OtherPlugins1} = list_my_plugin_plugins(PluginSrcDir),
+                    remove_other_plugins(PluginSrcDir, OtherPlugins1),
                     Config1;
                 {error, _} ->
                     {skip, "Failed to compile the `my_plugin` test plugin"}
             end;
         _ ->
+            remove_other_plugins(PluginSrcDir, OtherPlugins),
             Config1
     end.
+
+list_my_plugin_plugins(PluginSrcDir) ->
+    Files = filelib:wildcard("plugins/*", PluginSrcDir),
+    lists:partition(
+      fun(Path) ->
+              Filename = filename:basename(Path),
+              re:run(Filename, "^my_plugin-", [{capture, none}]) =:= match
+      end, Files).
+
+remove_other_plugins(PluginSrcDir, OtherPlugins) ->
+    [ok = file:delete(
+            filename:join(PluginSrcDir, Filename))
+     || Filename <- OtherPlugins].
 
 enable_feature_flag_on(Config, Node, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(
