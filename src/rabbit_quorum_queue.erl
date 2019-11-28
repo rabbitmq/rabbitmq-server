@@ -252,7 +252,7 @@ handle_tick(QName,
                                  0 -> 0;
                                  _ -> rabbit_fifo:usage(Name)
                              end,
-                      Infos = [{consumers, C}, {consumer_utilisation, Util},
+                      Infos = [{consumer_utilisation, Util},
                                {message_bytes_ready, MsgBytesReady},
                                {message_bytes_unacknowledged, MsgBytesUnack},
                                {message_bytes, MsgBytesReady + MsgBytesUnack},

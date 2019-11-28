@@ -127,7 +127,8 @@ all_tests() ->
      queue_length_in_memory_bytes_limit_subscribe,
      queue_length_in_memory_bytes_limit,
      queue_length_in_memory_purge,
-     in_memory
+     in_memory,
+     consumer_metrics
     ].
 
 memory_tests() ->
@@ -2243,6 +2244,24 @@ in_memory(Config) ->
     wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
     ?assertEqual([{0, 0}],
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
+
+consumer_metrics(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    subscribe(Ch1, QQ, false),
+
+    RaName = ra_name(QQ),
+    {ok, _, {_, Leader}} = ra:members({RaName, Server}),
+    timer:sleep(5000),
+    QNameRes = rabbit_misc:r(<<"/">>, queue, QQ),
+    [{_, PropList, _}] = rpc:call(Leader, ets, lookup, [queue_metrics, QNameRes]),
+    ?assertMatch([_], lists:filter(fun({Key, _}) ->
+                                           Key == consumers
+                                   end, PropList)).
 
 %%----------------------------------------------------------------------------
 
