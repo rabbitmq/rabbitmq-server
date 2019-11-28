@@ -243,6 +243,13 @@ configure_lager() ->
             end;
         _ -> ok
     end,
+    case application:get_env(lager, colored) of
+        undefined ->
+            UseColor = rabbit_prelaunch_early_logging:use_colored_logging(),
+            application:set_env(lager, colored, UseColor);
+        _ ->
+            ok
+    end,
     %% Set rabbit.log config variable based on environment.
     prepare_rabbit_log_config(),
     %% Configure syslog library.
@@ -273,7 +280,7 @@ configure_lager() ->
     LogConfig = application:get_env(rabbit, log, []),
     LogLevels = application:get_env(rabbit, log_levels, []),
     Categories = proplists:get_value(categories, LogConfig, []),
-    CategoriesConfig = case {Categories, LogLevels} of
+    CategoriesConfig0 = case {Categories, LogLevels} of
         {[], []} -> [];
         {[], LogLevels} ->
             io:format("Using deprecated config parameter 'log_levels'. "
@@ -283,13 +290,41 @@ configure_lager() ->
                       LogLevels);
         {Categories, []} ->
             Categories;
-        {Categories, LogLevels} ->
+        {Categories, _} ->
             io:format("Using the deprecated config parameter 'rabbit.log_levels' together "
                       "with a new parameter for log categories."
                       " 'rabbit.log_levels' will be ignored. Please remove it from the config. More at "
                       "https://rabbitmq.com/logging.html"),
             Categories
     end,
+    LogLevelsFromContext = case rabbit_prelaunch:get_context() of
+                               #{log_levels := LL} -> LL;
+                               undefined           -> undefined
+                           end,
+    Fun = fun
+              (global, _, CC) ->
+                  CC;
+              (color, _, CC) ->
+                  CC;
+              (CategoryS, LogLevel, CC) ->
+                  Category = list_to_atom(CategoryS),
+                  CCEntry = proplists:get_value(
+                              Category, CC, []),
+                  CCEntry1 = lists:ukeymerge(
+                               1,
+                               [{level, LogLevel}],
+                               lists:ukeysort(1, CCEntry)),
+                  lists:keystore(
+                    Category, 1, CC, {Category, CCEntry1})
+          end,
+    CategoriesConfig = case LogLevelsFromContext of
+                           undefined ->
+                               CategoriesConfig0;
+                           _ ->
+                               maps:fold(Fun,
+                                         CategoriesConfig0,
+                                         LogLevelsFromContext)
+                       end,
     SinkConfigs = lists:map(
         fun({Name, Config}) ->
             {rabbit_log:make_internal_sink_name(Name), Config}
@@ -365,7 +400,10 @@ lager_backend(exchange) -> lager_exchange_backend.
 %% Syslog backend is using an old API for configuration and
 %% does not support proplists.
 generate_handler(syslog_lager_backend=Backend, HandlerConfig) ->
-    DefaultConfigVal = default_config_value(level),
+    %% The default log level is set to `debug` because the actual
+    %% filtering is made at the sink level. We want to accept all
+    %% messages here.
+    DefaultConfigVal = debug,
     Level = proplists:get_value(level, HandlerConfig, DefaultConfigVal),
     ok = configure_handler_backend(Backend),
     [{Backend,
@@ -383,13 +421,25 @@ configure_handler_backend(_Backend) ->
     ok.
 
 default_handler_config(lager_console_backend) ->
-    [{level, default_config_value(level)},
+    %% The default log level is set to `debug` because the actual
+    %% filtering is made at the sink level. We want to accept all
+    %% messages here.
+    DefaultConfigVal = debug,
+    [{level, DefaultConfigVal},
      {formatter_config, default_config_value(formatter_config)}];
 default_handler_config(lager_exchange_backend) ->
-    [{level, default_config_value(level)},
+    %% The default log level is set to `debug` because the actual
+    %% filtering is made at the sink level. We want to accept all
+    %% messages here.
+    DefaultConfigVal = debug,
+    [{level, DefaultConfigVal},
      {formatter_config, default_config_value(formatter_config)}];
 default_handler_config(lager_file_backend) ->
-    [{level, default_config_value(level)},
+    %% The default log level is set to `debug` because the actual
+    %% filtering is made at the sink level. We want to accept all
+    %% messages here.
+    DefaultConfigVal = debug,
+    [{level, DefaultConfigVal},
      {formatter_config, default_config_value(formatter_config)},
      {date, ""},
      {size, 0}].
@@ -398,12 +448,18 @@ default_config_value(level) -> info;
 default_config_value(formatter_config) ->
     [date, " ", time, " ", color, "[", severity, "] ",
        {pid, ""},
-       " ", message, "\n"].
+       " ", message, eol()].
 
 syslog_formatter_config() ->
     [color, "[", severity, "] ",
        {pid, ""},
-       " ", message, "\n"].
+       " ", message, eol()].
+
+eol() ->
+    case application:get_env(lager, colored) of
+        {ok, true}  -> "\e[0m\r\n";
+        _           -> "\r\n"
+    end.
 
 prepare_rabbit_log_config() ->
     %% If RABBIT_LOGS is not set, we should ignore it.
@@ -493,18 +549,30 @@ set_env_upgrade_log_file(FileName) ->
     ok = application:set_env(rabbit, log, NewLogConfig).
 
 generate_lager_sinks(SinkNames, SinkConfigs) ->
+    LogLevels = case rabbit_prelaunch:get_context() of
+                    #{log_levels := LL} -> LL;
+                    undefined           -> undefined
+                end,
+    DefaultLogLevel = case LogLevels of
+                          #{global := LogLevel} ->
+                              LogLevel;
+                          _ ->
+                              default_config_value(level)
+                      end,
     lists:map(fun(SinkName) ->
         SinkConfig = proplists:get_value(SinkName, SinkConfigs, []),
         SinkHandlers = case proplists:get_value(file, SinkConfig, false) of
             %% If no file defined - forward everything to the default backend
             false ->
-                ForwarderLevel = proplists:get_value(level, SinkConfig, inherit),
+                ForwarderLevel = proplists:get_value(level,
+                                                     SinkConfig,
+                                                     DefaultLogLevel),
                 [{lager_forwarder_backend,
                     [lager_util:make_internal_sink_name(lager), ForwarderLevel]}];
             %% If a file defined - add a file backend to handlers and remove all default file backends.
             File ->
                 %% Use `debug` as a default handler to not override a handler level
-                Level = proplists:get_value(level, SinkConfig, debug),
+                Level = proplists:get_value(level, SinkConfig, DefaultLogLevel),
                 DefaultGeneratedHandlers = application:get_env(lager, rabbit_handlers, []),
                 SinkFileHandlers = case proplists:get_value(lager_file_backend, DefaultGeneratedHandlers, undefined) of
                     undefined ->
