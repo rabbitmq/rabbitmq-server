@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({:badrpc, {:timeout, _n}} = input), do: {:error, input}
   defp normalize_output({:badrpc, {:timeout, _n, _msg}} = input), do: {:error, input}
   defp normalize_output({:badrpc, {:EXIT, reason}}), do: {:error, reason}
-  defp normalize_output({:error, exit_code, string} = input) when is_integer(exit_code) do
+  defp normalize_output({:error, exit_code, string}) when is_integer(exit_code) do
     {:error, exit_code, to_string(string)}
   end
   defp normalize_output({:error, format, args})
