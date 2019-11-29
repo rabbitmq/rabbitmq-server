@@ -36,22 +36,36 @@ Changing ownership of paths required by virtualbox; your password may be necessa
 ```
 
 Please inspect the Make file to be extra sure that you understand and agree to what it does.
-After enabling 3rd party kernel extensions in OS setings, use
+After enabling 3rd party kernel extensions in OS setings, run the default Make target in this directory:
 
 ```
-make install-minikube
+make
 ```
 
-to install VirtualBox and Minikube using Homebrew. Then run
+which is equivalent to first running
+
+```
+make start-minikube
+```
+
+to install VirtualBox and Minikube using Homebrew, then
 
 ```
 make run-in-minikube
 ```
 
-to start Minikube and `kubectl apply` the example.
+to start Minikube and `kubectl apply` the example, and finally
+
+```
+make wait-for-rabbitmq
+```
+
+to wait for cluster formation.
+
 Once the changes are applied, follow the steps in the Check Cluster Status section below.
 
 In case you would prefer to install and run Minikube manually, see the following few sections.
+
 
 ## Running the Example Manually with Minikube
 
