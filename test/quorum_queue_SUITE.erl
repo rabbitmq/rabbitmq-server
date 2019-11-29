@@ -2246,7 +2246,7 @@ in_memory(Config) ->
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
 
 consumer_metrics(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -2259,9 +2259,9 @@ consumer_metrics(Config) ->
     timer:sleep(5000),
     QNameRes = rabbit_misc:r(<<"/">>, queue, QQ),
     [{_, PropList, _}] = rpc:call(Leader, ets, lookup, [queue_metrics, QNameRes]),
-    ?assertMatch([_], lists:filter(fun({Key, _}) ->
-                                           Key == consumers
-                                   end, PropList)).
+    ?assertMatch([{consumers, 1}], lists:filter(fun({Key, _}) ->
+                                                        Key == consumers
+                                                end, PropList)).
 
 %%----------------------------------------------------------------------------
 
