@@ -252,14 +252,15 @@ handle_tick(QName,
                                  0 -> 0;
                                  _ -> rabbit_fifo:usage(Name)
                              end,
-                      Infos = [{consumers, C}, {consumer_utilisation, Util},
+                      Infos = [{consumers, C},
+                               {consumer_utilisation, Util},
                                {message_bytes_ready, MsgBytesReady},
                                {message_bytes_unacknowledged, MsgBytesUnack},
                                {message_bytes, MsgBytesReady + MsgBytesUnack},
                                {message_bytes_persistent, MsgBytesReady + MsgBytesUnack},
                                {messages_persistent, M}
 
-                               | infos(QName)],
+                               | infos(QName, ?STATISTICS_KEYS -- [consumers])],
                       rabbit_core_metrics:queue_stats(QName, Infos),
                       rabbit_event:notify(queue_stats,
                                           Infos ++ [{name, QName},
@@ -582,9 +583,12 @@ info(Q) ->
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 
 infos(QName) ->
+    infos(QName, ?STATISTICS_KEYS).
+
+infos(QName, Keys) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
-            info(Q, ?STATISTICS_KEYS);
+            info(Q, Keys);
         {error, not_found} ->
             []
     end.
