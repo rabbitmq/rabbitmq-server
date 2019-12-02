@@ -565,10 +565,50 @@ start_long_running_testsuite_monitor(Config) ->
     set_config(Config, {long_running_testsuite_monitor, Pid}).
 
 load_elixir(Config) ->
-    application:load(elixir),
-    S = application:ensure_all_started(elixir),
-    ct:pal("Elixir start status: ~p~n", [S]),
-    Config.
+    case find_elixir_home() of
+        {skip, _} = Skip ->
+            Skip;
+        ElixirLibDir ->
+            ct:pal(?LOW_IMPORTANCE, "Elixir lib dir: ~s~n", [ElixirLibDir]),
+            true = code:add_pathz(ElixirLibDir),
+            application:load(elixir),
+            {ok, _} = application:ensure_all_started(elixir),
+            Config
+    end.
+
+find_elixir_home() ->
+    ElixirExe = case os:type() of
+                    {unix, _}  -> "elixir";
+                    {win32, _} -> "elixir.bat"
+                end,
+    case os:find_executable(ElixirExe) of
+        false   -> {skip, "Failed to locate Elixir executable"};
+        ExePath -> resolve_symlink(ExePath)
+    end.
+
+resolve_symlink(ExePath) ->
+    case file:read_link_all(ExePath) of
+        {error, einval} ->
+            determine_elixir_home(ExePath);
+        {ok, ResolvedLink} ->
+            ExePath1 = filename:absname(ResolvedLink,
+                                        filename:dirname(ExePath)),
+            resolve_symlink(ExePath1);
+        {error, Reason} ->
+            Msg = rabbit_misc:format("Failed to locate Elixir home: ~p",
+                                     [file:format_error(Reason)]),
+            {skip, Msg}
+    end.
+
+determine_elixir_home(ExePath) ->
+    LibPath = filename:join([filename:dirname(filename:dirname(ExePath)),
+                             "lib",
+                             "elixir",
+                             "ebin"]),
+    case filelib:is_dir(LibPath) of
+        true  -> LibPath;
+        false -> {skip, "Failed to locate Elixir lib dir"}
+    end.
 
 stop_long_running_testsuite_monitor(Config) ->
     case get_config(Config, long_running_testsuite_monitor) of
@@ -716,8 +756,8 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
             end
     end,
     Cmd1 = convert_to_unicode_binary(
-	     string:trim(
-	       rabbit_data_coercion:to_list(Cmd0))),
+             string:trim(
+               rabbit_data_coercion:to_list(Cmd0))),
     Args1 = [convert_to_unicode_binary(format_arg(Arg)) || Arg <- Args],
     {LocalOptions, PortOptions} = lists:partition(
       fun
