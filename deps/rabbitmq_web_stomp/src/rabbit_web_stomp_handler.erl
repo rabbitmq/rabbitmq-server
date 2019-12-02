@@ -120,10 +120,10 @@ init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
 
     AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web STOMP', 0}),
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    SSLLoginName = rabbit_stomp_reader:ssl_login_name(RealSocket, StompConfig2),
+    LoginNameFromCertificate = rabbit_stomp_reader:ssl_login_name(RealSocket, StompConfig2),
     ProcessorState = rabbit_stomp_processor:initial_state(
         StompConfig2,
-        {SendFun, AdapterInfo, SSLLoginName, PeerAddr}),
+        {SendFun, AdapterInfo, LoginNameFromCertificate, PeerAddr}),
     {ok, ProcessorState}.
 
 websocket_handle({text, Data}, State) ->
