@@ -44,15 +44,66 @@ get_elixir_deps_paths() ->
 
 get_elixir_deps_paths1(Fd, Paths) ->
     case file:read_line(Fd) of
-        {ok, Line} ->
-            RootPath = Line -- [$\r, $\n],
+        {ok, Line0} ->
+            Line = Line0 -- [$\r, $\n],
+            RootPath = case os:type() of
+                           {unix, _} ->
+                               Line;
+                           {win32, _} ->
+                               case os:find_executable("cygpath.exe") of
+                                   false ->
+                                       Line;
+                                   Cygpath ->
+                                       os:cmd(
+                                         io_lib:format("~s --windows \"~s\"",
+                                                       [Cygpath, Line]))
+                                       -- [$\r, $\n]
+                               end
+                       end,
             Glob = filename:join([RootPath, "_build", "dev", "lib", "*", "ebin"]),
             NewPaths = filelib:wildcard(Glob),
             get_elixir_deps_paths1(Fd, Paths ++ NewPaths);
         eof ->
-            Paths
+            add_elixir_stdlib_path(Paths)
     end.
 
+add_elixir_stdlib_path(Paths) ->
+    case find_elixir_home() of
+        false        -> Paths;
+        ElixirLibDir -> [ElixirLibDir | Paths]
+    end.
+
+find_elixir_home() ->
+    ElixirExe = case os:type() of
+                    {unix, _}  -> "elixir";
+                    {win32, _} -> "elixir.bat"
+                end,
+    case os:find_executable(ElixirExe) of
+        false   -> false;
+        ExePath -> resolve_symlink(ExePath)
+    end.
+
+resolve_symlink(ExePath) ->
+    case file:read_link_all(ExePath) of
+        {error, einval} ->
+            determine_elixir_home(ExePath);
+        {ok, ResolvedLink} ->
+            ExePath1 = filename:absname(ResolvedLink,
+                                        filename:dirname(ExePath)),
+            resolve_symlink(ExePath1);
+        {error, _} ->
+            false
+    end.
+
+determine_elixir_home(ExePath) ->
+    LibPath = filename:join([filename:dirname(filename:dirname(ExePath)),
+                             "lib",
+                             "elixir",
+                             "ebin"]),
+    case filelib:is_dir(LibPath) of
+        true  -> LibPath;
+        false -> {skip, "Failed to locate Elixir lib dir"}
+    end.
 check(Check) ->
     Dirs = ?DIRS,
     lists:foreach(fun code:add_path/1, Dirs),
