@@ -23,6 +23,7 @@
          code_change/3, terminate/2]).
 -export([start_heartbeats/2]).
 -export([info/2]).
+-export([ssl_login_name/2]).
 
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
