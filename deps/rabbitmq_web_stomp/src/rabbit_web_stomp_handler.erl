@@ -95,11 +95,12 @@ init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
                       ok
               end,
 
+    SSLLogin = application:get_env(rabbitmq_stomp, ssl_cert_login, false),
+    StompConfig0 = #stomp_configuration{ssl_cert_login = SSLLogin, implicit_connect = false},
     UseHTTPAuth = application:get_env(rabbitmq_web_stomp, use_http_auth, false),
-    StompConfig0 = #stomp_configuration{implicit_connect = false},
     UserConfig = application:get_env(rabbitmq_stomp, default_user, undefined),
     StompConfig1 = rabbit_stomp:parse_default_user(UserConfig, StompConfig0),
-    StompConfig = case UseHTTPAuth of
+    StompConfig2 = case UseHTTPAuth of
         true ->
             case AuthHd of
                 undefined ->
@@ -118,10 +119,11 @@ init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
     end,
 
     AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web STOMP', 0}),
-
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    LoginNameFromCertificate = rabbit_stomp_reader:ssl_login_name(RealSocket, StompConfig2),
     ProcessorState = rabbit_stomp_processor:initial_state(
-        StompConfig,
-        {SendFun, AdapterInfo, none, PeerAddr}),
+        StompConfig2,
+        {SendFun, AdapterInfo, LoginNameFromCertificate, PeerAddr}),
     {ok, ProcessorState}.
 
 websocket_handle({text, Data}, State) ->
