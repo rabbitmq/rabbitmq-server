@@ -1336,6 +1336,14 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             Delivery = rabbit_basic:delivery(
                          Mandatory, DoConfirm, Message, MsgSeqNo),
             QNames = rabbit_exchange:route(Exchange, Delivery),
+            case QNames =:= [] andalso 
+                MsgSeqNo =/= undefined andalso
+                string:prefix(ExchangeNameBin, "amq.") =:= nomatch of
+                false -> ok;
+                _ -> rabbit_misc:protocol_error(not_found, 
+                    "no queues for exchange '~s' with routing key '~s'", 
+                    [ExchangeNameBin, RoutingKey])
+            end,
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
             DQ = {Delivery#delivery{flow = Flow}, QNames},
