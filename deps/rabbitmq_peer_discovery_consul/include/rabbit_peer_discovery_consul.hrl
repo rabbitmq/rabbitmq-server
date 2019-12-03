@@ -1,3 +1,5 @@
+-define(BACKEND_CONFIG_KEY, peer_discovery_consul).
+
 -define(CONFIG_MAPPING,
          #{
           cluster_name                       => #peer_discovery_config_entry_meta{
