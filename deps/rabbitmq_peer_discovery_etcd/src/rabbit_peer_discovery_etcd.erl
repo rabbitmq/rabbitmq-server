@@ -51,29 +51,28 @@ init() ->
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
-    case application:get_env(rabbit, cluster_formation) of
-      undefined         ->
-        {ok, {[], disc}};
-      {ok, ClusterFormation} ->
-        case proplists:get_value(?BACKEND_CONFIG_KEY, ClusterFormation) of
-            undefined ->
-              rabbit_log:warning("Peer discovery backend is set to ~s "
-                                 "but final config does not contain rabbit.cluster_formation.peer_discovery_etcd. "
-                                 "Cannot discover any nodes because etcd cluster details are not configured!",
-                                 [?MODULE]),
-              {ok, {[], disc}};
-            Proplist  ->
-              M = maps:from_list(Proplist),
-              case etcd_get(nodes_path(M), [{recursive, true}], M) of
-                  {ok, Nodes}  ->
-                      NodeList = extract_nodes(Nodes),
-                      {ok, NodeList};
-                  {error, "404"} ->
-                      {ok, []};
-                  Error        -> Error
-              end
-        end
-    end.
+    Fun0 = fun() -> {ok, {[], disc}} end,
+    Fun1 = fun() ->
+                   rabbit_log:warning("Peer discovery backend is set to ~s "
+                                      "but final config does not contain "
+                                      "rabbit.cluster_formation.peer_discovery_etcd. "
+                                      "Cannot discover any nodes because etcd cluster details are not configured!",
+                                      [?MODULE]),
+                   {ok, {[], disc}}
+           end,
+    Fun2 = fun(Proplist) ->
+                   M = maps:from_list(Proplist),
+                   case etcd_get(nodes_path(M), [{recursive, true}], M) of
+                       {ok, Nodes} ->
+                           NodeList = extract_nodes(Nodes),
+                           {ok, NodeList};
+                       {error, "404"} ->
+                           {ok, []};
+                       Error ->
+                           Error
+                   end
+           end,
+    rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
 
 -spec supports_registration() -> boolean().
