@@ -46,7 +46,7 @@ services:
       - "5681:5672"
       - "15681:15672"
       - "15701:15692"
-  stress-qq:
+  qq-moderate-load:
     image: &perf-test-image pivotalrabbitmq/perf-test:2.10.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
@@ -60,7 +60,7 @@ services:
       QUEUE_ARGS: x-queue-type=quorum,x-max-length=1000
       FLAG: persistent
       AUTO_DELETE: "false"
-      RATE: 200
+      RATE: 50
       AUTOACK: "false"
       SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
       METRICS_PROMETHEUS: "true"
