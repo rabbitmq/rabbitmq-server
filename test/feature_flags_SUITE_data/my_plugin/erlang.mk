@@ -1,1 +1,1 @@
-../../../erlang.mk
+include ../../../erlang.mk

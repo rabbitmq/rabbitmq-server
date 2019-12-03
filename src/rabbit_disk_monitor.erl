@@ -240,7 +240,28 @@ get_disk_free(Dir, {unix, _}) ->
     Df = os:find_executable("df"),
     parse_free_unix(rabbit_misc:os_cmd(Df ++ " -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ "\"")).
+    %% On Windows, the Win32 API enforces a limit of 260 characters
+    %% (MAX_PATH). If we call `dir` with a path longer than that, it
+    %% fails with "File not found". Starting with Windows 10 version
+    %% 1607, this limit was removed, but the administrator has to
+    %% configure that.
+    %%
+    %% NTFS supports paths up to 32767 characters. Therefore, paths
+    %% longer than 260 characters exist but they are "inaccessible" to
+    %% `dir`.
+    %%
+    %% A workaround is to tell the Win32 API to not parse a path and
+    %% just pass it raw to the underlying filesystem. To do this, the
+    %% path must be prepended with "\\?\". That's what we do here.
+    %%
+    %% However, the underlying filesystem may not support forward
+    %% slashes transparently, as the Win32 API does. Therefore, we
+    %% convert all forward slashes to backslashes.
+    %%
+    %% See the following page to learn more about this:
+    %% https://ss64.com/nt/syntax-filenames.html
+    RawDir = "\\\\?\\" ++ string:replace(Dir, "/", "\\", all),
+    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ RawDir ++ "\"")).
 
 parse_free_unix(Str) ->
     case string:tokens(Str, "\n") of
@@ -298,7 +319,7 @@ enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
             start_timer(set_disk_limits(State, Limit));
         Err ->
             rabbit_log:info("Free disk space monitor encountered an error "
-                            "(e.g. failed to parse output from OS tools): ~p, retries left: ~s~n",
+                            "(e.g. failed to parse output from OS tools): ~p, retries left: ~b~n",
                             [Err, Retries]),
             erlang:send_after(Interval, self(), try_enable),
             State#state{enabled = false}

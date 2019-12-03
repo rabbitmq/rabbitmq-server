@@ -133,7 +133,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl mnesia os_mon inets compiler public_key crypto ssl syntax_tools
+LOCAL_DEPS = sasl mnesia os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 BUILD_DEPS = rabbitmq_cli syslog
 DEPS = ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
@@ -288,6 +288,7 @@ web-manpages: $(WEB_MANPAGES)
 	    gsub(/<\/h1>/, "</h2>", line); \
 	    gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \
 	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \
+	    gsub(/&#[xX]201[cCdD];/, "\\&quot;", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"

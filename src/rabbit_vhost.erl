@@ -17,16 +17,21 @@
 -module(rabbit_vhost).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
-
-%%----------------------------------------------------------------------------
+-include("vhost.hrl").
 
 -export([recover/0, recover/1]).
--export([add/2, delete/2, exists/1, list/0, count/0, with/2, with_user_and_vhost/3, assert/1, update/2,
-         set_limits/2, limits_of/1, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2]).
+-export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
+         set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
+        list/0, count/0, list_names/0, all/0, parse_tags/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
+-export([put_vhost/5]).
+
+%%
+%% API
+%%
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -42,11 +47,11 @@ recover() ->
     %% So recovery will be run every time a vhost supervisor is restarted.
     ok = rabbit_vhost_sup_sup:start(),
 
-    [ok = rabbit_vhost_sup_sup:init_vhost(VHost) || VHost <- rabbit_vhost:list()],
+    [ok = rabbit_vhost_sup_sup:init_vhost(VHost) || VHost <- list_names()],
     ok.
 
 recover(VHost) ->
-    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    VHostDir = msg_store_dir_path(VHost),
     rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists~n",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
@@ -61,37 +66,64 @@ recover(VHost) ->
     ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
     ok.
 
-%%----------------------------------------------------------------------------
+-define(INFO_KEYS, vhost:info_keys()).
 
--define(INFO_KEYS, [name, tracing, cluster_state]).
+-spec parse_tags(binary() | string() | atom()) -> [atom()].
+parse_tags(undefined) ->
+    [];
+parse_tags("") ->
+    [];
+parse_tags(<<"">>) ->
+    [];
+parse_tags(Val) when is_binary(Val) ->
+    parse_tags(rabbit_data_coercion:to_list(Val));
+parse_tags(Val) when is_list(Val) ->
+    [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])].
 
--spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+-spec add(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
 add(VHost, ActingUser) ->
     case exists(VHost) of
         true  -> ok;
-        false -> do_add(VHost, ActingUser)
+        false -> do_add(VHost, <<"">>, [], ActingUser)
     end.
 
-do_add(VHostPath, ActingUser) ->
-    rabbit_log:info("Adding vhost '~s'~n", [VHostPath]),
-    R = rabbit_misc:execute_mnesia_transaction(
+-spec add(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+
+add(Name, Description, Tags, ActingUser) ->
+    case exists(Name) of
+        true  -> ok;
+        false -> do_add(Name, Description, Tags, ActingUser)
+    end.
+
+do_add(Name, Description, Tags, ActingUser) ->
+    case Description of
+        undefined ->
+            rabbit_log:info("Adding vhost '~s' without a description", [Name]);
+        Value ->
+            rabbit_log:info("Adding vhost '~s' (description: '~s')", [Name, Value])
+    end,
+    VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
-                  case mnesia:wread({rabbit_vhost, VHostPath}) of
-                      []  -> ok = mnesia:write(rabbit_vhost,
-                                               #vhost{virtual_host = VHostPath},
-                                               write);
+                  case mnesia:wread({rabbit_vhost, Name}) of
+                      [] ->
+                        Row = vhost:new(Name, [], #{description => Description, tags => Tags}),
+                        rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
+                        ok = mnesia:write(rabbit_vhost, Row, write),
+                        Row;
                       %% the vhost already exists
-                      [_] -> ok
+                      [Row] ->
+                        Row
                   end
           end,
-          fun (ok, true) ->
-                  ok;
-              (ok, false) ->
-                  [_ = rabbit_exchange:declare(
-                     rabbit_misc:r(VHostPath, exchange, Name),
-                     Type, true, false, Internal, [], ActingUser) ||
-                      {Name, Type, Internal} <-
+          fun (VHost1, true) ->
+                  VHost1;
+              (VHost1, false) ->
+                  [begin
+                    Resource = rabbit_misc:r(Name, exchange, ExchangeName),
+                    rabbit_log:debug("Will declare an exchange ~p", [Resource]),
+                    _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
+                  end || {ExchangeName, Type, Internal} <-
                           [{<<"">>,                   direct,  false},
                            {<<"amq.direct">>,         direct,  false},
                            {<<"amq.topic">>,          topic,   false},
@@ -101,52 +133,96 @@ do_add(VHostPath, ActingUser) ->
                            {<<"amq.headers">>,        headers, false},
                            {<<"amq.fanout">>,         fanout,  false},
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
-                  ok
+                  VHost1
           end),
-    case rabbit_vhost_sup_sup:start_on_all_nodes(VHostPath) of
+    case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
-            rabbit_event:notify(vhost_created, info(VHostPath)
-                                ++ [{user_who_performed_action, ActingUser}]),
-            R;
+            rabbit_event:notify(vhost_created, info(VHost)
+                                ++ [{user_who_performed_action, ActingUser},
+                                    {description, Description},
+                                    {tags, Tags}]),
+            ok;
         {error, Reason} ->
             Msg = rabbit_misc:format("failed to set up vhost '~s': ~p",
-                                     [VHostPath, Reason]),
+                                     [Name, Reason]),
             {error, Msg}
     end.
 
--spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+-spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
-delete(VHostPath, ActingUser) ->
+delete(VHost, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
     %% the TX below. Queue deletion involves sending messages to the queue
     %% process, which in turn results in further mnesia actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
-    rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
+    rabbit_log:info("Deleting vhost '~s'~n", [VHost]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          Name = amqqueue:get_name(Q),
          assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
-     end || Q <- rabbit_amqqueue:list(VHostPath)],
+     end || Q <- rabbit_amqqueue:list(VHost)],
     [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
-        #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
+        #exchange{name = Name} <- rabbit_exchange:list(VHost)],
     Funs = rabbit_misc:execute_mnesia_transaction(
-          with(VHostPath, fun () -> internal_delete(VHostPath, ActingUser) end)),
-    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath},
+          with(VHost, fun () -> internal_delete(VHost, ActingUser) end)),
+    ok = rabbit_event:notify(vhost_deleted, [{name, VHost},
                                              {user_who_performed_action, ActingUser}]),
     [case Fun() of
          ok                                  -> ok;
-         {error, {no_such_vhost, VHostPath}} -> ok
+         {error, {no_such_vhost, VHost}} -> ok
      end || Fun <- Funs],
     %% After vhost was deleted from mnesia DB, we try to stop vhost supervisors
     %% on all the nodes.
-    rabbit_vhost_sup_sup:delete_on_all_nodes(VHostPath),
+    rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     ok.
+
+put_vhost(Name, Description, Tags0, Trace, Username) ->
+    Tags = case Tags0 of
+      undefined   -> <<"">>;
+      null        -> <<"">>;
+      "undefined" -> <<"">>;
+      "null"      -> <<"">>;
+      Other       -> Other
+    end,
+    Result = case exists(Name) of
+        true  -> ok;
+        false -> add(Name, Description, parse_tags(Tags), Username),
+                 %% wait for up to 45 seconds for the vhost to initialise
+                 %% on all nodes
+                 case await_running_on_all_nodes(Name, 45000) of
+                     ok               ->
+                         maybe_grant_full_permissions(Name, Username);
+                     {error, timeout} ->
+                         {error, timeout}
+                 end
+    end,
+    case Trace of
+        true      -> rabbit_trace:start(Name);
+        false     -> rabbit_trace:stop(Name);
+        undefined -> ok
+    end,
+    Result.
+
+%% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
+%% which does not actually exist
+maybe_grant_full_permissions(_Name, ?INTERNAL_USER) ->
+    ok;
+maybe_grant_full_permissions(Name, Username) ->
+    U = rabbit_auth_backend_internal:lookup_user(Username),
+    maybe_grant_full_permissions(U, Name, Username).
+
+maybe_grant_full_permissions({ok, _}, Name, Username) ->
+    rabbit_auth_backend_internal:set_permissions(
+      Username, Name, <<".*">>, <<".*">>, <<".*">>, Username);
+maybe_grant_full_permissions(_, _Name, _Username) ->
+    ok.
+
 
 %% 50 ms
 -define(AWAIT_SAMPLE_INTERVAL, 50).
 
--spec await_running_on_all_nodes(rabbit_types:vhost(), integer()) -> ok | {error, timeout}.
+-spec await_running_on_all_nodes(vhost:name(), integer()) -> ok | {error, timeout}.
 await_running_on_all_nodes(VHost, Timeout) ->
     Attempts = round(Timeout / ?AWAIT_SAMPLE_INTERVAL),
     await_running_on_all_nodes0(VHost, Attempts).
@@ -161,13 +237,13 @@ await_running_on_all_nodes0(VHost, Attempts) ->
             await_running_on_all_nodes0(VHost, Attempts - 1)
     end.
 
--spec is_running_on_all_nodes(rabbit_types:vhost()) -> boolean().
+-spec is_running_on_all_nodes(vhost:name()) -> boolean().
 is_running_on_all_nodes(VHost) ->
     States = vhost_cluster_state(VHost),
     lists:all(fun ({_Node, State}) -> State =:= running end,
               States).
 
--spec vhost_cluster_state(rabbit_types:vhost()) -> [{atom(), atom()}].
+-spec vhost_cluster_state(vhost:name()) -> [{atom(), atom()}].
 vhost_cluster_state(VHost) ->
     Nodes = rabbit_nodes:all_running(),
     lists:map(fun(Node) ->
@@ -182,9 +258,9 @@ vhost_cluster_state(VHost) ->
     end,
     Nodes).
 
-vhost_down(VHostPath) ->
+vhost_down(VHost) ->
     ok = rabbit_event:notify(vhost_down,
-                             [{name, VHostPath},
+                             [{name, VHost},
                               {node, node()},
                               {user_who_performed_action, ?INTERNAL_USER}]).
 
@@ -213,92 +289,86 @@ assert_benign({error, {absent, Q, _}}, ActingUser) ->
     QName = amqqueue:get_name(Q),
     rabbit_amqqueue:internal_delete(QName, ActingUser).
 
-internal_delete(VHostPath, ActingUser) ->
+internal_delete(VHost, ActingUser) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(
-            proplists:get_value(user, Info), VHostPath, ActingUser)
-     || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)],
-    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHostPath),
+            proplists:get_value(user, Info), VHost, ActingUser)
+     || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHost)],
+    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHost),
     [ok = rabbit_auth_backend_internal:clear_topic_permissions(
-        proplists:get_value(user, TopicPermission), VHostPath, ActingUser)
+        proplists:get_value(user, TopicPermission), VHost, ActingUser)
      || TopicPermission <- TopicPermissions],
-    Fs1 = [rabbit_runtime_parameters:clear(VHostPath,
+    Fs1 = [rabbit_runtime_parameters:clear(VHost,
                                            proplists:get_value(component, Info),
                                            proplists:get_value(name, Info),
                                            ActingUser)
-     || Info <- rabbit_runtime_parameters:list(VHostPath)],
-    Fs2 = [rabbit_policy:delete(VHostPath, proplists:get_value(name, Info), ActingUser)
-           || Info <- rabbit_policy:list(VHostPath)],
-    ok = mnesia:delete({rabbit_vhost, VHostPath}),
+     || Info <- rabbit_runtime_parameters:list(VHost)],
+    Fs2 = [rabbit_policy:delete(VHost, proplists:get_value(name, Info), ActingUser)
+           || Info <- rabbit_policy:list(VHost)],
+    ok = mnesia:delete({rabbit_vhost, VHost}),
     Fs1 ++ Fs2.
 
--spec exists(rabbit_types:vhost()) -> boolean().
+-spec exists(vhost:name()) -> boolean().
 
-exists(VHostPath) ->
-    mnesia:dirty_read({rabbit_vhost, VHostPath}) /= [].
+exists(VHost) ->
+    mnesia:dirty_read({rabbit_vhost, VHost}) /= [].
 
--spec list() -> [rabbit_types:vhost()].
+-spec list_names() -> [vhost:name()].
+list_names() -> mnesia:dirty_all_keys(rabbit_vhost).
 
-list() ->
-    mnesia:dirty_all_keys(rabbit_vhost).
+%% Exists for backwards compatibility, prefer list_names/0.
+-spec list() -> [vhost:name()].
+list() -> list_names().
+
+-spec all() -> [vhost:vhost()].
+all() -> mnesia:dirty_match_object(rabbit_vhost, vhost:pattern_match_all()).
 
 -spec count() -> non_neg_integer().
 count() ->
     length(list()).
 
--spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+-spec with(vhost:name(), rabbit_misc:thunk(A)) -> A.
 
-with(VHostPath, Thunk) ->
+with(VHost, Thunk) ->
     fun () ->
-            case mnesia:read({rabbit_vhost, VHostPath}) of
+            case mnesia:read({rabbit_vhost, VHost}) of
                 [] ->
-                    mnesia:abort({no_such_vhost, VHostPath});
+                    mnesia:abort({no_such_vhost, VHost});
                 [_V] ->
                     Thunk()
             end
     end.
 
 -spec with_user_and_vhost
-        (rabbit_types:username(), rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+        (rabbit_types:username(), vhost:name(), rabbit_misc:thunk(A)) -> A.
 
-with_user_and_vhost(Username, VHostPath, Thunk) ->
-    rabbit_misc:with_user(Username, with(VHostPath, Thunk)).
+with_user_and_vhost(Username, VHost, Thunk) ->
+    rabbit_misc:with_user(Username, with(VHost, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
 
--spec assert(rabbit_types:vhost()) -> 'ok'.
+-spec assert(vhost:name()) -> 'ok'.
 
-assert(VHostPath) -> case exists(VHostPath) of
+assert(VHost) -> case exists(VHost) of
                          true  -> ok;
-                         false -> throw({error, {no_such_vhost, VHostPath}})
+                         false -> throw({error, {no_such_vhost, VHost}})
                      end.
 
--spec update(rabbit_types:vhost(), fun((#vhost{}) -> #vhost{})) -> #vhost{}.
+-spec update(vhost:name(), fun((vhost:vhost()) -> vhost:vhost())) -> vhost:vhost().
 
-update(VHostPath, Fun) ->
-    case mnesia:read({rabbit_vhost, VHostPath}) of
+update(VHost, Fun) ->
+    case mnesia:read({rabbit_vhost, VHost}) of
         [] ->
-            mnesia:abort({no_such_vhost, VHostPath});
+            mnesia:abort({no_such_vhost, VHost});
         [V] ->
             V1 = Fun(V),
             ok = mnesia:write(rabbit_vhost, V1, write),
             V1
     end.
 
-limits_of(VHostPath) when is_binary(VHostPath) ->
-    assert(VHostPath),
-    case mnesia:dirty_read({rabbit_vhost, VHostPath}) of
-        [] ->
-            mnesia:abort({no_such_vhost, VHostPath});
-        [#vhost{limits = Limits}] ->
-            Limits
-    end;
-limits_of(#vhost{virtual_host = Name}) ->
-    limits_of(Name).
-
-set_limits(VHost = #vhost{}, undefined) ->
-    VHost#vhost{limits = undefined};
-set_limits(VHost = #vhost{}, Limits) ->
-    VHost#vhost{limits = Limits}.
+set_limits(VHost, undefined) ->
+    vhost:set_limits(VHost, undefined);
+set_limits(VHost, Limits) ->
+    vhost:set_limits(VHost, Limits).
 
 
 dir(Vhost) ->
@@ -307,8 +377,7 @@ dir(Vhost) ->
 
 msg_store_dir_path(VHost) ->
     EncodedName = dir(VHost),
-    rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(),
-                                                EncodedName])).
+    rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), EncodedName])).
 
 msg_store_dir_wildcard() ->
     rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), "*"])).
@@ -317,36 +386,46 @@ msg_store_dir_base() ->
     Dir = rabbit_mnesia:dir(),
     filename:join([Dir, "msg_stores", "vhosts"]).
 
+-spec trim_tag(list() | binary() | atom()) -> atom().
+trim_tag(Val) ->
+    rabbit_data_coercion:to_atom(string:trim(rabbit_data_coercion:to_list(Val))).
+
 %%----------------------------------------------------------------------------
 
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
-i(name,    VHost) -> VHost;
-i(tracing, VHost) -> rabbit_trace:enabled(VHost);
-i(cluster_state, VHost) -> vhost_cluster_state(VHost);
-i(Item, _)        -> throw({bad_argument, Item}).
+i(name,    VHost) -> vhost:get_name(VHost);
+i(tracing, VHost) -> rabbit_trace:enabled(vhost:get_name(VHost));
+i(cluster_state, VHost) -> vhost_cluster_state(vhost:get_name(VHost));
+i(description, VHost) -> vhost:get_description(VHost);
+i(tags, VHost) -> vhost:get_tags(VHost);
+i(metadata, VHost) -> vhost:get_metadata(VHost);
+i(Item, VHost)     ->
+  rabbit_log:error("Don't know how to compute a virtual host info item '~s' for virtual host '~p'", [Item, VHost]),
+  throw({bad_argument, Item}).
 
--spec info(rabbit_types:vhost()) -> rabbit_types:infos().
+-spec info(vhost:vhost() | vhost:name()) -> rabbit_types:infos().
 
-info(VHost)        -> infos(?INFO_KEYS, VHost).
+info(VHost) when ?is_vhost(VHost) ->
+    infos(?INFO_KEYS, VHost);
+info(Key) ->
+    case mnesia:dirty_read({rabbit_vhost, Key}) of
+        [] -> [];
+        [VHost] -> infos(?INFO_KEYS, VHost)
+    end.
 
--spec info(rabbit_types:vhost(), rabbit_types:info_keys())
-                -> rabbit_types:infos().
-
+-spec info(vhost:vhost(), rabbit_types:info_keys()) -> rabbit_types:infos().
 info(VHost, Items) -> infos(Items, VHost).
 
 -spec info_all() -> [rabbit_types:infos()].
-
-info_all()      -> info_all(?INFO_KEYS).
+info_all()       -> info_all(?INFO_KEYS).
 
 -spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
-
-info_all(Items) -> [info(VHost, Items) || VHost <- list()].
+info_all(Items) -> [info(VHost, Items) || VHost <- all()].
 
 info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 
--spec info_all(rabbit_types:info_keys(), reference(), pid()) ->
-                         'ok'.
+-spec info_all(rabbit_types:info_keys(), reference(), pid()) -> 'ok'.
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
-       AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).
+       AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, all()).

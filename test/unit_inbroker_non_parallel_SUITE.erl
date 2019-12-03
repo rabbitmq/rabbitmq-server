@@ -47,7 +47,12 @@ groups() ->
           exchange_count,
           queue_count,
           connection_count,
-          connection_lookup
+          connection_lookup,
+          file_handle_cache_reserve,
+          file_handle_cache_reserve_release,
+          file_handle_cache_reserve_above_limit,
+          file_handle_cache_reserve_monitor,
+          file_handle_cache_reserve_open_file_above_limit
         ]}
     ].
 
@@ -196,6 +201,147 @@ file_handle_cache1(_Config) ->
     ok = file_handle_cache:set_limit(Limit),
     passed.
 
+file_handle_cache_reserve(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve1, [Config]).
+
+file_handle_cache_reserve1(_Config) ->
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5),
+    %% Reserves are always accepted, even if above the limit
+    %% These are for special processes such as quorum queues
+    ok = file_handle_cache:set_reservation(7),
+
+    Self = self(),
+    spawn(fun () -> ok = file_handle_cache:obtain(),
+                    Self ! obtained
+          end),
+
+    Props = file_handle_cache:info([files_reserved, sockets_used]),
+    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
+    ?assertEqual(0, proplists:get_value(sockets_used, Props)),
+
+    %% The obtain should still be blocked, as there are no file handles
+    %% available
+    receive
+        obtained ->
+            throw(error_file_obtained)
+    after 1000 ->
+            %% Let's release 5 file handles, that should leave
+            %% enough free for the `obtain` to go through
+            file_handle_cache:set_reservation(2),
+            Props0 = file_handle_cache:info([files_reserved, sockets_used]),
+            ?assertEqual(2, proplists:get_value(files_reserved, Props0)),
+            ?assertEqual(1, proplists:get_value(sockets_used, Props0)),
+            receive
+                obtained ->
+                    ok = file_handle_cache:set_limit(Limit),
+                    passed
+            after 5000 ->
+                    throw(error_file_not_released)
+            end
+    end.
+
+file_handle_cache_reserve_release(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_release1, [Config]).
+
+file_handle_cache_reserve_release1(_Config) ->
+    ok = file_handle_cache:set_reservation(7),
+    ?assertEqual([{files_reserved, 7}], file_handle_cache:info([files_reserved])),
+    ok = file_handle_cache:set_reservation(3),
+    ?assertEqual([{files_reserved, 3}], file_handle_cache:info([files_reserved])),
+    ok = file_handle_cache:release_reservation(),
+    ?assertEqual([{files_reserved, 0}], file_handle_cache:info([files_reserved])),
+    passed.
+
+file_handle_cache_reserve_above_limit(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_above_limit1, [Config]).
+
+file_handle_cache_reserve_above_limit1(_Config) ->
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5),
+    %% Reserves are always accepted, even if above the limit
+    %% These are for special processes such as quorum queues
+    ok = file_handle_cache:obtain(5),
+    ?assertEqual([{file_descriptor_limit, []}],  rabbit_alarm:get_alarms()),
+
+    ok = file_handle_cache:set_reservation(7),
+
+    Props = file_handle_cache:info([files_reserved, sockets_used]),
+    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
+    ?assertEqual(5, proplists:get_value(sockets_used, Props)),
+
+    ok = file_handle_cache:set_limit(Limit),
+    passed.
+
+file_handle_cache_reserve_open_file_above_limit(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_open_file_above_limit1, [Config]).
+
+file_handle_cache_reserve_open_file_above_limit1(_Config) ->
+    Limit = file_handle_cache:get_limit(),
+    ok = file_handle_cache:set_limit(5),
+    %% Reserves are always accepted, even if above the limit
+    %% These are for special processes such as quorum queues
+    ok = file_handle_cache:set_reservation(7),
+
+    Self = self(),
+    TmpDir = filename:join(rabbit_mnesia:dir(), "tmp"),
+    spawn(fun () -> {ok, _} = file_handle_cache:open(
+                                filename:join(TmpDir, "file_above_limit"),
+                                [write], []),
+                    Self ! opened
+          end),
+
+    Props = file_handle_cache:info([files_reserved]),
+    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
+
+    %% The open should still be blocked, as there are no file handles
+    %% available
+    receive
+        opened ->
+            throw(error_file_opened)
+    after 1000 ->
+            %% Let's release 5 file handles, that should leave
+            %% enough free for the `open` to go through
+            file_handle_cache:set_reservation(2),
+            Props0 = file_handle_cache:info([files_reserved, total_used]),
+            ?assertEqual(2, proplists:get_value(files_reserved, Props0)),
+            receive
+                opened ->
+                    ok = file_handle_cache:set_limit(Limit),
+                    passed
+            after 5000 ->
+                    throw(error_file_not_released)
+            end
+    end.
+
+file_handle_cache_reserve_monitor(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, file_handle_cache_reserve_monitor1, [Config]).
+
+file_handle_cache_reserve_monitor1(_Config) ->
+    %% Check that if the process that does the reserve dies, the file handlers are
+    %% released by the cache
+    Self = self(),
+    Pid = spawn(fun () ->
+                        ok = file_handle_cache:set_reservation(2),
+                        Self ! done,
+                        receive
+                            stop -> ok
+                        end
+                end),
+    receive
+        done -> ok
+    end,
+    ?assertEqual([{files_reserved, 2}], file_handle_cache:info([files_reserved])),
+    Pid ! stop,
+    timer:sleep(500),
+    ?assertEqual([{files_reserved, 0}], file_handle_cache:info([files_reserved])),
+    passed.
+
 %% -------------------------------------------------------------------
 %% Log management.
 %% -------------------------------------------------------------------
@@ -244,6 +390,7 @@ log_management1(_Config) ->
 
     %% logging directed to tty (first, remove handlers)
     ok = rabbit:stop(),
+    ok = make_files_writable([LogFile ++ Suffix]),
     ok = clean_logs([LogFile], Suffix),
     ok = application:set_env(rabbit, lager_default_file, tty),
     application:unset_env(rabbit, log),
@@ -325,8 +472,12 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
     %% write permissions
     ok = rabbit:stop(),
 
+    NonWritableDir = case os:type() of
+			     {win32, _} -> "C:/Windows";
+			     _          -> "/var/empty"
+		     end,
     Run1 = fun() ->
-      NoPermission1 = "/var/empty/test.log",
+      NoPermission1 = filename:join(NonWritableDir, "test.log"),
       delete_file(NoPermission1),
       delete_file(filename:dirname(NoPermission1)),
       ok = rabbit:stop(),
@@ -346,7 +497,7 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
-    NoPermission2 = "/var/empty/non-existent/test.log",
+    NoPermission2 = filename:join(NonWritableDir, "non-existent/test.log"),
 
     Run2 = fun() ->
       delete_file(NoPermission2),
@@ -443,6 +594,11 @@ delete_file(File) ->
         {error, enoent} -> ok;
         Error           -> Error
     end.
+
+make_files_writable(Files) ->
+    [ok = file:write_file_info(File, #file_info{mode=8#644}) ||
+        File <- Files],
+    ok.
 
 make_files_non_writable(Files) ->
     [ok = file:write_file_info(File, #file_info{mode=8#444}) ||
@@ -594,16 +750,20 @@ head_message_timestamp1(_Config) ->
     %% Set up event receiver for queue
     dummy_event_receiver:start(self(), [node()], [queue_stats]),
 
-    %% Check timestamp is empty when queue is empty
-    Event1 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    '' = proplists:get_value(head_message_timestamp, Event1),
+    %% the head timestamp field is empty when the queue is empty
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == '')
+                                        end),
 
     rabbit_channel:do(Ch, #'tx.select'{}),
     receive #'tx.select_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_tx_select_ok)
     end,
 
-    %% Publish two messages and check timestamp is that of first message
+    %% Publish two messages and check that the timestamp is that of the first message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
                                            routing_key = QName},
                       rabbit_basic:build_content(#'P_basic'{timestamp = 1}, <<"">>)),
@@ -615,20 +775,32 @@ head_message_timestamp1(_Config) ->
     receive #'tx.commit_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_tx_commit_ok)
     end,
-    Event2 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    ?assertEqual(1, proplists:get_value(head_message_timestamp, Event2)),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == 1)
+                                        end),
 
-    %% Get first message and check timestamp is that of second message
+    %% Consume a message and check that the timestamp is now that of the second message
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
-    Event3 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    ?assertEqual(2, proplists:get_value(head_message_timestamp, Event3)),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == 2)
+                                        end),
 
-    %% Get second message and check timestamp is empty again
+    %% Consume one more message and check again
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
-    Event4 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    '' = proplists:get_value(head_message_timestamp, Event4),
+    test_queue_statistics_receive_event(QPid,
+                                        fun (E) ->
+                                                (proplists:get_value(name, E) == QRes)
+                                                    and
+                                                      (proplists:get_value(head_message_timestamp, E) == '')
+                                        end),
 
-    %% Teardown
+    %% Tear down
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
     rabbit_channel:shutdown(Ch),
     dummy_event_receiver:stop(),
@@ -676,15 +848,6 @@ disk_monitor_enable(Config) ->
       ?MODULE, disk_monitor_enable1, [Config]).
 
 disk_monitor_enable1(_Config) ->
-    case os:type() of
-        {unix, _} ->
-            disk_monitor_enable1();
-        _ ->
-            %% skip windows testing
-            skipped
-    end.
-
-disk_monitor_enable1() ->
     ok = meck:new(rabbit_misc, [passthrough]),
     ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> "\n" end),
     application:set_env(rabbit, disk_monitor_failure_retries, 20000),
@@ -692,7 +855,19 @@ disk_monitor_enable1() ->
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
     ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
     undefined = rabbit_disk_monitor:get_disk_free(),
-    Cmd = "Filesystem 1024-blocks      Used Available Capacity  iused     ifree %iused  Mounted on\n/dev/disk1   975798272 234783364 740758908    25% 58759839 185189727   24%   /\n",
+    Cmd = case os:type() of
+              {win32, _} -> " Le volume dans le lecteur C n’a pas de nom.\n"
+                            " Le numéro de série du volume est 707D-5BDC\n"
+                            "\n"
+                            " Répertoire de C:\Users\n"
+                            "\n"
+                            "10/12/2015  11:01    <DIR>          .\n"
+                            "10/12/2015  11:01    <DIR>          ..\n"
+                            "               0 fichier(s)                0 octets\n"
+                            "               2 Rép(s)  758537121792 octets libres\n";
+              _          -> "Filesystem 1024-blocks      Used Available Capacity  iused     ifree %iused  Mounted on\n"
+                            "/dev/disk1   975798272 234783364 740758908    25% 58759839 185189727   24%   /\n"
+          end,
     ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> Cmd end),
     timer:sleep(1000),
     Bytes = 740758908 * 1024,

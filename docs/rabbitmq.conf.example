@@ -442,13 +442,27 @@
 # collect_statistics_interval = 5000
 
 ##
+## Ra Settings
+## =====================
+##
+## NB: changing these on a node with existing data directory
+##     can lead to DATA LOSS.
+##
+# raft.segment_max_entries = 65536
+# raft.wal_max_size_bytes = 1048576
+# raft.wal_max_batch_size = 32768
+# raft.snapshot_chunk_size = 1000000
+
+##
 ## Misc/Advanced Options
 ## =====================
 ##
 ## NB: Change these only if you understand what you are doing!
 ##
 
-## Explicitly enable/disable hipe compilation.
+## Explicitly enable/disable hipe compilation. This option is deprecated
+## because HiPE supported has been
+## effectively discontinued in Erlang 22.
 ##
 # hipe_compile = false
 
@@ -955,8 +969,8 @@
 ##
 ## Related doc guide: https://rabbitmq.com/ldap.html#authorisation.
 
-## Following configuration should be defined in additional.config file
-## DO NOT UNCOMMENT THIS LINES!
+## Following configuration should be defined in advanced.config file
+## DO NOT UNCOMMENT THESE LINES!
 
 ## Set the query to use when determining vhost access
 ##

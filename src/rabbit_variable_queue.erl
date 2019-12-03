@@ -2841,7 +2841,7 @@ move_messages_to_vhost_store(Queues) ->
 
     OldStore = run_old_persistent_store(RecoveryRefs, StartFunState),
 
-    VHosts = rabbit_vhost:list(),
+    VHosts = rabbit_vhost:list_names(),
 
     %% New store should not be recovered.
     NewMsgStore = start_new_store(VHosts),

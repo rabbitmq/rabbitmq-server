@@ -1,23 +1,29 @@
-This is rabbitmq-server, a message broker implementing AMQP, STOMP and MQTT.
+This is rabbitmq-server, a message broker implementing AMQP 0-9-1, AMQP 1.0,
+STOMP and MQTT.
 
 Most of the documentation for RabbitMQ is provided on the RabbitMQ web
-site. You can see documentation for the current version at:
+site. You can see documentation for the current version at
 
 https://www.rabbitmq.com/documentation.html
 
-and for previous versions at:
+and for previous versions at
 
 https://www.rabbitmq.com/previous.html
 
 Man pages are installed with this package. Of particular interest are
-rabbitmqctl(1), to interact with a running RabbitMQ server, and
-rabbitmq-plugins(1), to enable and disable plugins. These should be
-run as the superuser.
+rabbitmqctl(8), rabbitmq-diagnostics(8), rabbitmq-queues(8).
+They interact with a running node. rabbitmq-plugins(8) is  used to manage plugins.
+All of these should be run as the superuser. Learn more about
+CLI tools at
+
+https://www.rabbitmq.com/cli.html
 
 An example configuration file is provided in the same directory as
-this README. Copy it to /etc/rabbitmq/rabbitmq.config to use it. The
+this README. Copy it to /etc/rabbitmq/rabbitmq.conf to use it. The
 RabbitMQ server must be restarted after changing the configuration
-file.
+file.  Learn more about configuration at
+
+https://www.rabbitmq.com/configure.html
 
 An example policy file for HA queues is provided in the same directory
 as this README. Copy and chmod +x it to

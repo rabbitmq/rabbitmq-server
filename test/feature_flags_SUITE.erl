@@ -60,7 +60,7 @@
      }}).
 
 suite() ->
-    [{timetrap, 10 * 60000}].
+    [{timetrap, {minutes, 15}}].
 
 all() ->
     [
@@ -529,7 +529,7 @@ enable_feature_flag_with_a_network_partition(Config) ->
 
     %% Repair the network and try again to enable the feature flag.
     unblock(NodePairs),
-    timer:sleep(1000),
+    timer:sleep(10000),
     [?assertEqual(ok, rabbit_ct_broker_helpers:stop_node(Config, N))
      || N <- [A, C, D]],
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
@@ -613,68 +613,86 @@ clustering_ok_with_ff_disabled_everywhere(Config) ->
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([false, false],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, ff_from_testsuite)),
+            ?assertEqual([false, false],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
 
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([false, false],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, ff_from_testsuite)),
+            ?assertEqual([false, false],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
     ok.
 
 clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
-    %% All feature flags are enabled on node 1, but not on node 2.
+    %% The test feature flag is enabled on node 1, but not on node 2.
     %% Clustering the two nodes should be accepted because they are
-    %% compatible. Also, feature flags will be enabled on node 2 as a
+    %% compatible. Also, the feature flag will be enabled on node 2 as a
     %% consequence.
-    enable_all_feature_flags_on(Config, 0),
+    enable_feature_flag_on(Config, 0, ff_from_testsuite),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, false],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, ff_from_testsuite)),
+            ?assertEqual([true, false],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
 
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
     ok.
 
 clustering_ok_with_ff_enabled_everywhere(Config) ->
-    %% All feature flags are enabled. Clustering the two nodes should be
-    %% accepted because they are compatible.
-    enable_all_feature_flags_everywhere(Config),
+    %% The test feature flags is enabled. Clustering the two nodes
+    %% should be accepted because they are compatible.
+    enable_feature_flag_everywhere(Config, ff_from_testsuite),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
 
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, true],
-                              is_feature_flag_enabled(Config, ff_from_testsuite));
-        false -> ok
+        true ->
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, ff_from_testsuite));
+        false ->
+            ok
     end,
     ok.
 
@@ -787,7 +805,7 @@ clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes(Config) ->
     %% should be considered compatible and the clustering should be
     %% allowed.
     rabbit_ct_broker_helpers:enable_plugin(Config, 0, "my_plugin"),
-    enable_all_feature_flags_on(Config, 0),
+    enable_feature_flag_on(Config, 0, plugin_ff),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -879,37 +897,48 @@ activating_plugin_with_new_ff_enabled(Config) ->
 
 build_my_plugin(Config) ->
     PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
-    PluginsDir1 = filename:join(?config(current_srcdir, Config), "plugins"),
-    PluginsDir2 = filename:join(PluginSrcDir, "plugins"),
-    PluginsDir = PluginsDir1 ++ ":" ++ PluginsDir2,
+    PluginsDir = filename:join(PluginSrcDir, "plugins"),
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_plugins_dir, PluginsDir}]),
-    case filelib:wildcard("plugins/my_plugin-*", PluginSrcDir) of
+    {MyPlugin, OtherPlugins} = list_my_plugin_plugins(PluginSrcDir),
+    case MyPlugin of
         [] ->
             DepsDir = ?config(erlang_mk_depsdir, Config),
             Args = ["test-dist",
                     {"DEPS_DIR=~s", [DepsDir]}],
             case rabbit_ct_helpers:make(Config1, PluginSrcDir, Args) of
                 {ok, _} ->
+                    {_, OtherPlugins1} = list_my_plugin_plugins(PluginSrcDir),
+                    remove_other_plugins(PluginSrcDir, OtherPlugins1),
                     Config1;
                 {error, _} ->
                     {skip, "Failed to compile the `my_plugin` test plugin"}
             end;
         _ ->
+            remove_other_plugins(PluginSrcDir, OtherPlugins),
             Config1
     end.
+
+list_my_plugin_plugins(PluginSrcDir) ->
+    Files = filelib:wildcard("plugins/*", PluginSrcDir),
+    lists:partition(
+      fun(Path) ->
+              Filename = filename:basename(Path),
+              re:run(Filename, "^my_plugin-", [{capture, none}]) =:= match
+      end, Files).
+
+remove_other_plugins(PluginSrcDir, OtherPlugins) ->
+    [ok = file:delete(
+            filename:join(PluginSrcDir, Filename))
+     || Filename <- OtherPlugins].
 
 enable_feature_flag_on(Config, Node, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(
       Config, Node, rabbit_feature_flags, enable, [FeatureName]).
 
-enable_all_feature_flags_on(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, Node, rabbit_feature_flags, enable_all, []).
-
-enable_all_feature_flags_everywhere(Config) ->
+enable_feature_flag_everywhere(Config, FeatureName) ->
     rabbit_ct_broker_helpers:rpc_all(
-      Config, rabbit_feature_flags, enable_all, []).
+      Config, rabbit_feature_flags, enable, [FeatureName]).
 
 is_feature_flag_supported(Config, FeatureName) ->
     rabbit_ct_broker_helpers:rpc_all(

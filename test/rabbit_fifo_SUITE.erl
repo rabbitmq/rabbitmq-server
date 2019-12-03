@@ -10,7 +10,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ra/include/ra.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("src/rabbit_fifo.hrl").
 
@@ -307,10 +306,10 @@ return_checked_out_test(_) ->
     Cid = {<<"cid">>, self()},
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, [_Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
               {aux, active} | _ ]} = check_auto(Cid, 2, State0),
     % returning immediately checks out the same message again
-    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, ra_event},
+    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, _},
              {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     ok.
@@ -324,10 +323,10 @@ return_checked_out_limit_test(_) ->
                   delivery_limit => 1}),
     {State0, [_, _]} = enq(1, 1, first, Init),
     {State1, [_Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
               {aux, active} | _ ]} = check_auto(Cid, 2, State0),
     % returning immediately checks out the same message again
-    {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, ra_event},
+    {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _},
                   {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     {#rabbit_fifo{ra_indexes = RaIdxs}, ok, []} =
@@ -445,12 +444,12 @@ discarded_message_without_dead_letter_handler_is_removed_test(_) ->
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {#{}, first}}]}, _},
+                 {delivery, _, [{0, {_, first}}]}, _},
                 Effects1),
     {_State2, _, Effects2} = apply(meta(1),
                                    rabbit_fifo:make_discard(Cid, [0]), State1),
     ?assertNoEffect({send_msg, _,
-                     {delivery, _, [{0, {#{}, first}}]}, _},
+                     {delivery, _, [{0, {_, first}}]}, _},
                     Effects2),
     ok.
 
@@ -463,7 +462,7 @@ discarded_message_with_dead_letter_handler_emits_mod_call_effect_test(_) ->
     {State0, [_, _]} = enq(1, 1, first, State00),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {#{}, first}}]}, _},
+                 {delivery, _, [{0, {_, first}}]}, _},
                 Effects1),
     {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
     % assert mod call effect with appended reason and message
@@ -503,7 +502,7 @@ delivery_query_returns_deliveries_test(_) ->
     Entries = lists:zip(Indexes, Commands),
     {State, _Effects} = run_log(test_init(help), Entries),
     % 3 deliveries are returned
-    [{0, {#{}, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
+    [{0, {_, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
     [_, _, _] = rabbit_fifo:get_checked_out(Cid, 1, 3, State),
     ok.
 
@@ -524,11 +523,27 @@ duplicate_delivery_test(_) ->
     ?assertEqual(1, maps:size(Messages)),
     ok.
 
-state_enter_test(_) ->
+state_enter_file_handle_leader_reservation_test(_) ->
     S0 = init(#{name => the_name,
                 queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                 become_leader_handler => {m, f, [a]}}),
-    [{mod_call, m, f, [a, the_name]}] = rabbit_fifo:state_enter(leader, S0),
+
+    Resource = {resource, <<"/">>, queue, <<"test">>},
+    Effects = rabbit_fifo:state_enter(leader, S0),
+    ?assertEqual([
+        {mod_call, m, f, [a, the_name]},
+        {mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}
+      ], Effects),
+    ok.
+
+state_enter_file_handle_other_reservation_test(_) ->
+    S0 = init(#{name => the_name,
+                queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+    Effects = rabbit_fifo:state_enter(other, S0),
+    ?assertEqual([
+        {mod_call, rabbit_quorum_queue, file_handle_other_reservation, []}
+      ],
+      Effects),
     ok.
 
 state_enter_monitors_and_notifications_test(_) ->
@@ -623,6 +638,21 @@ down_noconnection_returns_checked_out_test(_) ->
                         maps:get(Cid, S#rabbit_fifo.consumers)),
     %% validate returns are in order
     ?assertEqual(lists:sort(Returns), Returns),
+    ok.
+
+single_active_consumer_basic_get_test(_) ->
+    Cid = {?FUNCTION_NAME, self()},
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    ?assertEqual(single_active, State0#rabbit_fifo.cfg#cfg.consumer_strategy),
+    ?assertEqual(0, map_size(State0#rabbit_fifo.consumers)),
+    {State1, _} = enq(1, 1, first, State0),
+    {_State, {error, unsupported}} =
+        apply(meta(2), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State1),
     ok.
 
 single_active_consumer_test(_) ->
@@ -949,8 +979,9 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(_) ->
         [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
 
     Effects = rabbit_fifo:state_enter(leader, State1),
-    % 2 effects for each consumer process (channel process), 1 effect for the node
-    ?assertEqual(2 * 3 + 1, length(Effects)).
+    %% 2 effects for each consumer process (channel process), 1 effect for the node,
+    %% 1 effect for file handle reservation
+    ?assertEqual(2 * 3 + 1 + 1, length(Effects)).
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
     Resource = rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
@@ -979,8 +1010,9 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
                           {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
 
     Effects = rabbit_fifo:state_enter(eol, State1),
-    % 1 effect for each consumer process (channel process)
-    ?assertEqual(3, length(Effects)).
+    %% 1 effect for each consumer process (channel process),
+    %% 1 effect for file handle reservation
+    ?assertEqual(4, length(Effects)).
 
 query_consumers_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,

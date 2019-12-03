@@ -71,7 +71,10 @@ groups() ->
               rapid_change,
               nodes_policy_should_pick_master_from_its_params,
               promote_slave_after_standalone_restart,
-              queue_survive_adding_dead_vhost_mirror
+              queue_survive_adding_dead_vhost_mirror,
+              rebalance_all,
+              rebalance_exactly,
+              rebalance_nodes
               % FIXME: Re-enable those tests when the know issues are
               % fixed.
               % failing_random_policies,
@@ -536,6 +539,155 @@ promote_slave_after_standalone_restart(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, C),
     15 = proplists:get_value(messages, find_queue(?QNAME, C)),
     ok = rabbit_ct_broker_helpers:stop_node(Config, C),
+
+    ok.
+
+rebalance_all(Config) ->
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Q3 = <<"q3">>,
+    Q4 = <<"q4">>,
+    Q5 = <<"q5">>,
+
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q1}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q2}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q3}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q4}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q5}),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"q.*">>, <<"all">>),
+    timer:sleep(1000),
+
+    rabbit_ct_client_helpers:publish(ACh, Q1, 5),
+    rabbit_ct_client_helpers:publish(ACh, Q2, 3),
+    assert_slaves(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_slaves(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_slaves(A, Q3, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_slaves(A, Q4, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_slaves(A, Q5, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+
+    {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
+
+    %% Check that we have at most 2 queues per node
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
+    %% Check that Q1 and Q2 haven't moved
+    assert_slaves(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_slaves(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+
+    ok.
+
+rebalance_exactly(Config) ->
+    [A, _, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Q3 = <<"q3">>,
+    Q4 = <<"q4">>,
+    Q5 = <<"q5">>,
+
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q1}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q2}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q3}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q4}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q5}),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"q.*">>, {<<"exactly">>, 2}),
+    timer:sleep(1000),
+
+    %% Rebalancing happens with existing mirrors. Thus, before we
+    %% can verify it works as expected, we need the queues to be on
+    %% different mirrors.
+    %%
+    %% We only test Q3, Q4 and Q5 because the first two are expected to
+    %% stay where they are.
+    ensure_queues_are_mirrored_on_different_mirrors([Q3, Q4, Q5], A, ACh),
+
+    rabbit_ct_client_helpers:publish(ACh, Q1, 5),
+    rabbit_ct_client_helpers:publish(ACh, Q2, 3),
+
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q3, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q4, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q5, A)))),
+
+    {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
+
+    %% Check that we have at most 2 queues per node
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
+    %% Check that Q1 and Q2 haven't moved
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
+
+    ok.
+
+ensure_queues_are_mirrored_on_different_mirrors(Queues, Master, Ch) ->
+    SNodes = [node(SPid)
+              || Q <- Queues,
+                 SPid <- proplists:get_value(slave_pids, find_queue(Q, Master))],
+    UniqueSNodes = lists:usort(SNodes),
+    case UniqueSNodes of
+        [_] ->
+            %% All passed queues are on the same mirror. Let's redeclare
+            %% one of them and test again.
+            Q = hd(Queues),
+            amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
+            amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+            ensure_queues_are_mirrored_on_different_mirrors(Queues, Master, Ch);
+        _ ->
+            ok
+    end.
+
+rebalance_nodes(Config) ->
+    [A, B, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Q3 = <<"q3">>,
+    Q4 = <<"q4">>,
+    Q5 = <<"q5">>,
+
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q1}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q2}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q3}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q4}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q5}),
+    rabbit_ct_broker_helpers:set_ha_policy(
+      Config, A, <<"q.*">>,
+      {<<"nodes">>, [rabbit_misc:atom_to_binary(A), rabbit_misc:atom_to_binary(B)]}),
+    timer:sleep(1000),
+
+    rabbit_ct_client_helpers:publish(ACh, Q1, 5),
+    rabbit_ct_client_helpers:publish(ACh, Q2, 3),
+
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q3, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q4, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q5, A)))),
+
+    {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
+
+    %% Check that we have at most 3 queues per node
+    ?assert(lists:all(fun(NodeData) ->
+                              lists:all(fun({_, V}) when is_integer(V) -> V =< 3;
+                                           (_) -> true end,
+                                        NodeData)
+                      end, Summary)),
+    %% Check that Q1 and Q2 haven't moved
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
 
     ok.
 

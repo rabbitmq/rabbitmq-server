@@ -1,0 +1,197 @@
+.\" vim:ft=nroff:
+.\" The contents of this file are subject to the Mozilla Public License
+.\" Version 1.1 (the "License"); you may not use this file except in
+.\" compliance with the License. You may obtain a copy of the License
+.\" at https://www.mozilla.org/MPL/
+.\"
+.\" Software distributed under the License is distributed on an "AS IS"
+.\" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+.\" the License for the specific language governing rights and
+.\" limitations under the License.
+.\"
+.\" The Original Code is RabbitMQ.
+.\"
+.\" The Initial Developer of the Original Code is Pivotal Software, Inc.
+.\" Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
+.\"
+.Dd September 28, 2019
+.Dt RABBITMQ-QUEUES 8
+.Os "RabbitMQ Server"
+.Sh NAME
+.Nm rabbitmq-queues
+.Nd RabbitMQ queue management tools
+.\" ------------------------------------------------------------------
+.Sh SYNOPSIS
+.\" ------------------------------------------------------------------
+.Nm
+.Op Fl q
+.Op Fl s
+.Op Fl l
+.Op Fl n Ar node
+.Op Fl t Ar timeout
+.Ar command
+.Op Ar command_options
+.\" ------------------------------------------------------------------
+.Sh DESCRIPTION
+.\" ------------------------------------------------------------------
+.Nm
+is a command line tool that provides commands used to manage queues,
+mainly member handling for quorum queues.
+See the
+.Lk https://www.rabbitmq.com/quorum-queues.html "RabbitMQ quorum queues guide"
+and
+.Lk https://www.rabbitmq.com/ha.html "RabbitMQ classic mirrored queues guide"
+to learn more about queue types in RabbitMQ.
+.
+.\" ------------------------------------------------------------------
+.Sh OPTIONS
+.\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.It Fl n Ar node
+Default node is
+.Qq Pf rabbit@ Ar target-hostname ,
+where
+.Ar target-hostname
+is the local host.
+On a host named
+.Qq myserver.example.com ,
+the node name will usually be
+.Qq rabbit@myserver
+(unless
+.Ev RABBITMQ_NODENAME
+has been overridden).
+The output of
+.Qq hostname -s
+is usually the correct suffix to use after the
+.Qq @
+sign.
+See
+.Xr rabbitmq-server 8
+for details of configuring a RabbitMQ node.
+.It Fl q , -quiet
+Quiet output mode is selected.
+Informational messages are reduced when quiet mode is in effect.
+.It Fl s , -silent
+Silent output mode is selected.
+Informational messages are reduced and table headers are suppressed when silent mode is in effect.
+.It Fl t Ar timeout , Fl -timeout Ar timeout
+Operation timeout in seconds.
+Not all commands support timeouts.
+Default is
+.Cm infinity .
+.It Fl l , Fl -longnames
+Must be specified when the cluster is configured to use long (FQDN) node names.
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.It Fl -erlang-cookie Ar cookie
+Shared secret to use to authenticate to the target node.
+Prefer using a local file or the
+.Ev RABBITMQ_ERLANG_COOKIE
+environment variable instead of specifying this option on the command line.
+To learn more, see the
+.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.El
+.\" ------------------------------------------------------------------
+.Sh COMMANDS
+.\" ------------------------------------
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm help
+.Pp
+Displays general help and commands supported by
+.Nm .
+.El
+.Ss Cluster
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm grow Ar node Ar selector Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern Fl -errors-only
+.Pp
+Adds a new replica on the given node for all or a half of matching quorum queues.
+.Pp
+Supported
+.Ar selector
+values are:
+.Bl -tag -width Ds
+.It Dv Sy all
+Selects all quorum queues
+.It Dv Sy even
+Selects quorum queues with an even number of replicas
+.El
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues grow Qo rabbit@newhost Qc Qo all Qc --vhost-pattern Qo a-vhost Qc --queue-pattern Qo .* Qc
+.\" ------------------------------------
+.It Cm rebalance Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
+.Pp
+Rebalances queue master replicas across cluster nodes.
+.Pp
+Supported
+.Ar type
+values are:
+.Bl -tag -width Ds
+.It Dv Sy all
+All queue types
+.It Dv Sy quorum
+Only quorum queues
+.It Dv Sy classic
+Only classic queues
+.El
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues rebalance Qo all Qc --vhost-pattern Qo a-vhost Qc --queue-pattern Qo .* Qc
+.\" ------------------------------------
+.It Cm shrink Ar node
+.Pp
+Shrinks quorum queue clusters by removing any members (replicas) on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues shrink Qo rabbit@decomissioned-node Qc
+.\" ------------------------------------
+.El
+.Ss Replication
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm add_member Ar queue Ar node Fl -vhost Ar virtual-host
+.Pp
+Adds a quorum queue member (replica) on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues add_member --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@new-node Qc
+.\" ------------------------------------
+.It Cm delete_member Ar queue Ar node Fl -vhost Ar virtual-host
+.Pp
+Removes a quorum queue member (replica) on the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues delete_member --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@decomissioned-node Qc
+.\" ------------------------------------
+.El
+.Ss Queues
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm quorum_status Ar queue Fl -vhost Ar virtual-host
+.Pp
+Displays quorum status of a quorum queue.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues quorum_status --vhost Qo a-vhost Qc Qo a-queue Qc
+.\" ------------------------------------------------------------------
+.Sh SEE ALSO
+.\" ------------------------------------------------------------------
+.Xr rabbitmqctl 8 ,
+.Xr rabbitmq-diagnostics 8 ,
+.Xr rabbitmq-server 8 ,
+.Xr rabbitmq-upgrade 8 ,
+.Xr rabbitmq-service 8 ,
+.Xr rabbitmq-env.conf 5 ,
+.Xr rabbitmq-echopid 8
+.\" ------------------------------------------------------------------
+.Sh AUTHOR
+.\" ------------------------------------------------------------------
+.An The RabbitMQ Team Aq Mt info@rabbitmq.com

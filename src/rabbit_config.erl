@@ -11,6 +11,10 @@
          validate_config_files/0
         ]).
 
+-export_type([config_location/0]).
+
+-type config_location() :: string().
+
 prepare_and_use_config() ->
     case legacy_erlang_term_config_used() of
         true  ->
@@ -192,6 +196,7 @@ prepare_plugin_schemas(SchemaDir) ->
         false -> ok
     end.
 
+-spec config_files() -> [config_location()].
 config_files() ->
     case legacy_erlang_term_config_used() of
         true ->

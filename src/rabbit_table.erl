@@ -296,10 +296,11 @@ definitions() ->
                                  permission = #permission{_='_'},
                                  _='_'}}]},
      {rabbit_vhost,
-      [{record_name, vhost},
-       {attributes, record_info(fields, vhost)},
+      [
+       {record_name, vhost},
+       {attributes, vhost:fields()},
        {disc_copies, [node()]},
-       {match, #vhost{_='_'}}]},
+       {match, vhost:pattern_match_all()}]},
      {rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
@@ -383,9 +384,9 @@ reverse_binding_match() ->
 binding_destination_match() ->
     resource_match('_').
 trie_node_match() ->
-    #trie_node{   exchange_name = exchange_name_match(), _='_'}.
+    #trie_node{exchange_name = exchange_name_match(), _='_'}.
 trie_edge_match() ->
-    #trie_edge{   exchange_name = exchange_name_match(), _='_'}.
+    #trie_edge{exchange_name = exchange_name_match(), _='_'}.
 trie_binding_match() ->
     #trie_binding{exchange_name = exchange_name_match(), _='_'}.
 exchange_name_match() ->

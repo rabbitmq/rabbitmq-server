@@ -32,7 +32,7 @@
          emit_info_local/4, emit_info_down/4]).
 -export([count/0]).
 -export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
-         list_with_possible_retry/1]).
+         list_local_names_down/0, list_with_possible_retry/1]).
 -export([list_by_type/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -52,6 +52,9 @@
 
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
+
+-export([rebalance/3]).
+-export([collect_info_all/2]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -307,9 +310,14 @@ do_declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
 declare_classic_queue(Q, Node) ->
     QName = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
-    Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
-              {ok, Node0}  -> Node0;
-              {error, _}   -> Node
+    Node1 = case Node of
+                {ignore_location, Node0} ->
+                    Node0;
+                _ ->
+                    case rabbit_queue_master_location_misc:get_location(Q)  of
+                        {ok, Node0}  -> Node0;
+                        {error, _}   -> Node
+                    end
             end,
     Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
@@ -483,6 +491,124 @@ not_found_or_absent_dirty(Name) ->
         {error, not_found} -> not_found;
         {ok, Q}            -> {absent, Q, nodedown}
     end.
+
+-spec rebalance('all' | 'quorum' | 'classic', binary(), binary()) ->
+                       {ok, [{node(), pos_integer()}]}.
+rebalance(Type, VhostSpec, QueueSpec) ->
+    Running = rabbit_mnesia:cluster_nodes(running),
+    NumRunning = length(Running),
+    ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
+                        filter_per_type(Type, Q),
+                        is_replicated(Q),
+                        is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
+                            is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)],
+    NumToRebalance = length(ToRebalance),
+    ByNode = group_by_node(ToRebalance),
+    Rem = case (NumToRebalance rem NumRunning) of
+              0 -> 0;
+              _ -> 1
+          end,
+    MaxQueuesDesired = (NumToRebalance div NumRunning) + Rem,
+    iterative_rebalance(ByNode, MaxQueuesDesired).
+
+filter_per_type(all, _) ->
+    true;
+filter_per_type(quorum, Q) ->
+    ?amqqueue_is_quorum(Q);
+filter_per_type(classic, Q) ->
+    ?amqqueue_is_classic(Q).
+
+rebalance_module(Q) when ?amqqueue_is_quorum(Q) ->
+    rabbit_quorum_queue;
+rebalance_module(Q) when ?amqqueue_is_classic(Q) ->
+    rabbit_mirror_queue_misc.
+
+get_resource_name(#resource{name  = Name}) ->
+    Name.
+
+is_match(Subj, E) ->
+   nomatch /= re:run(Subj, E).
+
+iterative_rebalance(ByNode, MaxQueuesDesired) ->
+    case maybe_migrate(ByNode, MaxQueuesDesired) of
+        {ok, Summary} ->
+            rabbit_log:info("All queue masters are balanced"),
+            {ok, Summary};
+        {migrated, Other} ->
+            iterative_rebalance(Other, MaxQueuesDesired);
+        {not_migrated, Other} ->
+            iterative_rebalance(Other, MaxQueuesDesired)
+    end.
+
+maybe_migrate(ByNode, MaxQueuesDesired) ->
+    maybe_migrate(ByNode, MaxQueuesDesired, maps:keys(ByNode)).
+
+maybe_migrate(ByNode, _, []) ->
+    {ok, maps:fold(fun(K, V, Acc) ->
+                           {CQs, QQs} = lists:partition(fun({_, Q, _}) ->
+                                                                ?amqqueue_is_classic(Q)
+                                                        end, V),
+                           [[{<<"Node name">>, K}, {<<"Number of quorum queues">>, length(QQs)},
+                             {<<"Number of classic queues">>, length(CQs)}] | Acc]
+                   end, [], ByNode)};
+maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
+    case maps:get(N, ByNode, []) of
+        [{_, Q, false} = Queue | Queues] = All when length(All) > MaxQueuesDesired ->
+            Name = amqqueue:get_name(Q),
+            Module = rebalance_module(Q),
+            OtherNodes = Module:get_replicas(Q) -- [N],
+            case OtherNodes of
+                [] ->
+                    {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
+                _ ->
+                    [{Length, Destination} | _] = sort_by_number_of_queues(OtherNodes, ByNode),
+                    rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
+                                       [Name, N, length(All), Destination, Length]),
+                    case Module:transfer_leadership(Q, Destination) of
+                        {migrated, NewNode} ->
+                            rabbit_log:warning("Queue ~p migrated to ~p", [Name, NewNode]),
+                            {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
+                        {not_migrated, Reason} ->
+                            rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
+                            {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
+                    end
+            end;
+        [{_, _, true} | _] = All when length(All) > MaxQueuesDesired ->
+            rabbit_log:warning("Node ~p contains ~p queues, but all have already migrated. "
+                               "Do nothing", [N, length(All)]),
+            maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
+        All ->
+            rabbit_log:warning("Node ~p only contains ~p queues, do nothing",
+                               [N, length(All)]),
+            maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
+    end.
+
+update_not_migrated_queue(N, {Entries, Q, _}, Queues, ByNode) ->
+    maps:update(N, Queues ++ [{Entries, Q, true}], ByNode).
+
+update_migrated_queue(NewNode, OldNode, {Entries, Q, _}, Queues, ByNode) ->
+    maps:update_with(NewNode,
+                     fun(L) -> L ++ [{Entries, Q, true}] end,
+                     [{Entries, Q, true}], maps:update(OldNode, Queues, ByNode)).
+
+sort_by_number_of_queues(Nodes, ByNode) ->
+    lists:keysort(1,
+                  lists:map(fun(Node) ->
+                                    {num_queues(Node, ByNode), Node}
+                            end, Nodes)).
+
+num_queues(Node, ByNode) ->
+    length(maps:get(Node, ByNode, [])).
+
+group_by_node(Queues) ->
+    ByNode = lists:foldl(fun(Q, Acc) ->
+                                 Module = rebalance_module(Q),
+                                 Length = Module:queue_length(Q),
+                                 maps:update_with(amqqueue:qnode(Q),
+                                                   fun(L) -> [{Length, Q, false} | L] end,
+                                                  [{Length, Q, false}], Acc)
+                         end, #{}, Queues),
+    maps:map(fun(_K, V) -> lists:keysort(1, V) end, ByNode).
 
 -spec with(name(),
            qfun(A),
@@ -816,6 +942,19 @@ list_local_names() ->
     [ amqqueue:get_name(Q) || Q <- list(),
            amqqueue:get_state(Q) =/= crashed, is_local_to_node(amqqueue:get_pid(Q), node())].
 
+list_local_names_down() ->
+    [ amqqueue:get_name(Q) || Q <- list(),
+                              is_down(Q),
+                              is_local_to_node(amqqueue:get_pid(Q), node())].
+
+is_down(Q) ->
+    try
+        info(Q, [state]) == [{state, down}]
+    catch
+        _:_ ->
+            true
+    end.
+
 -spec list_by_type(atom()) -> [amqqueue:amqqueue()].
 
 list_by_type(Type) ->
@@ -935,7 +1074,7 @@ map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
 
 is_unresponsive(Q, _Timeout) when ?amqqueue_state_is(Q, crashed) ->
     false;
-is_unresponsive(Q, Timeout) ->
+is_unresponsive(Q, Timeout) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
     try
         delegate:invoke(QPid, {gen_server2, call, [{info, [name]}, Timeout]}),
@@ -944,10 +1083,22 @@ is_unresponsive(Q, Timeout) ->
         %% TODO catch any exit??
         exit:{timeout, _} ->
             true
+    end;
+is_unresponsive(Q, Timeout) when ?amqqueue_is_quorum(Q) ->
+    try
+        Leader = amqqueue:get_pid(Q),
+        case rabbit_fifo_client:stat(Leader, Timeout) of
+          {ok, _, _}   -> false;
+          {timeout, _} -> true;
+          {error, _}   -> true
+        end
+    catch
+        exit:{timeout, _} ->
+            true
     end.
 
 format(Q) when ?amqqueue_is_quorum(Q) -> rabbit_quorum_queue:format(Q);
-format(_) -> [].
+format(Q) -> rabbit_amqqueue_process:format(Q).
 
 -spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
@@ -978,7 +1129,7 @@ info_down(Q, DownReason) ->
     info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason).
 
 info_down(Q, Items, DownReason) ->
-    [{Item, i_down(Item, Q, DownReason)} || Item <- Items].
+    [{Item, i_down(Item, Q, DownReason)} || Item <- Items, Item =/= totals, Item =/= type_specific].
 
 i_down(name,               Q, _) -> amqqueue:get_name(Q);
 i_down(durable,            Q, _) -> amqqueue:is_durable(Q);
@@ -1014,6 +1165,26 @@ emit_info_local(VHostPath, Items, Ref, AggregatorPid) ->
 emit_info_all(Nodes, VHostPath, Items, Ref, AggregatorPid) ->
     Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, AggregatorPid]) || Node <- Nodes ],
     rabbit_control_misc:await_emitters_termination(Pids).
+
+collect_info_all(VHostPath, Items) ->
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Ref = make_ref(),
+    Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, self()]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    wait_for_queues(Ref, length(Pids), []).
+
+wait_for_queues(Ref, N, Acc) ->
+    receive
+        {Ref, finished} when N == 1 ->
+            Acc;
+        {Ref, finished} ->
+            wait_for_queues(Ref, N - 1, Acc);
+        {Ref, Items, continue} ->
+            wait_for_queues(Ref, N, [Items | Acc])
+    after
+        1000 ->
+            Acc
+    end.
 
 emit_info_down(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
@@ -1432,13 +1603,19 @@ basic_consume(Q,
     QName = amqqueue:get_name(Q),
     ok = check_consume_arguments(QName, Args),
     QState0 = get_quorum_state(Id, QName, QStates),
-    {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
-                                                     ConsumerPrefetchCount,
-                                                     ConsumerTag,
-                                                     ExclusiveConsume, Args,
-                                                     ActingUser,
-                                                     OkMsg, QState0),
-    {ok, maps:put(Name, QState, QStates)}.
+    case rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
+                                           ConsumerPrefetchCount,
+                                           ConsumerTag,
+                                           ExclusiveConsume, Args,
+                                           ActingUser,
+                                           OkMsg, QState0) of
+        {ok, QState} ->
+            {ok, maps:put(Name, QState, QStates)};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot consume a message from quorum queue '~s': ~w",
+                                       [rabbit_misc:rs(QName), Reason])
+    end.
 
 -spec basic_cancel
         (amqqueue:amqqueue(), pid(), rabbit_types:ctag(), any(),

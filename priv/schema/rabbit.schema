@@ -73,7 +73,7 @@ end}.
 ]}.
 
 
-%% Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
+%% Maximum time for 0-9-1 handshake (after socket connection
 %% and SSL handshake), in milliseconds.
 %%
 %% {handshake_timeout, 10000},
@@ -96,6 +96,19 @@ end}.
   {default, "true"},
   {level, advanced}
 ]}.
+
+%%
+%% Definition import
+%%
+
+%% Load definitions from a JSON file or directory of files. See
+%% https://www.rabbitmq.com/management.html#load-definitions
+%%
+%% {load_definitions, "/path/to/schema.json"},
+%% {load_definitions, "/path/to/schemas"},
+{mapping, "load_definitions", "rabbit.load_definitions",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
 
 %%
 %% Security / AAA
@@ -1068,6 +1081,16 @@ end}.
 {mapping, "vhost_restart_strategy", "rabbit.vhost_restart_strategy",
     [{datatype, {enum, [stop_node, continue, transient, persistent]}}]}.
 
+%% Approximate maximum time a consumer can spend processing a message before
+%% the channel is terminated, in milliseconds. Default is no timeout.
+%%
+%% {consumer_timeout, 10000},
+
+{mapping, "consumer_timeout", "rabbit.consumer_timeout", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 % ==========================
 % Lager section
 % ==========================
@@ -1522,6 +1545,67 @@ end}.
     end
 }.
 
+%%
+%% Ra
+%%
+
+{mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.segment_max_entries",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.segment_max_entries", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.wal_max_size_bytes", "ra.wal_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.wal_max_size_bytes",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.wal_max_size_bytes", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.wal_max_batch_size", "ra.wal_max_batch_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.wal_max_batch_size",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.wal_max_batch_size", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.snapshot_chunk_size", "ra.snapshot_chunk_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.snapshot_chunk_size",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.snapshot_chunk_size", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+
 % ===============================
 % Validators
 % ===============================
@@ -1560,7 +1644,7 @@ fun(Dir) ->
     Res
 end}.
 
-{validator, "file_accessible", "file doesn/t exist or isn't readable",
+{validator, "file_accessible", "file doesn't exist or isn't readable",
 fun(File) ->
     ReadFile = file:read_file_info(File),
     element(1, ReadFile) == ok

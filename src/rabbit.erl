@@ -187,6 +187,15 @@
                     {requires,    [core_initialized]},
                     {enables,     routing_ready}]}).
 
+%% We want to A) make sure we apply definitions before the node begins serving
+%% traffic and B) in fact do it before empty_db_check (so the defaults will not
+%% get created if we don't need 'em).
+-rabbit_boot_step({load_core_definitions,
+                   [{description, "imports definitions"},
+                    {mfa,         {rabbit_definitions, maybe_load_definitions, []}},
+                    {requires,    recovery},
+                    {enables,     empty_db_check}]}).
+
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
@@ -267,8 +276,7 @@
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
-%% this really should be an abstract type
--type log_location() :: string().
+
 -type param() :: atom().
 -type app_name() :: atom().
 
@@ -542,7 +550,12 @@ start_loaded_apps(Apps, RestartTypes) ->
     %% default OTP logger
     application:set_env(ra, logger_module, rabbit_log_ra_shim),
     %% use a larger segments size for queues
-    application:set_env(ra, segment_max_entries, 32768),
+    case application:get_env(ra, segment_max_entries) of
+      undefined ->
+        application:set_env(ra, segment_max_entries, 32768);
+      _ ->
+        ok
+    end,
     case application:get_env(ra, wal_max_size_bytes) of
         undefined ->
             application:set_env(ra, wal_max_size_bytes, 536870912); %% 5 * 2 ^ 20
@@ -761,6 +774,10 @@ await_startup(Node, PrintProgressReports, Timeout) ->
 wait_for_boot_to_start(Node) ->
     wait_for_boot_to_start(Node, ?BOOT_START_TIMEOUT).
 
+wait_for_boot_to_start(Node, infinity) ->
+    %% This assumes that 100K iterations is close enough to "infinity".
+    %% Now that's deep.
+    do_wait_for_boot_to_start(Node, 100000);
 wait_for_boot_to_start(Node, Timeout) ->
     Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
     do_wait_for_boot_to_start(Node, Iterations).
@@ -784,6 +801,10 @@ wait_for_boot_to_finish(Node) ->
 wait_for_boot_to_finish(Node, PrintProgressReports) ->
     wait_for_boot_to_finish(Node, PrintProgressReports, ?BOOT_FINISH_TIMEOUT).
 
+wait_for_boot_to_finish(Node, PrintProgressReports, infinity) ->
+    %% This assumes that 100K iterations is close enough to "infinity".
+    %% Now that's deep.
+    do_wait_for_boot_to_finish(Node, PrintProgressReports, 100000);
 wait_for_boot_to_finish(Node, PrintProgressReports, Timeout) ->
     Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
     do_wait_for_boot_to_finish(Node, PrintProgressReports, Iterations).
@@ -894,7 +915,7 @@ total_queue_count() ->
     lists:foldl(fun (VirtualHost, Acc) ->
                   Acc + rabbit_amqqueue:count(VirtualHost)
                 end,
-                0, rabbit_vhost:list()).
+                0, rabbit_vhost:list_names()).
 
 %% TODO this only determines if the rabbit application has started,
 %% not if it is running, never mind plugins. It would be nice to have
@@ -1040,8 +1061,10 @@ boot_error(_, {error, {cannot_log_to_file, LogFile, Reason}}) ->
                             [LogFile, Reason]);
 boot_error(_, {error, {generate_config_file, Error}}) ->
     log_boot_error_and_exit(generate_config_file,
-                            "~nConfig file generation failed:~n~s~n",
-                            [Error]);
+      "~nConfig file generation failed:~n~s"
+      "In case the setting comes from a plugin, make sure that the plugin is enabled.~n"
+      "Alternatively remove the setting from the config.~n",
+      [Error]);
 boot_error(Class, Reason) ->
     LogLocations = log_locations(),
     log_boot_error_and_exit(
@@ -1098,7 +1121,7 @@ insert_default_data() ->
     DefaultWritePermBin = rabbit_data_coercion:to_binary(DefaultWritePerm),
     DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
 
-    ok = rabbit_vhost:add(DefaultVHostBin, ?INTERNAL_USER),
+    ok = rabbit_vhost:add(DefaultVHostBin, <<"Default virtual host">>, [], ?INTERNAL_USER),
     ok = lager_exchange_backend:maybe_init_exchange(),
     ok = rabbit_auth_backend_internal:add_user(
         DefaultUserBin,
@@ -1122,10 +1145,13 @@ start_logger() ->
     rabbit_lager:start_logger(),
     ok.
 
--spec log_locations() -> [log_location()].
-
+-spec log_locations() -> [rabbit_lager:log_location()].
 log_locations() ->
     rabbit_lager:log_locations().
+
+-spec config_locations() -> [rabbit_config:config_location()].
+config_locations() ->
+    rabbit_config:config_files().
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
@@ -1173,24 +1199,32 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(description),
     {ok, Version} = application:get_key(vsn),
-    {LogFmt, LogLocations} = case log_locations() of
-        [_ | Tail] = LL ->
-            LF = lists:flatten(["~n                    ~ts"
-                                || _ <- lists:seq(1, length(Tail))]),
-            {LF, LL};
-        [] ->
-            {"", ["(none)"]}
+    LineListFormatter = fun (Placeholder, [_ | Tail] = LL) ->
+                              LF = lists:flatten([Placeholder || _ <- lists:seq(1, length(Tail))]),
+                              {LF, LL};
+                            (_, []) ->
+                              {"", ["(none)"]}
     end,
-    io:format("~n  ##  ##"
-              "~n  ##  ##      ~s ~s. ~s"
+    %% padded list lines
+    {LogFmt, LogLocations} = LineListFormatter("~n        ~ts", log_locations()),
+    {CfgFmt, CfgLocations} = LineListFormatter("~n                  ~ts", config_locations()),
+    io:format("~n  ##  ##      ~s ~s"
+              "~n  ##  ##"
               "~n  ##########  ~s"
               "~n  ######  ##"
-              "~n  ##########  Logs: ~ts" ++
-              LogFmt ++
-              "~n~n              Starting broker..."
-              "~n",
+              "~n  ##########  ~s"
+              "~n"
+              "~n  Doc guides: https://rabbitmq.com/documentation.html"
+              "~n  Support:    https://rabbitmq.com/contact.html"
+              "~n  Tutorials:  https://rabbitmq.com/getstarted.html"
+              "~n  Monitoring: https://rabbitmq.com/monitoring.html"
+              "~n"
+              "~n  Logs: ~ts" ++ LogFmt ++ "~n"
+              "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
+              "~n  Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
-              LogLocations).
+              LogLocations ++
+              CfgLocations).
 
 log_banner() ->
     {FirstLog, OtherLogs} = case log_locations() of

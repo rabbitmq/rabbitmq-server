@@ -1,0 +1,24 @@
+{
+  "rabbit_version": "3.8.0+rc.1.5.g9148053",
+  "rabbitmq_version": "3.8.0+rc.1.5.g9148053",
+  "queues": [
+    {
+      "name": "amq.queuebar",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "amq.foobar",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ]
+}

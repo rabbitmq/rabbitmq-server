@@ -18,7 +18,7 @@
 
 -export([init_state/2, handle_event/2]).
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
--export([info/1, info/2, stat/1, infos/1]).
+-export([info/1, info/2, stat/1, stat/2, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/10, basic_cancel/4]).
 -export([credit/4]).
 -export([purge/1]).
@@ -39,6 +39,9 @@
 -export([cleanup_data_dir/0]).
 -export([shrink_all/1,
          grow/4]).
+-export([transfer_leadership/2, get_replicas/1, queue_length/1]).
+-export([file_handle_leader_reservation/1, file_handle_other_reservation/0]).
+-export([file_handle_release_reservation/0]).
 
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
@@ -249,14 +252,15 @@ handle_tick(QName,
                                  0 -> 0;
                                  _ -> rabbit_fifo:usage(Name)
                              end,
-                      Infos = [{consumers, C}, {consumer_utilisation, Util},
+                      Infos = [{consumers, C},
+                               {consumer_utilisation, Util},
                                {message_bytes_ready, MsgBytesReady},
                                {message_bytes_unacknowledged, MsgBytesUnack},
                                {message_bytes, MsgBytesReady + MsgBytesUnack},
                                {message_bytes_persistent, MsgBytesReady + MsgBytesUnack},
                                {messages_persistent, M}
 
-                               | infos(QName)],
+                               | infos(QName, ?STATISTICS_KEYS -- [consumers])],
                       rabbit_core_metrics:queue_stats(QName, Infos),
                       rabbit_event:notify(queue_stats,
                                           Infos ++ [{name, QName},
@@ -472,10 +476,18 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
         {ok, empty, QState} ->
             {ok, empty, QState};
         {ok, {{MsgId, {MsgHeader, Msg0}}, MsgsReady}, QState} ->
-            Count = maps:get(delivery_count, MsgHeader, 0),
+            Count = case MsgHeader of
+                        #{delivery_count := C} -> C;
+                       _ -> 0
+                    end,
             IsDelivered = Count > 0,
             Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
             {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
+        {error, unsupported} ->
+            rabbit_misc:protocol_error(
+              resource_locked,
+              "cannot obtain access to locked ~s. basic.get operations are not supported by quorum queues with single active consumer",
+              [rabbit_misc:rs(QName)]);
         {error, _} = Err ->
             Err;
         {timeout, _} ->
@@ -513,25 +525,31 @@ basic_consume(Q, NoAck, ChPid,
                                                Prefetch,
                                                ConsumerMeta,
                                                QState0),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, SacResult}, _} ->
 
-    SingleActiveConsumerOn = single_active_consumer_on(Q),
-    {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
-                                                   {false, _} ->
-                                                       {true, up};
-                                                   {true, {value, {ConsumerTag, ChPid}}} ->
-                                                       {true, single_active};
-                                                   _ ->
-                                                       {false, waiting}
-                                               end,
+            SingleActiveConsumerOn = single_active_consumer_on(Q),
+            {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
+                                                           {false, _} ->
+                                                               {true, up};
+                                                           {true, {value, {ConsumerTag, ChPid}}} ->
+                                                               {true, single_active};
+                                                           _ ->
+                                                               {false, waiting}
+                                                       end,
 
-    %% TODO: emit as rabbit_fifo effect
-    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                         not NoAck, QName,
-                                         ConsumerPrefetchCount, IsSingleActiveConsumer,
-                                         ActivityStatus, Args),
-    {ok, QState}.
+            %% TODO: emit as rabbit_fifo effect
+            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                                 not NoAck, QName,
+                                                 ConsumerPrefetchCount, IsSingleActiveConsumer,
+                                                 ActivityStatus, Args),
+            {ok, QState};
+        {error, Error} ->
+            Error;
+        {timeout, _} ->
+            {error, timeout}
+    end.
 
 -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
                           {'ok', rabbit_fifo_client:state()}.
@@ -565,9 +583,12 @@ info(Q) ->
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 
 infos(QName) ->
+    infos(QName, ?STATISTICS_KEYS).
+
+infos(QName, Keys) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
-            info(Q, ?STATISTICS_KEYS);
+            info(Q, Keys);
         {error, not_found} ->
             []
     end.
@@ -575,14 +596,30 @@ infos(QName) ->
 -spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
 
 info(Q, Items) ->
-    [{Item, i(Item, Q)} || Item <- Items].
+    lists:foldr(fun(totals, Acc) ->
+                        i_totals(Q) ++ Acc;
+                   (type_specific, Acc) ->
+                        format(Q) ++ Acc;
+                   (Item, Acc) ->
+                        [{Item, i(Item, Q)} | Acc]
+                end, [], Items).
 
 -spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 
 stat(Q) when ?is_amqqueue(Q) ->
+    %% same short default timeout as in rabbit_fifo_client:stat/1
+    stat(Q, 250).
+
+-spec stat(amqqueue:amqqueue(), non_neg_integer()) -> {'ok', non_neg_integer(), non_neg_integer()}.
+
+stat(Q, Timeout) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
     try
-        {ok, _, _} = rabbit_fifo_client:stat(Leader)
+        case rabbit_fifo_client:stat(Leader, Timeout) of
+          {ok, _, _} = Success -> Success;
+          {error, _}           -> {ok, 0, 0};
+          {timeout, _}         -> {ok, 0, 0}
+        end
     catch
         _:_ ->
             %% Leader is not available, cluster might be in minority
@@ -847,6 +884,31 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
         is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].
 
+transfer_leadership(Q, Destination) ->
+    {RaName, _} = Pid = amqqueue:get_pid(Q),
+    case ra:transfer_leadership(Pid, {RaName, Destination}) of
+        ok ->
+            {_, _, {_, NewNode}} = ra:members(Pid),
+            {migrated, NewNode};
+        already_leader ->
+            {not_migrated, already_leader};
+        {error, Reason} ->
+            {not_migrated, Reason};
+        {timeout, _} ->
+            %% TODO should we retry once?
+            {not_migrated, timeout}
+    end.
+
+queue_length(Q) ->
+    Name = amqqueue:get_name(Q),
+    case ets:lookup(ra_metrics, Name) of
+        [] -> 0;
+        [{_, _, SnapIdx, _, _, LastIdx, _}] -> LastIdx - SnapIdx
+    end.
+
+get_replicas(Q) ->
+    get_nodes(Q).
+
 get_resource_name(#resource{name  = Name}) ->
     Name.
 
@@ -857,6 +919,16 @@ matches_strategy(even, Members) ->
 is_match(Subj, E) ->
    nomatch /= re:run(Subj, E).
 
+file_handle_leader_reservation(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    ClusterSize = length(get_nodes(Q)),
+    file_handle_cache:set_reservation(2 + ClusterSize).
+
+file_handle_other_reservation() ->
+    file_handle_cache:set_reservation(2).
+
+file_handle_release_reservation() ->
+    file_handle_cache:release_reservation().
 
 %%----------------------------------------------------------------------------
 dlx_mfa(Q) ->
@@ -910,6 +982,19 @@ find_quorum_queues(VHost) ->
                                 amqqueue:get_vhost(Q) =:= VHost,
                                 amqqueue:qnode(Q) == Node]))
       end).
+
+i_totals(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    case ets:lookup(queue_coarse_metrics, QName) of
+        [{_, MR, MU, M, _}] ->
+            [{messages_ready, MR},
+             {messages_unacknowledged, MU},
+             {messages, M}];
+        [] ->
+            [{messages_ready, 0},
+             {messages_unacknowledged, 0},
+             {messages, 0}]
+    end.
 
 i(name,        Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q);
 i(durable,     Q) when ?is_amqqueue(Q) -> amqqueue:is_durable(Q);
@@ -1001,35 +1086,52 @@ i(open_files, Q) when ?is_amqqueue(Q) ->
     lists:flatten(Data);
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
-    case SacResult of
-        {value, {_ConsumerTag, ChPid}} ->
+    case ra:local_query(QPid, fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, {value, {_ConsumerTag, ChPid}}}, _} ->
             ChPid;
-        _ ->
+        {ok, _, _} ->
+            '';
+        {error, _} ->
+            '';
+        {timeout, _} ->
             ''
     end;
 i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, SacResult}, _} = ra:local_query(QPid,
-                                             fun rabbit_fifo:query_single_active_consumer/1),
-    case SacResult of
-        {value, {ConsumerTag, _ChPid}} ->
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_single_active_consumer/1) of
+        {ok, {_, {value, {ConsumerTag, _ChPid}}}, _} ->
             ConsumerTag;
-        _ ->
+        {ok, _, _} ->
+            '';
+        {error, _} ->
+            '';
+        {timeout, _} ->
             ''
     end;
 i(type, _) -> quorum;
 i(messages_ram, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, {Length, _}}, _} = ra:local_query(QPid,
-                                          fun rabbit_fifo:query_in_memory_usage/1),
-    Length;
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_in_memory_usage/1) of
+        {ok, {_, {Length, _}}, _} ->
+            Length;
+        {error, _} ->
+            0;
+        {timeout, _} ->
+            0
+    end;
 i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    {ok, {_, {_, Bytes}}, _} = ra:local_query(QPid,
-                                         fun rabbit_fifo:query_in_memory_usage/1),
-    Bytes;
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_in_memory_usage/1) of
+        {ok, {_, {_, Bytes}}, _} ->
+            Bytes;
+        {error, _} ->
+            0;
+        {timeout, _} ->
+            0
+    end;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->

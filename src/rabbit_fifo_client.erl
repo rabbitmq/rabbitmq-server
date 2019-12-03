@@ -40,10 +40,10 @@
          cluster_name/1,
          update_machine_state/2,
          pending_size/1,
-         stat/1
+         stat/1,
+         stat/2
          ]).
 
--include_lib("ra/include/ra.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(SOFT_LIMIT, 256).
@@ -63,8 +63,8 @@
                    delivery_count = 0 :: non_neg_integer()}).
 
 -record(state, {cluster_name :: cluster_name(),
-                servers = [] :: [ra_server_id()],
-                leader :: maybe(ra_server_id()),
+                servers = [] :: [ra:server_id()],
+                leader :: undefined | ra:server_id(),
                 next_seq = 0 :: seq(),
                 %% Last applied is initialise to -1 to note that no command has yet been
                 %% applied, but allowing to resend messages if the first ones on the sequence
@@ -77,7 +77,7 @@
                                            {[seq()], [seq()], [seq()]}},
                 soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
                 pending = #{} :: #{seq() =>
-                                   {maybe(term()), rabbit_fifo:command()}},
+                                   {term(), rabbit_fifo:command()}},
                 consumer_deliveries = #{} :: #{rabbit_fifo:consumer_tag() =>
                                                #consumer{}},
                 block_handler = fun() -> ok end :: fun(() -> term()),
@@ -99,7 +99,7 @@
 %% @param ClusterName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
--spec init(cluster_name(), [ra_server_id()]) -> state().
+-spec init(cluster_name(), [ra:server_id()]) -> state().
 init(ClusterName, Servers) ->
     init(ClusterName, Servers, ?SOFT_LIMIT).
 
@@ -109,7 +109,7 @@ init(ClusterName, Servers) ->
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
--spec init(cluster_name(), [ra_server_id()], non_neg_integer()) -> state().
+-spec init(cluster_name(), [ra:server_id()], non_neg_integer()) -> state().
 init(ClusterName = #resource{}, Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     #state{cluster_name = ClusterName,
@@ -117,7 +117,7 @@ init(ClusterName = #resource{}, Servers, SoftLimit) ->
            soft_limit = SoftLimit,
            timeout = Timeout}.
 
--spec init(cluster_name(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
+-spec init(cluster_name(), [ra:server_id()], non_neg_integer(), fun(() -> ok),
            fun(() -> ok)) -> state().
 init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
@@ -199,6 +199,8 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
             {ok, empty, State0#state{leader = Leader}};
         {ok, {dequeue, Msg, NumReady}, Leader} ->
             {ok, {Msg, NumReady}, State0#state{leader = Leader}};
+        {ok, {error, _} = Err, _Leader} ->
+            Err;
         Err ->
             Err
     end.
@@ -401,7 +403,7 @@ cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
 
 %% @doc Purges all the messages from a rabbit_fifo queue and returns the number
 %% of messages purged.
--spec purge(ra_server_id()) -> {ok, non_neg_integer()} | {error | timeout, term()}.
+-spec purge(ra:server_id()) -> {ok, non_neg_integer()} | {error | timeout, term()}.
 purge(Node) ->
     case ra:process_command(Node, rabbit_fifo:make_purge()) of
         {ok, {purge, Reply}, _} ->
@@ -414,14 +416,25 @@ purge(Node) ->
 pending_size(#state{pending = Pend}) ->
     maps:size(Pend).
 
--spec stat(ra_server_id()) ->
+-spec stat(ra:server_id()) ->
     {ok, non_neg_integer(), non_neg_integer()}
     | {error | timeout, term()}.
 stat(Leader) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    {ok, {_, {R, C}}, _} = ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250),
-    {ok, R, C}.
+    stat(Leader, 250).
+
+-spec stat(ra:server_id(), non_neg_integer()) ->
+    {ok, non_neg_integer(), non_neg_integer()}
+    | {error | timeout, term()}.
+stat(Leader, Timeout) ->
+    %% short timeout as we don't want to spend too long if it is going to
+    %% fail anyway
+    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, Timeout) of
+      {ok, {_, {R, C}}, _} -> {ok, R, C};
+      {error, _} = Error   -> Error;
+      {timeout, _} = Error -> Error
+    end.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().
@@ -458,7 +471,7 @@ update_machine_state(Node, Conf) ->
 %%  end
 %% '''
 %%
-%% @param From the {@link ra_server_id().} of the sending process.
+%% @param From the {@link ra:server_id().} of the sending process.
 %% @param Event the body of the `ra_event'.
 %% @param State the current {@module} state.
 %%
@@ -479,7 +492,7 @@ update_machine_state(Node, Conf) ->
 %% <li>`MsgId' is a consumer scoped monotonically incrementing id that can be
 %% used to {@link settle/3.} (roughly: AMQP 0.9.1 ack) message once finished
 %% with them.</li>
--spec handle_ra_event(ra_server_id(), ra_server_proc:ra_event_body(), state()) ->
+-spec handle_ra_event(ra:server_id(), ra_server_proc:ra_event_body(), state()) ->
     {internal, Correlators :: [term()], actions(), state()} |
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
@@ -567,7 +580,7 @@ handle_ra_event(_Leader, {machine, eol}, _State0) ->
 %% @param Msg the message to enqueue.
 %%
 %% @returns `ok'
--spec untracked_enqueue([ra_server_id()], term()) ->
+-spec untracked_enqueue([ra:server_id()], term()) ->
     ok.
 untracked_enqueue([Node | _], Msg) ->
     Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg),
@@ -702,8 +715,18 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     Query = fun (State) ->
                     rabbit_fifo:get_checked_out(ConsumerId, From, To, State)
             end,
-    {ok, {_, Missing}, _} = ra:local_query(Leader, Query),
-    Missing.
+    case ra:local_query(Leader, Query) of
+        {ok, {_, Missing}, _} ->
+            Missing;
+        {error, Error} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot query missing deliveries from ~p: ~p",
+                                       [Leader, Error]);
+        {timeout, _} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot query missing deliveries from ~p: timeout",
+                                       [Leader])
+    end.
 
 pick_node(#state{leader = undefined, servers = [N | _]}) ->
     %% TODO: pick random rather that first?
@@ -749,9 +772,9 @@ add_command(_, _, [], Acc) ->
 add_command(Cid, settle, MsgIds, Acc) ->
     [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
 add_command(Cid, return, MsgIds, Acc) ->
-    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
+    [rabbit_fifo:make_return(Cid, MsgIds) | Acc];
 add_command(Cid, discard, MsgIds, Acc) ->
-    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc].
+    [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
 
 set_timer(#state{servers = [Server | _]} = State) ->
     Ref = erlang:send_after(?TIMER_TIME, self(),
@@ -772,4 +795,3 @@ find_leader([Server | Servers]) ->
         _ ->
             find_leader(Servers)
     end.
-
