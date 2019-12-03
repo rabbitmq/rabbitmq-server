@@ -28,7 +28,8 @@
          parse_port/1,
          as_proplist/1,
          as_map/1,
-         stringify_error/1
+         stringify_error/1,
+         maybe_backend_configured/4
         ]).
 
 
@@ -363,6 +364,25 @@ stringify_error({error, Str}) when is_list(Str) ->
 stringify_error({error, Term}) ->
     {error, lists:flatten(io_lib:format("~p", [Term]))}.
 
+-spec maybe_backend_configured(BackendConfigKey :: atom(),
+                               ClusterFormationUndefinedFun :: fun(() -> {ok, term()} | ok),
+                               BackendUndefinedFun :: fun(() -> {ok, term()} | ok),
+                               ConfiguredFun :: fun((list()) -> {ok, term()})) -> {ok, term()}.
+maybe_backend_configured(BackendConfigKey,
+                         ClusterFormationUndefinedFun,
+                         BackendUndefinedFun,
+                         ConfiguredFun) ->
+    case application:get_env(rabbit, cluster_formation) of
+        undefined ->
+            ClusterFormationUndefinedFun();
+        {ok, ClusterFormation} ->
+            case proplists:get_value(BackendConfigKey, ClusterFormation) of
+                undefined ->
+                    BackendUndefinedFun();
+                Proplist  ->
+                    ConfiguredFun(Proplist)
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
