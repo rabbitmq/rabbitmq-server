@@ -36,8 +36,6 @@
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
 
--define(BACKEND_CONFIG_KEY, peer_discovery_consul).
-
 -define(CONSUL_CHECK_NOTES, "RabbitMQ Consul-based peer discovery plugin TTL check").
 
 %%
