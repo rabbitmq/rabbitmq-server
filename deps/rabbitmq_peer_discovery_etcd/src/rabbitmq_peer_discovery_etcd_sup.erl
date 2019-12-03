@@ -20,23 +20,27 @@
 -export([init/1, start_link/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_peer_discovery_etcd.hrl").
 
 %%
 %% API
 %%
 
 init([]) ->
-    Flags = #{strategy  => one_for_one,
-              intensity => 1,
-              period    => 1},
-    Specs = [#{id       => rabbitmq_peer_discovery_etcd_health_check_helper,
-               start    => {rabbitmq_peer_discovery_etcd_health_check_helper, start_link, []},
-               restart  => permanent,
-               shutdown => ?SUPERVISOR_WAIT,
-               type     => worker,
-               modules  => [rabbitmq_peer_discovery_etcd_health_check_helper]
-              }],
-    {ok, {Flags, Specs}}.
+    Flags = #{strategy => one_for_one, intensity => 1, period => 1},
+    Fun0 = fun() -> {ok, {Flags, []}} end,
+    Fun1 = fun() -> {ok, {Flags, []}} end,
+    Fun2 = fun(_) ->
+                   Specs = [#{id       => rabbitmq_peer_discovery_etcd_health_check_helper,
+                              start    => {rabbitmq_peer_discovery_etcd_health_check_helper, start_link, []},
+                              restart  => permanent,
+                              shutdown => ?SUPERVISOR_WAIT,
+                              type     => worker,
+                              modules  => [rabbitmq_peer_discovery_etcd_health_check_helper]
+                             }],
+                   {ok, {Flags, Specs}}
+           end,
+    rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
