@@ -36,8 +36,6 @@
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
 
--define(BACKEND_CONFIG_KEY, peer_discovery_consul).
-
 -define(CONSUL_CHECK_NOTES, "RabbitMQ Consul-based peer discovery plugin TTL check").
 
 %%
@@ -56,36 +54,33 @@ init() ->
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
-    case application:get_env(rabbit, cluster_formation) of
-      undefined         ->
-        {ok, {[], disc}};
-      {ok, ClusterFormation} ->
-        case proplists:get_value(?BACKEND_CONFIG_KEY, ClusterFormation) of
-            undefined ->
-              rabbit_log:warning("Peer discovery backend is set to ~s "
-                                 "but final config does not contain rabbit.cluster_formation.peer_discovery_consul. "
-                                 "Cannot discover any nodes because Consul cluster details are not configured!",
-                                 [?MODULE]),
-              {ok, {[], disc}};
-            Proplist  ->
-              M = maps:from_list(Proplist),
-              case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
-                                                   get_config_key(consul_host, M),
-                                                   get_config_key(consul_port, M),
-                                                   [v1, health, service, get_config_key(consul_svc, M)],
-                                                   list_nodes_query_args(),
-                                                   maybe_add_acl([]),
-                                                   []) of
-                  {ok, Nodes} ->
-                      IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
-                      Result = extract_nodes(
-                                 filter_nodes(Nodes, IncludeWithWarnings)),
-                      {ok, {Result, disc}};
-                  {error, _} = Error ->
-                      Error
-              end
-        end
-    end.
+    Fun0 = fun() -> {ok, {[], disc}} end,
+    Fun1 = fun() ->
+                   rabbit_log:warning("Peer discovery backend is set to ~s "
+                                      "but final config does not contain rabbit.cluster_formation.peer_discovery_consul. "
+                                      "Cannot discover any nodes because Consul cluster details are not configured!",
+                                      [?MODULE]),
+                   {ok, {[], disc}}
+           end,
+    Fun2 = fun(Proplist) ->
+                   M = maps:from_list(Proplist),
+                   case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
+                                                        get_config_key(consul_host, M),
+                                                        get_config_key(consul_port, M),
+                                                        [v1, health, service, get_config_key(consul_svc, M)],
+                                                        list_nodes_query_args(),
+                                                        maybe_add_acl([]),
+                                                        []) of
+                       {ok, Nodes} ->
+                           IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
+                           Result = extract_nodes(
+                                      filter_nodes(Nodes, IncludeWithWarnings)),
+                           {ok, {Result, disc}};
+                       {error, _} = Error ->
+                           Error
+                   end
+           end,
+    rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
 
 -spec supports_registration() -> boolean().
