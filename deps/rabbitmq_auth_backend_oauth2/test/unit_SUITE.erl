@@ -21,7 +21,8 @@ all() ->
         test_command_pem_no_kid,
         test_token_expiration,
         test_post_process_token_payload,
-        test_post_process_token_payload_keycloak
+        test_post_process_token_payload_keycloak,
+        test_post_process_token_payload_complex_claims
     ].
 
 init_per_suite(Config) ->
@@ -117,6 +118,76 @@ test_post_process_token_payload_keycloak(_) ->
 post_process_payload_with_keycloak_authorization(Authorization) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     Token = maps:put(<<"authorization">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
+    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
+    {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
+    rabbit_auth_backend_oauth2:post_process_payload(Payload).
+
+
+
+test_post_process_token_payload_complex_claims(_) ->
+    AuthorizationArgumentExpectedScope = [
+        %% claims in form of binary
+        {<<"rabbitmq.rabbitmq-resource.read:*/* rabbitmq.rabbitmq-resource-read">>,
+        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        }, 
+        %% claims in form of binary - empty result
+        {<<>>, []
+        }, 
+        %% claims in form of list
+        {[<<"rabbitmq.rabbitmq-resource.read:*/*">>, 
+          <<"rabbitmq2.rabbitmq-resource-read">>],
+        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq2.rabbitmq-resource-read">>]
+        }, 
+        %% claims in form of list - empty result
+        {[], []
+        }, 
+        %% claims are map with list content
+        {#{<<"rabbitmq">> =>
+                [<<"rabbitmq-resource.read:*/*">>, 
+                 <<"rabbitmq-resource-read">>],
+          <<"rabbitmq3">> =>
+                [<<"rabbitmq-resource.read:*/*">>, 
+                 <<"rabbitmq-resource-read">>]},
+        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        }, 
+        %% claims are map with list content - empty result
+        {#{<<"rabbitmq2">> =>
+                 [<<"rabbitmq-resource.read:*/*">>, 
+                  <<"rabbitmq-resource-read">>]},
+         []
+        }, 
+        %% claims are map with binary content
+        {#{<<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
+           <<"rabbitmq3">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>},
+        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        }, 
+        %% claims are map with binary content - empty result
+        {#{<<"rabbitmq2">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>}, []
+        }, 
+        %% claims are map with empty binary content - empty result
+        {#{<<"rabbitmq">> => <<>>}, []
+        }, 
+        %% claims are map with empty list content - empty result
+        {#{<<"rabbitmq">> => []}, []
+        }, 
+        %% no extra claims provided
+        {[], []
+        }, 
+        %% no extra claims provided
+        {#{}, []
+       }
+    ],
+    lists:foreach(
+        fun({Authorization, ExpectedScope}) ->
+            Payload = post_process_payload_with_complex_claim_authorization(Authorization),
+            ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
+        end, AuthorizationArgumentExpectedScope).
+
+post_process_payload_with_complex_claim_authorization(Authorization) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    Token =  maps:put(<<"rabbit_resources">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).

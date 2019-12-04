@@ -39,6 +39,9 @@ groups() ->
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
+                       test_successful_connection_with_map_complex_claim_token, 
+                       test_successful_connection_with_list_complex_claim_token,
+                       test_successful_connection_with_binary_complex_claim_token,
                        test_successful_connection_with_keycloak_token,
                        test_successful_token_refresh
                       ]},
@@ -58,6 +61,7 @@ groups() ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+-define(EXTRA_PERMISSION_SOURCE, <<"rabbit_resources">>).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -124,6 +128,8 @@ preconfigure_node(Config) ->
                                       [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, extra_permissions_source, ?EXTRA_PERMISSION_SOURCE]),
 
     rabbit_ct_helpers:set_config(Config, {fixture_jwk, Jwk}).
 
@@ -204,6 +210,45 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
         Config,
         <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
         <<"hare rabbitmq">>
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_map_complex_claim_token(Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"rabbit_resources">> => #{<<"rabbitmq">> => [<<"configure:*/*">>, <<"read:*/*">>, <<"write:*/*">>]}}
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_list_complex_claim_token(Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"rabbit_resources">> => [<<"rabbitmq.configure:*/*">>, <<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>]}
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+        
+test_successful_connection_with_binary_complex_claim_token(Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"rabbit_resources">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
