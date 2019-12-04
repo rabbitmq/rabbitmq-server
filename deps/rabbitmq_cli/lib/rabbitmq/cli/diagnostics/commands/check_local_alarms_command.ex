@@ -62,7 +62,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   end
 
   def output(alarms, %{node: node_name, formatter: "json"}) do
-    {:ok,
+    {:error,
      %{
        "result" => "ok",
        "local" => alarm_lines(alarms, node_name),
