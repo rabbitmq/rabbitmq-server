@@ -50,7 +50,7 @@
       }
     ]
   },
-  "description": "Erlang cluster metrics",
+  "description": "Erlang Distribution links, inet socket, port driver, dist process + tls_connection & tls_sender",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
@@ -761,7 +761,7 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
+          "decimals": 1,
           "format": "Bps",
           "label": null,
           "logBase": 1,
@@ -896,7 +896,7 @@
       },
       "yaxes": [
         {
-          "decimals": 0,
+          "decimals": 1,
           "format": "Bps",
           "label": null,
           "logBase": 1,
