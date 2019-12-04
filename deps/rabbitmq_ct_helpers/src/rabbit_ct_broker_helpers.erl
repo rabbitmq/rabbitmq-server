@@ -1419,8 +1419,18 @@ kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
     %% FIXME maybe_flush_cover(Cfg),
     Cmd = case os:type() of
-              {win32, _} -> rabbit_misc:format("taskkill /PID ~s /F", [Pid]);
-              _          -> rabbit_misc:format("kill -9 ~s", [Pid])
+              {win32, _} ->
+                  case os:find_executable("taskkill.exe") of
+                      false ->
+                          rabbit_misc:format(
+                            "PowerShell -Command "
+                            "\"Stop-Process -Id ~s -Force\"",
+                            [Pid]);
+                      _ ->
+                          rabbit_misc:format("taskkill /PID ~s /F", [Pid])
+                  end;
+              _ ->
+                  rabbit_misc:format("kill -9 ~s", [Pid])
           end,
     os:cmd(Cmd),
     await_os_pid_death(Pid).
