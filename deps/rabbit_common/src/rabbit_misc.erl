@@ -1161,12 +1161,29 @@ is_os_process_alive(Pid) ->
                             run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
-                             Cmd = "tasklist /nh /fi \"pid eq " ++
-                                 rabbit_data_coercion:to_list(Pid) ++ "\" ",
-                             Res = os_cmd(Cmd ++ "2>&1"),
-                             case re:run(Res, "erl\\.exe", [{capture, none}]) of
-                                 match -> true;
-                                 _     -> false
+                             PidS = rabbit_data_coercion:to_list(Pid),
+                             case os:find_executable("tasklist.exe") of
+                                 false ->
+                                     Cmd =
+                                     format(
+                                       "PowerShell -Command "
+                                       "\"(Get-Process -Id ~s).ProcessName\"",
+                                       [PidS]),
+                                     Res =
+                                     os_cmd(Cmd ++ " 2>&1") -- [$\r, $\n],
+                                     case Res of
+                                         "erl"  -> true;
+                                         "werl" -> true;
+                                         _      -> false
+                                     end;
+                                 _ ->
+                                     Cmd =
+                                     "tasklist /nh /fi "
+                                     "\"pid eq " ++ PidS ++ "\"",
+                                     Res = os_cmd(Cmd ++ " 2>&1"),
+                                     match =:= re:run(Res,
+                                                      "erl\\.exe",
+                                                      [{capture, none}])
                              end
                      end}]).
 
