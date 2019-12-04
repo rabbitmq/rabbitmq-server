@@ -1,6 +1,6 @@
 # Erlang-Memory-Allocators
 
-Visualise Erlang VM memory utilisation from erts_alloc perspective
+Erlang VM memory utilisation from erts_alloc perspective
 
 ## Categories
 
