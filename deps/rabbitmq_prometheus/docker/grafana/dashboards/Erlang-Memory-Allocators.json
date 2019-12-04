@@ -44,7 +44,7 @@
       }
     ]
   },
-  "description": "Visualise Erlang VM memory utilisation from erts_alloc perspective",
+  "description": "Erlang VM memory utilisation from erts_alloc perspective",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
