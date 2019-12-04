@@ -199,7 +199,7 @@ CFh:
 DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
 define GENERATE_DASHBOARD
 cd $(DASHBOARDS_TO_PATH) \
-&& jq --slurp add $(@F) __inputs.json \
+&& jq --slurp add $(@F) ../__inputs.json \
 | jq '.templating.list[].datasource = "$${DS_PROMETHEUS}"' \
 | jq '.panels[].datasource = "$${DS_PROMETHEUS}"'
 endef
