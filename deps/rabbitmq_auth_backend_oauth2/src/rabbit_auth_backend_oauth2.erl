@@ -36,8 +36,13 @@
 -endif.
 %%--------------------------------------------------------------------
 
+-define(APP, rabbitmq_auth_backend_oauth2).
+-define(RESOURCE_SERVER_ID, resource_server_id).
+%% a term used by the IdentityServer community
+-define(COMPLEX_CLAIM, extra_scopes_source).
+
 description() ->
-    [{name, <<"UAA">>},
+    [{name, <<"OAuth 2">>},
      {description, <<"Performs authentication and authorisation using JWT tokens and OAuth 2 scopes">>}].
 
 %%--------------------------------------------------------------------
@@ -145,37 +150,76 @@ check_token(Token) ->
     end.
 
 post_process_payload(Payload) when is_map(Payload) ->
-    Payload1 = case maps:is_key(<<"authorization">>, Payload) of
-        true ->
-            post_process_payload_keycloak(Payload);
-        false ->
-            Payload
-    end,
-    maps:map(fun(K, V) ->
-                case K of
-                    <<"aud">> when is_binary(V) ->
-                        binary:split(V, <<" ">>, [global]);
-                    <<"scope">> when is_binary(V) ->
-                        binary:split(V, <<" ">>, [global]);
-                    _ -> V
-                end
+    Payload0 = maps:map(fun(K, V) ->
+                        case K of
+                            <<"aud">>   when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
+                            <<"scope">> when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
+                            _ -> V
+                        end
+        end,
+        Payload
+    ),
+    Payload1 = case does_include_complex_claim_field(Payload0) of
+        true  -> post_process_payload_complex_claim(Payload0);
+        false -> Payload0
+        end,
+
+    Payload2 = case maps:is_key(<<"authorization">>, Payload1) of
+        true -> post_process_payload_keycloak(Payload1);
+        false -> Payload1
+        end,
+
+    Payload2.
+
+does_include_complex_claim_field(Payload) when is_map(Payload) ->
+        maps:is_key(application:get_env(?APP, ?COMPLEX_CLAIM, undefined), Payload).
+
+post_process_payload_complex_claim(Payload) ->
+    ComplexClaim = maps:get(application:get_env(?APP, ?COMPLEX_CLAIM, undefined), Payload),
+    ResourceServerId = rabbit_data_coercion:to_binary(application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>)),
+
+    AdditionalScopes =
+        case ComplexClaim of
+            L when is_list(L) -> L;
+            M when is_map(M) ->
+                case maps:get(ResourceServerId, M, undefined) of
+                    undefined           -> [];
+                    Ks when is_list(Ks) ->
+                        [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
+                    ClaimBin when is_binary(ClaimBin) ->
+                        UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
+                        [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
+                    _ -> []
+                    end;
+            Bin when is_binary(Bin) ->
+                binary:split(Bin, <<" ">>, [global, trim_all]);
+            _ -> []
             end,
-            Payload1
-    ).
+
+    case AdditionalScopes of
+        [] -> Payload;
+        _  ->
+            TokenScopes = maps:get(<<"scope">>, Payload),
+            case TokenScopes of
+                [] -> maps:put(<<"scope">>, AdditionalScopes, Payload);
+                _  -> maps:put(<<"scope">>, AdditionalScopes ++ TokenScopes, Payload)
+            end
+        end.
 
 %% keycloak token format: https://github.com/rabbitmq/rabbitmq-auth-backend-oauth2/issues/36
 post_process_payload_keycloak(#{<<"authorization">> := Authorization} = Payload) ->
-    Scopes = case maps:get(<<"permissions">>, Authorization, no_permissions) of
-        no_permissions ->
-            [];
-        Permissions ->
-            extract_scopes_from_keycloak_permissions([], Permissions)
+    AdditionalScopes = case maps:get(<<"permissions">>, Authorization, undefined) of
+        undefined   -> [];
+        Permissions -> extract_scopes_from_keycloak_permissions([], Permissions)
     end,
-    case Scopes of
-        [] ->
-            Payload;
+    case AdditionalScopes of
+        [] -> Payload;
         _  ->
-            maps:put(<<"scope">>, Scopes, Payload)
+            TokenScopes = maps:get(<<"scope">>, Payload),
+            case TokenScopes of
+                [] -> maps:put(<<"scope">>, AdditionalScopes, Payload);
+                _  -> maps:put(<<"scope">>, AdditionalScopes ++ TokenScopes, Payload)
+            end
     end.
 
 extract_scopes_from_keycloak_permissions(Acc, []) ->
@@ -192,7 +236,7 @@ extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
     extract_scopes_from_keycloak_permissions(Acc, T).
 
 validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = DecodedToken) ->
-    ResourceServerEnv = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<>>),
+    ResourceServerEnv = application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>),
     ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
     validate_payload(DecodedToken, ResourceServerId).
 
