@@ -150,25 +150,26 @@ check_token(Token) ->
     end.
 
 post_process_payload(Payload) when is_map(Payload) ->
-    Payload0 = case does_include_complex_claim_field(Payload) of
-        true  -> post_process_payload_complex_claim(Payload);
-        false -> Payload
+    Payload0 = maps:map(fun(K, V) ->
+                        case K of
+                            <<"aud">>   when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
+                            <<"scope">> when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
+                            _ -> V
+                        end
         end,
-
-    Payload1 = case maps:is_key(<<"authorization">>, Payload0) of
-        true -> post_process_payload_keycloak(Payload0);
+        Payload
+    ),
+    Payload1 = case does_include_complex_claim_field(Payload0) of
+        true  -> post_process_payload_complex_claim(Payload0);
         false -> Payload0
         end,
 
-    maps:map(fun(K, V) ->
-            case K of
-                <<"aud">>   when is_binary(V) -> binary:split(V, <<" ">>, [global]);
-                <<"scope">> when is_binary(V) -> binary:split(V, <<" ">>, [global]);
-                _ -> V
-            end
+    Payload2 = case maps:is_key(<<"authorization">>, Payload1) of
+        true -> post_process_payload_keycloak(Payload1);
+        false -> Payload1
         end,
-        Payload1
-    ).
+
+    Payload2.
 
 does_include_complex_claim_field(Payload) when is_map(Payload) ->
         maps:is_key(application:get_env(?APP, ?COMPLEX_CLAIM, undefined), Payload).
