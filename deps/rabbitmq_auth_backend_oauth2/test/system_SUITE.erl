@@ -104,6 +104,14 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
+                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
+                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?EXTRA_SCOPES_SOURCE]),
+  rabbit_ct_helpers:testcase_started(Config, Testcase),
+  Config;
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
@@ -113,6 +121,15 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_c
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
+                                        Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
+                                        Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
+  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined]),
+  rabbit_ct_helpers:testcase_started(Config, Testcase),
+  Config;
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
@@ -128,8 +145,6 @@ preconfigure_node(Config) ->
                                       [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?EXTRA_SCOPES_SOURCE]),
 
     rabbit_ct_helpers:set_config(Config, {fixture_jwk, Jwk}).
 
@@ -218,8 +233,6 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_with_complex_claim_as_a_map(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
-    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
         #{<<"additional_rabbitmq_scopes">> => #{<<"rabbitmq">> => [<<"configure:*/*">>, <<"read:*/*">>, <<"write:*/*">>]}}
@@ -231,8 +244,6 @@ test_successful_connection_with_complex_claim_as_a_map(Config) ->
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_with_complex_claim_as_a_list(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
-    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
         #{<<"additional_rabbitmq_scopes">> => [<<"rabbitmq.configure:*/*">>, <<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>]}
@@ -244,8 +255,6 @@ test_successful_connection_with_complex_claim_as_a_list(Config) ->
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_with_complex_claim_as_a_binary(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
-    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
         #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}

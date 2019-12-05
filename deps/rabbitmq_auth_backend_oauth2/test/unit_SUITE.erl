@@ -40,6 +40,21 @@ end_per_suite(Config) ->
         Env),
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+  Config;
+
+init_per_testcase(_, Config) ->
+  Config.
+
+end_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, undefined),
+  Config;
+end_per_testcase(_, Config) ->
+  Config.
+
 %%
 %% Test Cases
 %%
@@ -158,8 +173,8 @@ test_post_process_token_payload_complex_claims(_) ->
                 [<<"rabbitmq-resource.read:*/*">>,
                  <<"rabbitmq-resource-read">>],
             <<"rabbitmq3">> =>
-                [<<"rabbitmq-resource.read:*/*">>,
-                 <<"rabbitmq-resource-read">>]},
+                [<<"rabbitmq-resource.write:*/*">>,
+                 <<"rabbitmq-resource-write">>]},
           [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
         },
         %% claims are map with list content - empty result
@@ -172,7 +187,7 @@ test_post_process_token_payload_complex_claims(_) ->
         %% claims are map with binary content
         {
           #{<<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
-           <<"rabbitmq3">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>},
+           <<"rabbitmq3">> => <<"rabbitmq-resource.write:*/* rabbitmq-resource-write">>},
           [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
         },
         %% claims are map with binary content - empty result
@@ -199,8 +214,6 @@ test_post_process_token_payload_complex_claims(_) ->
         end, Pairs).
 
 post_process_payload_with_complex_claim_authorization(Authorization) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
-    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Jwk = ?UTIL_MOD:fixture_jwk(),
     Token =  maps:put(<<"additional_rabbitmq_scopes">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
