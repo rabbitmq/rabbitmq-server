@@ -39,6 +39,9 @@ groups() ->
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
+                       test_successful_connection_with_complex_claim_as_a_map,
+                       test_successful_connection_with_complex_claim_as_a_list,
+                       test_successful_connection_with_complex_claim_as_a_binary,
                        test_successful_connection_with_keycloak_token,
                        test_successful_token_refresh
                       ]},
@@ -58,6 +61,7 @@ groups() ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+-define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -88,7 +92,7 @@ end_per_group(_Group, Config) ->
     Config.
 
 
-init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse 
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse
                                          Testcase =:= test_successful_token_refresh ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -100,6 +104,14 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
+                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
+                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?EXTRA_SCOPES_SOURCE]),
+  rabbit_ct_helpers:testcase_started(Config, Testcase),
+  Config;
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
@@ -109,6 +121,15 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_c
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
+                                        Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
+                                        Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
+  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined]),
+  rabbit_ct_helpers:testcase_started(Config, Testcase),
+  Config;
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
@@ -204,6 +225,39 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
         Config,
         <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
         <<"hare rabbitmq">>
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_complex_claim_as_a_map(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"additional_rabbitmq_scopes">> => #{<<"rabbitmq">> => [<<"configure:*/*">>, <<"read:*/*">>, <<"write:*/*">>]}}
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_complex_claim_as_a_list(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"additional_rabbitmq_scopes">> => [<<"rabbitmq.configure:*/*">>, <<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>]}
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_complex_claim_as_a_binary(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
