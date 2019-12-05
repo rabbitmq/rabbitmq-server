@@ -42,10 +42,12 @@
 -export([transfer_leadership/2, get_replicas/1, queue_length/1]).
 -export([file_handle_leader_reservation/1, file_handle_other_reservation/0]).
 -export([file_handle_release_reservation/0]).
+-export([list_with_minimum_quorum/0, list_with_minimum_quorum_for_cli/0,
+         filter_quorum_critical/1, filter_quorum_critical/2,
+         all_replica_states/0]).
 
-%%-include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
+-include("rabbit.hrl").
 -include("amqqueue.hrl").
 
 -type msg_id() :: non_neg_integer().
@@ -233,6 +235,69 @@ become_leader(QName, Name) ->
                           ok
                   end
           end).
+
+-spec all_replica_states() -> {node(), #{atom() => atom()}}.
+all_replica_states() ->
+    Rows = ets:tab2list(ra_state),
+    {node(), maps:from_list(Rows)}.
+
+-spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
+list_with_minimum_quorum() ->
+    filter_quorum_critical(rabbit_amqqueue:list_local_quorum_queues()).
+
+-spec list_with_minimum_quorum_for_cli() -> [amqqueue:amqqueue()].
+list_with_minimum_quorum_for_cli() ->
+    QQs = list_with_minimum_quorum(),
+    [begin
+         #resource{name = Name} = amqqueue:get_name(Q),
+         #{
+             <<"readable_name">> => rabbit_misc:rs(amqqueue:get_name(Q)),
+             <<"name">> => Name,
+             <<"virtual_host">> => amqqueue:get_vhost(Q),
+             <<"type">> => <<"quorum">>
+         }
+     end || Q <- QQs].
+
+-spec filter_quorum_critical([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
+filter_quorum_critical(Queues) ->
+    %% Example map of QQ replica states:
+    %%    #{rabbit@warp10 =>
+    %%      #{'%2F_qq.636' => leader,'%2F_qq.243' => leader,
+    %%        '%2F_qq.1939' => leader,'%2F_qq.1150' => leader,
+    %%        '%2F_qq.1109' => leader,'%2F_qq.1654' => leader,
+    %%        '%2F_qq.1679' => leader,'%2F_qq.1003' => leader,
+    %%        '%2F_qq.1593' => leader,'%2F_qq.1765' => leader,
+    %%        '%2F_qq.933' => leader,'%2F_qq.38' => leader,
+    %%        '%2F_qq.1357' => leader,'%2F_qq.1345' => leader,
+    %%        '%2F_qq.1694' => leader,'%2F_qq.994' => leader,
+    %%        '%2F_qq.490' => leader,'%2F_qq.1704' => leader,
+    %%        '%2F_qq.58' => leader,'%2F_qq.564' => leader,
+    %%        '%2F_qq.683' => leader,'%2F_qq.386' => leader,
+    %%        '%2F_qq.753' => leader,'%2F_qq.6' => leader,
+    %%        '%2F_qq.1590' => leader,'%2F_qq.1363' => leader,
+    %%        '%2F_qq.882' => leader,'%2F_qq.1161' => leader,...}}
+    ReplicaStates = maps:from_list(
+                        rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
+                            ?MODULE, all_replica_states, [])),
+    filter_quorum_critical(Queues, ReplicaStates).
+
+-spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => #{atom() => atom()}}) -> [amqqueue:amqqueue()].
+
+filter_quorum_critical(Queues, ReplicaStates) ->
+    lists:filter(fun (Q) ->
+                    MemberNodes = rabbit_amqqueue:get_quorum_nodes(Q),
+                    {Name, _Node} = amqqueue:get_pid(Q),
+                    AllUp = lists:filter(fun (N) ->
+                                            {Name, _} = amqqueue:get_pid(Q),
+                                            case maps:get(N, ReplicaStates, undefined) of
+                                                #{Name := State} when State =:= follower orelse State =:= leader ->
+                                                    true;
+                                                _ -> false
+                                            end
+                                         end, MemberNodes),
+                    MinQuorum = length(MemberNodes) div 2 + 1,
+                    length(AllUp) =< MinQuorum
+                 end, Queues).
 
 rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),
