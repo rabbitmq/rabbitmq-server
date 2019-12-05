@@ -23,7 +23,8 @@
 -include("rabbit_peer_discovery_k8s.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0]).
+         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
+         send_event/3]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -36,7 +37,6 @@
 -define(BACKEND_CONFIG_KEY, peer_discovery_k8s).
 
 
-
 %%
 %% API
 %%
@@ -47,6 +47,7 @@ init() ->
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
     application:load(rabbitmq_peer_discovery_common),
+    proc_lib:spawn(fun monitor_f/0),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -60,7 +61,9 @@ list_nodes() ->
 	{error, Reason} ->
 	    rabbit_log:info(
 	      "Failed to get nodes from k8s - ~s", [Reason]),
-	    {error, Reason}
+          send_event("Warning", "Failed",  
+          io_lib:format("Failed to get nodes from k8s - ~s", [Reason])), 
+  	    {error, Reason}
     end.
 
 -spec supports_registration() -> boolean().
@@ -82,6 +85,7 @@ unregister() ->
 -spec post_registration() -> ok | {error, Reason :: string()}.
 
 post_registration() ->
+    send_event("Normal", "Created",  io_lib:format("Node ~s, registered", [node()])), 
     ok.
 
 -spec lock(Node :: atom()) -> not_supported.
@@ -182,3 +186,66 @@ base_path() ->
 get_address(Address) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     maps:get(list_to_binary(get_config_key(k8s_address_type, M)), Address).
+
+
+%% @doc Perform a HTTP POST request to K8s to send and event
+%% @end
+%%
+-spec send_event(term(),term(), term()) -> {ok, term()} | {error, term()}.
+send_event(Type, Reason, Message) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    {ok, Token} = file:read_file(get_config_key(k8s_token_path, M)),
+    Token1 = binary:replace(Token, <<"\n">>, <<>>),
+    {ok, NameSpace} = file:read_file(
+			get_config_key(k8s_namespace_path, M)),
+    NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
+
+    Name = list_to_binary(
+        io_lib:format("rabbitmq_op_~B",[os:system_time(millisecond)])),
+
+    V1Event = #{
+        metadata => #{
+            name => Name,
+            namespace => NameSpace1
+        },
+        type => list_to_binary(Type),
+        message => list_to_binary(Message),
+        reason => list_to_binary(Reason)
+    },
+
+
+    ?HTTPC_MODULE:post(
+      get_config_key(k8s_scheme, M),
+      get_config_key(k8s_host, M),
+      get_config_key(k8s_port, M),
+      base_path_events(),
+      [],
+      [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
+      [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
+        binary_to_list(rabbit_json:encode(V1Event))
+      ).  
+
+%% @doc Return a list of path segments that are the base path for k8s key actions
+%% @end
+%%
+-spec base_path_events() -> [?HTTPC_MODULE:path_component()].
+base_path_events() ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    {ok, NameSpace} = file:read_file(
+			get_config_key(k8s_namespace_path, M)),
+    NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
+    [api, v1, namespaces, NameSpace1, events].
+
+recv()->
+    receive
+        {nodeup, Node} ->
+            send_event("Normal", "NodeUP", io_lib:format("the Node ~s is UP, ",[Node]));
+        {nodedown, Node} ->
+            send_event("Normal", "NodeDown", io_lib:format("the Node ~s is Down, ",[Node]))
+    end,
+    recv().
+
+monitor_f() ->
+    _ = net_kernel:monitor_nodes(true, []),
+    recv().
+    
