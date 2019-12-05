@@ -61,7 +61,7 @@ groups() ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
--define(EXTRA_PERMISSION_SOURCE, <<"rabbit_resources">>).
+-define(EXTRA_SCOPES_SOURCE, <<"rabbit_resources">>).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -129,7 +129,7 @@ preconfigure_node(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-        [rabbitmq_auth_backend_oauth2, extra_permissions_source, ?EXTRA_PERMISSION_SOURCE]),
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?EXTRA_SCOPES_SOURCE]),
 
     rabbit_ct_helpers:set_config(Config, {fixture_jwk, Jwk}).
 
@@ -218,7 +218,7 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_with_map_complex_claim_token(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
@@ -231,7 +231,7 @@ test_successful_connection_with_map_complex_claim_token(Config) ->
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_with_list_complex_claim_token(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
@@ -244,7 +244,7 @@ test_successful_connection_with_list_complex_claim_token(Config) ->
     close_connection_and_channel(Conn, Ch).
         
 test_successful_connection_with_binary_complex_claim_token(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,

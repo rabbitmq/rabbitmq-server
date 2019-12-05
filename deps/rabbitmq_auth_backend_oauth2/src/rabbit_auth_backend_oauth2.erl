@@ -38,7 +38,7 @@
 
 -define(APP, rabbitmq_auth_backend_oauth2).
 -define(RESOURCE_SERVER_ID, resource_server_id).
--define(COMPLEX_CLAIM, extra_permissions_source).
+-define(COMPLEX_CLAIM, extra_scopes_source).
 
 description() ->
     [{name, <<"UAA">>},
@@ -194,19 +194,19 @@ post_process_payload_complex_claim(Payload) ->
                 case maps:get(ResourceServerId, Content, empty) of
                     empty ->
                         [];
-                    Permissions when is_list(Permissions) ->
-                        case Permissions of
+                    ExtraScopes when is_list(ExtraScopes) ->
+                        case ExtraScopes of
                             [] ->
                                 [];
                             _ ->
-                                [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Permissions]
+                                [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- ExtraScopes]
                             end;
-                    Permission when is_binary(Permission) ->
-                        case Permission of
+                    ExtraScopes when is_binary(ExtraScopes) ->
+                        case ExtraScopes of
                             <<>> ->
                                 [];
                             _ ->
-                                RawClaims = binary:split(Permission, <<" ">>, [global]),
+                                RawClaims = binary:split(ExtraScopes, <<" ">>, [global]),
                                 [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- RawClaims]
                             end;
                     _ -> 
@@ -232,7 +232,7 @@ post_process_payload_complex_claim(Payload) ->
                 [] ->
                     maps:put(<<"scope">>, Scopes, Payload);
                 _ ->                            
-                    maps:put(<<"scope">>, [TokenScopes, Scopes], Payload)
+                    maps:put(<<"scope">>, Scopes ++ TokenScopes, Payload)
             end
         end.
 
@@ -253,7 +253,7 @@ post_process_payload_keycloak(#{<<"authorization">> := Authorization} = Payload)
                 [] ->
                     maps:put(<<"scope">>, Scopes, Payload);
                 _ ->                            
-                    maps:put(<<"scope">>, [TokenScopes, Scopes], Payload)
+                    maps:put(<<"scope">>, Scopes ++ TokenScopes, Payload)
             end
     end.
 

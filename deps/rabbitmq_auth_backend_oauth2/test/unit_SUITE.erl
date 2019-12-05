@@ -184,7 +184,7 @@ test_post_process_token_payload_complex_claims(_) ->
         end, AuthorizationArgumentExpectedScope).
 
 post_process_payload_with_complex_claim_authorization(Authorization) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_permissions_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Jwk = ?UTIL_MOD:fixture_jwk(),
     Token =  maps:put(<<"rabbit_resources">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
