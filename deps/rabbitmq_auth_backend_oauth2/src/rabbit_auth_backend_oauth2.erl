@@ -41,7 +41,7 @@
 -define(COMPLEX_CLAIM, extra_scopes_source).
 
 description() ->
-    [{name, <<"UAA">>},
+    [{name, <<"OAuth 2">>},
      {description, <<"Performs authentication and authorisation using JWT tokens and OAuth 2 scopes">>}].
 
 %%--------------------------------------------------------------------
@@ -150,19 +150,15 @@ check_token(Token) ->
 
 post_process_payload(Payload) when is_map(Payload) ->
     Payload0 = case is_complex_claim(Payload) of
-        true ->
-            post_process_payload_complex_claim(Payload);
-        false ->
-            Payload
+        true  -> post_process_payload_complex_claim(Payload);
+        false -> Payload
         end,
 
     Payload1 = case maps:is_key(<<"authorization">>, Payload0) of
-        true ->
-            post_process_payload_keycloak(Payload0);
-        false ->
-            Payload0
+        true -> post_process_payload_keycloak(Payload0);
+        false -> Payload0
         end,
-        
+
     maps:map(fun(K, V) ->
             case K of
                 <<"aud">> when is_binary(V) ->
@@ -174,86 +170,59 @@ post_process_payload(Payload) when is_map(Payload) ->
         end,
         Payload1
     ).
-    
+
 is_complex_claim(Payload) when is_map(Payload) ->
-        ComplexClaimName = application:get_env(?APP, ?COMPLEX_CLAIM, <<>>),
-        maps:is_key(ComplexClaimName, Payload).
+        maps:is_key(application:get_env(?APP, ?COMPLEX_CLAIM, undefined), Payload).
 
 post_process_payload_complex_claim(Payload) ->
-    ComplexClaimName = application:get_env(?APP, ?COMPLEX_CLAIM, <<>>),
-    ComplexClaimContent = maps:get(ComplexClaimName, Payload),
+    ComplexClaimContent = maps:get(application:get_env(?APP, ?COMPLEX_CLAIM, undefined), Payload),
 
     ResourceServerEnv = application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>),
     ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
 
-    Scopes = 
+    Scopes =
         case ComplexClaimContent of
-            Content when is_list(Content) ->
-                Content;
-            Content when is_map(Content) ->
-                case maps:get(ResourceServerId, Content, empty) of
-                    empty ->
-                        [];
-                    ExtraScopes when is_list(ExtraScopes) ->
-                        case ExtraScopes of
-                            [] ->
-                                [];
-                            _ ->
-                                [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- ExtraScopes]
-                            end;
-                    ExtraScopes when is_binary(ExtraScopes) ->
-                        case ExtraScopes of
-                            <<>> ->
-                                [];
-                            _ ->
-                                RawClaims = binary:split(ExtraScopes, <<" ">>, [global]),
-                                [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- RawClaims]
-                            end;
-                    _ -> 
+            L when is_list(L) -> L;
+            M when is_map(M) ->
+                case maps:get(ResourceServerId, M, undefined) of
+                    undefined -> [];
+                    Ks when is_list(Ks) ->
+                        [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
+                    ClaimBin when is_binary(ClaimBin) ->
+                        RawClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
+                        [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- RawClaims];
+                    _ ->
                         []
                     end;
-            Content when is_binary(Content) ->
-                case Content of
-                    <<>> ->
-                        [];
-                    _ ->
-                        binary:split(Content, <<" ">>, [global])
-                    end;
+            Bin when is_binary(Bin) ->
+                binary:split(Bin, <<" ">>, [global, trim_all]);
             _ ->
                 []
             end,
 
     case Scopes of
-        [] ->
-            Payload;
-        _ -> 
+        [] -> Payload;
+        _  ->
             TokenScopes = maps:get(<<"scope">>, Payload),
             case TokenScopes of
-                [] ->
-                    maps:put(<<"scope">>, Scopes, Payload);
-                _ ->                            
-                    maps:put(<<"scope">>, Scopes ++ TokenScopes, Payload)
+                [] -> maps:put(<<"scope">>, Scopes, Payload);
+                _  -> maps:put(<<"scope">>, Scopes ++ TokenScopes, Payload)
             end
         end.
 
 %% keycloak token format: https://github.com/rabbitmq/rabbitmq-auth-backend-oauth2/issues/36
 post_process_payload_keycloak(#{<<"authorization">> := Authorization} = Payload) ->
-    Scopes = case maps:get(<<"permissions">>, Authorization, no_permissions) of
-        no_permissions ->
-            [];
-        Permissions ->
-            extract_scopes_from_keycloak_permissions([], Permissions)
+    Scopes = case maps:get(<<"permissions">>, Authorization, undefined) of
+        undefined   -> [];
+        Permissions -> extract_scopes_from_keycloak_permissions([], Permissions)
     end,
     case Scopes of
-        [] ->
-            Payload;
-        _  ->            
+        [] -> Payload;
+        _  ->
             TokenScopes = maps:get(<<"scope">>, Payload),
             case TokenScopes of
-                [] ->
-                    maps:put(<<"scope">>, Scopes, Payload);
-                _ ->                            
-                    maps:put(<<"scope">>, Scopes ++ TokenScopes, Payload)
+                [] -> maps:put(<<"scope">>, Scopes, Payload);
+                _  -> maps:put(<<"scope">>, Scopes ++ TokenScopes, Payload)
             end
     end.
 
