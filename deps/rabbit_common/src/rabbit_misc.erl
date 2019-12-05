@@ -1103,11 +1103,16 @@ format_message_queue_entry(V) when is_tuple(V) ->
 format_message_queue_entry(_V) ->
     '_'.
 
+%% Same as rpc:multicall/4 but concatenates all results.
+%% M, F, A is expected to return a list. If it does not,
+%% its return value will be wrapped in a list.
 append_rpc_all_nodes(Nodes, M, F, A) ->
     {ResL, _} = rpc:multicall(Nodes, M, F, A),
     lists:append([case Res of
-                      {badrpc, _} -> [];
-                      _           -> Res
+                      {badrpc, _}         -> [];
+                      Xs when is_list(Xs) -> Xs;
+                      %% wrap it in a list
+                      Other               -> [Other]
                   end || Res <- ResL]).
 
 os_cmd(Command) ->
