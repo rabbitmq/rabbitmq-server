@@ -39,9 +39,9 @@ groups() ->
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
-                       test_successful_connection_with_map_complex_claim_token, 
-                       test_successful_connection_with_list_complex_claim_token,
-                       test_successful_connection_with_binary_complex_claim_token,
+                       test_successful_connection_with_complex_claim_as_a_map,
+                       test_successful_connection_with_complex_claim_as_a_list,
+                       test_successful_connection_with_complex_claim_as_a_binary,
                        test_successful_connection_with_keycloak_token,
                        test_successful_token_refresh
                       ]},
@@ -61,7 +61,7 @@ groups() ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
--define(EXTRA_SCOPES_SOURCE, <<"rabbit_resources">>).
+-define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -92,7 +92,7 @@ end_per_group(_Group, Config) ->
     Config.
 
 
-init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse 
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse
                                          Testcase =:= test_successful_token_refresh ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -217,12 +217,12 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
-test_successful_connection_with_map_complex_claim_token(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
+test_successful_connection_with_complex_claim_as_a_map(Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"rabbit_resources">> => #{<<"rabbitmq">> => [<<"configure:*/*">>, <<"read:*/*">>, <<"write:*/*">>]}}
+        #{<<"additional_rabbitmq_scopes">> => #{<<"rabbitmq">> => [<<"configure:*/*">>, <<"read:*/*">>, <<"write:*/*">>]}}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -230,25 +230,25 @@ test_successful_connection_with_map_complex_claim_token(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
-test_successful_connection_with_list_complex_claim_token(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
+test_successful_connection_with_complex_claim_as_a_list(Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"rabbit_resources">> => [<<"rabbitmq.configure:*/*">>, <<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>]}
+        #{<<"additional_rabbitmq_scopes">> => [<<"rabbitmq.configure:*/*">>, <<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>]}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
-        
-test_successful_connection_with_binary_complex_claim_token(Config) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
+
+test_successful_connection_with_complex_claim_as_a_binary(Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"rabbit_resources">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}
+        #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),

@@ -71,9 +71,10 @@ post_process_token_payload(Audience, Scopes) ->
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
 
 test_post_process_token_payload_keycloak(_) ->
-    AuthorizationArgumentExpectedScope = [
+    Pairs = [
         %% common case
-        {#{<<"permissions">> =>
+        {
+          #{<<"permissions">> =>
                 [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
                    <<"rsname">> => <<"allvhost">>,
                    <<"scopes">> => [<<"rabbitmq-resource.read:*/*">>]},
@@ -82,10 +83,12 @@ test_post_process_token_payload_keycloak(_) ->
                    <<"scopes">> => [<<"rabbitmq-resource-read">>]},
                  #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
                    <<"rsname">> => <<"Default Resource">>}]},
-        [<<"rabbitmq-resource.read:*/*">>, <<"rabbitmq-resource-read">>]
+          [<<"rabbitmq-resource.read:*/*">>, <<"rabbitmq-resource-read">>]
         },
+
         %% one scopes field with a string instead of an array
-        {#{<<"permissions">> =>
+        {
+          #{<<"permissions">> =>
                 [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
                    <<"rsname">> => <<"allvhost">>,
                    <<"scopes">> => <<"rabbitmq-resource.read:*/*">>},
@@ -94,26 +97,34 @@ test_post_process_token_payload_keycloak(_) ->
                    <<"scopes">> => [<<"rabbitmq-resource-read">>]},
                  #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
                    <<"rsname">> => <<"Default Resource">>}]},
-        [<<"rabbitmq-resource.read:*/*">>, <<"rabbitmq-resource-read">>]
+          [<<"rabbitmq-resource.read:*/*">>, <<"rabbitmq-resource-read">>]
         },
+
         %% no scopes field in permissions
-        {#{<<"permissions">> =>
+        {
+          #{<<"permissions">> =>
                 [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
                    <<"rsname">> => <<"allvhost">>},
                  #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
                    <<"rsname">> => <<"vhost1">>},
                  #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
                    <<"rsname">> => <<"Default Resource">>}]},
-        []
+          []
         },
-        {#{<<"permissions">> => []}, []}, %% no permissions
-        {#{}, []} %% no permissions key
+
+        %% no permissions
+        {
+          #{<<"permissions">> => []},
+          []
+        },
+        %% missing permissions key
+        {#{}, []}
     ],
     lists:foreach(
         fun({Authorization, ExpectedScope}) ->
             Payload = post_process_payload_with_keycloak_authorization(Authorization),
             ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
-        end, AuthorizationArgumentExpectedScope).
+        end, Pairs).
 
 post_process_payload_with_keycloak_authorization(Authorization) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -125,69 +136,73 @@ post_process_payload_with_keycloak_authorization(Authorization) ->
 
 
 test_post_process_token_payload_complex_claims(_) ->
-    AuthorizationArgumentExpectedScope = [
+    Pairs = [
         %% claims in form of binary
-        {<<"rabbitmq.rabbitmq-resource.read:*/* rabbitmq.rabbitmq-resource-read">>,
-        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
-        }, 
+        {
+          <<"rabbitmq.rabbitmq-resource.read:*/* rabbitmq.rabbitmq-resource-read">>,
+          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        },
         %% claims in form of binary - empty result
-        {<<>>, []
-        }, 
+        {<<>>, []},
         %% claims in form of list
-        {[<<"rabbitmq.rabbitmq-resource.read:*/*">>, 
-          <<"rabbitmq2.rabbitmq-resource-read">>],
-        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq2.rabbitmq-resource-read">>]
-        }, 
+        {
+          [<<"rabbitmq.rabbitmq-resource.read:*/*">>,
+           <<"rabbitmq2.rabbitmq-resource-read">>],
+          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq2.rabbitmq-resource-read">>]
+        },
         %% claims in form of list - empty result
-        {[], []
-        }, 
+        {[], []},
         %% claims are map with list content
-        {#{<<"rabbitmq">> =>
-                [<<"rabbitmq-resource.read:*/*">>, 
+        {
+          #{<<"rabbitmq">> =>
+                [<<"rabbitmq-resource.read:*/*">>,
                  <<"rabbitmq-resource-read">>],
-          <<"rabbitmq3">> =>
-                [<<"rabbitmq-resource.read:*/*">>, 
+            <<"rabbitmq3">> =>
+                [<<"rabbitmq-resource.read:*/*">>,
                  <<"rabbitmq-resource-read">>]},
-        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
-        }, 
+          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        },
         %% claims are map with list content - empty result
-        {#{<<"rabbitmq2">> =>
-                 [<<"rabbitmq-resource.read:*/*">>, 
+        {
+          #{<<"rabbitmq2">> =>
+                 [<<"rabbitmq-resource.read:*/*">>,
                   <<"rabbitmq-resource-read">>]},
-         []
-        }, 
+          []
+        },
         %% claims are map with binary content
-        {#{<<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
+        {
+          #{<<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
            <<"rabbitmq3">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>},
-        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
-        }, 
+          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        },
         %% claims are map with binary content - empty result
-        {#{<<"rabbitmq2">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>}, []
-        }, 
+        {
+          #{<<"rabbitmq2">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>}, []
+        },
         %% claims are map with empty binary content - empty result
-        {#{<<"rabbitmq">> => <<>>}, []
-        }, 
+        {
+          #{<<"rabbitmq">> => <<>>}, []
+        },
         %% claims are map with empty list content - empty result
-        {#{<<"rabbitmq">> => []}, []
-        }, 
+        {
+          #{<<"rabbitmq">> => []}, []
+        },
         %% no extra claims provided
-        {[], []
-        }, 
+        {[], []},
         %% no extra claims provided
-        {#{}, []
-       }
+        {#{}, []}
     ],
     lists:foreach(
         fun({Authorization, ExpectedScope}) ->
             Payload = post_process_payload_with_complex_claim_authorization(Authorization),
             ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
-        end, AuthorizationArgumentExpectedScope).
+        end, Pairs).
 
 post_process_payload_with_complex_claim_authorization(Authorization) ->
-    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"rabbit_resources">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Jwk = ?UTIL_MOD:fixture_jwk(),
-    Token =  maps:put(<<"rabbit_resources">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
+    Token =  maps:put(<<"additional_rabbitmq_scopes">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
@@ -260,7 +275,7 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     Jwk  = Jwk0#{<<"k">> => <<"bm90b2tlbmtleQ">>},
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
-    
+
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, <<"not a token">>}])).
 
