@@ -30,6 +30,7 @@
          get/5,
          get/7,
          post/6,
+         post/8,
          put/6,
          put/7,
          maybe_configure_proxy/0,
@@ -191,10 +192,27 @@ get(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
 %% @end
 %%
 post(Scheme, Host, Port, Path, Args, Body) ->
+    post(Scheme, Host, Port, Path, Args, [], [], Body).
+
+%% @public
+%% @spec post(Scheme, Host, Port, Path, Args, Body) -> Result
+%% @where Scheme = string(),
+%%        Host   = string(),
+%%        Port   = integer(),
+%%        Path   = string(),
+%%        Args   = proplist(),
+%%        Headers = proplist(),
+%%        HttpOpts = proplist(),
+%%        Body   = string(),
+%%        Result = {ok, mixed}|{error, Reason::string()}
+%% @doc Perform a HTTP POST request
+%% @end
+%%
+post(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("POST ~s [~p]", [URL, Body]),
-  HttpOpts = ensure_timeout(),
-  Response = httpc:request(post, {URL, [], ?CONTENT_JSON, Body}, HttpOpts, []),
+  HttpOpts1 = ensure_timeout(HttpOpts),
+  Response = httpc:request(post, {URL, Headers, ?CONTENT_JSON, Body}, HttpOpts1, []),
   rabbit_log:debug("Response: [~p]", [Response]),
   parse_response(Response).
 
