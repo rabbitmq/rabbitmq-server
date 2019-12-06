@@ -24,7 +24,7 @@
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
-         send_event/3]).
+         send_event/3, generate_v1_event/7]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -35,6 +35,9 @@
 -define(HTTPC_MODULE,  rabbit_peer_discovery_httpc).
 
 -define(BACKEND_CONFIG_KEY, peer_discovery_k8s).
+
+-define(EVENT_FROM_DESCRIPTION, "rabbitmq_peer_discovery").
+
 
 
 %%
@@ -190,7 +193,39 @@ get_address(Address) ->
     maps:get(list_to_binary(get_config_key(k8s_address_type, M)), Address).
 
 
-%% @doc Perform a HTTP POST request to K8s to send and event
+generate_v1_event(NameSpace, Type, Message, Reason) ->
+    {ok, HostName} = inet:gethostname(),   
+    Name = 
+        io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)]),
+    Eventime = calendar:system_time_to_rfc3339(erlang:system_time(second)),
+    generate_v1_event(NameSpace, Name, Type, Message, Reason, Eventime, HostName).
+
+
+generate_v1_event(NameSpace, Name, Type, Message, Reason, EventTime, HostName) ->
+ #{
+    metadata => #{
+        namespace => NameSpace,
+        name => list_to_binary(Name)
+    },
+    type => list_to_binary(Type),
+    message => list_to_binary(Message),
+    reason => list_to_binary(Reason),
+    count => 1,
+    lastTimestamp =>  list_to_binary(EventTime),
+    involvedObject => #{
+        apiVersion => <<"v1">>,
+        kind => <<"RabbitMQ">>,
+        name =>  list_to_binary("pod/" ++ HostName),
+        namespace => NameSpace
+    },
+    source => #{
+        component => list_to_binary(HostName ++ "/" ++ ?EVENT_FROM_DESCRIPTION),
+        host => list_to_binary(HostName)
+    }           
+ }.
+
+
+%% @doc Perform a HTTP POST request to K8s to send and k8s v1.Event
 %% @end
 %%
 -spec send_event(term(),term(), term()) -> {ok, term()} | {error, term()}.
@@ -201,34 +236,8 @@ send_event(Type, Reason, Message) ->
     {ok, NameSpace} = file:read_file(
 			get_config_key(k8s_namespace_path, M)),
     NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
-    {ok, HostName} = inet:gethostname(),   
-    Name = list_to_binary(
-        io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)])),
 
-    
-    V1Event = #{
-        metadata => #{
-            name => Name,
-            namespace => NameSpace1
-        },
-        type => list_to_binary(Type),
-        message => list_to_binary(Message),
-        reason => list_to_binary(Reason),
-        count => 1,
-        lastTimestamp =>  list_to_binary(
-            calendar:system_time_to_rfc3339(erlang:system_time(second))),
-        involvedObject => #{
-            apiVersion => <<"v1">>,
-            kind => <<"RabbitMQ">>,
-            name =>  list_to_binary("pod/" ++ HostName),
-            namespace => NameSpace1
-        },
-        source => #{
-            component => list_to_binary(HostName ++ "/rabbitmq_plugin"),
-            host => list_to_binary(HostName)
-        }           
-    },
-
+    V1Event = generate_v1_event(NameSpace1, Type, Reason, Message),
 
     ?HTTPC_MODULE:post(
       get_config_key(k8s_scheme, M),
@@ -245,9 +254,9 @@ send_event(Type, Reason, Message) ->
 receive_monitoring_messages()->
     receive
         {nodeup, Node} ->
-            send_event("Normal", "NodeUP", io_lib:format("Node ~s is UP ",[Node]));
+            send_event("Normal", "NodeUP", io_lib:format("The Node ~s is UP ",[Node]));
         {nodedown, Node} ->
-            send_event("Warning", "NodeDown", io_lib:format("Node ~s is Down ",[Node]))
+            send_event("Warning", "NodeDown", io_lib:format("The Node ~s is Down ",[Node]))
     end,
     receive_monitoring_messages().
 
