@@ -195,7 +195,7 @@ post(Scheme, Host, Port, Path, Args, Body) ->
     post(Scheme, Host, Port, Path, Args, [], [], Body).
 
 %% @public
-%% @spec post(Scheme, Host, Port, Path, Args, Body) -> Result
+%% @spec post(Scheme, Host, Port, Path, Headers, HttpOpts, Args, Body) -> Result
 %% @where Scheme = string(),
 %%        Host   = string(),
 %%        Port   = integer(),
