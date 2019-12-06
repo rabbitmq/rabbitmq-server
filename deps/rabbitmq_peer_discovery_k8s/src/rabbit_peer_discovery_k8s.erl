@@ -47,7 +47,7 @@ init() ->
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
     application:load(rabbitmq_peer_discovery_common),
-    proc_lib:spawn(fun monitor_f/0),
+    proc_lib:spawn(fun monitor_nodes/0),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -85,7 +85,7 @@ unregister() ->
 -spec post_registration() -> ok | {error, Reason :: string()}.
 
 post_registration() ->
-    send_event("Normal", "Created",  io_lib:format("Node ~s, registered", [node()])), 
+    send_event("Normal", "Created",  io_lib:format("Node ~s is registered", [node()])), 
     ok.
 
 -spec lock(Node :: atom()) -> not_supported.
@@ -128,7 +128,7 @@ make_request() ->
       get_config_key(k8s_scheme, M),
       get_config_key(k8s_host, M),
       get_config_key(k8s_port, M),
-      base_path(),
+      base_path(endpoints,get_config_key(k8s_service_name, M)),
       [],
       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
       [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}]).
@@ -174,14 +174,16 @@ extract_node_list(Response) ->
 %% @doc Return a list of path segments that are the base path for k8s key actions
 %% @end
 %%
--spec base_path() -> [?HTTPC_MODULE:path_component()].
-base_path() ->
+-spec base_path(events | endpoints, term()) -> [?HTTPC_MODULE:path_component()].
+base_path(Type, Args) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, NameSpace} = file:read_file(
 			get_config_key(k8s_namespace_path, M)),
     NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
-    [api, v1, namespaces, NameSpace1, endpoints,
-     get_config_key(k8s_service_name, M)].
+    [api, v1, namespaces, NameSpace1, Type,
+     Args].
+
+%% get_config_key(k8s_service_name, M)    
 
 get_address(Address) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
@@ -199,10 +201,11 @@ send_event(Type, Reason, Message) ->
     {ok, NameSpace} = file:read_file(
 			get_config_key(k8s_namespace_path, M)),
     NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
-
+    {ok, HostName} = inet:gethostname(),   
     Name = list_to_binary(
-        io_lib:format("rabbitmq_op_~B",[os:system_time(millisecond)])),
+        io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)])),
 
+    
     V1Event = #{
         metadata => #{
             name => Name,
@@ -210,7 +213,20 @@ send_event(Type, Reason, Message) ->
         },
         type => list_to_binary(Type),
         message => list_to_binary(Message),
-        reason => list_to_binary(Reason)
+        reason => list_to_binary(Reason),
+        count => 1,
+        lastTimestamp =>  list_to_binary(
+            calendar:system_time_to_rfc3339(erlang:system_time(second))),
+        involvedObject => #{
+            apiVersion => <<"v1">>,
+            kind => <<"RabbitMQ">>,
+            name =>  list_to_binary("pod/" ++ HostName),
+            namespace => NameSpace1
+        },
+        source => #{
+            component => list_to_binary(HostName ++ "/rabbitmq_plugin"),
+            host => list_to_binary(HostName)
+        }           
     },
 
 
@@ -218,34 +234,24 @@ send_event(Type, Reason, Message) ->
       get_config_key(k8s_scheme, M),
       get_config_key(k8s_host, M),
       get_config_key(k8s_port, M),
-      base_path_events(),
+      base_path(events,""),
       [],
       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
       [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
         binary_to_list(rabbit_json:encode(V1Event))
       ).  
 
-%% @doc Return a list of path segments that are the base path for k8s key actions
-%% @end
-%%
--spec base_path_events() -> [?HTTPC_MODULE:path_component()].
-base_path_events() ->
-    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, NameSpace} = file:read_file(
-			get_config_key(k8s_namespace_path, M)),
-    NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
-    [api, v1, namespaces, NameSpace1, events].
 
-recv()->
+receive_monitoring_messages()->
     receive
         {nodeup, Node} ->
-            send_event("Normal", "NodeUP", io_lib:format("the Node ~s is UP, ",[Node]));
+            send_event("Normal", "NodeUP", io_lib:format("Node ~s is UP ",[Node]));
         {nodedown, Node} ->
-            send_event("Normal", "NodeDown", io_lib:format("the Node ~s is Down, ",[Node]))
+            send_event("Warning", "NodeDown", io_lib:format("Node ~s is Down ",[Node]))
     end,
-    recv().
+    receive_monitoring_messages().
 
-monitor_f() ->
+monitor_nodes() ->
     _ = net_kernel:monitor_nodes(true, []),
-    recv().
+    receive_monitoring_messages().
     
