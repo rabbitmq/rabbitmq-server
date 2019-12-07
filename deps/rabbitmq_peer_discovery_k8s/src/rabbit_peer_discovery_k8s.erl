@@ -86,9 +86,9 @@ unregister() ->
     ok.
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
-
 post_registration() ->
-    send_event("Normal", "Created",  io_lib:format("Node ~s is registered", [node()])), 
+    send_event("Normal", "Created",  
+	       io_lib:format("Node ~s is registered", [node()])), 
     ok.
 
 -spec lock(Node :: atom()) -> not_supported.
@@ -202,27 +202,28 @@ generate_v1_event(NameSpace, Type, Message, Reason) ->
 
 
 generate_v1_event(NameSpace, Name, Type, Message, Reason, EventTime, HostName) ->
- #{
-    metadata => #{
-        namespace => NameSpace,
-        name => list_to_binary(Name)
-    },
-    type => list_to_binary(Type),
-    message => list_to_binary(Message),
-    reason => list_to_binary(Reason),
-    count => 1,
-    lastTimestamp =>  list_to_binary(EventTime),
-    involvedObject => #{
-        apiVersion => <<"v1">>,
-        kind => <<"RabbitMQ">>,
-        name =>  list_to_binary("pod/" ++ HostName),
-        namespace => NameSpace
-    },
-    source => #{
-        component => list_to_binary(HostName ++ "/" ++ ?EVENT_FROM_DESCRIPTION),
-        host => list_to_binary(HostName)
-    }           
- }.
+    #{
+      metadata => #{
+		    namespace => NameSpace,
+		    name => list_to_binary(Name)
+		   },
+      type => list_to_binary(Type),
+      message => list_to_binary(Message),
+      reason => list_to_binary(Reason),
+      count => 1,
+      lastTimestamp =>  list_to_binary(EventTime),
+      involvedObject => #{
+			  apiVersion => <<"v1">>,
+			  kind => <<"RabbitMQ">>,
+			  name =>  list_to_binary("pod/" ++ HostName),
+			  namespace => NameSpace
+			 },
+      source => #{
+		  component => list_to_binary(HostName ++ "/" ++ 
+						  ?EVENT_FROM_DESCRIPTION),
+		  host => list_to_binary(HostName)
+		 }           
+     }.
 
 
 %% @doc Perform a HTTP POST request to K8s to send and k8s v1.Event
@@ -240,27 +241,28 @@ send_event(Type, Reason, Message) ->
     V1Event = generate_v1_event(NameSpace1, Type, Reason, Message),
 
     ?HTTPC_MODULE:post(
-      get_config_key(k8s_scheme, M),
-      get_config_key(k8s_host, M),
-      get_config_key(k8s_port, M),
-      base_path(events,""),
-      [],
-      [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
-      [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
-        binary_to_list(rabbit_json:encode(V1Event))
+       get_config_key(k8s_scheme, M),
+       get_config_key(k8s_host, M),
+       get_config_key(k8s_port, M),
+       base_path(events,""),
+       [],
+       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
+       [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
+       binary_to_list(rabbit_json:encode(V1Event))
       ).  
 
 
 receive_monitoring_messages()->
     receive
         {nodeup, Node} ->
-            send_event("Normal", "NodeUP", io_lib:format("The Node ~s is UP ",[Node]));
+            send_event("Normal", "NodeUP", 
+		       io_lib:format("The Node ~s is UP ",[Node]));
         {nodedown, Node} ->
-            send_event("Warning", "NodeDown", io_lib:format("The Node ~s is Down ",[Node]))
+            send_event("Warning", "NodeDown", 
+		       io_lib:format("The Node ~s is Down ",[Node]))
     end,
     receive_monitoring_messages().
 
 monitor_nodes() ->
     _ = net_kernel:monitor_nodes(true, []),
     receive_monitoring_messages().
-    
