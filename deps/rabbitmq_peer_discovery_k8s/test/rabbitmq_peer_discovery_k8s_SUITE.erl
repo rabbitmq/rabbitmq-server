@@ -115,26 +115,26 @@ node_name_suffix_test(_Config) ->
 
 event_v1_test(_Config) ->
     Expectation = #{
-      count => 1,
-      type => <<"Normal">>,
-      lastTimestamp => <<"2019-12-06T15:10:23+00:00">>,
-      message => <<"MyMessage">>,
-      reason => <<"Reason">>,
-      metadata =>#{
-            name => <<"test">> ,
-            namespace => <<"namespace">>
-        },
-      involvedObject =>#{
-            apiVersion => <<"v1">>,
-            kind => <<"RabbitMQ">>,
-            name => <<"pod/MyHostName">>,
-            namespace => <<"namespace">>
-        },
-      source =>#{
-            component => <<"MyHostName/rabbitmq_peer_discovery">>,
-            host => <<"MyHostName">>
-        }
-    },
+		    count => 1,
+		    type => <<"Normal">>,
+		    lastTimestamp => <<"2019-12-06T15:10:23+00:00">>,
+		    message => <<"MyMessage">>,
+		    reason => <<"Reason">>,
+		    metadata =>#{
+				 name => <<"test">> ,
+				 namespace => <<"namespace">>
+				},
+		    involvedObject =>#{
+				       apiVersion => <<"v1">>,
+				       kind => <<"RabbitMQ">>,
+				       name => <<"pod/MyHostName">>,
+				       namespace => <<"namespace">>
+				      },
+		    source =>#{
+			       component => <<"MyHostName/rabbitmq_peer_discovery">>,
+			       host => <<"MyHostName">>
+			      }
+		   },
     ?assertEqual(Expectation, 
-    rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
-        "Normal", "MyMessage", "Reason", "2019-12-06T15:10:23+00:00", "MyHostName")).
+		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
+							     "Normal", "MyMessage", "Reason", "2019-12-06T15:10:23+00:00", "MyHostName")).
