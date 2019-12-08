@@ -794,10 +794,10 @@ var chart_data = {};
 var last_page_out_of_range_error = 0;
 
 var enable_uaa;
-var oauth2_implementation;
 var uaa_client_id;
 var uaa_location;
 var oauth2_scopes;
+var oauth2_implementation;
 
 var uaa_oauth2_implementation = 'uaa';
 var identityServer_oauth2_implementation = 'identityserver';

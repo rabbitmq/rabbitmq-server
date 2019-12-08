@@ -1,51 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!-- <script type="application/javascript">
-    window.parent.afterAccess(parseInt(window.location.search.substring(1)));
-  </script> -->
   <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
   <meta content="utf-8" http-equiv="encoding">
   <link href="css/main.css" rel="stylesheet" type="text/css"/>
   <link href="favicon.ico" rel="shortcut icon" type="image/x-icon"/>
   <script src="js/oidc-client.js"></script>
   <script type="application/javascript">
-    var counter = 3;
-    
-    function redirect_me() {
-      window.location = "/";
-    }
-
-    function timer(){   
-      setTimeout(function(){
-          if (counter == 0) {
-            document.getElementById("redirect").textContent = 'Redirecting...';
-            redirect_me();
-          } else {
-            document.getElementById("redirect").textContent = 'Redirect in ' + counter + ' second(s)';
-            counter--; 
-            timer();
-          }
-      }, 1000);
-    }
-
-    new Oidc.UserManager().signinRedirectCallback()
-    .then(function () {
-      //timer();
-      redirect_me();
-    }).catch(function (e) {
+    new Oidc.UserManager()
+      .signinRedirectCallback()
+      .then(function () {
+        window.location = "/";
+      }).catch(function (e) {
         console.error(e);
-    });
+      });
   </script>
 </head>
 <body>
-    <div id="outer">
-        <div id="login">
-            <p><img src="img/rabbitmqlogo.png" alt="RabbitMQ logo" width="204" height="37"/></p>
-            <div id="login-status" style="text-align: center;">
-                <!-- <p class="success">Logged in successfully!</p>
-                <button id="redirect" style="text-align: center; margin: 0 auto;" onclick="redirect_me()">Redirect in 3 second(s)</button></div>  -->
-          </div>
-    </div>
 </body>
 </html>

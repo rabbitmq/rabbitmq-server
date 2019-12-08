@@ -27,8 +27,9 @@ $(document).ready(function() {
                 automaticSilentRenew: true,
                 loadUserInfo: true
             };
-
-            Oidc.Log.logger = console;
+            
+            // Uncomment for debug    
+            //Oidc.Log.logger = console;
             oidcClient = new Oidc.UserManager(oidcClientSettings);
 
             if (!oidcClientEventInitialized) {
@@ -42,14 +43,13 @@ $(document).ready(function() {
                         replace_content('outer', format('login_uaa', {}));
                         replace_content('login-status', '<p class="warning">' + " Access token expired! User Logged out!"  + 
                                                         '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
-                        console.log("Access token expired - user logout.");
+                        console.warn("Access token has expired. User logged out.");
                     });
                 });
                 oidcClient.events.addSilentRenewError(function (e) {
-                    console.log("Silent renew access token error: ", e.message);
+                    console.warn("Automatic silent token renew has failed: ", e.message);
                 });
                 oidcClient.events.addUserLoaded(function (user) {
-                    console.log("check this: user loaded");
                     set_auth_pref(uaa_client_id + ':' + user.access_token);
                     store_pref('jwt_token', user.access_token);
                 });
@@ -60,10 +60,7 @@ $(document).ready(function() {
                     replace_content('outer', format('login_uaa', {}));
                     replace_content('login-status', '<p class="success">' + "Logged out successfully!" +
                                                     '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
-                    console.log("User unloaded. Token cleared.");
-                });               
-                oidcClient.events.addSilentRenewError(function (e) {
-                    console.log("Silent renew error", e.message);
+                    console.log("User session has been terminated. Token cleared.");
                 });
             }
 
@@ -78,18 +75,13 @@ $(document).ready(function() {
                                 oauth2_logout();
                             }
                         }
-                        if(user){
-                            oauth2_login();
-                        } else {
-                            replace_content('outer', format('login_uaa', {}));
-                            replace_content('login-status', '<p class="success">' + uaa_location + " appear to be a running IdentityServer instance."  + 
-                                                            '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
-                        };
+                        oauth2_login();
                     });
                 };
             });
             break;
           default:
+            break;
         }
     } else {
         replace_content('outer', format('login', {}));
@@ -259,13 +251,23 @@ function check_login() {
             switch (oauth2_implementation) {
                 case uaa_oauth2_implementation:
                     replace_content('login-status', '<button id="loginWindow" onclick="oauth2_login()">Log out</button>');
-                break;
+                    break;
                 case identityServer_oauth2_implementation:
-                    // todo: OpenId client logout!
-                    replace_content('login-status', '<p>Login failed</p>');
-                break;
+                    oidcClient = new Oidc.UserManager(oidcClientSettings);
+                    oidcClient.getUser().then(function(user){
+                        if (user){
+                            user.token
+                            oidcClient.removeUser().then(function() {
+                                replace_content('outer', format('login_uaa', {}));
+                                replace_content('login-status', '<p class="warning">' + " Unauthorized access! User Logged out!"  + 
+                                                                '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
+                                console.log("Unauthorized access! User logged out.");
+                            });
+                        }
+                    });
+                    break;
                 default:
-                enable_uaa = false;
+                    enable_uaa = false;
             }
         } else {
             replace_content('login-status', '<p>Login failed</p>');
