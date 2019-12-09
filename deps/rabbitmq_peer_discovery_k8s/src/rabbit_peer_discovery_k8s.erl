@@ -30,14 +30,6 @@
 -compile(export_all).
 -endif.
 
--define(CONFIG_MODULE, rabbit_peer_discovery_config).
--define(UTIL_MODULE,   rabbit_peer_discovery_util).
--define(HTTPC_MODULE,  rabbit_peer_discovery_httpc).
-
--define(BACKEND_CONFIG_KEY, peer_discovery_k8s).
-
--define(K8S_EVENT_SOURCE_DESCRIPTION, "rabbitmq_peer_discovery").
-
 %%
 %% API
 %%
@@ -48,7 +40,6 @@ init() ->
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
     application:load(rabbitmq_peer_discovery_common),
-    proc_lib:spawn(fun monitor_nodes/0),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -60,10 +51,9 @@ list_nodes() ->
 	    Addresses = extract_node_list(Response),
 	    {ok, lists:map(fun node_name/1, Addresses)};
 	{error, Reason} ->
-	    rabbit_log:info(
-	      "Failed to get nodes from k8s - ~s", [Reason]),
-          send_event("Warning", "Failed",  
-          io_lib:format("Failed to get nodes from k8s - ~s", [Reason])), 
+	    Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
+        rabbit_log:error(Details),
+        send_event("Warning", "Failed", Details),
   	    {error, Reason}
     end.
 
@@ -85,9 +75,8 @@ unregister() ->
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
 post_registration() ->
-    send_event("Normal", "Created",  
-	       io_lib:format("Node ~s is registered", [node()])), 
-    ok.
+    Details = io_lib:format("Node ~s is registered", [node()]),
+    send_event("Normal", "Created", Details).
 
 -spec lock(Node :: atom()) -> not_supported.
 
@@ -178,9 +167,9 @@ extract_node_list(Response) ->
 -spec base_path(events | endpoints, term()) -> [?HTTPC_MODULE:path_component()].
 base_path(Type, Args) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, NameSpace} = file:read_file(
+    {ok, Namespace} = file:read_file(
 			get_config_key(k8s_namespace_path, M)),
-    NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
+    NameSpace1 = binary:replace(Namespace, <<"\n">>, <<>>),
     [api, v1, namespaces, NameSpace1, Type,
      Args].
 
@@ -238,6 +227,7 @@ send_event(Type, Reason, Message) ->
 
     V1Event = generate_v1_event(NameSpace1, Type, Reason, Message),
 
+    Body = rabbit_data_coercion:to_list(rabbit_json:encode(V1Event)),
     ?HTTPC_MODULE:post(
        get_config_key(k8s_scheme, M),
        get_config_key(k8s_host, M),
@@ -246,21 +236,5 @@ send_event(Type, Reason, Message) ->
        [],
        [{"Authorization", "Bearer " ++ rabbit_data_coercion:to_list(Token1)}],
        [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
-       rabbit_data_coercion:to_list(rabbit_json:encode(V1Event))
+        Body
       ).  
-
-
-node_monitor_loop()->
-    receive
-        {nodeup, Node} ->
-            send_event("Normal", "NodeUp",
-		       io_lib:format("Node ~s is up ", [Node]));
-        {nodedown, Node} ->
-            send_event("Warning", "NodeDown", 
-		       io_lib:format("Node ~s is down or disconnected ", [Node]))
-    end,
-    node_monitor_loop().
-
-monitor_nodes() ->
-    _ = net_kernel:monitor_nodes(true, []),
-    node_monitor_loop().
