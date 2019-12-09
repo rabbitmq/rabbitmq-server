@@ -254,10 +254,10 @@ node_monitor_loop()->
     receive
         {nodeup, Node} ->
             send_event("Normal", "NodeUp",
-		       io_lib:format("Node ~s is up ",[Node]));
+		       io_lib:format("Node ~s is up ", [Node]));
         {nodedown, Node} ->
             send_event("Warning", "NodeDown", 
-		       io_lib:format("Node ~s is down ",[Node]))
+		       io_lib:format("Node ~s is down or disconnected ", [Node]))
     end,
     node_monitor_loop().
 
