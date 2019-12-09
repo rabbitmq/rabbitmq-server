@@ -107,7 +107,7 @@ If you are using a symmetric key, the configuration will look like this:
 ```erlang
 [
   {rabbitmq_auth_backend_oauth2, [
-    {resource_server_id, <<"my_rabbit_server">>}
+    {resource_server_id, <<"my_rabbit_server">>},
     {key_config, [
       {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"MAC">>,
