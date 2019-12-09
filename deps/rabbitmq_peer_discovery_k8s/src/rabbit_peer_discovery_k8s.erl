@@ -36,9 +36,7 @@
 
 -define(BACKEND_CONFIG_KEY, peer_discovery_k8s).
 
--define(EVENT_FROM_DESCRIPTION, "rabbitmq_peer_discovery").
-
-
+-define(K8S_EVENT_SOURCE_DESCRIPTION, "rabbitmq_peer_discovery").
 
 %%
 %% API
@@ -220,7 +218,7 @@ generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) -
 			 },
       source => #{
 		  component => rabbit_data_coercion:to_binary(HostName ++ "/" ++
-						  ?EVENT_FROM_DESCRIPTION),
+						  ?K8S_EVENT_SOURCE_DESCRIPTION),
 		  host => rabbit_data_coercion:to_binary(HostName)
 		 }           
      }.
