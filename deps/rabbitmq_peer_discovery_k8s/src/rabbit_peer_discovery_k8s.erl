@@ -193,35 +193,35 @@ get_address(Address) ->
     maps:get(list_to_binary(get_config_key(k8s_address_type, M)), Address).
 
 
-generate_v1_event(NameSpace, Type, Message, Reason) ->
+generate_v1_event(Namespace, Type, Message, Reason) ->
     {ok, HostName} = inet:gethostname(),   
     Name = 
         io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)]),
-    Eventime = calendar:system_time_to_rfc3339(erlang:system_time(second)),
-    generate_v1_event(NameSpace, Name, Type, Message, Reason, Eventime, HostName).
+    TimeInSeconds = calendar:system_time_to_rfc3339(erlang:system_time(second)),
+    generate_v1_event(Namespace, Name, Type, Message, Reason, TimeInSeconds, HostName).
 
 
-generate_v1_event(NameSpace, Name, Type, Message, Reason, EventTime, HostName) ->
+generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) ->
     #{
       metadata => #{
-		    namespace => NameSpace,
-		    name => list_to_binary(Name)
+		    namespace => rabbit_data_coercion:to_binary(Namespace),
+		    name => rabbit_data_coercion:to_binary(Name)
 		   },
-      type => list_to_binary(Type),
-      message => list_to_binary(Message),
-      reason => list_to_binary(Reason),
+      type => rabbit_data_coercion:to_binary(Type),
+      message => rabbit_data_coercion:to_binary(Message),
+      reason => rabbit_data_coercion:to_binary(Reason),
       count => 1,
-      lastTimestamp =>  list_to_binary(EventTime),
+      lastTimestamp =>  rabbit_data_coercion:to_binary(Timestamp),
       involvedObject => #{
 			  apiVersion => <<"v1">>,
 			  kind => <<"RabbitMQ">>,
-			  name =>  list_to_binary("pod/" ++ HostName),
-			  namespace => NameSpace
+			  name =>  rabbit_data_coercion:to_binary("pod/" ++ HostName),
+			  namespace => rabbit_data_coercion:to_binary(Namespace)
 			 },
       source => #{
-		  component => list_to_binary(HostName ++ "/" ++ 
+		  component => rabbit_data_coercion:to_binary(HostName ++ "/" ++
 						  ?EVENT_FROM_DESCRIPTION),
-		  host => list_to_binary(HostName)
+		  host => rabbit_data_coercion:to_binary(HostName)
 		 }           
      }.
 
@@ -246,23 +246,23 @@ send_event(Type, Reason, Message) ->
        get_config_key(k8s_port, M),
        base_path(events,""),
        [],
-       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
+       [{"Authorization", "Bearer " ++ rabbit_data_coercion:to_list(Token1)}],
        [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
-       binary_to_list(rabbit_json:encode(V1Event))
+       rabbit_data_coercion:to_list(rabbit_json:encode(V1Event))
       ).  
 
 
-receive_monitoring_messages()->
+node_monitor_loop()->
     receive
         {nodeup, Node} ->
-            send_event("Normal", "NodeUP", 
-		       io_lib:format("The Node ~s is UP ",[Node]));
+            send_event("Normal", "NodeUp",
+		       io_lib:format("Node ~s is up ",[Node]));
         {nodedown, Node} ->
             send_event("Warning", "NodeDown", 
-		       io_lib:format("The Node ~s is Down ",[Node]))
+		       io_lib:format("Node ~s is down ",[Node]))
     end,
-    receive_monitoring_messages().
+    node_monitor_loop().
 
 monitor_nodes() ->
     _ = net_kernel:monitor_nodes(true, []),
-    receive_monitoring_messages().
+    node_monitor_loop().
