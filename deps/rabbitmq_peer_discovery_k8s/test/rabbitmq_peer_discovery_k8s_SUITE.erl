@@ -37,7 +37,8 @@ groups() ->
                  extract_node_list_with_not_ready_addresses_test,
                  node_name_empty_test,
                  node_name_suffix_test,
-                 registration_support
+                 registration_support,
+                 event_v1_test
                 ]}].
 
 init_per_testcase(T, Config) when T == node_name_empty_test;
@@ -111,3 +112,29 @@ node_name_suffix_test(_Config) ->
     os:putenv("K8S_HOSTNAME_SUFFIX", ".rabbitmq.default.svc.cluster.local"),
     Expectation = 'rabbit@rabbitmq-0.rabbitmq.default.svc.cluster.local',
     ?assertEqual(Expectation, rabbit_peer_discovery_k8s:node_name(<<"rabbitmq-0">>)).
+
+event_v1_test(_Config) ->
+    Expectation = #{
+		    count => 1,
+		    type => <<"Normal">>,
+		    lastTimestamp => <<"2019-12-06T15:10:23+00:00">>,
+		    message => <<"MyMessage">>,
+		    reason => <<"Reason">>,
+		    metadata =>#{
+				 name => <<"test">> ,
+				 namespace => <<"namespace">>
+				},
+		    involvedObject =>#{
+				       apiVersion => <<"v1">>,
+				       kind => <<"RabbitMQ">>,
+				       name => <<"pod/MyHostName">>,
+				       namespace => <<"namespace">>
+				      },
+		    source =>#{
+			       component => <<"MyHostName/rabbitmq_peer_discovery">>,
+			       host => <<"MyHostName">>
+			      }
+		   },
+    ?assertEqual(Expectation, 
+		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
+							     "Normal", "MyMessage", "Reason", "2019-12-06T15:10:23+00:00", "MyHostName")).

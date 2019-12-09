@@ -1,3 +1,11 @@
+-define(CONFIG_MODULE, rabbit_peer_discovery_config).
+-define(UTIL_MODULE,   rabbit_peer_discovery_util).
+-define(HTTPC_MODULE,  rabbit_peer_discovery_httpc).
+
+-define(BACKEND_CONFIG_KEY, peer_discovery_k8s).
+
+-define(K8S_EVENT_SOURCE_DESCRIPTION, "rabbitmq_peer_discovery").
+
 -define(CONFIG_MAPPING,
          #{
           k8s_scheme                         => #peer_discovery_config_entry_meta{

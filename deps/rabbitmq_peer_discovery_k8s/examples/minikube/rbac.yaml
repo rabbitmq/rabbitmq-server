@@ -8,17 +8,20 @@ metadata:
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: endpoint-reader
+  name: rabbitmq-peer-discovery-rbac
   namespace: test-rabbitmq
 rules:
 - apiGroups: [""]
   resources: ["endpoints"]
   verbs: ["get"]
+# - apiGroups: [""]
+#   resources: ["events"]
+#   verbs: ["create"]
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
 metadata:
-  name: endpoint-reader
+  name: rabbitmq-peer-discovery-rbac
   namespace: test-rabbitmq
 subjects:
 - kind: ServiceAccount
@@ -26,4 +29,4 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: endpoint-reader
+  name: rabbitmq-peer-discovery-rbac

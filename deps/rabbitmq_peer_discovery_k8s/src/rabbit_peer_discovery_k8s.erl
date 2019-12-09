@@ -23,19 +23,12 @@
 -include("rabbit_peer_discovery_k8s.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0]).
+         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
+         send_event/3, generate_v1_event/7]).
 
 -ifdef(TEST).
 -compile(export_all).
 -endif.
-
--define(CONFIG_MODULE, rabbit_peer_discovery_config).
--define(UTIL_MODULE,   rabbit_peer_discovery_util).
--define(HTTPC_MODULE,  rabbit_peer_discovery_httpc).
-
--define(BACKEND_CONFIG_KEY, peer_discovery_k8s).
-
-
 
 %%
 %% API
@@ -58,9 +51,10 @@ list_nodes() ->
 	    Addresses = extract_node_list(Response),
 	    {ok, lists:map(fun node_name/1, Addresses)};
 	{error, Reason} ->
-	    rabbit_log:info(
-	      "Failed to get nodes from k8s - ~s", [Reason]),
-	    {error, Reason}
+	    Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
+        rabbit_log:error(Details),
+        send_event("Warning", "Failed", Details),
+  	    {error, Reason}
     end.
 
 -spec supports_registration() -> boolean().
@@ -80,9 +74,9 @@ unregister() ->
     ok.
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
-
 post_registration() ->
-    ok.
+    Details = io_lib:format("Node ~s is registered", [node()]),
+    send_event("Normal", "Created", Details).
 
 -spec lock(Node :: atom()) -> not_supported.
 
@@ -124,7 +118,7 @@ make_request() ->
       get_config_key(k8s_scheme, M),
       get_config_key(k8s_host, M),
       get_config_key(k8s_port, M),
-      base_path(),
+      base_path(endpoints,get_config_key(k8s_service_name, M)),
       [],
       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
       [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}]).
@@ -170,15 +164,77 @@ extract_node_list(Response) ->
 %% @doc Return a list of path segments that are the base path for k8s key actions
 %% @end
 %%
--spec base_path() -> [?HTTPC_MODULE:path_component()].
-base_path() ->
+-spec base_path(events | endpoints, term()) -> [?HTTPC_MODULE:path_component()].
+base_path(Type, Args) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, NameSpace} = file:read_file(
+    {ok, Namespace} = file:read_file(
 			get_config_key(k8s_namespace_path, M)),
-    NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
-    [api, v1, namespaces, NameSpace1, endpoints,
-     get_config_key(k8s_service_name, M)].
+    NameSpace1 = binary:replace(Namespace, <<"\n">>, <<>>),
+    [api, v1, namespaces, NameSpace1, Type,
+     Args].
+
+%% get_config_key(k8s_service_name, M)    
 
 get_address(Address) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     maps:get(list_to_binary(get_config_key(k8s_address_type, M)), Address).
+
+
+generate_v1_event(Namespace, Type, Message, Reason) ->
+    {ok, HostName} = inet:gethostname(),   
+    Name = 
+        io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)]),
+    TimeInSeconds = calendar:system_time_to_rfc3339(erlang:system_time(second)),
+    generate_v1_event(Namespace, Name, Type, Message, Reason, TimeInSeconds, HostName).
+
+
+generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) ->
+    #{
+      metadata => #{
+		    namespace => rabbit_data_coercion:to_binary(Namespace),
+		    name => rabbit_data_coercion:to_binary(Name)
+		   },
+      type => rabbit_data_coercion:to_binary(Type),
+      message => rabbit_data_coercion:to_binary(Message),
+      reason => rabbit_data_coercion:to_binary(Reason),
+      count => 1,
+      lastTimestamp =>  rabbit_data_coercion:to_binary(Timestamp),
+      involvedObject => #{
+			  apiVersion => <<"v1">>,
+			  kind => <<"RabbitMQ">>,
+			  name =>  rabbit_data_coercion:to_binary("pod/" ++ HostName),
+			  namespace => rabbit_data_coercion:to_binary(Namespace)
+			 },
+      source => #{
+		  component => rabbit_data_coercion:to_binary(HostName ++ "/" ++
+						  ?K8S_EVENT_SOURCE_DESCRIPTION),
+		  host => rabbit_data_coercion:to_binary(HostName)
+		 }           
+     }.
+
+
+%% @doc Perform a HTTP POST request to K8s to send and k8s v1.Event
+%% @end
+%%
+-spec send_event(term(),term(), term()) -> {ok, term()} | {error, term()}.
+send_event(Type, Reason, Message) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    {ok, Token} = file:read_file(get_config_key(k8s_token_path, M)),
+    Token1 = binary:replace(Token, <<"\n">>, <<>>),
+    {ok, NameSpace} = file:read_file(
+			get_config_key(k8s_namespace_path, M)),
+    NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
+
+    V1Event = generate_v1_event(NameSpace1, Type, Reason, Message),
+
+    Body = rabbit_data_coercion:to_list(rabbit_json:encode(V1Event)),
+    ?HTTPC_MODULE:post(
+       get_config_key(k8s_scheme, M),
+       get_config_key(k8s_host, M),
+       get_config_key(k8s_port, M),
+       base_path(events,""),
+       [],
+       [{"Authorization", "Bearer " ++ rabbit_data_coercion:to_list(Token1)}],
+       [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
+        Body
+      ).  
