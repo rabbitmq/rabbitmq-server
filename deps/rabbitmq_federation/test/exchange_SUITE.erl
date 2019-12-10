@@ -721,13 +721,13 @@ dynamic_reconfiguration_integrity(Config) ->
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
 delete_upstream(Config) ->
-    %% If two exchanges have the same name, it must be deleted only on the given vhost.
+    %% If two exchanges in different virtual hosts have the same name, only one should be deleted.
     rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream1">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream1">>),
     rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream2">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream2">>),
 
-    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream1">>), 
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream1">>),
     Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream2">>),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
@@ -769,8 +769,9 @@ delete_upstream(Config) ->
 
     Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
                                           status, []),
-    ?assertMatch([_], Status),
-    ?assertMatch(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
+    %% one link is still around
+    ?assertEqual(1, length(Status)),
+    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
 
 federate_unfederate(Config) ->
     with_ch(Config,
