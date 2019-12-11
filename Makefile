@@ -129,7 +129,9 @@ define PROJECT_ENV
 		%% interval at which the channel can perform periodic actions
 	    {channel_tick_interval, 60000},
 	    %% Default max message size is 128 MB
-	    {max_message_size, 134217728}
+	    {max_message_size, 134217728},
+	    %% Default is ~ 1MB
+	    {gc_threshold, 1000000}
 	  ]
 endef
 
