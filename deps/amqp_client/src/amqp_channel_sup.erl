@@ -55,11 +55,12 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
                   VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]),
     RabbitCh;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
+    {ok, GCThreshold} = application:get_env(amqp_client, gc_threshold),
     {ok, Writer} = supervisor2:start_child(
                      Sup,
                      {writer, {rabbit_writer, start_link,
                                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
-                                {ConnName, ChNumber}]},
+                                {ConnName, ChNumber}, false, GCThreshold]},
                       transient, ?WORKER_WAIT, worker, [rabbit_writer]}),
     Writer.
 
