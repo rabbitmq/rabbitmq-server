@@ -33,7 +33,10 @@ defmodule EnablePluginsCommandTest do
                                                [:rabbit, :plugins_dir])
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
 
+    IO.puts("plugins enable tests default env: enabled plugins = #{plugins_file}, plugins dir = #{plugins_dir}, RabbitMQ home directory = #{rabbitmq_home}")
+
     {:ok, [enabled_plugins]} = :file.consult(plugins_file)
+    IO.puts("plugins enable tests will assume tnat #{Enum.join(enabled_plugins, ",")} is the list of enabled plugins to revert to")
 
     opts = %{enabled_plugins_file: plugins_file,
              plugins_dir: plugins_dir,
@@ -78,17 +81,6 @@ defmodule EnablePluginsCommandTest do
     )
   end
 
-  test "validate_execution_environment: not specifying an enabled_plugins_file is reported as an error", context do
-    assert @command.validate_execution_environment(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
-      {:validation_failure, :no_plugins_file}
-  end
-
-  test "validate_execution_environment: not specifying a plugins_dir is reported as an error", context do
-    assert @command.validate_execution_environment(["a"], Map.delete(context[:opts], :plugins_dir)) ==
-      {:validation_failure, :no_plugins_dir}
-  end
-
-
   test "validate_execution_environment: specifying a non-existent enabled_plugins_file is fine", context do
     assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
   end
@@ -96,11 +88,6 @@ defmodule EnablePluginsCommandTest do
   test "validate_execution_environment: specifying a non-existent plugins_dir is reported as an error", context do
     assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
       {:validation_failure, :plugins_dir_does_not_exist}
-  end
-
-  test "validate: failure to load the rabbit application is reported as an error", context do
-    assert {:validation_failure, {:unable_to_load_rabbit, _}} =
-      @command.validate_execution_environment(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
   test "if node is inaccessible, writes enabled plugins file and reports implicitly enabled plugin list", context do

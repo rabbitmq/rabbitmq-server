@@ -15,7 +15,7 @@
 
 
 defmodule PostUpgradeCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Upgrade.Commands.PostUpgradeCommand

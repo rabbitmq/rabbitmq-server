@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule ListenersCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
   import RabbitMQ.CLI.Core.Listeners, only: [listener_maps: 1]
 

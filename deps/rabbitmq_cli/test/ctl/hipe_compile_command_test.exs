@@ -68,9 +68,4 @@ defmodule HipeCompileCommandTest do
   test "validate: providing one non-blank directory path and required options succeeds", context do
     assert @command.validate([context[:target_dir]], context[:opts]) == :ok
   end
-
-  test "validate: failure to load the rabbit application is reported as an error", context do
-    assert {:validation_failure, {:unable_to_load_rabbit, _}} =
-      @command.validate([context[:target_dir]], Map.delete(context[:opts], :rabbitmq_home))
-  end
 end

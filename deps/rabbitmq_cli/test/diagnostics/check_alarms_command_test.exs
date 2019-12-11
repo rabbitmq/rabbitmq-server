@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule CheckAlarmsCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
   import RabbitMQ.CLI.Core.Alarms, only: [alarm_types: 1]
 

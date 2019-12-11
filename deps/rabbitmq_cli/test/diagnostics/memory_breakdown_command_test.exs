@@ -14,14 +14,13 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule MemoryBreakdownCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-
 
     start_rabbitmq_app()
 
