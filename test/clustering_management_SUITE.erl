@@ -224,8 +224,7 @@ join_cluster_bad_operations(Config) ->
     ok = stop_app(Hare),
     assert_failure(fun () -> start_app(Hare) end),
     ok = start_app(Rabbit),
-    %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    ok = start_app(Hare),
     ok.
 
 %% This tests that the nodes in the cluster are notified immediately of a node

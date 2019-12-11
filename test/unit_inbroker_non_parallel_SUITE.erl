@@ -503,7 +503,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_no_write_permission_dir_test})
     catch
-        _:could_not_initialise_logger -> ok
+        throw:{error, {rabbit, {{cannot_log_to_file, _, _}, _}}} -> ok
     end,
 
     %% start application with logging to a subdirectory which
@@ -530,7 +530,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_parent_dirs_test})
     catch
-        _:could_not_initialise_logger -> ok
+        throw:{error, {rabbit, {{cannot_log_to_file, _, _}, _}}} -> ok
     end,
 
     %% clean up

@@ -106,9 +106,11 @@ wait(TableNames, Timeout, Retries) ->
                  ok ->
                      ok;
                  {timeout, BadTabs} ->
-                     {error, {timeout_waiting_for_tables, BadTabs}};
+                     AllNodes = rabbit_mnesia:cluster_nodes(all),
+                     {error, {timeout_waiting_for_tables, AllNodes, BadTabs}};
                  {error, Reason} ->
-                     {error, {failed_waiting_for_tables, Reason}}
+                     AllNodes = rabbit_mnesia:cluster_nodes(all),
+                     {error, {failed_waiting_for_tables, AllNodes, Reason}}
              end,
     case {Retries, Result} of
         {_, ok} ->
