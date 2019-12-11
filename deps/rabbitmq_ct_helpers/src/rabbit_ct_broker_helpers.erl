@@ -175,10 +175,10 @@
 
 setup_steps() ->
     [
+      fun run_make_dist/1,
       fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
       fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
       fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
-      fun run_make_dist/1,
       fun set_lager_flood_limit/1,
       fun start_rabbitmq_nodes/1,
       fun share_dist_and_proxy_ports_map/1
@@ -633,17 +633,35 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      true -> ["LEAVE_PLUGINS_DISABLED=yes" | ExtraArgs1];
                      _    -> ExtraArgs1
                  end,
+    KeepPidFile = rabbit_ct_helpers:get_config(
+                    Config, keep_pid_file_on_exit),
+    ExtraArgs3 = case KeepPidFile of
+                     true -> ["RABBITMQ_KEEP_PID_FILE_ON_EXIT=yes" | ExtraArgs2];
+                     _    -> ExtraArgs2
+                 end,
     ExtraArgs = case UseSecondaryUmbrella of
                     true ->
                         DepsDir = ?config(erlang_mk_depsdir, Config),
                         ErlLibs = os:getenv("ERL_LIBS"),
-                        SecDepsDir = ?config(secondary_erlang_mk_depsdir, Config),
+                        SecDepsDir = ?config(secondary_erlang_mk_depsdir,
+                                             Config),
                         SecErlLibs = lists:flatten(
                                        string:replace(ErlLibs,
                                                       DepsDir,
                                                       SecDepsDir,
                                                       all)),
-                        SecScriptsDir = filename:join([SecDepsDir, "rabbit", "scripts"]),
+                        SecNewScriptsDir = filename:join([SecDepsDir,
+                                                          SrcDir,
+                                                          "sbin"]),
+                        SecOldScriptsDir = filename:join([SecDepsDir,
+                                                          "rabbit",
+                                                          "scripts"]),
+                        SecNewScriptsDirExists = filelib:is_dir(
+                                                   SecNewScriptsDir),
+                        SecScriptsDir = case SecNewScriptsDirExists of
+                                            true  -> SecNewScriptsDir;
+                                            false -> SecOldScriptsDir
+                                        end,
                         [{"DEPS_DIR=~s", [SecDepsDir]},
                          {"REBAR_DEPS_DIR=~s", [SecDepsDir]},
                          {"ERL_LIBS=~s", [SecErlLibs]},
@@ -651,9 +669,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                          {"RABBITMQ_SERVER=~s/rabbitmq-server", [SecScriptsDir]},
                          {"RABBITMQCTL=~s/rabbitmqctl", [SecScriptsDir]},
                          {"RABBITMQ_PLUGINS=~s/rabbitmq-plugins", [SecScriptsDir]}
-                         | ExtraArgs2];
+                         | ExtraArgs3];
                     false ->
-                        ExtraArgs2
+                        ExtraArgs3
                 end,
     Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
@@ -662,6 +680,8 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_CONFIG_FILE=~s", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~s", [StartArgs1]},
       "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
+      "RABBITMQ_LOG=debug",
+      "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~s", [PrivDir]}
       | ExtraArgs],
     case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
@@ -939,6 +959,7 @@ rabbitmqctl(Config, Node, Args) ->
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
     Env0 = [
+      {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqctl)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
@@ -969,6 +990,7 @@ rabbitmq_queues(Config, Node, Args) ->
     NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
     Env0 = [
+      {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqQueues)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
@@ -1619,6 +1641,7 @@ plugin_action(Config, Node, Args) ->
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
     Env = [
+      {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqplugins)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},

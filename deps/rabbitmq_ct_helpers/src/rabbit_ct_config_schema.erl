@@ -21,49 +21,14 @@
 -export([run_snippets/1]).
 
 init_schemas(App, Config) ->
-    DepsDir = ?config(erlang_mk_depsdir, Config),
-    RabbitSchema = find_app_schema(rabbit, DepsDir),
-    Schemas = case App of
-        rabbit -> [RabbitSchema];
-        _      -> [RabbitSchema, find_app_schema(App, DepsDir)]
-    end,
-    ct:pal("Schemas ~p~n", [Schemas]),
-    SchemaDir = filename:join(?config(data_dir, Config), "schema"),
-    file:make_dir(SchemaDir),
-    ct:pal("Schema DIR ~p~n", [SchemaDir]),
-    [ copy_to(Schema, SchemaDir) || Schema <- Schemas ],
-
     ResultsDir = filename:join(?config(priv_dir, Config), "results"),
     Snippets = filename:join(?config(data_dir, Config),
                               atom_to_list(App) ++ ".snippets"),
     ok = file:make_dir(ResultsDir),
-
     rabbit_ct_helpers:set_config(Config, [
-        {schema_dir, SchemaDir},
         {results_dir, ResultsDir},
         {conf_snippets, Snippets}
         ]).
-
-find_app_schema(App, DepsDir) ->
-    SchemaFile = get_schema_for([DepsDir, App], App),
-    does_schema_exist(filelib:is_regular(SchemaFile), App, DepsDir, SchemaFile, cont).
-
-does_schema_exist(true, _App, _DepsDir, SchemaFile, _) ->
-    SchemaFile;
-does_schema_exist(false, App, _DepsDir, _SchemaFile, stop) ->
-    ct:fail("Could not find schema for app: ~p~n", [App]);
-does_schema_exist(false, App, DepsDir, _SchemaFile, cont) ->
-    % If not in umbrella, priv will be at ../priv
-    SchemaFile = get_schema_for([DepsDir, ".."], App),
-    does_schema_exist(filelib:is_regular(SchemaFile), App, DepsDir, SchemaFile, stop).
-
-get_schema_for(Prefix, App) ->
-    SchemaFileName = atom_to_list(App) ++ ".schema",
-    filename:join(Prefix ++ ["priv", "schema", SchemaFileName]).
-
-copy_to(File, Dir) ->
-    BaseName = filename:basename(File),
-    {ok, _} = file:copy(File, Dir ++ "/" ++ BaseName).
 
 run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
@@ -85,9 +50,7 @@ snippet_id(L) when is_list(L) ->
 
 test_snippet(Config, Snippet, Expected, _Plugins) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
-    {ok, GeneratedFile} = generate_config(Config, ConfFile, AdvancedFile),
-    ct:pal("Generated a config file at ~p for snippet ~p", [GeneratedFile, Snippet]),
-    {ok, [Generated]} = file:consult(GeneratedFile),
+    Generated = generate_config(ConfFile, AdvancedFile),
     Gen = deepsort(Generated),
     Exp = deepsort(Expected),
     case Exp of
@@ -108,13 +71,10 @@ write_snippet(Config, {Name, Conf, Advanced}) ->
     rabbit_file:write_term_file(AdvancedFile, [Advanced]),
     {ConfFile, AdvancedFile}.
 
-generate_config(Config, ConfFile, AdvancedFile) ->
-    SchemaDir = ?config(schema_dir, Config),
-    ResultsDir = ?config(results_dir, Config),
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    ScriptDir = filename:dirname(Rabbitmqctl),
-    rabbit_config:generate_config_file([ConfFile], ResultsDir, ScriptDir,
-                                       SchemaDir, AdvancedFile).
+generate_config(ConfFile, AdvancedFile) ->
+    Context = rabbit_env:get_context(),
+    rabbit_prelaunch_conf:generate_config_from_cuttlefish_files(
+      Context, [ConfFile], AdvancedFile).
 
 deepsort(List) ->
     case is_proplist(List) of
