@@ -33,7 +33,10 @@ defmodule DisablePluginsCommandTest do
                                                [:rabbit, :plugins_dir])
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
 
+    IO.puts("plugins disable tests default env: enabled plugins = #{plugins_file}, plugins dir = #{plugins_dir}, RabbitMQ home directory = #{rabbitmq_home}")
+
     {:ok, [enabled_plugins]} = :file.consult(plugins_file)
+    IO.puts("plugins disable tests will assume tnat #{Enum.join(enabled_plugins, ",")} is the list of enabled plugins to revert to")
 
     opts = %{enabled_plugins_file: plugins_file,
              plugins_dir: plugins_dir,
