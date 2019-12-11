@@ -364,11 +364,11 @@ lager_backend(exchange) -> lager_exchange_backend.
 
 %% Syslog backend is using an old API for configuration and
 %% does not support proplists.
-generate_handler(syslog_lager_backend, HandlerConfig) ->
+generate_handler(syslog_lager_backend=Backend, HandlerConfig) ->
     DefaultConfigVal = default_config_value(level),
     Level = proplists:get_value(level, HandlerConfig, DefaultConfigVal),
-    ok = app_utils:load_applications([syslog]),
-    [{syslog_lager_backend,
+    ok = configure_handler_backend(Backend),
+    [{Backend,
      [Level,
       {},
       {lager_default_formatter, syslog_formatter_config()}]}];
@@ -376,6 +376,11 @@ generate_handler(Backend, HandlerConfig) ->
     [{Backend,
         lists:ukeymerge(1, lists:ukeysort(1, HandlerConfig),
                            lists:ukeysort(1, default_handler_config(Backend)))}].
+
+configure_handler_backend(syslog_lager_backend) ->
+    app_utils:load_applications([syslog]);
+configure_handler_backend(_Backend) ->
+    ok.
 
 default_handler_config(lager_console_backend) ->
     [{level, default_config_value(level)},
@@ -546,6 +551,18 @@ handler_level_more_verbose(Handler, Level) ->
     lager_util:level_to_num(HandlerLevel) > lager_util:level_to_num(Level).
 
 merge_lager_sink_handlers([{Name, Sink} | RestSinks], GeneratedSinks, Agg) ->
+    %% rabbitmq/rabbitmq-server#2044.
+    %% We have to take into account that a sink's
+    %% handler backend may need additional configuration here.
+    %% {rabbit_log_federation_lager_event, [
+    %%     {handlers, [
+    %%         {lager_forwarder_backend, [lager_event,inherit]},
+    %%         {syslog_lager_backend, [debug]}
+    %%     ]},
+    %%     {rabbit_handlers, [
+    %%         {lager_forwarder_backend, [lager_event,inherit]}
+    %%     ]}
+    %% ]}
     case lists:keytake(Name, 1, GeneratedSinks) of
         {value, {Name, GenSink}, RestGeneratedSinks} ->
             Handlers = proplists:get_value(handlers, Sink, []),
@@ -555,11 +572,11 @@ merge_lager_sink_handlers([{Name, Sink} | RestSinks], GeneratedSinks, Agg) ->
             %% Remove handlers defined in previous starts
             ConfiguredHandlers = remove_rabbit_handlers(Handlers, FormerRabbitHandlers),
             NewHandlers = GenHandlers ++ ConfiguredHandlers,
+            ok = maybe_configure_handler_backends(NewHandlers),
             MergedSink = lists:keystore(rabbit_handlers, 1,
                                         lists:keystore(handlers, 1, Sink,
                                                        {handlers, NewHandlers}),
                                         {rabbit_handlers, GenHandlers}),
-
             merge_lager_sink_handlers(
                 RestSinks,
                 RestGeneratedSinks,
@@ -571,6 +588,12 @@ merge_lager_sink_handlers([{Name, Sink} | RestSinks], GeneratedSinks, Agg) ->
                 [{Name, Sink} | Agg])
     end;
 merge_lager_sink_handlers([], GeneratedSinks, Agg) -> GeneratedSinks ++ Agg.
+
+maybe_configure_handler_backends([]) ->
+    ok;
+maybe_configure_handler_backends([{Backend, _}|Backends]) ->
+    ok = configure_handler_backend(Backend),
+    maybe_configure_handler_backends(Backends).
 
 list_expected_sinks() ->
     case application:get_env(rabbit, lager_extra_sinks) of
