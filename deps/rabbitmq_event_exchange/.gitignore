@@ -1,13 +1,18 @@
 .sw?
 .*.sw?
 *.beam
-.erlang.mk/
-cover/
-deps/
-doc/
-ebin/
-logs/
-plugins/
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/escript/
+/escript.lock
+/logs/
+/plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 
 test/config_schema_SUITE_data/schema/rabbit.schema
 
