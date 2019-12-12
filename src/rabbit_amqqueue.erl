@@ -1958,18 +1958,28 @@ maybe_clear_recoverable_node(Node, Q) ->
 -spec on_node_down(node()) -> 'ok'.
 
 on_node_down(Node) ->
-    {QueueNames, QueueDeletions} = delete_queues_on_node_down(Node),
-    notify_queue_binding_deletions(QueueDeletions),
-    rabbit_core_metrics:queues_deleted(QueueNames),
-    notify_queues_deleted(QueueNames),
+    delete_queues_on_node_down(Node),
     ok.
 
 delete_queues_on_node_down(Node) ->
-    lists:unzip(lists:flatten([
-        rabbit_misc:execute_mnesia_transaction(
-          fun () -> [{Queue, delete_queue(Queue)} || Queue <- Queues] end
+    [rabbit_misc:execute_mnesia_tx_with_tail(
+          fun () ->
+            {QueueNames, QueueDeletions} = lists:unzip([{Queue, delete_queue(Queue)} || Queue <- Queues]),
+             F = rabbit_binding:process_deletions(
+                  lists:foldl(
+                      fun rabbit_binding:combine_deletions/2,
+                      rabbit_binding:new_deletions(),
+                      QueueDeletions
+                  ),
+                  ?INTERNAL_USER),
+            fun() ->
+              F(),
+              rabbit_core_metrics:queues_deleted(QueueNames),
+              notify_queues_deleted(QueueNames)
+            end
+          end
         ) || Queues <- partition_queues(queues_to_delete_when_node_down(Node))
-    ])).
+    ].
 
 delete_queue(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
@@ -1998,20 +2008,6 @@ queues_to_delete_when_node_down(NodeDown) ->
                 rabbit_amqqueue:is_dead_exclusive(Q))]
         ))
     end).
-
-notify_queue_binding_deletions(QueueDeletions) ->
-    rabbit_misc:execute_mnesia_tx_with_tail(
-        fun() ->
-            rabbit_binding:process_deletions(
-                lists:foldl(
-                    fun rabbit_binding:combine_deletions/2,
-                    rabbit_binding:new_deletions(),
-                    QueueDeletions
-                ),
-                ?INTERNAL_USER
-            )
-        end
-    ).
 
 notify_queues_deleted(QueueDeletions) ->
     lists:foreach(
