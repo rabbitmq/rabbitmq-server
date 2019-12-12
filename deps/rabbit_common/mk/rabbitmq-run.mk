@@ -340,6 +340,8 @@ start-brokers start-cluster:
 		  RABBITMQ_SERVER_START_ARGS=" \
 		  -rabbit loopback_users [] \
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
+		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
+		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
