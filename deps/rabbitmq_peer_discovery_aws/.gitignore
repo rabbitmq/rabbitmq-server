@@ -10,7 +10,12 @@
 /ebin/
 /git-revisions.txt
 /logs/
+/escript/
+/escript.lock
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 /rebar.config
 /rebar.lock
 /test/ct.cover.spec
