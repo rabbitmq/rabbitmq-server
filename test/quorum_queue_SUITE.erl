@@ -169,26 +169,34 @@ init_per_group(Group, Config) ->
                                             {rmq_nodename_suffix, Group},
                                             {tcp_ports_base}]),
     Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
-    Config2 = rabbit_ct_helpers:run_steps(Config1b,
-                                          [fun merge_app_env/1 ] ++
-                                          rabbit_ct_broker_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
-        ok ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                   Config2, 0, application, set_env,
-                   [rabbit, channel_tick_interval, 100]),
-            %% HACK: the larger cluster sizes benefit for a bit more time
-            %% after clustering before running the tests.
-            case Group of
-                cluster_size_5 ->
-                    timer:sleep(5000),
-                    Config2;
-                _ ->
-                    Config2
-            end;
-        Skip ->
-            end_per_group(Group, Config2),
-            Skip
+    Ret = rabbit_ct_helpers:run_steps(Config1b,
+                                      [fun merge_app_env/1 ] ++
+                                      rabbit_ct_broker_helpers:setup_steps()),
+    case Ret of
+        {skip, _} ->
+            Ret;
+        Config2 ->
+            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
+                         Config2, quorum_queue),
+            case EnableFF of
+                ok ->
+                    ok = rabbit_ct_broker_helpers:rpc(
+                           Config2, 0, application, set_env,
+                           [rabbit, channel_tick_interval, 100]),
+                    %% HACK: the larger cluster sizes benefit for a bit
+                    %% more time after clustering before running the
+                    %% tests.
+                    case Group of
+                        cluster_size_5 ->
+                            timer:sleep(5000),
+                            Config2;
+                        _ ->
+                            Config2
+                    end;
+                Skip ->
+                    end_per_group(Group, Config2),
+                    Skip
+            end
     end.
 
 end_per_group(clustered, Config) ->
@@ -213,18 +221,25 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
                                             {queue_name, Q},
                                             {alt_queue_name, <<Q/binary, "_alt">>}
                                            ]),
-    Config3 = rabbit_ct_helpers:run_steps(
-                Config2,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps() ++
-                [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
-                 fun rabbit_ct_broker_helpers:cluster_nodes/1]),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config3, quorum_queue) of
-        ok ->
-            Config3;
-        Skip ->
-            end_per_testcase(Testcase, Config3),
-            Skip
+    Ret = rabbit_ct_helpers:run_steps(
+            Config2,
+            rabbit_ct_broker_helpers:setup_steps() ++
+            rabbit_ct_client_helpers:setup_steps() ++
+            [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
+             fun rabbit_ct_broker_helpers:cluster_nodes/1]),
+    case Ret of
+        {skip, _} ->
+            Ret;
+        Config3 ->
+            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
+                         Config3, quorum_queue),
+            case EnableFF of
+                ok ->
+                    Config3;
+                Skip ->
+                    end_per_testcase(Testcase, Config3),
+                    Skip
+            end
     end;
 init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -1988,7 +2003,7 @@ queue_length_in_memory_limit_subscribe(Config) ->
          #amqp_msg{payload = Msg1}} ->
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                multiple     = false})
-    end, 
+    end,
     ?assertEqual([{0, 0}],
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
     receive
@@ -2133,7 +2148,7 @@ queue_length_in_memory_bytes_limit_subscribe(Config) ->
          #amqp_msg{payload = Msg1}} ->
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                multiple     = false})
-    end, 
+    end,
     ?assertEqual([{0, 0}],
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
     receive
@@ -2224,7 +2239,7 @@ in_memory(Config) ->
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
 
     subscribe(Ch, QQ, false),
-    
+
     wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
     ?assertEqual([{0, 0}],
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
