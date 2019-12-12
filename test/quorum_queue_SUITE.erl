@@ -1395,14 +1395,16 @@ delete_member_not_a_member(Config) ->
 %% their quorum. See rabbitmq/rabbitmq-cli#389 for background.
 
 node_removal_is_quorum_critical(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QName = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
-    Qs = rpc:call(Server, rabbit_quorum_queue, list_with_minimum_quorum, []),
-    ?assertEqual([QName], queue_names(Qs)).
+    [begin
+         Qs = rpc:call(S, rabbit_quorum_queue, list_with_minimum_quorum, []),
+         ?assertEqual([QName], queue_names(Qs))
+     end || S <- Servers].
 
 node_removal_is_not_quorum_critical(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

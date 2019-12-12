@@ -1006,15 +1006,13 @@ list_by_type(Type) ->
 list_local_quorum_queue_names() ->
     [ amqqueue:get_name(Q) || Q <- list_by_type(quorum),
            amqqueue:get_state(Q) =/= crashed,
-           lists:member(node(), get_quorum_nodes(Q)),
-           is_local_to_node(amqqueue:get_pid(Q), node())].
+           lists:member(node(), get_quorum_nodes(Q))].
 
 -spec list_local_quorum_queues() -> [amqqueue:amqqueue()].
 list_local_quorum_queues() ->
     [ Q || Q <- list_by_type(quorum),
       amqqueue:get_state(Q) =/= crashed,
-      lists:member(node(), get_quorum_nodes(Q)),
-      is_local_to_node(amqqueue:get_pid(Q), node())].
+      lists:member(node(), get_quorum_nodes(Q))].
 
 -spec list_local_leaders() -> [amqqueue:amqqueue()].
 list_local_leaders() ->
