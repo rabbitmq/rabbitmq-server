@@ -13,11 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.QuorumStatusCommandTest do
+defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Queues.Commands.QuorumStatusCommand
+  @command RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -32,23 +32,18 @@ defmodule RabbitMQ.CLI.Queues.Commands.QuorumStatusCommandTest do
       }}
   end
 
-
-  test "validate: treats no arguments as a failure" do
-    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+  test "validate: accepts no positional arguments" do
+    assert @command.validate([], %{}) == :ok
   end
 
-  test "validate: accepts a single positional argument" do
-    assert @command.validate(["quorum-queue-a"], %{}) == :ok
-  end
-
-  test "validate: when two or more arguments are provided, returns a failure" do
-    assert @command.validate(["quorum-queue-a", "one-extra-arg"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["quorum-queue-a", "extra-arg", "another-extra-arg"], %{}) == {:validation_failure, :too_many_args}
+  test "validate: any positional arguments fail validation" do
+    assert @command.validate(["quorum-queue-a"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["quorum-queue-a", "two"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["quorum-queue-a", "two", "three"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run(["quorum-queue-a"],
-                                             %{node: :jake@thedog, vhost: "/", timeout: 200}))
+    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, vhost: "/", timeout: 200}))
   end
 end
