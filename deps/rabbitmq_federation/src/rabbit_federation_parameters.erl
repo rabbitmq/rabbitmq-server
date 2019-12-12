@@ -74,8 +74,9 @@ notify(_VHost, <<"federation-upstream">>, Name, _Term, _Username) ->
 notify_clear(_VHost, <<"federation-upstream-set">>, Name, _Username) ->
     adjust({clear_upstream_set, Name});
 
-notify_clear(_VHost, <<"federation-upstream">>, Name, _Username) ->
-    adjust({clear_upstream, Name}).
+notify_clear(VHost, <<"federation-upstream">>, Name, _Username) ->
+    rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream, VHost, Name}),
+    rabbit_federation_queue_link_sup_sup:adjust({clear_upstream, Name}).
 
 adjust(Thing) ->
     rabbit_federation_exchange_link_sup_sup:adjust(Thing),
