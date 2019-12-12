@@ -7,8 +7,13 @@
 /deps/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /logs/
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 /xrefr
 
 /rabbitmq_ct_client_helpers.d
