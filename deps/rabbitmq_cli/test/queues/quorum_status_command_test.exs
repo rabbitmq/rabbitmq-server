@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.QuorumQueuesCommandTest do
+defmodule RabbitMQ.CLI.Queues.Commands.QuorumStatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
