@@ -2293,7 +2293,7 @@ on_load() ->
         true ->
             %% RabbitMQ is running.
             %%
-            %% Now we want to differenciate a pre-feature-flags node
+            %% Now we want to differentiate a pre-feature-flags node
             %% from one having the subsystem.
             %%
             %% To do that, we verify if the `feature_flags_file`

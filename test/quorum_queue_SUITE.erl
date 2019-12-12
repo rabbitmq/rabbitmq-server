@@ -43,6 +43,7 @@ groups() ->
     [
      {single_node, [], all_tests()},
      {single_node, [], memory_tests()},
+     {single_node, [], [node_removal_is_quorum_critical]},
      {unclustered, [], [
                         {cluster_size_2, [], [add_member]}
                        ]},
@@ -56,7 +57,8 @@ groups() ->
                                             delete_member_classic,
                                             delete_member_queue_not_found,
                                             delete_member,
-                                            delete_member_not_a_member]
+                                            delete_member_not_a_member,
+                                            node_removal_is_quorum_critical]
                        ++ all_tests()},
                       {cluster_size_2, [], memory_tests()},
                       {cluster_size_3, [], [
@@ -74,12 +76,14 @@ groups() ->
                                             shrink_all,
                                             rebalance,
                                             file_handle_reservations,
-                                            file_handle_reservations_above_limit
+                                            file_handle_reservations_above_limit,
+                                            node_removal_is_not_quorum_critical
                                             ]},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
                                             quorum_cluster_size_3,
-                                            quorum_cluster_size_7
+                                            quorum_cluster_size_7,
+                                            node_removal_is_not_quorum_critical
                                            ]},
                       {clustered_with_partitions, [], [
                                             reconnect_consumer_and_publish,
@@ -1387,6 +1391,31 @@ delete_member_not_a_member(Config) ->
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Server])).
 
+%% These tests check if node removal would cause any queues to lose (or not lose)
+%% their quorum. See rabbitmq/rabbitmq-cli#389 for background.
+
+node_removal_is_quorum_critical(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QName = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(100),
+    [begin
+         Qs = rpc:call(S, rabbit_quorum_queue, list_with_minimum_quorum, []),
+         ?assertEqual([QName], queue_names(Qs))
+     end || S <- Servers].
+
+node_removal_is_not_quorum_critical(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QName = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(100),
+    Qs = rpc:call(Server, rabbit_quorum_queue, list_with_minimum_quorum, []),
+    ?assertEqual([], Qs).
+
 file_handle_reservations(Config) ->
     Servers = [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
@@ -2407,3 +2436,9 @@ wait_for_consensus(Name, Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     RaName = ra_name(Name),
     {ok, _, _} = ra:members({RaName, Server}).
+
+queue_names(Records) ->
+    [begin
+         #resource{name = Name} = amqqueue:get_name(Q),
+         Name
+     end || Q <- Records].
