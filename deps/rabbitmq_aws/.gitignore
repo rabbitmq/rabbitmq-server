@@ -21,4 +21,9 @@ deps
 rabbitmq_aws.d
 test/*xml
 cover
-plugins
+/escript/
+/escript.lock
+/plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
