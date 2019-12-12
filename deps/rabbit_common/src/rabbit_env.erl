@@ -1144,7 +1144,7 @@ loading_conf_env_file_enabled(_) ->
     persistent_term:get({?MODULE, load_conf_env_file}, true).
 -else.
 loading_conf_env_file_enabled(_) ->
-    %% When this is module is built without `TEST` defined, we want this
+    %% When this module is built without `TEST` defined, we want this
     %% function to always return true. However, this makes Dialyzer
     %% think it can only return true: this is not the case when the
     %% module is compiled with `TEST` defined. The following line is
