@@ -959,7 +959,6 @@ get_enabled_plugins_file_from_node(Remote) ->
 get_enabled_plugins() ->
     case get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS") of
         false  -> undefined;
-        ""     -> undefined;
         "ALL"  -> all;
         "NONE" -> [];
         Value  -> [list_to_atom(P) || P <- string:lexemes(Value, ",")]
@@ -1138,12 +1137,19 @@ load_conf_env_file(#{os_type := {win32, _}} = Context) ->
 load_conf_env_file(Context) ->
     Context.
 
+-spec loading_conf_env_file_enabled(map()) -> boolean().
+
 -ifdef(TEST).
 loading_conf_env_file_enabled(_) ->
     persistent_term:get({?MODULE, load_conf_env_file}, true).
 -else.
 loading_conf_env_file_enabled(_) ->
-    true.
+    %% When this is module is built without `TEST` defined, we want this
+    %% function to always return true. However, this makes Dialyzer
+    %% think it can only return true: this is not the case when the
+    %% module is compiled with `TEST` defined. The following line is
+    %% here to trick Dialyzer.
+    erlang:get({?MODULE, always_undefined}) =:= undefined.
 -endif.
 
 do_load_conf_env_file(Context, Sh, ConfEnvFile) ->
