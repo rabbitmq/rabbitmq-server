@@ -56,7 +56,8 @@ groups() ->
               dynamic_plugin_stop_start,
               dynamic_plugin_cleanup_stop_start,
               dynamic_policy_cleanup,
-              delete_upstream
+              delete_federated_exchange_upstream,
+              delete_federated_queue_upstream
             ]}
         ]},
       {with_disambiguate, [], [
@@ -720,7 +721,7 @@ dynamic_reconfiguration_integrity(Config) ->
               assert_connections(Config, 0, Xs, [<<"local5673">>])
       end, [x(<<"new.fed1">>), x(<<"new.fed2">>)]).
 
-delete_upstream(Config) ->
+delete_federated_exchange_upstream(Config) ->
     %% If two exchanges in different virtual hosts have the same name, only one should be deleted.
     rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream1">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream1">>),
@@ -732,27 +733,76 @@ delete_upstream(Config) ->
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
-    declare_exchange(Ch1,
-                     #'exchange.declare'{exchange = <<"federated.topic">>,
-                                         type     = <<"topic">>,
-                                         durable  = true}),
-    declare_exchange(Ch2,
-                     #'exchange.declare'{exchange = <<"federated.topic">>,
-                                         type     = <<"topic">>,
-                                         durable  = true}),
+    #'exchange.declare_ok'{} = declare_exchange(Ch1, #'exchange.declare'{exchange = <<"federated.topic">>,
+                                                                         type     = <<"topic">>,
+                                                                         durable  = true}),
+    #'exchange.declare_ok'{} = declare_exchange(Ch2, #'exchange.declare'{exchange = <<"federated.topic">>,
+                                                                         type     = <<"topic">>,
+                                                                         durable  = true}),
 
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
                                  [<<"federation-downstream1">>,
-                                  <<"federation">>, <<"^federated\..*$">>,
+                                  <<"federation">>, <<"^federated\.">>,
                                   [{<<"federation-upstream-set">>, <<"all">>}],
                                   0, <<"exchanges">>, <<"acting-user">>]),
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
                                  [<<"federation-downstream2">>,
-                                  <<"federation">>, <<"^federated\..*$">>,
+                                  <<"federation">>, <<"^federated\.">>,
                                   [{<<"federation-upstream-set">>, <<"all">>}],
                                   0, <<"exchanges">>, <<"acting-user">>]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream1">>,
+                                           <<"federation-upstream">>, <<"upstream">>,
+                                           [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+    rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream2">>,
+                                           <<"federation-upstream">>, <<"upstream">>,
+                                           [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+
+    ?assertMatch([_, _], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
+                                                      status, [])),
+
+    rabbit_ct_broker_helpers:clear_parameter(Config, 0, <<"federation-downstream2">>,
+                                             <<"federation-upstream">>, <<"upstream">>),
+
+    Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
+                                          status, []),
+    %% one link is still around
+    ?assertEqual(1, length(Status)),
+    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
+
+delete_federated_queue_upstream(Config) ->
+    %% If two queues in different virtual hosts have the same name, only one should be deleted.
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream1">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream1">>),
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream2">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream2">>),
+
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream1">>),
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream2">>),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    #'queue.declare_ok'{} = declare_queue(Ch1,
+                                          #'queue.declare'{queue = <<"federated.queue">>,
+                                                           durable = true}),
+    #'queue.declare_ok'{} = declare_queue(Ch2,
+                                          #'queue.declare'{queue = <<"federated.queue">>,
+                                                           durable = true}),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_policy, set,
+                                 [<<"federation-downstream1">>,
+                                  <<"federation">>, <<"^federated\.">>,
+                                  [{<<"federation-upstream-set">>, <<"all">>}],
+                                  0, <<"queues">>, <<"acting-user">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_policy, set,
+                                 [<<"federation-downstream2">>,
+                                  <<"federation">>, <<"^federated\.">>,
+                                  [{<<"federation-upstream-set">>, <<"all">>}],
+                                  0, <<"queues">>, <<"acting-user">>]),
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream1">>,
                                            <<"federation-upstream">>, <<"upstream">>,
@@ -966,6 +1016,9 @@ declare_queue(Ch) ->
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     Q.
+
+declare_queue(Ch, Q) ->
+    amqp_channel:call(Ch, Q).
 
 bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
