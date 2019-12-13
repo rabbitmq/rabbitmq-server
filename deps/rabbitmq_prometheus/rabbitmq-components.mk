@@ -114,7 +114,8 @@ dep_cowboy = hex 2.6.1
 dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.9.0
 dep_lager = hex 3.8.0
-dep_prometheus = hex 4.3.0
+dep_prometheus = hex 4.2.2
+dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.0
 dep_observer_cli = hex 1.5.2
@@ -319,15 +320,15 @@ prepare-dist::
 
 ifneq ($(wildcard ../../UMBRELLA.md),)
 UNDER_UMBRELLA = 1
+DEPS_DIR ?= $(abspath ..)
+else ifneq ($(wildcard ../../../../UMBRELLA.md),)
+UNDER_UMBRELLA = 1
+DEPS_DIR ?= $(abspath ../../..)
 else ifneq ($(wildcard UMBRELLA.md),)
 UNDER_UMBRELLA = 1
 endif
 
 ifeq ($(UNDER_UMBRELLA),1)
-ifneq ($(PROJECT),rabbitmq_public_umbrella)
-DEPS_DIR ?= $(abspath ..)
-endif
-
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
 endif
