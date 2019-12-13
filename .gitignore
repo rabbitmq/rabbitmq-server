@@ -3,7 +3,12 @@
 .*.sw?
 /.erlang.mk/
 /deps/
+/escript/
+/escript.lock
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 .envrc
 
 PACKAGES/
