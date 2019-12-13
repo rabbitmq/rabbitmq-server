@@ -4,16 +4,22 @@
 .*.plt
 *.beam
 *.coverdata
+/.*.plt
 /.erlang.mk/
 /cover/
 /deps/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /git-revisions.txt
 /logs/
 /plugins/
+/plugins.lock
 /rebar.config
 /rebar.lock
+/sbin/
+/sbin.lock
 /test/ct.cover.spec
 /xrefr
 
