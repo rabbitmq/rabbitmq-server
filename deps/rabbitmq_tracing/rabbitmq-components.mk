@@ -320,15 +320,15 @@ prepare-dist::
 
 ifneq ($(wildcard ../../UMBRELLA.md),)
 UNDER_UMBRELLA = 1
+DEPS_DIR ?= $(abspath ..)
+else ifneq ($(wildcard ../../../../UMBRELLA.md),)
+UNDER_UMBRELLA = 1
+DEPS_DIR ?= $(abspath ../../..)
 else ifneq ($(wildcard UMBRELLA.md),)
 UNDER_UMBRELLA = 1
 endif
 
 ifeq ($(UNDER_UMBRELLA),1)
-ifneq ($(PROJECT),rabbitmq_public_umbrella)
-DEPS_DIR ?= $(abspath ..)
-endif
-
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
 endif
