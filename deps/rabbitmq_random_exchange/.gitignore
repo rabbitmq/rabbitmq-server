@@ -8,7 +8,12 @@ erl_crash.dump
 /deps/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /logs/
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 
 /rabbitmq_random_exchange.d
