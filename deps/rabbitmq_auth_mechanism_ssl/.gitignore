@@ -6,7 +6,12 @@
 /deps/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /logs/
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 
 /rabbitmq_auth_mechanism_ssl.d
