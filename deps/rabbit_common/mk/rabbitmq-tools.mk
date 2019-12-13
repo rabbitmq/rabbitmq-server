@@ -198,6 +198,24 @@ else
 	$(verbose) cd $* && git config user.email "$(RMQ_GIT_USER_EMAIL)"
 endif
 
+.PHONY: sync-gitignore-from-master
+sync-gitignore-from-master: $(READY_DEPS:%=$(DEPS_DIR)/%+sync-gitignore-from-master)
+
+%+sync-gitignore-from-master:
+	$(gen_verbose) cd $* && \
+	if test -d .git; then \
+		branch=$$(LANG=C git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}'); \
+		! test "$$branch" = 'master' || exit 0; \
+		git show origin/master:.gitignore > .gitignore; \
+	fi
+ifeq ($(DO_COMMIT),yes)
+	$(verbose) cd $* && \
+	if test -d .git; then \
+		git diff --quiet .gitignore \
+		|| git commit -m 'Git: Sync .gitignore from master' .gitignore; \
+	fi
+endif
+
 .PHONY: show-branch
 
 show-branch: $(READY_DEPS:%=$(DEPS_DIR)/%+show-branch)
