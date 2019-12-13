@@ -1,15 +1,20 @@
 .sw?
 .*.sw?
 *.beam
+*.plt
 /.erlang.mk/
 /cover/
 /deps/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /logs/
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 /xrefr
-*.plt
 
 rabbitmq_amqp1_0.d
 
