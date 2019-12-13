@@ -10,8 +10,13 @@
 /deps/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /logs/
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 
 erl_crash.dump
 prometheus/data
