@@ -11,13 +11,17 @@ MnesiaCore.*
 /debug/
 /doc/
 /ebin/
+/escript/
+/escript.lock
 /etc/
 /logs/
 /plugins/
+/plugins.lock
 /test/ct.cover.spec
 /test/config_schema_SUITE_data/schema/**
 /xrefr
-/escript
+/sbin/
+/sbin.lock
 rabbit.d
 
 # Generated documentation.
