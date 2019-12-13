@@ -601,7 +601,7 @@ tick(_Ts, #?MODULE{cfg = #cfg{name = Name,
                EnqueueBytes,
                CheckoutBytes},
     [{mod_call, rabbit_quorum_queue,
-      handle_tick, [QName, Metrics, all_nodes(State)]}, {aux, emit}].
+      handle_tick, [QName, Metrics, all_nodes(State)]}].
 
 -spec overview(state()) -> map().
 overview(#?MODULE{consumers = Cons,
@@ -643,9 +643,11 @@ handle_aux(_, cast, Cmd, {Name, Use0}, Log, _) ->
     Use = case Cmd of
               _ when Cmd == active orelse Cmd == inactive ->
                   update_use(Use0, Cmd);
-              emit ->
+              tick ->
                   true = ets:insert(rabbit_fifo_usage,
                                     {Name, utilisation(Use0)}),
+                  Use0;
+              eval ->
                   Use0
           end,
     {no_reply, {Name, Use}, Log}.
