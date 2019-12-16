@@ -994,10 +994,10 @@ do_run_postlaunch_phase() ->
               end
           end, Plugins),
 
-        maybe_sd_notify(),
-
         rabbit_log_prelaunch:debug("Marking RabbitMQ as running"),
         rabbit_prelaunch:set_boot_state(ready),
+        maybe_sd_notify(),
+
         ok = rabbit_lager:broker_is_started(),
         ok = log_broker_started(
                rabbit_plugins:strictly_plugins(rabbit_plugins:active()))
