@@ -1337,7 +1337,7 @@ check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
 
 sync_mirrors(QName, Config) ->
-    case ?config(is_mirrored, Config) of
+    case rabbit_ct_helpers:get_config(Config, is_mirrored) of
         true ->
             rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
         _ -> ok
