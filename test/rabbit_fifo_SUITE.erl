@@ -483,8 +483,7 @@ tick_test(_) ->
       [#resource{},
        {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3},
        [_Node]
-      ]},
-     {aux, emit}] = rabbit_fifo:tick(1, S4),
+      ]}] = rabbit_fifo:tick(1, S4),
     ok.
 
 
@@ -1266,8 +1265,7 @@ purge_nodes_test(_) ->
        [{mod_call, rabbit_quorum_queue, handle_tick,
          [#resource{}, _Metrics,
           [ThisNode, Node]
-         ]},
-        {aux, emit}] , rabbit_fifo:tick(1, State4)),
+         ]}] , rabbit_fifo:tick(1, State4)),
     %% assert there are both enqueuers and consumers
     {State, _, _} = apply(meta(5),
                           rabbit_fifo:make_purge_nodes([Node]),
@@ -1283,8 +1281,7 @@ purge_nodes_test(_) ->
        [{mod_call, rabbit_quorum_queue, handle_tick,
          [#resource{}, _Metrics,
           [ThisNode]
-         ]},
-        {aux, emit}] , rabbit_fifo:tick(1, State)),
+         ]}] , rabbit_fifo:tick(1, State)),
     ok.
 
 meta(Idx) ->
@@ -1360,7 +1357,7 @@ aux_test(_) ->
     Log = undefined,
     {no_reply, Aux, undefined} = handle_aux(leader, cast, active, Aux0,
                                             Log, MacState),
-    {no_reply, _Aux, undefined} = handle_aux(leader, cast, emit, Aux,
+    {no_reply, _Aux, undefined} = handle_aux(leader, cast, tick, Aux,
                                              Log, MacState),
     [X] = ets:lookup(rabbit_fifo_usage, aux_test),
     ?assert(X > 0.0),
