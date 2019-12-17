@@ -31,12 +31,12 @@ Deploy RabbitMQ with or without [persistent-volumes](https://kubernetes.io/docs/
 
 **Note:** You can use **one** deploy at time
 
-* Deploy RabbitMQ without PVC:
+* Deploy RabbitMQ without PV:
 ```
  $ kubectl apply  -k overlays/dev
 ```
 
-* Deploy RabbitMQ with PVC using storage class:
+* Deploy RabbitMQ with PV using storage class:
  ```
  $ kubectl apply  -k overlays/dev-persistence/
 ```
@@ -133,12 +133,12 @@ pvc-2b7162f5-c596-404d-be85-475600b9f82a   1Gi        RWO            Delete     
 
 ## CleanUp
 
-CleanUP RabbitMQ without persistent the data:
+CleanUP RabbitMQ without PV:
 ```
  $ kubectl delete  -k overlays/dev
 ```
 
-CleanUP RabbitMQ with persistent the data using storage class:
+CleanUP RabbitMQ with PV:
 ```
  $ kubectl delete  -k overlays/dev-persistence/
 ```
