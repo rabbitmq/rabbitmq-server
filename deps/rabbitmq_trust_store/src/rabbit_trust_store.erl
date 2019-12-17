@@ -146,10 +146,10 @@ init([]) ->
         Interval  >  0 ->
             erlang:send_after(Interval, erlang:self(), refresh)
     end,
-    {ok,
-     #state{
-      providers_state = ProvidersState,
-      refresh_interval = Interval}}.
+    State = #state{
+        providers_state = ProvidersState,
+        refresh_interval = Interval},
+    {ok, State}.
 
 handle_call(mode, _, St) ->
     {reply, mode(St), St};
@@ -165,10 +165,18 @@ handle_cast(_, St) ->
 
 handle_info(refresh, #state{refresh_interval = Interval,
                             providers_state = ProvidersState} = St) ->
-    Config = application:get_all_env(rabbitmq_trust_store),
-    NewProvidersState = refresh_certs(Config, ProvidersState),
-    erlang:send_after(Interval, erlang:self(), refresh),
-    {noreply, St#state{providers_state = NewProvidersState}};
+        Config = application:get_all_env(rabbitmq_trust_store),
+        try
+            rabbit_log:error("Trust store will attempt to refresh certificates..."),
+            NewProvidersState = refresh_certs(Config, ProvidersState),
+            {noreply, St#state{providers_state = NewProvidersState}}
+        catch
+            _:Error  ->
+                rabbit_log:error("Failed to refresh certificates: ~p", [Error]),
+                {noreply, St#state{providers_state = ProvidersState}}
+        after
+            erlang:send_after(Interval, erlang:self(), refresh)
+        end;
 handle_info(_, St) ->
     {noreply, St}.
 
@@ -227,8 +235,13 @@ refresh_certs(Config, State) ->
 refresh_provider_certs(Provider, Config, ProviderState) ->
     case list_certs(Provider, Config, ProviderState) of
         no_change ->
+            rabbit_log:debug("Trust store provider reported no certificate changes"),
+            ProviderState;
+        ok ->
+            rabbit_log:debug("Trust store provider reported no certificate changes"),
             ProviderState;
         {ok, CertsList, NewProviderState} ->
+            rabbit_log:debug("Trust store listed certificates: ~p", [CertsList]),
             update_certs(CertsList, Provider, Config),
             NewProviderState;
         {error, Reason} ->
@@ -244,6 +257,7 @@ list_certs(Provider, Config, ProviderState) ->
     Provider:list_certs(Config, ProviderState).
 
 update_certs(CertsList, Provider, Config) ->
+    rabbit_log:debug("Updating ~p fetched trust store certificates", [length(CertsList)]),
     OldCertIds = get_old_cert_ids(Provider),
     {NewCertIds, _} = lists:unzip(CertsList),
 
