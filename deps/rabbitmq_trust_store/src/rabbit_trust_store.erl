@@ -259,7 +259,7 @@ list_certs(Provider, Config, ProviderState) ->
 update_certs([], _Provider, _Config) ->
     ok;
 update_certs(CertsList, Provider, Config) ->
-    rabbit_log:debug("Updating ~s fetched trust store certificates", [length(CertsList)]),
+    rabbit_log:debug("Updating ~p fetched trust store certificates", [length(CertsList)]),
     OldCertIds = get_old_cert_ids(Provider),
     {NewCertIds, _} = lists:unzip(CertsList),
 
