@@ -22,15 +22,17 @@ list_certs(Config) ->
 list_certs(_, #http_state{url = Url,
                           http_options = HttpOptions,
                           headers = Headers} = State) ->
-    Res = httpc:request(get, {Url, Headers}, HttpOptions, [{body_format, binary}], ?PROFILE),
-    case Res of
+    case (httpc:request(get, {Url, Headers}, HttpOptions, [{body_format, binary}], ?PROFILE)) of
         {ok, {{_, 200, _}, RespHeaders, Body}} ->
+            rabbit_log:debug("Trust store HTTP[S] provider responded with 200 OK"),
             Certs = decode_cert_list(Body),
             NewState = new_state(RespHeaders, State),
             {ok, Certs, NewState};
         {ok, {{_,304, _}, _, _}}  -> no_change;
         {ok, {{_,Code,_}, _, Body}} -> {error, {http_error, Code, Body}};
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+            rabbit_log:error("Trust store HTTP[S] provider request failed: ~p", [Reason]),
+            {error, Reason}
     end.
 
 load_cert(_, Attributes, Config) ->
@@ -70,18 +72,25 @@ init_state(Config) ->
         undefined -> [];
         SslOpts   -> [{ssl, SslOpts}]
     end,
-    #http_state{url = Url, http_options = HttpOptions, headers = Headers}.
+    #http_state{url = Url, http_options = HttpOptions, headers = [{"connection", "close"} | Headers]}.
 
 decode_cert_list(Body) ->
-    Struct = rabbit_json:decode(Body),
-    #{<<"certificates">> := Certs} = Struct,
-    lists:map(
-        fun(Cert) ->
-            Path = maps:get(<<"path">>, Cert),
-            CertId = maps:get(<<"id">>, Cert),
-            {CertId, [{path, Path}]}
-        end,
-        Certs).
+    try
+        Struct = rabbit_json:decode(Body),
+        #{<<"certificates">> := Certs} = Struct,
+        lists:map(
+            fun(Cert) ->
+                Path = maps:get(<<"path">>, Cert),
+                CertId = maps:get(<<"id">>, Cert),
+                {CertId, [{path, Path}]}
+            end, Certs)
+    catch _:badarg ->
+            rabbit_log:error("Trust store failed to decode an HTTP[S] response: JSON parser failed"),
+            [];
+          _:Error ->
+            rabbit_log:error("Trust store failed to decode an HTTP[S] response: ~p", [Error]),
+            []
+    end.
 
 new_state(RespHeaders, #http_state{headers = Headers0} = State) ->
     LastModified0 = proplists:get_value("last-modified", RespHeaders),
