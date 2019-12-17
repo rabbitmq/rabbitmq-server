@@ -62,7 +62,6 @@ node_mnesia_dir = $(call node_mnesia_base,$(1))/$(1)
 node_quorum_dir = $(call node_mnesia_dir,$(1))/quorum
 node_schema_dir = $(call node_tmpdir,$(1))/schema
 node_plugins_expand_dir = $(call node_tmpdir,$(1))/plugins
-node_generated_config_dir = $(call node_tmpdir,$(1))/config
 node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
@@ -79,7 +78,6 @@ RABBITMQ_MNESIA_DIR ?= $(call node_mnesia_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_QUORUM_DIR ?= $(call node_quorum_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_SCHEMA_DIR ?= $(call node_schema_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
-RABBITMQ_GENERATED_CONFIG_DIR ?= $(call node_generated_config_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_FEATURE_FLAGS_FILE ?= $(call node_feature_flags_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 
@@ -108,7 +106,6 @@ RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
 RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
 RABBITMQ_QUORUM_DIR="$(call node_quorum_dir,$(2))" \
 RABBITMQ_SCHEMA_DIR="$(call node_schema_dir,$(2))" \
-RABBITMQ_GENERATED_CONFIG_DIR="$(call node_generated_config_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR))" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
@@ -131,16 +128,14 @@ node-tmpdir:
 	$(verbose) mkdir -p $(RABBITMQ_LOG_BASE) \
 		$(RABBITMQ_MNESIA_BASE) \
 		$(RABBITMQ_SCHEMA_DIR) \
-		$(RABBITMQ_PLUGINS_EXPAND_DIR) \
-		$(RABBITMQ_GENERATED_CONFIG_DIR)
+		$(RABBITMQ_PLUGINS_EXPAND_DIR)
 
 virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
 	$(verbose) mkdir -p $(RABBITMQ_LOG_BASE) \
 		$(RABBITMQ_MNESIA_BASE) \
 		$(RABBITMQ_SCHEMA_DIR) \
-		$(RABBITMQ_PLUGINS_EXPAND_DIR) \
-		$(RABBITMQ_GENERATED_CONFIG_DIR)
+		$(RABBITMQ_PLUGINS_EXPAND_DIR)
 
 .PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
