@@ -23,9 +23,9 @@ setup(Context) ->
     %% TODO: Support glob patterns & directories in RABBITMQ_CONFIG_FILE.
     %% TODO: Always try parsing of both erlang and cuttlefish formats.
 
-    update_enabled_plugins_file(Context),
+    ok = update_enabled_plugins_file(Context),
 
-    set_default_config(),
+    ok = set_default_config(),
 
     AdvancedConfigFile = find_actual_advanced_config_file(Context),
     State = case find_actual_main_config_file(Context) of
@@ -63,7 +63,7 @@ setup(Context) ->
                       config_files => [],
                       config_advanced_file => undefined}
             end,
-    override_with_hard_coded_critical_config(),
+    ok = override_with_hard_coded_critical_config(),
     rabbit_log_prelaunch:debug(
       "Saving config state to application env: ~p", [State]),
     store_config_state(State).
@@ -393,7 +393,7 @@ apply_erlang_term_based_config([{_, []} | Rest]) ->
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->
     rabbit_log_prelaunch:debug("  Applying configuration for '~s':", [App]),
-    apply_app_env_vars(App, Vars),
+    ok = apply_app_env_vars(App, Vars),
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([]) ->
     ok.

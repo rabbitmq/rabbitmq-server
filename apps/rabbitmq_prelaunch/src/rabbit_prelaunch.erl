@@ -99,13 +99,16 @@ do_run() ->
     rabbit_env:context_to_code_path(Context),
     rabbit_env:context_to_app_env_vars(Context),
 
-    %% 1. Erlang/OTP compatibility check.
+    %% Erlang/OTP compatibility check.
     ok = rabbit_prelaunch_erlang_compat:check(Context),
 
-    %% 2. Erlang distribution check + start.
+    %% Erlang distribution check + start.
     ok = rabbit_prelaunch_dist:setup(Context),
 
-    %% 3. Write PID file.
+    %% Configuration check + loading.
+    ok = rabbit_prelaunch_conf:setup(Context),
+
+    %% Write PID file.
     rabbit_log_prelaunch:debug(""),
     _ = write_pid_file(Context),
     ignore.

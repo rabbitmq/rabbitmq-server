@@ -331,13 +331,10 @@ run_prelaunch_second_phase() ->
             ok
     end,
 
-    %% 1. Feature flags registry.
+    %% Feature flags registry.
     ok = rabbit_prelaunch_feature_flags:setup(Context),
 
-    %% 2. Configuration check + loading.
-    ok = rabbit_prelaunch_conf:setup(Context),
-
-    %% 3. Logging.
+    %% Logging.
     ok = rabbit_prelaunch_logging:setup(Context),
 
     case IsInitialPass of
@@ -348,7 +345,7 @@ run_prelaunch_second_phase() ->
             ok
     end,
 
-    %% 5. Clustering.
+    %% Clustering.
     ok = rabbit_prelaunch_cluster:setup(Context),
 
     %% Start Mnesia now that everything is ready.
@@ -488,7 +485,6 @@ start_it(StartType) ->
                 {ok, _} = application:ensure_all_started(rabbit,
                                                          StartType),
                 ok = wait_for_ready_or_stopped(),
-
                 T1 = erlang:timestamp(),
                 rabbit_log_prelaunch:debug(
                   "Time to start RabbitMQ: ~p µs",
