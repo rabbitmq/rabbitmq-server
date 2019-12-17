@@ -10,7 +10,7 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_trust_store_app).
@@ -20,7 +20,7 @@
 -export([start/2, stop/1]).
 
 -rabbit_boot_step({rabbit_trust_store, [
-    {description, "Change necessary SSL options."},
+    {description, "Overrides TLS options in take RabbitMQ trust store into account"},
     {mfa, {?MODULE, change_SSL_options, []}},
     {cleanup, {?MODULE, revert_SSL_options, []}},
     %% {requires, ...},
