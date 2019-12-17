@@ -256,8 +256,6 @@ list_certs(Provider, Config, nostate) ->
 list_certs(Provider, Config, ProviderState) ->
     Provider:list_certs(Config, ProviderState).
 
-update_certs([], _Provider, _Config) ->
-    ok;
 update_certs(CertsList, Provider, Config) ->
     rabbit_log:debug("Updating ~p fetched trust store certificates", [length(CertsList)]),
     OldCertIds = get_old_cert_ids(Provider),
