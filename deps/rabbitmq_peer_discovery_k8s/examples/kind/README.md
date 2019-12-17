@@ -45,7 +45,7 @@ Deploy RabbitMQ with or without [persistent-volumes](https://kubernetes.io/docs/
 
 The ports used by this example are:
 
-* amqp://guest:guest@localhost: AMQP 0-9-1 and AMQP 1.0 client connections
+* `amqp://guest:guest@localhost`: AMQP 0-9-1 and AMQP 1.0 client connections
 * http://localhost:15672: HTTP API and management UI
 
 
@@ -65,7 +65,7 @@ The `kind-cluster.yaml` configuration binds localhost ports:
     hostPort: 5672
 ```
 
-The `NodePort` exposes the ports: 
+The `NodePort` service exposes the ports: 
 ```yaml
 spec:
   type: NodePort
