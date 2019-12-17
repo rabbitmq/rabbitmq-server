@@ -27,18 +27,26 @@ The example uses, targets or assumes:
   $ kind create cluster --config kind/kind-cluster/kind-cluster.yaml
 ```
 
-Deploy RabbitMQ with or without [persistent-volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/). 
+Deploy RabbitMQ with or without [persistent-volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/).
+
 **Note:** You can use **one** deploy at time
 
-Deploy RabbitMQ without PVC:
+* Deploy RabbitMQ without PVC:
 ```
  $ kubectl apply  -k overlays/dev
 ```
 
-Deploy RabbitMQ with PVC using storage class:
+* Deploy RabbitMQ with PVC using storage class:
  ```
  $ kubectl apply  -k overlays/dev-persistence/
 ```
+
+## Use Public Localhost Address to Connect
+
+The ports used by this example are:
+
+* amqp://guest:guest@localhost: AMQP 0-9-1 and AMQP 1.0 client connections
+* http://localhost:15672: HTTP API and management UI
 
 
 ## Details
