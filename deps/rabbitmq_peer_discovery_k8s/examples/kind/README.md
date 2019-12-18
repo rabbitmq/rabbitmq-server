@@ -23,22 +23,22 @@ The example uses, targets or assumes:
 ## Quick Start
 
  * Create Kind cluster 
- ```
-  $ kind create cluster --config kind/kind-cluster/kind-cluster.yaml
+```
+kind create cluster --config kind/kind-cluster/kind-cluster.yaml
 ```
 
-Deploy RabbitMQ with or without [persistent-volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/).
+Deploy RabbitMQ with or without [persistent volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/).
 
 **Note:** You can use **one** deploy at time
 
 * Deploy RabbitMQ without PV:
 ```
- $ kubectl apply  -k overlays/dev
+kubectl apply  -k overlays/dev
 ```
 
 * Deploy RabbitMQ with PV using storage class:
- ```
- $ kubectl apply  -k overlays/dev-persistence/
+```
+kubectl apply  -k overlays/dev-persistence/
 ```
 
 ## Use Public Localhost Address to Connect
@@ -74,12 +74,12 @@ spec:
      protocol: TCP
      port: 15672
      targetPort: 15672
-     nodePort: 31672 <---- binds the extraPortMappings.containerPort 31672
+     nodePort: 31672  # <---- binds the extraPortMappings.containerPort 31672
    - name: amqp
      protocol: TCP
      port: 5672
      targetPort: 5672
-     nodePort: 30672 <---- binds the extraPortMappings.containerPort 30672
+     nodePort: 30672  # <---- binds the extraPortMappings.containerPort 30672
 ```
 
 So in this way you can easly use the localhost ports.
@@ -107,7 +107,7 @@ spec:
       name: rabbitmq-data
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      storageClassName: "standard" <----- standard storage class
+      storageClassName: "standard" # <----- standard storage class
       resources:
         requests:
           storage: 1Gi
@@ -131,14 +131,14 @@ pvc-24514f31-5b40-4bd6-a721-84a16afaa697   1Gi        RWO            Delete     
 pvc-2b7162f5-c596-404d-be85-475600b9f82a   1Gi        RWO            Delete           Bound    rabbitmq-dev-persistence/rabbitmq-data-rabbitmq-2   standard                5s
 ```
 
-## CleanUp
+## Clean up
 
-CleanUP RabbitMQ without PV:
+Clean up RabbitMQ without PV:
 ```
  $ kubectl delete  -k overlays/dev
 ```
 
-CleanUP RabbitMQ with PV:
+Clean up RabbitMQ with PV:
 ```
  $ kubectl delete  -k overlays/dev-persistence/
 ```
