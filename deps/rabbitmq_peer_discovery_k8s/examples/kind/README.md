@@ -41,7 +41,7 @@ kubectl apply  -k overlays/dev
 kubectl apply  -k overlays/dev-persistence/
 ```
 
-## Use Public Localhost Address to Connect
+## Use Localhost Address to Connect
 
 The ports used by this example are:
 
