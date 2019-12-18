@@ -88,14 +88,14 @@ So in this way you can easly use the localhost ports.
 
 `Kind` by default creates a [storage class](https://kubernetes.io/docs/concepts/storage/storage-classes/) called `standard`
 ```
-$ kubectl get storageclass
+kubectl get storageclass
 NAME                 PROVISIONER               AGE
 standard (default)   kubernetes.io/host-path   5h
 ```
 
 used by:
 ```yaml
-$ cat overlays/dev-persistence/deployment.yaml
+cat overlays/dev-persistence/deployment.yaml
 apiVersion: apps/v1
 # See the Prerequisites section of https://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s.
 kind: StatefulSet
@@ -115,7 +115,7 @@ spec:
 
 Check the persistent volumes claim:
 ```
-$ kubectl get pvc -n rabbitmq-dev-persistence
+kubectl get pvc -n rabbitmq-dev-persistence
 NAME                       STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
 rabbitmq-data-rabbitmq-0   Bound    pvc-0db837ec-a856-4a6b-9acf-2c9110bb9f12   1Gi        RWO            standard       2m38s
 rabbitmq-data-rabbitmq-1   Bound    pvc-24514f31-5b40-4bd6-a721-84a16afaa697   1Gi        RWO            standard       78s
@@ -124,7 +124,7 @@ rabbitmq-data-rabbitmq-2   Bound    pvc-2b7162f5-c596-404d-be85-475600b9f82a   1
 
 Check the persistent volumes:
 ```
-$ kubectl get pv -n rabbitmq-dev-persistence
+kubectl get pv -n rabbitmq-dev-persistence
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                               STORAGECLASS   REASON   AGE
 pvc-0db837ec-a856-4a6b-9acf-2c9110bb9f12   1Gi        RWO            Delete           Bound    rabbitmq-dev-persistence/rabbitmq-data-rabbitmq-0   standard                2m41s
 pvc-24514f31-5b40-4bd6-a721-84a16afaa697   1Gi        RWO            Delete           Bound    rabbitmq-dev-persistence/rabbitmq-data-rabbitmq-1   standard                81s
