@@ -23,9 +23,7 @@ setup(Context) ->
     %% TODO: Support glob patterns & directories in RABBITMQ_CONFIG_FILE.
     %% TODO: Always try parsing of both erlang and cuttlefish formats.
 
-    update_enabled_plugins_file(Context),
-
-    set_default_config(),
+    ok = set_default_config(),
 
     AdvancedConfigFile = find_actual_advanced_config_file(Context),
     State = case find_actual_main_config_file(Context) of
@@ -63,7 +61,7 @@ setup(Context) ->
                       config_files => [],
                       config_advanced_file => undefined}
             end,
-    override_with_hard_coded_critical_config(),
+    ok = override_with_hard_coded_critical_config(),
     rabbit_log_prelaunch:debug(
       "Saving config state to application env: ~p", [State]),
     store_config_state(State).
@@ -73,49 +71,6 @@ store_config_state(ConfigState) ->
 
 get_config_state() ->
     persistent_term:get({rabbitmq_prelaunch, config_state}, undefined).
-
-%% -------------------------------------------------------------------
-%% `enabled_plugins` file content initialization.
-%% -------------------------------------------------------------------
-
-update_enabled_plugins_file(Context) ->
-    %% We only do this on startup, not when the configuration is
-    %% reloaded.
-    case get_config_state() of
-        undefined -> update_enabled_plugins_file1(Context);
-        _         -> ok
-    end.
-
-update_enabled_plugins_file1(#{enabled_plugins := undefined}) ->
-    ok;
-update_enabled_plugins_file1(#{enabled_plugins := all,
-                              plugins_path := Path} = Context) ->
-    List = [P#plugin.name || P <- rabbit_plugins:list(Path)],
-    do_update_enabled_plugins_file(Context, List);
-update_enabled_plugins_file1(#{enabled_plugins := List} = Context) ->
-    do_update_enabled_plugins_file(Context, List).
-
-do_update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
-    SortedList = lists:usort(List),
-    case SortedList of
-        [] ->
-            rabbit_log_prelaunch:debug("Marking all plugins as disabled");
-        _ ->
-            rabbit_log_prelaunch:debug(
-              "Marking the following plugins as enabled:"),
-            [rabbit_log_prelaunch:debug("  - ~s", [P]) || P <- SortedList]
-    end,
-    Content = io_lib:format("~p.~n", [SortedList]),
-    case file:write_file(File, Content) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            rabbit_log_prelaunch:error(
-              "Failed to update enabled plugins file \"~ts\" "
-              "from $RABBITMQ_ENABLED_PLUGINS: ~ts",
-              [File, file:format_error(Reason)]),
-            throw({error, failed_to_update_enabled_plugins_file})
-    end.
 
 %% -------------------------------------------------------------------
 %% Configuration loading.
@@ -393,7 +348,7 @@ apply_erlang_term_based_config([{_, []} | Rest]) ->
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->
     rabbit_log_prelaunch:debug("  Applying configuration for '~s':", [App]),
-    apply_app_env_vars(App, Vars),
+    ok = apply_app_env_vars(App, Vars),
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([]) ->
     ok.

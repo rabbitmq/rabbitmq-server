@@ -105,7 +105,10 @@ do_run() ->
     %% 2. Erlang distribution check + start.
     ok = rabbit_prelaunch_dist:setup(Context),
 
-    %% 3. Write PID file.
+    %% 3. Configuration check + loading.
+    ok = rabbit_prelaunch_conf:setup(Context),
+
+    %% 4. Write PID file.
     rabbit_log_prelaunch:debug(""),
     _ = write_pid_file(Context),
     ignore.
