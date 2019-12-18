@@ -43,11 +43,11 @@ do_setup(#{nodename := Node, nodename_type := NameType}) ->
 duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
     rabbit_log_prelaunch:debug(
       "Checking if node name ~s is already used", [NodeName]),
-    PrelaunchName = rabbit_nodes:make(
+    PrelaunchName = rabbit_nodes_common:make(
                       {NodeName ++ "_prelaunch_" ++ os:getpid(),
                        "localhost"}),
     {ok, _} = net_kernel:start([PrelaunchName, shortnames]),
-    case rabbit_nodes:names(NodeHost) of
+    case rabbit_nodes_common:names(NodeHost) of
         {ok, NamePorts}  ->
             case proplists:is_defined(NodeName, NamePorts) of
                 true ->
@@ -93,7 +93,7 @@ dist_port_use_check_ipv6(NodeHost, Port) ->
                                          no_return().
 
 dist_port_use_check_fail(Port, Host) ->
-    {ok, Names} = rabbit_nodes:names(Host),
+    {ok, Names} = rabbit_nodes_common:names(Host),
     case [N || {N, P} <- Names, P =:= Port] of
         [] ->
             throw({error, {dist_port_already_used, Port, not_erlang, Host}});
