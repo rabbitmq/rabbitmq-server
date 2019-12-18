@@ -135,11 +135,11 @@ pvc-2b7162f5-c596-404d-be85-475600b9f82a   1Gi        RWO            Delete     
 
 Clean up RabbitMQ without PV:
 ```
- $ kubectl delete  -k overlays/dev
+kubectl delete  -k overlays/dev
 ```
 
 Clean up RabbitMQ with PV:
 ```
- $ kubectl delete  -k overlays/dev-persistence/
+kubectl delete  -k overlays/dev-persistence/
 ```
 
