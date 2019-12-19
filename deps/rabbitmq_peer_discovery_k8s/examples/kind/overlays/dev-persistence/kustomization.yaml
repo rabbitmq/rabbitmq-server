@@ -1,0 +1,14 @@
+commonLabels:
+  app: rabbitmq
+  
+bases:
+ - ../../base
+
+resources:
+ - namespace.yaml
+
+patchesStrategicMerge:
+ - deployment.yaml
+
+
+namespace: rabbitmq-dev-persistence

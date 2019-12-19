@@ -1,0 +1,10 @@
+commonLabels:
+  app: rabbitmq
+  
+bases:
+ - ../../base
+
+resources:
+ - namespace.yaml 
+
+namespace: rabbitmq-dev
