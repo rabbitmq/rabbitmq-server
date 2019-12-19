@@ -1049,7 +1049,7 @@ list_local_mirrored_classic_without_synchronised_mirrors() ->
 
 -spec list_local_mirrored_classic_without_synchronised_mirrors_for_cli() -> [amqqueue:amqqueue()].
 list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
-    QQs = list_local_mirrored_classic_without_synchronised_mirrors(),
+    ClassicQs = list_local_mirrored_classic_without_synchronised_mirrors(),
     [begin
          #resource{name = Name} = amqqueue:get_name(Q),
          #{
@@ -1058,7 +1058,7 @@ list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
              <<"virtual_host">> => amqqueue:get_vhost(Q),
              <<"type">> => <<"quorum">>
          }
-     end || Q <- QQs].
+     end || Q <- ClassicQs].
 
 is_local_to_node(QPid, Node) when ?IS_CLASSIC(QPid) ->
     Node =:= node(QPid);
