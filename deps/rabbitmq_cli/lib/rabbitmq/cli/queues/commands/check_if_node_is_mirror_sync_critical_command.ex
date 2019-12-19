@@ -79,7 +79,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsMirrorSyncCriticalCommand do
     "without online synchronised mirrors (queues that would potentially lose data if the target node is shut down)"
   end
 
-  def usage, do: "check_if_node_is_quorum_critical"
+  def usage, do: "check_if_node_is_mirror_sync_critical"
 
   def banner([], %{node: node_name}) do
     "Checking if node #{node_name} is critical for data safety of any classic mirrored queues ..."
