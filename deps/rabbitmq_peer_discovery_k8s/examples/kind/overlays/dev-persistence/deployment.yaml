@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+# See the Prerequisites section of https://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s.
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+spec:
+  volumeClaimTemplates:
+  - metadata:
+      name: rabbitmq-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 1Gi
