@@ -44,7 +44,7 @@ format_error({error, {erlang_dist_running_with_unexpected_nodename,
 format_error({bad_config_entry_decoder, missing_passphrase}) ->
     rabbit_misc:format(
       "Missing passphrase or missing passphrase read method in "
-      "`config_entry_decoder`");
+      "`config_entry_decoder`", []);
 format_error({config_decryption_error, {key, Key}, _Msg}) ->
     rabbit_misc:format(
       "Error while decrypting key '~p'. Please check encrypted value, "
