@@ -130,8 +130,8 @@ define PROJECT_ENV
 	    {channel_tick_interval, 60000},
 	    %% Default max message size is 128 MB
 	    {max_message_size, 134217728},
-	    %% Default is ~ 1MB
-	    {gc_threshold, 1000000}
+	    %% Socket writer will run GC every 1 GB of outgoing data
+	    {gc_threshold, 1000000000}
 	  ]
 endef
 
