@@ -7,7 +7,7 @@ define PROJECT_ENV
 [
 	    {prefer_ipv6, false},
 	    {ssl_options, []},
-	    {gc_threshold, 1000000}
+	    {gc_threshold, 1000000000}
 	  ]
 endef
 
