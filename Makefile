@@ -123,7 +123,9 @@ define PROJECT_ENV
 	    %% vhost had to shut down, see server#1158 and server#1280
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
-	    {default_consumer_prefetch, {false, 0}}
+	    {default_consumer_prefetch, {false, 0}},
+			%% Socket writer will run GC every 1 GB of outgoing data
+	    {gc_threshold, 1000000000}
 	  ]
 endef
 

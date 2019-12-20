@@ -161,7 +161,9 @@
   %% flow | noflow, see rabbitmq-server#114
   delivery_flow,
   interceptor_state,
-  authz_context
+  authz_context,
+  %% defines how ofter gc will be executed
+  gc_threshold
 }).
 
 
@@ -456,6 +458,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                       Limiter0
               end,
     OptionalVariables = extract_topic_variable_map_from_amqp_params(AmqpParams),
+    {ok, GCThreshold} = application:get_env(rabbit, gc_threshold),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -488,7 +491,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 reply_consumer          = none,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
-                authz_context           = OptionalVariables},
+                authz_context           = OptionalVariables,
+                gc_threshold            = GCThreshold},
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
     State2 = rabbit_event:init_stats_timer(State1, #ch.stats_timer),
@@ -931,8 +935,8 @@ extract_topic_variable_map_from_amqp_params([Value]) ->
 extract_topic_variable_map_from_amqp_params(_) ->
     #{}.
 
-check_msg_size(Content) ->
-    Size = rabbit_basic:maybe_gc_large_msg(Content),
+check_msg_size(Content, GCThreshold) ->
+    Size = rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
     case Size > ?MAX_MSG_SIZE of
         true  -> precondition_failed("message size ~B larger than max size ~B",
                                      [Size, ?MAX_MSG_SIZE]);
@@ -1118,8 +1122,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    user            = #user{username = Username} = User,
                                    conn_name       = ConnName,
                                    delivery_flow   = Flow,
-                                   authz_context   = AuthzContext}) ->
-    check_msg_size(Content),
+                                   authz_context   = AuthzContext,
+                                   gc_threshold     = GCThreshold}) ->
+    check_msg_size(Content, GCThreshold),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, User),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
