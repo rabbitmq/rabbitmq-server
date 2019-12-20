@@ -13,8 +13,7 @@ volumes:
 services:
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    # flat-statusmap-panel does not work on Grafana >= 6.5.0
-    image: grafana/grafana:6.4.5
+    image: grafana/grafana:6.5.2
     ports:
       - "3000:3000"
     networks:
