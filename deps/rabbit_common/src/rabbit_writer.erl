@@ -72,7 +72,8 @@
 }).
 
 -define(HIBERNATE_AFTER, 5000).
--define(GC_THRESHOLD, 1000000).
+%% 1GB
+-define(DEFAULT_GC_THRESHOLD, 1000000000).
 
 %%---------------------------------------------------------------------------
 
@@ -160,12 +161,12 @@ start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
 start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
       ReaderWantsStats) ->
     start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-          ReaderWantsStats, ?GC_THRESHOLD).
+          ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
 
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
            ReaderWantsStats) ->
     start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-               ReaderWantsStats, ?GC_THRESHOLD).
+               ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
       ReaderWantsStats, GCThreshold) ->
@@ -179,8 +180,7 @@ start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
                           ReaderWantsStats, GCThreshold),
     {ok, proc_lib:spawn_link(?MODULE, enter_mainloop, [Identity, State])}.
 
-initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats
-             ,GCThreshold) ->
+initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats, GCThreshold) ->
     (case ReaderWantsStats of
          true  -> fun rabbit_event:init_stats_timer/2;
          false -> fun rabbit_event:init_disabled_stats_timer/2
@@ -424,7 +424,7 @@ port_cmd(Sock, Data) ->
 %% message is 1MB then that's ugly). So count how many bytes of
 %% message we have processed, and force a GC every so often.
 maybe_gc_large_msg(Content) ->
-    maybe_gc_large_msg(Content, ?GC_THRESHOLD).
+    maybe_gc_large_msg(Content, ?DEFAULT_GC_THRESHOLD).
 
 maybe_gc_large_msg(_Content, undefined) ->
     undefined;
