@@ -47,6 +47,9 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 %% Internal plumbing
 %%---------------------------------------------------------------------------
 
+%% 1GB
+-define(DEFAULT_GC_THRESHOLD, 1000000000).
+
 start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
     {ok, RabbitCh} =
@@ -55,7 +58,7 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
                   VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]),
     RabbitCh;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
-    {ok, GCThreshold} = application:get_env(amqp_client, gc_threshold),
+    GCThreshold = application:get_env(amqp_client, gc_threshold, ?DEFAULT_GC_THRESHOLD),
     {ok, Writer} = supervisor2:start_child(
                      Sup,
                      {writer, {rabbit_writer, start_link,
