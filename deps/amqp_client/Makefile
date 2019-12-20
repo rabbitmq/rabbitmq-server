@@ -6,7 +6,8 @@ PROJECT_REGISTERED = amqp_sup
 define PROJECT_ENV
 [
 	    {prefer_ipv6, false},
-	    {ssl_options, []}
+	    {ssl_options, []},
+	    {gc_threshold, 1000000}
 	  ]
 endef
 
