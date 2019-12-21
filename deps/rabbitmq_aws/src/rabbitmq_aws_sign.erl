@@ -10,6 +10,10 @@
 %% API
 -export([headers/1]).
 
+%% Transitional step until we can require Erlang/OTP 22 and
+%% use crypto:mac/4 instead of crypto:hmac/3.
+-compile(nowarn_deprecated_function).
+
 %% Export all for unit tests
 -ifdef(TEST).
 -compile(export_all).
