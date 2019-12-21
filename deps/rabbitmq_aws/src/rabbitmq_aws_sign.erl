@@ -19,6 +19,8 @@
 -compile(export_all).
 -endif.
 
+-ignore_xref([{crypto, hmac, 3}]).
+
 -include("rabbitmq_aws.hrl").
 
 -define(ALGORITHM, "AWS4-HMAC-SHA256").
