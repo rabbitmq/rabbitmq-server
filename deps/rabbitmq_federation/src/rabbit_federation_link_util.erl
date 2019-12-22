@@ -24,8 +24,9 @@
 -export([start_conn_ch/5, disposable_channel_call/2, disposable_channel_call/3,
          disposable_connection_call/3, ensure_connection_closed/1,
          log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
-         handle_down/6, get_connection_name/2,
-         log_debug/3, log_info/3, log_warning/3, log_error/3]).
+         handle_downstream_down/3, handle_upstream_down/3,
+         get_connection_name/2, log_debug/3, log_info/3, log_warning/3,
+         log_error/3]).
 
 %% temp
 -export([connection_error/6]).
@@ -121,7 +122,7 @@ open(Params, Name) ->
     case amqp_connection:start(Params, Name) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> {ok, Conn, Ch};
-                          E        -> catch amqp_connection:close(Conn),
+                          E        -> ensure_connection_closed(Conn),
                                       E
                       end;
         E -> E
@@ -144,6 +145,13 @@ connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
     log_info(XorQName, "disconnected from ~s~n~p~n",
+             [rabbit_federation_upstream:params_to_string(UParams), E]),
+    {stop, {shutdown, restart}, State};
+
+connection_error(command_channel, E, Upstream, UParams, XorQName, State) ->
+    rabbit_federation_status:report(
+      Upstream, UParams, XorQName, clean_reason(E)),
+    log_info(XorQName, "failed to open a command channel for upstream ~s~n~p~n",
              [rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
@@ -242,21 +250,20 @@ update_headers(Headers, Msg = #amqp_msg{props = Props}) ->
 
 %% If the downstream channel shuts down cleanly, we can just ignore it
 %% - we're the same node, we're presumably about to go down too.
-handle_down(DCh, shutdown, _Ch, DCh, _Args, State) ->
+handle_downstream_down(shutdown, _Args, State) ->
     {noreply, State};
+
+handle_downstream_down(Reason, _Args, State) ->
+    {stop, {downstream_channel_down, Reason}, State}.
 
 %% If the upstream channel goes down for an intelligible reason, just
 %% log it and die quietly.
-handle_down(Ch, {shutdown, Reason}, Ch, _DCh,
-            {Upstream, UParams, XName}, State) ->
+handle_upstream_down({shutdown, Reason}, {Upstream, UParams, XName}, State) ->
     rabbit_federation_link_util:connection_error(
       remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);
 
-handle_down(Ch, Reason, Ch, _DCh, _Args, State) ->
-    {stop, {upstream_channel_down, Reason}, State};
-
-handle_down(DCh, Reason, _Ch, DCh, _Args, State) ->
-    {stop, {downstream_channel_down, Reason}, State}.
+handle_upstream_down(Reason, _Args, State) ->
+    {stop, {upstream_channel_down, Reason}, State}.
 
 %%----------------------------------------------------------------------------
 

@@ -176,8 +176,7 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
                            upstream_params = UParams,
                            queue           = Q}) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    rabbit_federation_link_util:handle_down(
-      Pid, Reason, Ch, DCh, {Upstream, UParams, QName}, State);
+    handle_down(Pid, Reason, Ch, DCh, {Upstream, UParams, QName}, State);
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
@@ -330,3 +329,8 @@ cancel(Ch, Upstream) ->
     ConsumerTag = consumer_tag(Upstream),
     amqp_channel:cast(Ch, #'basic.cancel'{nowait       = true,
                                           consumer_tag = ConsumerTag}).
+
+handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
+    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
+    rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
