@@ -122,7 +122,7 @@ open(Params, Name) ->
     case amqp_connection:start(Params, Name) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> {ok, Conn, Ch};
-                          E        -> catch amqp_connection:close(Conn),
+                          E        -> ensure_connection_closed(Conn),
                                       E
                       end;
         E -> E
@@ -145,6 +145,13 @@ connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
     log_info(XorQName, "disconnected from ~s~n~p~n",
+             [rabbit_federation_upstream:params_to_string(UParams), E]),
+    {stop, {shutdown, restart}, State};
+
+connection_error(command_channel, E, Upstream, UParams, XorQName, State) ->
+    rabbit_federation_status:report(
+      Upstream, UParams, XorQName, clean_reason(E)),
+    log_info(XorQName, "failed to open a command channel for upstream ~s~n~p~n",
              [rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
