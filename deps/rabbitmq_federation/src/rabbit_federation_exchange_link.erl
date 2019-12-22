@@ -410,7 +410,8 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
-              {ok, CmdCh} = open_cmd_channel(Conn),
+              {ok, CmdCh} = open_cmd_channel(Conn, Upstream, UParams, DownXName, S0),
+              erlang:monitor(process, CmdCh),
               Props = pget(server_properties,
                            amqp_connection:info(Conn, [server_properties])),
               UName = case rabbit_misc:table_lookup(
@@ -453,13 +454,15 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
 
-open_cmd_channel(Conn) ->
+open_cmd_channel(Conn, Upstream, UParams, DownXName, S0) ->
     case amqp_connection:open_channel(Conn) of
         {ok, CCh} ->
             erlang:monitor(process, CCh),
             {ok, CCh};
         E ->
-            catch amqp_connection:close(Conn),
+            rabbit_federation_link_util:ensure_connection_closed(Conn),
+            rabbit_federation_link_util:connection_error(command_channel, E,
+                                                         Upstream, UParams, DownXName, S0),
             E
     end.
 
