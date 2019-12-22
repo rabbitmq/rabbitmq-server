@@ -37,6 +37,7 @@
                 upstream_name,
                 connection,
                 channel,
+                cmd_channel,
                 consumer_tag,
                 queue,
                 internal_exchange,
@@ -173,11 +174,12 @@ handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
 handle_info({'DOWN', _Ref, process, Pid, Reason},
             State = #state{downstream_channel  = DCh,
                            channel             = Ch,
+                           cmd_channel         = CmdCh,
                            upstream            = Upstream,
                            upstream_params     = UParams,
                            downstream_exchange = XName}) ->
-    rabbit_federation_link_util:handle_down(
-      Pid, Reason, Ch, DCh, {Upstream, UParams, XName}, State);
+    handle_down(Pid, Reason, Ch, CmdCh, DCh,
+                {Upstream, UParams, XName}, State);
 
 handle_info(check_internal_exchange, State = #state{internal_exchange = IntXNameBin,
                                                     internal_exchange_interval = Int}) ->
@@ -294,7 +296,7 @@ forget_binding(B = #binding{destination = Dest},
     {DoIt, State#state{bindings = Bs1}}.
 
 binding_op(UpdateFun, Cmd, B = #binding{args = Args},
-           State = #state{channel = Ch}) ->
+           State = #state{cmd_channel = Ch}) ->
     {DoIt, State1} =
         case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
             undefined  -> UpdateFun(B, State);
@@ -408,6 +410,7 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
+              {ok, CmdCh} = open_cmd_channel(Conn),
               Props = pget(server_properties,
                            amqp_connection:info(Conn, [server_properties])),
               UName = case rabbit_misc:table_lookup(
@@ -438,6 +441,7 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  upstream_name         = UName,
                                  connection            = Conn,
                                  channel               = Ch,
+                                 cmd_channel           = CmdCh,
                                  next_serial           = Serial,
                                  downstream_connection = DConn,
                                  downstream_channel    = DCh,
@@ -448,6 +452,16 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
+
+open_cmd_channel(Conn) ->
+    case amqp_connection:open_channel(Conn) of
+        {ok, CCh} ->
+            erlang:monitor(process, CCh),
+            {ok, CCh};
+        E ->
+            catch amqp_connection:close(Conn),
+            E
+    end.
 
 consume_from_upstream_queue(
   State = #state{upstream            = Upstream,
@@ -623,3 +637,9 @@ get_hops(Table) ->
     {unsignedint, N}   -> N;
     {_, N} when is_integer(N) andalso N >= 0 -> N
   end.
+
+handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args, State) ->
+    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+handle_down(ChPid, Reason, Ch, CmdCh, _DCh, Args, State)
+  when ChPid =:= Ch; ChPid =:= CmdCh ->
+    rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
