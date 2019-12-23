@@ -169,7 +169,9 @@
              delivery_flow,
              interceptor_state,
              queue_states,
-             tick_timer
+             tick_timer,
+             %% defines how ofter gc will be executed
+             gc_threshold
             }).
 
 -define(QUEUE, lqueue).
@@ -508,6 +510,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     MaxMessageSize = get_max_message_size(),
     ConsumerTimeout = get_consumer_timeout(),
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
+    {ok, GCThreshold} = application:get_env(rabbit, gc_threshold),
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
                             channel = Channel,
@@ -543,7 +546,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 reply_consumer          = none,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
-                queue_states            = #{}
+                queue_states            = #{},
+                gc_threshold            = GCThreshold
                },
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
@@ -1110,8 +1114,8 @@ extract_variable_map_from_amqp_params([Value]) ->
 extract_variable_map_from_amqp_params(_) ->
     #{}.
 
-check_msg_size(Content, MaxMessageSize) ->
-    Size = rabbit_basic:maybe_gc_large_msg(Content),
+check_msg_size(Content, MaxMessageSize, GCThreshold) ->
+    Size = rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
     case Size of
         S when S > MaxMessageSize ->
             ErrorMessage = case MaxMessageSize of
@@ -1309,9 +1313,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                               },
                                    tx               = Tx,
                                    confirm_enabled  = ConfirmEnabled,
-                                   delivery_flow    = Flow
+                                   delivery_flow    = Flow,
+                                   gc_threshold     = GCThreshold
                                    }) ->
-    check_msg_size(Content, MaxMessageSize),
+    check_msg_size(Content, MaxMessageSize, GCThreshold),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, User, AuthzContext),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
@@ -2697,7 +2702,8 @@ handle_deliver(ConsumerTag, AckRequired,
                                      routing_keys  = [RoutingKey | _CcRoutes],
                                      content       = Content}},
                State = #ch{cfg = #conf{writer_pid = WriterPid},
-                           next_tag   = DeliveryTag}) ->
+                           next_tag   = DeliveryTag,
+                           gc_threshold = GCThreshold}) ->
     Deliver = #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
                                redelivered  = Redelivered,
@@ -2710,7 +2716,7 @@ handle_deliver(ConsumerTag, AckRequired,
         false ->
             ok = rabbit_writer:send_command(WriterPid, Deliver, Content)
     end,
-    rabbit_basic:maybe_gc_large_msg(Content),
+    rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
     record_sent(deliver, ConsumerTag, AckRequired, Msg, State).
 
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,

@@ -1,0 +1,12 @@
+*~
+.sw?
+.*.sw?
+*.beam
+*.coverdata
+/ebin/
+/.erlang.mk/
+/rabbitmq_prelaunch.d
+/xrefr
+
+# Dialyzer
+*.plt
