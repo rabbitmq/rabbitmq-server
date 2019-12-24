@@ -71,6 +71,13 @@ ssl_options.fail_if_no_peer_cert = true",
   "listeners.ssl = none",[{rabbit,[{ssl_listeners,[]}]}],[]},
  {num_acceptors,
   "num_acceptors.ssl = 1",[{rabbit,[{num_ssl_acceptors,1}]}],[]},
+
+ {socket_writer_gc_threshold,
+  "socket_writer.gc_threshold = 999666111", [{rabbit, [{writer_gc_threshold, 999666111}]}],[]},
+
+ {socket_writer_gc_threshold_off,
+  "socket_writer.gc_threshold = off", [{rabbit, [{writer_gc_threshold, undefined}]}],[]},
+
  {default_user_settings,
   "default_user = guest
 default_pass = guest
