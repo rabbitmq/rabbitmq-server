@@ -109,6 +109,22 @@ URIS = {
     'vhost_limit': '/vhost-limits/{vhost}/{name}'
     }
 
+def queue_upload_fixup(upload):
+    # rabbitmq/rabbitmq-management#761
+    #
+    # In general, the fixup_upload argument can be used to fixup/change the
+    # upload dict after all argument parsing is complete.
+    #
+    # This simplifies setting the queue type for a new queue by allowing the
+    # user to use a queue_type=quorum argument rather than the somewhat confusing
+    # arguments='{"x-queue-type":"quorum"}' parameter
+    #
+    if 'queue_type' in upload:
+        queue_type = upload.get('queue_type')
+        arguments = upload.get('arguments', {})
+        arguments['x-queue-type'] = queue_type
+        upload['arguments'] = arguments
+
 DECLARABLE = {
     'exchange':   {'mandatory': ['name', 'type'],
                    'json':      ['arguments'],
@@ -117,7 +133,8 @@ DECLARABLE = {
     'queue':      {'mandatory': ['name'],
                    'json':      ['arguments'],
                    'optional':  {'auto_delete': 'false', 'durable': 'true',
-                                 'arguments': {}, 'node': None}},
+                                 'arguments': {}, 'node': None, 'queue_type': None},
+                   'fixup_upload': queue_upload_fixup},
     'binding':    {'mandatory': ['source', 'destination'],
                    'json':      ['arguments'],
                    'optional':  {'destination_type': 'queue',
@@ -806,6 +823,9 @@ class Management:
                 if k == 'destination_type':
                     uri_args['destination_char'] = v[0]
         uri = uri_template.format(**uri_args)
+        if 'fixup_upload' in obj:
+            fixup = obj['fixup_upload']
+            fixup(upload)
         return (uri, upload)
 
     def parse_json(self, text):
