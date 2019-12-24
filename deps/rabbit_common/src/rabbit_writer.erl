@@ -68,7 +68,7 @@
     %% flushes)
     pending,
     %% defines how ofter gc will be executed
-    gc_threshold
+    writer_gc_threshold
 }).
 
 -define(HIBERNATE_AFTER, 5000).
@@ -190,7 +190,7 @@ initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats, GC
                   protocol     = Protocol,
                   reader       = ReaderPid,
                   pending      = [],
-                  gc_threshold = GCThreshold},
+                  writer_gc_threshold = GCThreshold},
           #wstate.stats_timer).
 
 system_continue(Parent, Deb, State) ->
@@ -367,7 +367,7 @@ internal_send_command_async(MethodRecord, Content,
                                             frame_max    = FrameMax,
                                             protocol     = Protocol,
                                             pending      = Pending,
-                                            gc_threshold = GCThreshold}) ->
+                                            writer_gc_threshold = GCThreshold}) ->
     Frames = assemble_frames(Channel, MethodRecord, Content, FrameMax,
                              Protocol),
     maybe_gc_large_msg(Content, GCThreshold),
