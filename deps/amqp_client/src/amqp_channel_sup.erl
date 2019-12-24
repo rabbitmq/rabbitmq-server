@@ -58,7 +58,7 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
                   VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]),
     RabbitCh;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
-    GCThreshold = application:get_env(amqp_client, gc_threshold, ?DEFAULT_GC_THRESHOLD),
+    GCThreshold = application:get_env(amqp_client, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),
     {ok, Writer} = supervisor2:start_child(
                      Sup,
                      {writer, {rabbit_writer, start_link,
