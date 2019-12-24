@@ -171,7 +171,7 @@
              queue_states,
              tick_timer,
              %% defines how ofter gc will be executed
-             gc_threshold
+             writer_gc_threshold
             }).
 
 -define(QUEUE, lqueue).
@@ -510,7 +510,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     MaxMessageSize = get_max_message_size(),
     ConsumerTimeout = get_consumer_timeout(),
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
-    {ok, GCThreshold} = application:get_env(rabbit, gc_threshold),
+    {ok, GCThreshold} = application:get_env(rabbit, writer_gc_threshold),
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
                             channel = Channel,
@@ -547,7 +547,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
                 queue_states            = #{},
-                gc_threshold            = GCThreshold
+                writer_gc_threshold     = GCThreshold
                },
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
@@ -1314,7 +1314,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    tx               = Tx,
                                    confirm_enabled  = ConfirmEnabled,
                                    delivery_flow    = Flow,
-                                   gc_threshold     = GCThreshold
+                                   writer_gc_threshold     = GCThreshold
                                    }) ->
     check_msg_size(Content, MaxMessageSize, GCThreshold),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
@@ -2695,7 +2695,7 @@ handle_deliver(ConsumerTag, AckRequired,
                                      content       = Content}},
                State = #ch{cfg = #conf{writer_pid = WriterPid},
                            next_tag   = DeliveryTag,
-                           gc_threshold = GCThreshold}) ->
+                           writer_gc_threshold = GCThreshold}) ->
     Deliver = #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
                                redelivered  = Redelivered,
