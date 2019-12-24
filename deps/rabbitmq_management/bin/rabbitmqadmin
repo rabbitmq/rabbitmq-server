@@ -778,6 +778,17 @@ class Management:
         (uri, upload) = self.parse_args(self.args[1:], obj)
         return (obj_type, uri, upload)
 
+    def assert_mandatory_keys(self, mandatory, upload):
+        for m in mandatory:
+            if type(m) is list:
+                a_set = set(m)
+                b_set = set(upload.keys())
+                assert_usage((a_set & b_set),
+                             'one of mandatory arguments "{0}" is required'.format(m))
+            else:
+                assert_usage(m in upload.keys(),
+                             'mandatory argument "{0}" is required'.format(m))
+
     def parse_args(self, args, obj):
         mandatory = obj['mandatory']
         optional = obj['optional']
@@ -806,15 +817,7 @@ class Management:
                 upload[name] = self.parse_json(value)
             else:
                 upload[name] = value
-        for m in mandatory:
-            if type(m) is list:
-                a_set = set(m)
-                b_set = set(upload.keys())
-                assert_usage((a_set & b_set),
-                             'one of mandatory arguments "{0}" is required'.format(m))
-            else:
-                assert_usage(m in upload.keys(),
-                             'mandatory argument "{0}" is required'.format(m))
+        self.assert_mandatory_keys(mandatory, upload)
         if 'vhost' not in mandatory:
             upload['vhost'] = self.options.vhost or self.options.declare_vhost
         uri_args = {}
