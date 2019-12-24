@@ -8,6 +8,7 @@
 /deps/
 /doc/
 /ebin/
+/escript/
 /git-revisions.txt
 /logs/
 /PACKAGES/
@@ -15,6 +16,7 @@
 /plugins/
 /rebar.config
 /rebar.lock
+/sbin
 /test/ct.cover.spec
 /xrefr
 /amqp_client.d
