@@ -59,7 +59,7 @@ fun(Conf) ->
 end}.
 
 %% Number of Erlang processes that will accept connections for the TCP
-%% and SSL listeners.
+%% and TLS listeners.
 %%
 %% {num_tcp_acceptors, 10},
 %% {num_ssl_acceptors, 1},
@@ -73,13 +73,32 @@ end}.
 ]}.
 
 
+{mapping, "socket_writer.gc_threshold", "rabbit.writer_gc_threshold", [
+    {datatype, [{atom, off}, integer]}
+]}.
+
+{translation, "rabbit.writer_gc_threshold",
+    fun(Conf) ->
+            case cuttlefish:conf_get("socket_writer.gc_threshold", Conf, undefined) of
+                %% missing from the config
+                undefined -> cuttlefish:unset();
+                %% explicitly disabled
+                off -> undefined;
+                Int when is_integer(Int) andalso Int > 0 ->
+                    Int;
+                _ ->
+                    cuttlefish:invalid("should be a non-negative integer")
+            end
+    end
+}.
+
 %% Maximum time for 0-9-1 handshake (after socket connection
-%% and SSL handshake), in milliseconds.
+%% and TLS handshake), in milliseconds.
 %%
 %% {handshake_timeout, 10000},
 
 {mapping, "handshake_timeout", "rabbit.handshake_timeout", [
-    {datatype, integer}
+    {datatype, [{atom, infinity}, integer]}
 ]}.
 
 %% Set to 'true' to perform reverse DNS lookups when accepting a

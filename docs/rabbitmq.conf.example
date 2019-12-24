@@ -40,6 +40,13 @@
 # num_acceptors.tcp = 10
 # num_acceptors.ssl = 10
 
+## Socket writer will force GC every so many bytes transferred.
+## Default is 1 GiB (`1000000000`). Set to 'off' to disable.
+##
+# socket_writer.gc_threshold = 1000000000
+#
+## To disable:
+# socket_writer.gc_threshold = off
 
 ## Maximum amount of time allowed for the AMQP 0-9-1 and AMQP 1.0 handshake
 ## (performed after socket connection and TLS handshake) to complete, in milliseconds.
