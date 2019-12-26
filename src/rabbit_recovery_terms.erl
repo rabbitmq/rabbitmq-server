@@ -193,12 +193,22 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-open_global_table() ->
-    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
-    {ok, _} = dets:open_file(?MODULE, [{file,      File},
-                                       {ram_file,  true},
-                                       {auto_save, infinity}]),
-    ok.
+open_table(VHost) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    File = filename:join(VHostDir, "recovery.dets"),
+    try
+        {ok, _} = dets:open_file(VHost, [{file,      File},
+                                        {ram_file,  true},
+                                        {auto_save, infinity}])
+    catch _:_ ->
+        file:delete(File),
+        %% Sleep for a period of time to avoid the CPU surge caused by repeated operation
+        Wait_time = 1000,
+        rabbit_log:warning("open '~p' failed, deleted it and try again after ~pms.", 
+            [File, Wait_time]),
+        timer:sleep(Wait_time),
+        open_table(VHost)
+     end.
 
 flush(VHost) ->
     try
