@@ -193,30 +193,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-open_table(VHost) ->
-    open_table(VHost, false).
-open_table(VHost, HasFailed) ->
-    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
-    File = filename:join(VHostDir, "recovery.dets"),
-    try
-        {ok, _} = dets:open_file(VHost, [{file,      File},
-                                        {ram_file,  true},
-                                        {auto_save, infinity}])
-    catch _:_ ->
-        case HasFailed of 
-            false ->
-                rabbit_log:warning("open '~p' failed, delete it and try again.", [File]),
-                rabbit_misc:delete_file(File),
-                open_table(VHost, true);
-            _ ->
-                %% If it has failed, quit and restart the broker 
-                %% depending on the system or other means
-                Wait_time = 5000,
-                rabbit_log:warning("open '~p' failed, quit after ~pms.", [File, Wait_time]),
-                timer:sleep(Wait_time),
-                rabbit_misc:quit(0)    
-        end
-    end. 
+open_global_table() ->
+    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
+    {ok, _} = dets:open_file(?MODULE, [{file,      File},
+                                       {ram_file,  true},
+                                       {auto_save, infinity}]),
+    ok.
 
 flush(VHost) ->
     try
