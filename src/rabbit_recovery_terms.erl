@@ -223,6 +223,8 @@ open_table(VHost, RetriesLeft) ->
           end
     end.
 
+-spec flush(vhost:name()) -> rabbit_types:ok_or_error(any()).
+
 flush(VHost) ->
     try
         dets:sync(VHost)
@@ -232,6 +234,8 @@ flush(VHost) ->
                              [VHost]),
             ok
     end.
+
+-spec close_table(vhost:name()) -> rabbit_types:ok_or_error(any()).
 
 close_table(VHost) ->
     try
