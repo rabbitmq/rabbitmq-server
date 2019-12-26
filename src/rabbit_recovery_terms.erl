@@ -193,22 +193,35 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+-spec open_table(vhost:name()) -> rabbit_types:ok_or_error(any()).
+
 open_table(VHost) ->
+    open_table(VHost, 10).
+
+-spec open_table(vhost:name(), non_neg_integer()) -> rabbit_types:ok_or_error(any()).
+
+open_table(VHost, RetriesLeft) ->
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     File = filename:join(VHostDir, "recovery.dets"),
-    try
-        {ok, _} = dets:open_file(VHost, [{file,      File},
-                                        {ram_file,  true},
-                                        {auto_save, infinity}])
-    catch _:_ ->
-        file:delete(File),
-        %% Sleep for a period of time to avoid the CPU surge caused by repeated operation
-        Wait_time = 1000,
-        rabbit_log:warning("Failed to open '~p', deleted it and retry after ~pms.", 
-            [File, Wait_time]),
-        timer:sleep(Wait_time),
-        open_table(VHost)
-     end.
+    Opts = [{file,      File},
+            {ram_file,  true},
+            {auto_save, infinity}],
+    case dets:open_file(VHost, Opts) of
+        {ok, _}        -> ok;
+        {error, Error} ->
+          case RetriesLeft of
+                0 ->
+                    {error, Error};
+                N when is_integer(N) ->
+                    _ = file:delete(File),
+                    %% Wait before retrying
+                    DelayInMs = 1000,
+                    rabbit_log:warning("Failed to open a recovery terms DETS file at ~p. Will delete it and retry in ~p ms (~p retries left)",
+                                       [File, DelayInMs, RetriesLeft]),
+                    timer:sleep(DelayInMs),
+                    open_table(VHost, RetriesLeft - 1)
+          end
+    end.
 
 flush(VHost) ->
     try
