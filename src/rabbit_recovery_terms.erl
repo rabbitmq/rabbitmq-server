@@ -204,7 +204,7 @@ open_table(VHost) ->
         file:delete(File),
         %% Sleep for a period of time to avoid the CPU surge caused by repeated operation
         Wait_time = 1000,
-        rabbit_log:warning("open '~p' failed, deleted it and try again after ~pms.", 
+        rabbit_log:warning("Failed to open '~p', deleted it and try again after ~pms.", 
             [File, Wait_time]),
         timer:sleep(Wait_time),
         open_table(VHost)
