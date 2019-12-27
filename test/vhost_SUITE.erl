@@ -44,7 +44,7 @@ groups() ->
         vhost_failure_forces_connection_closure_on_failure_node,
         dead_vhost_connection_refused_on_failure_node,
         node_starts_with_dead_vhosts,
-        node_starts_with_dead_vhosts_and_ignore_slaves,
+        node_starts_with_dead_vhosts_with_mirrors,
         vhost_creation_idempotency
     ],
     [
@@ -313,14 +313,14 @@ node_starts_with_dead_vhosts(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(1500),
+    timer:sleep(3000),
 
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
                         rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])),
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 1,
                       rabbit_vhost_sup_sup, check, [])).
 
-node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
+node_starts_with_dead_vhosts_with_mirrors(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -337,7 +337,7 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
     {ok, Chan} = amqp_connection:open_channel(Conn),
 
-    QName = <<"node_starts_with_dead_vhosts_and_ignore_slaves-q-0">>,
+    QName = <<"node_starts_with_dead_vhosts_with_mirrors-q-0">>,
     amqp_channel:call(Chan, #'queue.declare'{queue = QName, durable = true}),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
              rabbit_policy, set,
@@ -370,7 +370,7 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(1500),
+    timer:sleep(3000),
 
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
                         rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])),
