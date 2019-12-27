@@ -313,14 +313,12 @@ node_starts_with_dead_vhosts(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(500),
+    timer:sleep(1500),
 
-    false = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
-    true = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
-    [VHost1] = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, check, []).
+    ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
+                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 1,
+                      rabbit_vhost_sup_sup, check, [])).
 
 node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
     VHost1 = <<"vhost1">>,
@@ -346,8 +344,8 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
              [VHost1, <<"mirror">>, <<".*">>, [{<<"ha-mode">>, <<"all">>}],
               0, <<"queues">>, <<"acting-user">>]),
 
-    %% Wait for the queue to create a slave
-    timer:sleep(300),
+    %% Wait for the queue to start a mirror
+    timer:sleep(500),
 
     rabbit_ct_client_helpers:publish(Chan, QName, 10),
 
@@ -372,14 +370,12 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(500),
+    timer:sleep(1500),
 
-    false = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
-    true = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
-    [VHost1] = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, check, []). 
+    ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
+                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 1,
+                      rabbit_vhost_sup_sup, check, [])).
 
 vhost_creation_idempotency(Config) ->
     VHost = <<"idempotency-test">>,
