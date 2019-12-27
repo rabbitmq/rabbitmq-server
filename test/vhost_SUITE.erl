@@ -316,9 +316,7 @@ node_starts_with_dead_vhosts(Config) ->
     timer:sleep(3000),
 
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
-                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])),
-    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 1,
-                      rabbit_vhost_sup_sup, check, [])).
+                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
 
 node_starts_with_dead_vhosts_with_mirrors(Config) ->
     VHost1 = <<"vhost1">>,
@@ -373,9 +371,7 @@ node_starts_with_dead_vhosts_with_mirrors(Config) ->
     timer:sleep(3000),
 
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
-                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])),
-    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 1,
-                      rabbit_vhost_sup_sup, check, [])).
+                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
 
 vhost_creation_idempotency(Config) ->
     VHost = <<"idempotency-test">>,
