@@ -39,6 +39,6 @@ and see under the `./plugins` directory.
 
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-2019.
+(c) Pivotal Software Inc, 2007-2020.
 
 See `LICENSE` for license information.
