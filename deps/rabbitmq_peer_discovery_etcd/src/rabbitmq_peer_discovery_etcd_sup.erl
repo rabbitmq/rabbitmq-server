@@ -10,7 +10,7 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   Copyright (c) 2007-2017 Pivotal Software, Inc. All rights reserved.
+%%   Copyright (c) 2007-2020 Pivotal Software, Inc. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_etcd_sup).
