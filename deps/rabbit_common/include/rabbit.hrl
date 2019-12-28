@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -include("resource.hrl").
@@ -193,7 +193,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2019 Pivotal Software, Inc.").
+-define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2020 Pivotal Software, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL 1.1. Website: https://rabbitmq.com").
 -define(OTP_MINIMUM, "21.3").
 -define(ERTS_MINIMUM, "10.3").
