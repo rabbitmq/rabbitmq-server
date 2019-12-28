@@ -29,6 +29,6 @@ will build the plugin and put build artifacts under the `./plugins` directory.
 
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-2019
+(c) Pivotal Software Inc, 2007-2020
 
 Released under the MPL, the same license as RabbitMQ.
