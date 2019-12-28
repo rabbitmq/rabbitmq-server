@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Management Plugin.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 %%
 
 %% This module contains helper functions that control

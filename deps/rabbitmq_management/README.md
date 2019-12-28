@@ -15,4 +15,4 @@ it has to be [enabled](https://www.rabbitmq.com/plugins.html#basics) before it c
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2019.
+(c) Pivotal Software Inc., 2007-2020.
