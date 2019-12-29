@@ -18,6 +18,8 @@
 -module(rabbit_peer_discovery_consul).
 -behaviour(rabbit_peer_discovery_backend).
 
+-include_lib("common_test/include/ct.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 -include("rabbit_peer_discovery_consul.hrl").
@@ -67,7 +69,7 @@ list_nodes() ->
                    case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                                         get_config_key(consul_host, M),
                                                         get_config_key(consul_port, M),
-                                                        [v1, health, service, get_config_key(consul_svc, M)],
+                                                        rabbit_peer_discovery_httpc:build_path([v1, health, service, get_config_key(consul_svc, M)]),
                                                         list_nodes_query_args(),
                                                         maybe_add_acl([]),
                                                         []) of
@@ -98,7 +100,7 @@ register() ->
       case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
                                             get_config_key(consul_port, M),
-                                            [v1, agent, service, register],
+                                            rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
                                             [],
                                             maybe_add_acl([]),
                                             Body) of
@@ -117,7 +119,7 @@ unregister() ->
   case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
                                        get_config_key(consul_port, M),
-                                       [v1, agent, service, deregister, ID],
+                                       rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
                                        [],
                                        maybe_add_acl([]),
                                        []) of
@@ -139,7 +141,7 @@ post_registration() ->
     send_health_check_pass(),
     ok.
 
--spec lock(Node :: string()) -> {ok, Data :: term()} | {error, Reason :: string()}.
+-spec lock(Node :: atom()) -> {ok, Data :: term()} | {error, Reason :: string()}.
 
 lock(Node) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
@@ -459,7 +461,7 @@ send_health_check_pass() ->
   case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
                                        get_config_key(consul_port, M),
-                                       [v1, agent, check, pass, Service],
+                                       rabbit_peer_discovery_httpc:build_path([v1, agent, check, pass, Service]),
                                        [],
                                        maybe_add_acl([]),
                                        []) of
@@ -534,7 +536,7 @@ create_session(Name, TTL) ->
 %% Create session
 %% @end
 %%--------------------------------------------------------------------
--spec consul_session_create(Query, Headers, Body) -> {ok, term()} | {error, Reason::string()} when
+-spec consul_session_create(Query, Headers, Body) -> {ok, string()} | {error, any()} when
       Query :: list(),
       Headers :: [{string(), string()}],
       Body :: term().
@@ -545,7 +547,7 @@ consul_session_create(Query, Headers, Body) ->
             rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
                                             get_config_key(consul_port, M),
-                                            [v1, session, create],
+                                            "v1/session/create",
                                             Query,
                                             Headers,
                                             Serialized);
@@ -632,7 +634,7 @@ lock(TRef, SessionId, _, EndTime) ->
 %% Acquire session for a key
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_lock(string()) -> {ok, term()} | {error, string()}.
+-spec acquire_lock(string()) -> {ok, any()} | {error, string()}.
 acquire_lock(SessionId) ->
     consul_kv_write(startup_lock_path(), [{acquire, SessionId}], maybe_add_acl([]), []).
 
@@ -642,7 +644,7 @@ acquire_lock(SessionId) ->
 %% Release a previously acquired lock held by a given session
 %% @end
 %%--------------------------------------------------------------------
--spec release_lock(string()) -> {ok, term()} | {error, string()}.
+-spec release_lock(string()) -> {ok, any()} | {error, string()}.
 release_lock(SessionId) ->
     consul_kv_write(startup_lock_path(), [{release, SessionId}], maybe_add_acl([]), []).
 
@@ -652,9 +654,9 @@ release_lock(SessionId) ->
 %% Write KV store key value
 %% @end
 %%--------------------------------------------------------------------
--spec consul_kv_write(Path, Query, Headers, Body) -> {ok, term()} | {error, string()} when
-      Path :: [rabbit_peer_discovery_httpc:path_component()],
-      Query :: [rabbit_peer_discovery_httpc:path_component()],
+-spec consul_kv_write(Path, Query, Headers, Body) -> {ok, any()} | {error, string()} when
+      Path :: string(),
+      Query :: [{string(), string()}],
       Headers :: [{string(), string()}],
       Body :: term().
 consul_kv_write(Path, Query, Headers, Body) ->
@@ -664,7 +666,7 @@ consul_kv_write(Path, Query, Headers, Body) ->
             rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
                                             get_config_key(consul_port, M),
-                                            [v1, kv] ++ Path,
+                                            "v1/kv/" ++ Path,
                                             Query,
                                             Headers,
                                             Serialized);
@@ -679,15 +681,15 @@ consul_kv_write(Path, Query, Headers, Body) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec consul_kv_read(Path, Query, Headers) -> {ok, term()} | {error, string()} when
-      Path :: [rabbit_peer_discovery_httpc:path_component()],
-      Query :: [rabbit_peer_discovery_httpc:path_component()],
+      Path :: string(),
+      Query :: [{string(), string()}],
       Headers :: [{string(), string()}].
 consul_kv_read(Path, Query, Headers) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
                                     get_config_key(consul_port, M),
-                                    [v1, kv] ++ Path,
+                                    "v1/kv/" ++ Path,
                                     Query,
                                     Headers,
                                     []).
@@ -717,9 +719,9 @@ get_lock_status() ->
 %% Returns consul path for startup lock
 %% @end
 %%--------------------------------------------------------------------
--spec startup_lock_path() -> [rabbit_peer_discovery_httpc:path_component()].
+-spec startup_lock_path() -> string().
 startup_lock_path() ->
-    base_path() ++ ["startup_lock"].
+    base_path() ++ "/" ++ "startup_lock".
 
 %%--------------------------------------------------------------------
 %% @private
@@ -727,10 +729,11 @@ startup_lock_path() ->
 %% consul kv keys related to current cluster.
 %% @end
 %%--------------------------------------------------------------------
--spec base_path() -> [rabbit_peer_discovery_httpc:path_component()].
+-spec base_path() -> string().
 base_path() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    [get_config_key(consul_lock_prefix, M), get_config_key(cluster_name, M)].
+    Segments = [get_config_key(consul_lock_prefix, M), get_config_key(cluster_name, M)],
+    rabbit_peer_discovery_httpc:build_path(Segments).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -764,13 +767,13 @@ session_ttl_update_callback(SessionId) ->
 %% Renew session TTL
 %% @end
 %%--------------------------------------------------------------------
--spec consul_session_renew(string(), [rabbit_peer_discovery_httpc:path_component()], [{string(), string()}]) -> {ok, term()} | {error, string()}.
+-spec consul_session_renew(string(), [{string(), string()}], [{string(), string()}]) -> {ok, term()} | {error, string()}.
 consul_session_renew(SessionId, Query, Headers) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
                                     get_config_key(consul_port, M),
-                                    [v1, session, renew, rabbit_data_coercion:to_atom(SessionId)],
+                                    rabbit_peer_discovery_httpc:build_path([v1, session, renew, rabbit_data_coercion:to_atom(SessionId)]),
                                     Query,
                                     Headers,
                                     []).
