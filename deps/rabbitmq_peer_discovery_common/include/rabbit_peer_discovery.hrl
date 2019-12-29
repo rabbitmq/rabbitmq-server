@@ -27,3 +27,9 @@
         {env_variable  :: string(),
          default_value :: peer_discovery_config_value(),
          type          :: atom()}).
+
+-type(peer_discovery_config_entry_meta() :: #peer_discovery_config_entry_meta{
+                                             type :: atom(),
+                                             env_variable :: string(),
+                                             default_value :: peer_discovery_config_value()
+                                            }).
