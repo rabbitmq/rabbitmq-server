@@ -26,7 +26,7 @@
 %%
 
 -spec get(Key :: atom(),
-          Mapping :: #{atom() => #peer_discovery_config_entry_meta{}},
+          Mapping :: #{atom() => peer_discovery_config_entry_meta()},
           Config  :: #{atom() => peer_discovery_config_value()}) -> peer_discovery_config_value().
 
 get(Key, Mapping, Config) ->

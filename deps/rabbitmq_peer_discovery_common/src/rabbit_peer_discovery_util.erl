@@ -357,8 +357,8 @@ as_map(Value) ->
     [].
 
 -spec stringify_error({ok, term()} | {error, term()}) -> {ok, term()} | {error, string()}.
-stringify_error({ok, _} = Res) ->
-    Res;
+stringify_error({ok, Val}) ->
+    {ok, Val};
 stringify_error({error, Str}) when is_list(Str) ->
     {error, Str};
 stringify_error({error, Term}) ->
