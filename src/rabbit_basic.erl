@@ -23,7 +23,7 @@
          extract_headers/1, extract_timestamp/1, map_headers/2, delivery/4,
          header_routes/1, parse_expiration/1, header/2, header/3]).
 -export([build_content/2, from_content/1, msg_size/1,
-         maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
+         maybe_gc_large_msg/1, maybe_gc_large_msg/2, maybe_gc_large_msg/3]).
 -export([add_header/4]).
 
 %%----------------------------------------------------------------------------
@@ -316,6 +316,12 @@ maybe_gc_large_msg(Content, undefined) ->
     rabbit_writer:msg_size(Content);
 maybe_gc_large_msg(Content, GCThreshold) ->
     rabbit_writer:maybe_gc_large_msg(Content, GCThreshold).
+
+maybe_gc_large_msg(_Content, undefined, nosize) ->
+    ok;
+maybe_gc_large_msg(Content, GCThreshold, _Opts) ->
+    _Size = maybe_gc_large_msg(Content, GCThreshold),
+    ok.
 
 msg_size(Content) ->
     rabbit_writer:msg_size(Content).
