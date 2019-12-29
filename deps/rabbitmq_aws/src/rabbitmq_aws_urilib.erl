@@ -25,6 +25,7 @@
     -compile({nowarn_deprecated_function, [{http_uri, decode, 1},
                                            {http_uri, encode, 1},
                                            {http_uri, parse,  1},
+                                           {http_uri, parse,  2},
                                            {http_uri, scheme_defaults, 0}]}).
   -endif.
 -endif.
