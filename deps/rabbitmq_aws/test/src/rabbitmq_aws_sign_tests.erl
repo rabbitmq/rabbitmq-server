@@ -145,9 +145,9 @@ request_hash_test_() ->
                  {"Host", "iam.amazonaws.com"},
                  {"Date", "20150830T123600Z"}],
       Payload = "",
-      Expectation = "49b454e0f20fe17f437eaa570846fc5d687efc1752c8b5a1eeee5597a7eb92a5",
+      Expectation = "6fe26323919d9ab6c0e06a1ca24a90eee2c66ce13077c1d49dd71a82c8c780cc",
       ?assertEqual(Expectation,
-                   rabbitmq_aws_sign:request_hash(Method, Path, QArgs,  Headers, Payload))
+                   rabbitmq_aws_sign:request_hash(Method, Path, QArgs, Headers, Payload))
      end}
   ].
 
@@ -256,7 +256,7 @@ headers_test_() ->
           body = "",
           headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"}]},
         Expectation = [
-          {"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;content-type;date;host;x-amz-content-sha256, Signature=81cb49e1e232a0a5f7f594ad6b2ad2b8b7adbafddb3604d00491fe8f3cc5a442"},
+          {"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;content-type;date;host;x-amz-content-sha256, Signature=dbd60f6062cf99dc810b44986aa5882c3dd5301137c49217b41d3bd22b7e6994"},
           {"content-length", "0"},
           {"content-type", "application/x-www-form-urlencoded; charset=utf-8"},
           {"date", "20150830T123600Z"},
@@ -278,10 +278,10 @@ headers_test_() ->
           body = "",
           headers = [{"host", "gavinroy.com.s3.amazonaws.com"}]},
         Expectation = [
-          {"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;date;host;x-amz-content-sha256, Signature=64e549daad14fc1ba9fc4aca6b7df4b2c60e352e3313090d84a2941c1e653d36"},
-          {"content-length", "0"},
-          {"date", "20150830T123600Z"},
-          {"host", "gavinroy.com.s3.amazonaws.com"},
+          {"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;date;host;x-amz-content-sha256, Signature=756d0648a85821ad671038457cb03720ba76fb5f1a5220ed4baba855f4b9dacf"},
+          {"content-length","0"},
+          {"date","20150830T123600Z"},
+          {"host","gavinroy.com.s3.amazonaws.com"},
           {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
         ],
         ?assertEqual(Expectation, rabbitmq_aws_sign:headers(Request)),

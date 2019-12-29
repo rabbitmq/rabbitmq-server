@@ -8,7 +8,7 @@
 -module(rabbitmq_aws_sign).
 
 %% API
--export([headers/1]).
+-export([headers/1, request_hash/5]).
 
 %% Transitional step until we can require Erlang/OTP 22 and
 %% use crypto:mac/4 instead of crypto:hmac/3.
@@ -197,7 +197,8 @@ query_string(QueryArgs) ->
 %% @doc Create the request hash value
 %% @end
 request_hash(Method, Path, QArgs, Headers, Payload) ->
-  EncodedPath = "/" ++ string:join([rabbitmq_aws_urilib:percent_encode(P) || P <- string:tokens(Path, "/")], "/"),
+  RawPath = "/" ++ Path,
+  EncodedPath = uri_string:recompose(#{path => RawPath}),
   CanonicalRequest = string:join([string:to_upper(atom_to_list(Method)),
                                   EncodedPath,
                                   query_string(QArgs),
