@@ -143,11 +143,11 @@ parse_test_() ->
       ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end},
     {"variation4", fun() ->
-      URI = "https://www.google.com/search?foo",
+      URI = "https://www.google.com/search?foo=true",
       Expect = #uri{scheme = "https",
                     authority = {undefined, "www.google.com", 443},
                     path = "/search",
-                    query = [{"foo", true}],
+                    query = [{"foo", "true"}],
                     fragment = undefined},
       ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end}
