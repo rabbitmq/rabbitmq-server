@@ -554,11 +554,11 @@ parse_uri_test_() ->
      ?_assertEqual({error, {invalid_option, verify}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
-                  "keyfile=/etc/keyfile.key&verify=verify_bananas&")),
+                  "keyfile=/etc/keyfile.key&verify=verify_bananas")),
      ?_assertEqual({error, {invalid_option, fail_if_no_peer_cert}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
-                  "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana&")),
+                  "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana")),
      ?_assertEqual({error, plain_sasl_missing_userinfo},
                    parse_uri("amqp://my_host:9876?sasl=plain")),
      ?_assertEqual({error, path_segment_not_supported},
