@@ -20,6 +20,15 @@
 
 -include("rabbitmq_aws.hrl").
 
+-ifdef (OTP_RELEASE).
+  -if(?OTP_RELEASE >= 23).
+    -compile({nowarn_deprecated_function, [{http_uri, decode, 1},
+                                           {http_uri, encode, 1},
+                                           {http_uri, parse,  1},
+                                           {http_uri, scheme_defaults, 0}]}).
+  -endif.
+-endif.
+
 -spec build(#uri{}) -> string().
 %% @doc Build a URI string
 %% @end
