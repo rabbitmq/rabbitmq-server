@@ -58,6 +58,10 @@
     -compile({nowarn_deprecated_function, [{http_uri, decode, 1},
                                            {http_uri, parse,  1},
                                            {http_uri, parse,  2}]}).
+
+     -ignore_xref([{http_uri, decode, 1},
+                   {http_uri, parse,  1},
+                   {http_uri, parse,  2}]).
   -endif.
 -endif.
 
