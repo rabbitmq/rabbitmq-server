@@ -44,6 +44,9 @@
   -if(?OTP_RELEASE >= 23).
     -compile({nowarn_deprecated_function, [{http_uri, encode, 1},
                                            {http_uri, parse,  1}]}).
+
+    -ignore_xref([{http_uri, encode, 1},
+                  {http_uri, parse,  1}]).
   -endif.
 -endif.
 
