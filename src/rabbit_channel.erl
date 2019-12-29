@@ -616,7 +616,8 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                                    routing_keys  = [RoutingKey | _CcRoutes],
                                    content       = Content}}},
             State = #ch{writer_pid = WriterPid,
-                        next_tag   = DeliveryTag}) ->
+                        next_tag   = DeliveryTag,
+                        gc_threshold = GCThreshold}) ->
     ok = rabbit_writer:send_command_and_notify(
            WriterPid, QPid, self(),
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -625,7 +626,12 @@ handle_cast({deliver, ConsumerTag, AckRequired,
                             exchange     = ExchangeName#resource.name,
                             routing_key  = RoutingKey},
            Content),
-    rabbit_basic:maybe_gc_large_msg(Content),
+    case GCThreshold of
+        undefined ->
+            ok;
+        _ ->
+            rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
+    end,
     noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
 
 handle_cast({deliver_reply, _K, _Del}, State = #ch{state = closing}) ->
