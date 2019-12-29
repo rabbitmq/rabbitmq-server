@@ -2708,7 +2708,10 @@ handle_deliver(ConsumerTag, AckRequired,
         false ->
             ok = rabbit_writer:send_command(WriterPid, Deliver, Content)
     end,
-    rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
+    case GCThreshold of
+        undefined -> ok;
+        _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
+    end,
     record_sent(deliver, ConsumerTag, AckRequired, Msg, State).
 
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
