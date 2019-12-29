@@ -53,6 +53,13 @@
          parse_uri/1
         ]).
 
+-ifdef (OTP_RELEASE).
+  -if(?OTP_RELEASE >= 23).
+    -compile({nowarn_deprecated_function, [{http_uri, decode, 1},
+                                           {http_uri, parse,  1}]}).
+  -endif.
+-endif.
+
 -define(DEFAULT_TIMEOUT, 5000).
 
 -type snd_settle_mode() :: amqp10_client_session:snd_settle_mode().
