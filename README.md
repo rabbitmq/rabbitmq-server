@@ -4,14 +4,15 @@
 
  * AMQP 0-9-1
  * AMQP 1.0
- * STOMP 1.0 through 1.2
  * MQTT 3.1.1
+ * STOMP 1.0 through 1.2
 
 
 ## Installation
 
  * [Installation guides](https://rabbitmq.com/download.html) for various platforms
-
+ * [Supported and unsupported series](https://www.rabbitmq.com/versions.html)
+ * [Supported Erlang versions](https://www.rabbitmq.com/which-erlang.html)
 
 ## Tutorials & Documentation
 
