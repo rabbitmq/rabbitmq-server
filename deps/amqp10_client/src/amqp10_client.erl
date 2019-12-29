@@ -86,6 +86,12 @@
               connection_config/0
              ]).
 
+-ifdef (OTP_RELEASE).
+  -if(?OTP_RELEASE >= 23).
+    -compile({nowarn_deprecated_function, [{http_uri, decode, 1}]}).
+  -endif.
+-endif.
+
 %% @doc Convenience function for opening a connection providing only an
 %% address and port. This uses anonymous sasl authentication.
 %% This is asynchronous and will notify success/closure to the caller using
@@ -370,34 +376,41 @@ link_handle(#link_ref{link_handle = Handle}) -> Handle.
 -spec parse_uri(string()) ->
     {ok, connection_config()} | {error, term()}.
 parse_uri(Uri) ->
-    case http_uri:parse(Uri, [{scheme_defaults,
-                               [{amqp, 5672},
-                                {amqps, 5671}]}]) of
-        {ok, Result} ->
+    case uri_string:parse(Uri) of
+        Map when is_map(Map) ->
             try
-                {ok, parse_result(Result)}
+                {ok, parse_result(Map)}
             catch
                 throw:Err -> {error, Err}
             end;
-        Err -> Err
+        {error, _, _} = Err -> Err
     end.
 
-parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
-    Query = lists:foldl(fun (W, Acc) ->
-                                [K, V] = string:tokens(W, "="),
-                                Acc#{K => V}
-                        end, #{},
-                        string:tokens(safe_substr(Query0, 2), "&")),
+parse_result(Map) ->
+    _ = case maps:get(path, Map, "/") of
+      "/" -> ok;
+      ""  -> ok;
+      _   -> throw(path_segment_not_supported)
+    end,
+    Scheme   = maps:get(scheme, Map, "amqp"),
+    UserInfo = maps:get(userinfo, Map, undefined),
+    Host     = maps:get(host, Map),
+    DefaultPort = case Scheme of
+      "amqp"  -> 5672;
+      "amqps" -> 5671
+    end,
+    Port   = maps:get(port, Map, DefaultPort),
+    Query0 = maps:get(query, Map, ""),
+    Query  = maps:from_list(uri_string:dissect_query(Query0)),
     Sasl = case Query of
                #{"sasl" := "anon"} -> anon;
-               #{"sasl" := "plain"} when length(UserInfo) =:= 0 ->
+               #{"sasl" := "plain"} when UserInfo =:= undefined orelse length(UserInfo) =:= 0 ->
                    throw(plain_sasl_missing_userinfo);
                _ ->
                    case UserInfo of
-                       [] ->
-                           none;
-                       U ->
-                           parse_usertoken(U)
+                       [] -> none;
+                       undefined -> none;
+                       U -> parse_usertoken(U)
                    end
            end,
     Ret0 = maps:fold(fun("idle_time_out", V, Acc) ->
@@ -416,25 +429,20 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
                             port => Port,
                             sasl => Sasl}, Query),
     case Scheme of
-        amqp -> Ret0;
-        amqps ->
+        "amqp"  -> Ret0;
+        "amqps" ->
             TlsOpts = parse_tls_opts(Query),
             Ret0#{tls_opts => {secure_port, TlsOpts}}
-    end;
-parse_result({_Scheme, _UserInfo, _Host, _Port, _Path, _Query0}) ->
-    throw(path_segment_not_supported).
+    end.
 
 
+parse_usertoken(undefined) ->
+    none;
+parse_usertoken("") ->
+    none;
 parse_usertoken(U) ->
     [User, Pass] = string:tokens(U, ":"),
-    {plain,
-     to_binary(http_uri:decode(User)),
-     to_binary(http_uri:decode(Pass))}.
-
-
-safe_substr(Str, Start) when length(Str) >= Start ->
-    string:substr(Str, Start);
-safe_substr(_Str, _Start) -> "".
+    {plain, to_binary(http_uri:decode(User)), to_binary(http_uri:decode(Pass))}.
 
 parse_tls_opts(M) ->
     lists:sort(maps:fold(fun parse_tls_opt/3, [], M)).
