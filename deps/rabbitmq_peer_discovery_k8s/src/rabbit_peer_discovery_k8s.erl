@@ -43,13 +43,13 @@ init() ->
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
--spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}}.
+-spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
     case make_request() of
 	{ok, Response} ->
 	    Addresses = extract_node_list(Response),
-	    {ok, lists:map(fun node_name/1, Addresses)};
+	    {ok, {lists:map(fun node_name/1, Addresses), disc}};
 	{error, Reason} ->
 	    Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
         rabbit_log:error(Details),
@@ -109,7 +109,8 @@ get_config_key(Key, Map) ->
 %% @doc Perform a HTTP GET request to K8s
 %% @end
 %%
--spec make_request() -> {ok, term()} | {error, term()}.
+-spec make_request() -> {ok, map() | list() | term()} | {error, term()}.
+
 make_request() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, Token} = file:read_file(get_config_key(k8s_token_path, M)),
@@ -123,7 +124,7 @@ make_request() ->
       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
       [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}]).
 
-%% @spec node_name(k8s_endpoint) -> list()  
+%% @spec node_name(k8s_endpoint) -> list()
 %% @doc Return a full rabbit node name, appending hostname suffix
 %% @end
 %%
@@ -135,17 +136,17 @@ node_name(Address) ->
 
 %% @spec maybe_ready_address(k8s_subsets()) -> list()
 %% @doc Return a list of ready nodes
-%% SubSet can contain also "notReadyAddresses"  
+%% SubSet can contain also "notReadyAddresses"
 %% @end
 %%
+-spec maybe_ready_address([map()]) -> list().
+
 maybe_ready_address(Subset) ->
     case maps:get(<<"notReadyAddresses">>, Subset, undefined) of
       undefined -> ok;
       NotReadyAddresses ->
-            Formatted = string:join([binary_to_list(get_address(X))
-                                     || X <- NotReadyAddresses], ", "),
-            rabbit_log:info("k8s endpoint listing returned nodes not yet ready: ~s",
-                            [Formatted])
+            Formatted = string:join([binary_to_list(get_address(X)) || X <- NotReadyAddresses], ", "),
+            rabbit_log:info("k8s endpoint listing returned nodes not yet ready: ~s", [Formatted])
     end,
     maps:get(<<"addresses">>, Subset, []).
 
@@ -153,27 +154,25 @@ maybe_ready_address(Subset) ->
 %%    see https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_endpoints
 %% @end
 %%
--spec extract_node_list(term()) -> [binary()].
+-spec extract_node_list(map()) -> list().
+
 extract_node_list(Response) ->
     IpLists = [[get_address(Address)
-		|| Address <- maybe_ready_address(Subset)]
-	       || Subset <- maps:get(<<"subsets">>, Response, [])],
+		|| Address <- maybe_ready_address(Subset)] || Subset <- maps:get(<<"subsets">>, Response, [])],
     sets:to_list(sets:union(lists:map(fun sets:from_list/1, IpLists))).
 
 
 %% @doc Return a list of path segments that are the base path for k8s key actions
 %% @end
 %%
--spec base_path(events | endpoints, term()) -> [?HTTPC_MODULE:path_component()].
+-spec base_path(events | endpoints, term()) -> string().
 base_path(Type, Args) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, Namespace} = file:read_file(
-			get_config_key(k8s_namespace_path, M)),
+    {ok, Namespace} = file:read_file(get_config_key(k8s_namespace_path, M)),
     NameSpace1 = binary:replace(Namespace, <<"\n">>, <<>>),
-    [api, v1, namespaces, NameSpace1, Type,
-     Args].
+    rabbit_peer_discovery_httpc:build_path([api, v1, namespaces, NameSpace1, Type, Args]).
 
-%% get_config_key(k8s_service_name, M)    
+%% get_config_key(k8s_service_name, M)
 
 get_address(Address) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
@@ -181,8 +180,8 @@ get_address(Address) ->
 
 
 generate_v1_event(Namespace, Type, Message, Reason) ->
-    {ok, HostName} = inet:gethostname(),   
-    Name = 
+    {ok, HostName} = inet:gethostname(),
+    Name =
         io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)]),
     TimeInSeconds = calendar:system_time_to_rfc3339(erlang:system_time(second)),
     generate_v1_event(Namespace, Name, Type, Message, Reason, TimeInSeconds, HostName).
@@ -209,7 +208,7 @@ generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) -
 		  component => rabbit_data_coercion:to_binary(HostName ++ "/" ++
 						  ?K8S_EVENT_SOURCE_DESCRIPTION),
 		  host => rabbit_data_coercion:to_binary(HostName)
-		 }           
+		 }
      }.
 
 
@@ -237,4 +236,4 @@ send_event(Type, Reason, Message) ->
        [{"Authorization", "Bearer " ++ rabbit_data_coercion:to_list(Token1)}],
        [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}],
         Body
-      ).  
+      ).
