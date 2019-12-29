@@ -93,35 +93,35 @@ extract_nodes_test(_Config) ->
   ?assertEqual(Expectation, rabbit_peer_discovery_etcd:extract_nodes(Values)).
 
 base_path_defaults_test(_Config) ->
-    ?assertEqual([v2, keys, "rabbitmq", "default"],
+    ?assertEqual("v2/keys/rabbitmq/default",
                  rabbit_peer_discovery_etcd:base_path(#{})).
 
 base_path_custom_test(_Config) ->
     C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
           cluster_name => <<"test_cluster">>},
-    ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test_cluster"],
+    ?assertEqual("v2/keys/example/com/1.2.3/config/mq/test_cluster",
                  rabbit_peer_discovery_etcd:base_path(C)).
 
 base_path_custom_test_with_slash(_Config) ->
     C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
           cluster_name => <<"test/cluster">>},
-    ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test/cluster"],
+    ?assertEqual("v2/keys/example/com/1.2.3/config/mq/test/cluster",
                  rabbit_peer_discovery_etcd:base_path(C)).
 
 nodes_path_defaults_test(_Config) ->
-    ?assertEqual([v2, keys, "rabbitmq", "default", nodes, rabbit_data_coercion:to_list(node())],
+    ?assertEqual("v2/keys/rabbitmq/default/nodes/" ++ rabbit_data_coercion:to_list(node()),
                  rabbit_peer_discovery_etcd:node_path(#{})).
 
 nodes_path_with_custom_prefix_and_cluster_name_test(_Config) ->
     C = #{etcd_prefix => <<"project/prefix/mq">>,
           cluster_name => <<"test_cluster">>},
-    ?assertEqual([v2, keys, "project/prefix/mq", "test_cluster", nodes],
+    ?assertEqual("v2/keys/project/prefix/mq/test_cluster/nodes",
                  rabbit_peer_discovery_etcd:nodes_path(C)).
 
 nodes_path_with_custom_prefix_and_cluster_name_with_slash_test(_Config) ->
     C = #{etcd_prefix => <<"project/prefix/mq">>,
           cluster_name => <<"test/cluster">>},
-    ?assertEqual([v2, keys, "project/prefix/mq", "test/cluster", nodes],
+    ?assertEqual("v2/keys/project/prefix/mq/test/cluster/nodes",
                  rabbit_peer_discovery_etcd:nodes_path(C)).
 
 get_node_from_key_case1_test(_Config) ->
