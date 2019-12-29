@@ -30,7 +30,7 @@
 -export([lock_ttl_update_callback/1]).
 
 %% for tests
--export([extract_nodes/1, base_path/1, node_path/1, nodes_path/1,
+-export([extract_nodes/1, base_path/0, base_path/1, startup_lock_path/0, node_path/1, nodes_path/1,
          get_node_from_key/2]).
 
 
@@ -81,20 +81,21 @@ supports_registration() ->
     true.
 
 
--spec register() -> ok | {error, Reason :: string()}.
+-spec register() -> ok | {error, string()}.
+
 register() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     case set_etcd_node_key(M) of
-        {ok, _} ->
-            rabbit_log:info("Registered node with etcd"),
-            ok;
-        {error, Error}   ->
-            rabbit_log:error("Failed to register node with etcd: ~s", [Error]),
-            {error, Error}
+      {ok, _} ->
+          rabbit_log:info("Registered node with etcd"),
+          ok;
+      {error, Error}   ->
+          rabbit_log:error("Failed to register node with etcd: ~s", [Error]),
+          {error, Error}
     end.
 
 
--spec unregister() -> ok | {error, Reason :: string()}.
+-spec unregister() -> ok | {error, string()}.
 unregister() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     rabbit_log:info("Unregistering node with etcd"),
@@ -110,7 +111,7 @@ post_registration() ->
 
 -spec lock(Node :: atom()) -> {ok, Data :: term()} | {error, Reason :: string()}.
 
-lock(Node) ->
+lock(Node) when is_atom(Node) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     Now = erlang:system_time(seconds),
     EndTime = Now + get_config_key(lock_wait_time, M),
@@ -141,7 +142,7 @@ get_config_key(Key, Map) ->
 %% @doc Update etcd, setting a key for this node with a TTL of etcd_node_ttl
 %% @end
 -spec set_etcd_node_key(Map :: #{atom() => peer_discovery_config_value()})
-                       -> ok | {error, Reason :: string()}.
+                       -> {ok, any()} | {error, string()}.
 set_etcd_node_key(Map) ->
   Interval = get_config_key(etcd_node_ttl, Map),
   etcd_put(node_path(Map), [{ttl, Interval}], [{value, enabled}], Map).
@@ -159,29 +160,30 @@ cluster_name_path_part(Map) ->
 %% @doc Return a list of path segments that are the base path for all
 %% etcd keys related to current cluster.
 %% @end
--spec base_path(Map :: #{atom() => peer_discovery_config_value()}) -> [?HTTPC_MODULE:path_component()].
+-spec base_path(Map :: #{atom() => peer_discovery_config_value()}) -> string().
 base_path(Map) ->
-  [v2, keys, get_config_key(etcd_prefix, Map), cluster_name_path_part(Map)].
+  Segments = [v2, keys, get_config_key(etcd_prefix, Map), cluster_name_path_part(Map)],
+  rabbit_peer_discovery_httpc:build_path(Segments).
 
 %% @doc Return a list of path segments that are the base path for all
 %% etcd keys related to current cluster.
 %% @end
--spec base_path() -> [?HTTPC_MODULE:path_component()].
+-spec base_path() -> string().
 base_path() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     base_path(M).
 
 %% @doc Returns etcd path under which nodes should be registered.
 %% @end
--spec nodes_path(Map :: #{atom() => peer_discovery_config_value()}) -> [?HTTPC_MODULE:path_component()].
+-spec nodes_path(Map :: #{atom() => peer_discovery_config_value()}) -> string().
 nodes_path(Map) ->
-    base_path(Map) ++ [nodes].
+    base_path(Map) ++ "/nodes".
 
 %% @doc Returns etcd path under which current node should be registered
 %% @end
--spec node_path(Map :: #{atom() => peer_discovery_config_value()}) -> [?HTTPC_MODULE:path_component()].
+-spec node_path(Map :: #{atom() => peer_discovery_config_value()}) -> string().
 node_path(Map) ->
-  nodes_path(Map) ++ [atom_to_list(node())].
+  nodes_path(Map) ++ "/" ++ atom_to_list(node()).
 
 %% @doc Return the list of erlang nodes
 %% @end
@@ -232,8 +234,8 @@ get_node_from_key(V, _Map) ->
 
 -spec etcd_delete(Path, Query, Map)
                  -> {ok, term()} | {error, string()} when
-      Path :: [?HTTPC_MODULE:path_component()],
-      Query :: [?HTTPC_MODULE:query_component()],
+      Path :: string(),
+      Query :: list(),
       Map :: #{atom() => peer_discovery_config_value()}.
 etcd_delete(Path, Query, Map) ->
     ?UTIL_MODULE:stringify_error(
@@ -244,8 +246,8 @@ etcd_delete(Path, Query, Map) ->
 
 -spec etcd_get(Path, Query, Map)
               -> {ok, term()} | {error, string()} when
-      Path :: [?HTTPC_MODULE:path_component()],
-      Query :: [?HTTPC_MODULE:query_component()],
+      Path :: string(),
+      Query :: list(),
       Map :: #{atom() => peer_discovery_config_value()}.
 etcd_get(Path, Query, Map) ->
     ?UTIL_MODULE:stringify_error(
@@ -254,10 +256,10 @@ etcd_get(Path, Query, Map) ->
                         get_config_key(etcd_port, Map),
                         Path, Query)).
 
--spec etcd_put(Path, Query, Body, Map) -> {ok, term()} | {error, string()} when
-      Path :: [?HTTPC_MODULE:path_component()],
-      Query :: [?HTTPC_MODULE:query_component()],
-      Body :: [?HTTPC_MODULE:query_component()],
+-spec etcd_put(Path, Query, Body, Map) -> {ok, any()} | {error, string()} when
+      Path :: string(),
+      Query :: list(),
+      Body :: list(),
       Map :: #{atom() => peer_discovery_config_value()}.
 etcd_put(Path, Query, Body, Map) ->
     ?UTIL_MODULE:stringify_error(
@@ -267,7 +269,7 @@ etcd_put(Path, Query, Body, Map) ->
                         Path, Query, ?HTTPC_MODULE:build_query(Body))).
 
 
--spec update_node_key() -> ok.
+-spec update_node_key() -> {ok, any()} | {error, string()}.
 update_node_key() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     set_etcd_node_key(M).
@@ -314,6 +316,7 @@ try_insert_lock_key(UniqueId) ->
 -spec set_etcd_lock_key(string(), non_neg_integer()) -> {ok, term()} | {error, string()}.
 set_etcd_lock_key(UniqueId, Ttl) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    rabbit_log:debug("Will set a lock key with Etcd, path: ~p", [startup_lock_path()]),
     etcd_put(startup_lock_path(),
              [{ttl, Ttl}, {'prevExist', "false"}],
              [{value, UniqueId}],
@@ -321,9 +324,9 @@ set_etcd_lock_key(UniqueId, Ttl) ->
 
 %% @doc Returns etcd path for startup lock
 %% @end
--spec startup_lock_path() -> [?HTTPC_MODULE:path_component()].
+-spec startup_lock_path() -> string().
 startup_lock_path() ->
-    base_path() ++ ["startup_lock"].
+    base_path() ++ "/startup_lock".
 
 %% @doc Generate random string. We are using it for compare-and-change
 %% operations in etcd.
@@ -332,7 +335,7 @@ startup_lock_path() ->
 generate_unique_string() ->
     [ $a - 1 + rand:uniform(26) || _ <- lists:seq(1, 32) ].
 
--spec start_lock_ttl_updater(string()) -> ok.
+-spec start_lock_ttl_updater(string()) -> timer:tref().
 start_lock_ttl_updater(UniqueId) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     Interval = get_config_key(etcd_node_ttl, M),
@@ -341,7 +344,7 @@ start_lock_ttl_updater(UniqueId) ->
                                       lock_ttl_update_callback, [UniqueId]),
     TRef.
 
--spec stop_lock_ttl_updater(string()) -> ok.
+-spec stop_lock_ttl_updater(timer:tref()) -> ok.
 stop_lock_ttl_updater(TRef) ->
     timer:cancel(TRef),
     rabbit_log:debug("Stopped startup lock refresher"),
