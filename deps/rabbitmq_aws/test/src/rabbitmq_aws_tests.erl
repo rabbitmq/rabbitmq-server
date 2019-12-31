@@ -467,7 +467,7 @@ sign_headers_test_() ->
         Headers = [],
         Body = "",
         URI = "http://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01",
-        Expectation = [{"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20160501/us-east-1/ec2/aws4_request, SignedHeaders=content-length;date;host;x-amz-content-sha256;x-amz-security-token, Signature=940a81236591ab436772cf64e6ca074b5936859b27a0dd5a4b3dd8e48af52957"},
+        Expectation = [{"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20160501/us-east-1/ec2/aws4_request, SignedHeaders=content-length;date;host;x-amz-content-sha256;x-amz-security-token, Signature=62d10b4897f7d05e4454b75895b5e372f6c2eb6997943cd913680822e94c6999"},
                        {"content-length","0"},
                        {"date","20160501T120000Z"}, {"host","ec2.us-east-1.amazonaws.com"},
                        {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
