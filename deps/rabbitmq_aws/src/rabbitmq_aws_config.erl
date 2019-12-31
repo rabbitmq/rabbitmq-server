@@ -578,7 +578,6 @@ maybe_get_region_from_instance_metadata() ->
 %% @end
 maybe_get_role_from_instance_metadata() ->
   URL = instance_role_url(),
-  io:format("instance_role_url(): ~p", [instance_role_url()]),
   parse_body_response(perform_http_get(URL)).
 
 
