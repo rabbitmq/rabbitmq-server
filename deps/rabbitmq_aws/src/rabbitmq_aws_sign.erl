@@ -197,7 +197,10 @@ query_string(QueryArgs) ->
 %% @doc Create the request hash value
 %% @end
 request_hash(Method, Path, QArgs, Headers, Payload) ->
-  RawPath = "/" ++ Path,
+  RawPath = case string:slice(Path, 0, 1) of
+    "/" -> Path;
+    _   -> "/" ++ Path
+  end,
   EncodedPath = uri_string:recompose(#{path => RawPath}),
   CanonicalRequest = string:join([string:to_upper(atom_to_list(Method)),
                                   EncodedPath,
