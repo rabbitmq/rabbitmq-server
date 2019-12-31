@@ -42,7 +42,12 @@ build(URI) ->
   end,
   UriMap3 = case URI#uri.path of
     undefined -> maps:put(path, "", UriMap2);
-    Value2    -> maps:put(path, Value2, UriMap2)
+    Value2    ->
+      PrefixedPath = case string:slice(Value2, 0, 1) of
+        "/" -> Value2;
+        _   -> "/" ++ Value2
+      end,
+      maps:put(path, PrefixedPath, UriMap2)
   end,
   UriMap4 = case URI#uri.query of
     undefined -> UriMap3;

@@ -14,7 +14,7 @@
 -define(DEFAULT_REGION, "us-east-1").
 -define(DEFAULT_PROFILE, "default").
 
--define(INSTANCE_AZ, ["placement", "availability-zone"]).
+-define(INSTANCE_AZ, "placement/availability-zone").
 -define(INSTANCE_HOST, "169.254.169.254").
 
 % rabbitmq/rabbitmq-peer-discovery-aws#25
@@ -27,8 +27,8 @@
 % by `httpc`
 -define(DEFAULT_HTTP_TIMEOUT, 2250).
 
--define(INSTANCE_CREDENTIALS, ["iam", "security-credentials"]).
--define(INSTANCE_METADATA_BASE, ["latest", "meta-data"]).
+-define(INSTANCE_CREDENTIALS, "iam/security-credentials").
+-define(INSTANCE_METADATA_BASE, "latest/meta-data").
 
 -type access_key() :: nonempty_string().
 -type secret_access_key() :: nonempty_string().
