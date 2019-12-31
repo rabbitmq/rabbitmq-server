@@ -12,6 +12,7 @@
          credentials/1,
          value/2,
          values/1,
+         instance_role_url/0,
          region/0,
          region/1]).
 
