@@ -60,6 +60,19 @@ config_file_data_test_() ->
   ].
 
 
+instance_metadata_test_() ->
+  {"instance role URL", fun() ->
+    ?assertEqual("http://169.254.169.254/latest/meta-data/iam/security-credentials",
+                 rabbitmq_aws_config:instance_role_url())
+  end},
+  {"availability zone URL", fun() ->
+    ?assertEqual("http://169.254.169.254/latest/meta-data/placement/availability-zone",
+                 rabbitmq_aws_config:instance_availability_zone_url())
+  end},
+  {"arbitrary paths", fun () ->
+    ?assertEqual("http://169.254.169.254/a/b/c", rabbitmq_aws_config:instance_metadata_url("a/b/c")),
+    ?assertEqual("http://169.254.169.254/a/b/c", rabbitmq_aws_config:instance_metadata_url("/a/b/c"))
+  end}.
 
 credentials_file_test_() ->
   [
