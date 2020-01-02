@@ -1,8 +1,11 @@
 # Deploy RabbitMQ on Kubernetes with the Kubernetes Peer Discovery Plugin
 
 This directory contains **examples** that demonstrates a RabbitMQ deployment on Kubernetes with peer discovery
-via `rabbitmq-peer-discovery-k8s` plugin. Currently the primary environment targeted is Minikube.
-Find it under the [Minikube](./minikube) directory.
+via `rabbitmq-peer-discovery-k8s` plugin. There are two examples:
+
+ * [One that targets Minikube](./minikube)
+ * [Another that targets Kind](./kind)
+
 
 ## Production (Non-)Suitability
 
