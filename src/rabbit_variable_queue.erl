@@ -2841,7 +2841,7 @@ move_messages_to_vhost_store(Queues) ->
     %% New store should not be recovered.
     NewMsgStore = start_new_store(VHosts),
     %% Recovery terms should be started for all vhosts for new store.
-    [{ok, _} = rabbit_recovery_terms:open_table(VHost) || VHost <- VHosts],
+    [ok = rabbit_recovery_terms:open_table(VHost) || VHost <- VHosts],
 
     MigrationBatchSize = application:get_env(rabbit, queue_migration_batch_size,
                                              ?QUEUE_MIGRATION_BATCH_SIZE),
