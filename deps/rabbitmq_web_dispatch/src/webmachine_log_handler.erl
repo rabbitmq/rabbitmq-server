@@ -87,7 +87,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% This is one such part. The code is however equivalent to Webmachine's.
 
 format_req({Status0, Body, Req}) ->
-    User = "-",
+    User = user_from_req(Req),
     Time = webmachine_log:fmtnow(),
     Status = integer_to_list(Status0),
     Length1 = case Body of
@@ -113,3 +113,16 @@ fmt_alog(Time, Ip, User, Method, Path, Version,
      " ", atom_to_list(Version), [$",$\s],
      Status, [$\s], Length, [$\s,$"], Referrer,
      [$",$\s,$"], UserAgent, [$",$\n]].
+
+user_from_req(Req) ->
+    try cowboy_req:parse_header(<<"authorization">>, Req) of
+        {basic, Username, _} ->
+            Username;
+        {bearer, _} ->
+            rabbit_data_coercion:to_binary(
+              application:get_env(rabbitmq_management, uaa_client_id, ""));
+        _ ->
+            "-"
+    catch _:_ ->
+        "-"
+    end.
