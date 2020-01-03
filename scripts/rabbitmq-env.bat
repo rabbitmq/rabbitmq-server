@@ -23,7 +23,7 @@ if defined ERL_LIBS (
 REM If ERLANG_HOME is not defined, check if "erl.exe" is available in
 REM the path and use that.
 if not defined ERLANG_HOME (
-    for /f "delims=" %%F in ('PowerShell.exe -Command "(Get-Command erl.exe).Definition"') do @set ERL_PATH=%%F
+    for /f "delims=" %%F in ('powershell.exe -NoLogo -NoProfile -NonInteractive -Command "(Get-Command erl.exe).Definition"') do @set ERL_PATH=%%F
     if exist "!ERL_PATH!" (
         for /f "delims=" %%F in ("!ERL_PATH!") do set ERL_DIRNAME=%%~dpF
         for /f "delims=" %%F in ("!ERL_DIRNAME!\..") do @set ERLANG_HOME=%%~dpF%%~nF%%~xF
