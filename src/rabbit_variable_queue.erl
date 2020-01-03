@@ -321,7 +321,7 @@
           mode,
           %% number of reduce_memory_usage executions, once it
           %% reaches a threshold the queue will manually trigger a runtime GC
-	        %% see: maybe_execute_gc/1
+          %% see: maybe_execute_gc/1
           memory_reduction_run_count,
           %% Queue data is grouped by VHost. We need to store it
           %% to work with queue index.
@@ -2396,7 +2396,7 @@ ifold(Fun, Acc, Its, State) ->
 maybe_reduce_memory_use(State = #vqstate {memory_reduction_run_count = MRedRunCount,
                                           mode = Mode}) ->
     case MRedRunCount >= ?EXPLICIT_GC_RUN_OP_THRESHOLD(Mode) of
-	true -> State1 = reduce_memory_use(State),
+        true -> State1 = reduce_memory_use(State),
                 State1#vqstate{memory_reduction_run_count =  0};
         false -> State#vqstate{memory_reduction_run_count =  MRedRunCount + 1}
     end.
