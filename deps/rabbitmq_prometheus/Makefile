@@ -199,9 +199,9 @@ CFh:
 DASHBOARDS_TO_PATH := $(CURDIR)/docker/grafana/dashboards
 define GENERATE_DASHBOARD
 cd $(DASHBOARDS_TO_PATH) \
-&& jq --slurp add $(@F) ../__inputs.json \
-| jq '.templating.list[].datasource = "$${DS_PROMETHEUS}"' \
-| jq '.panels[].datasource = "$${DS_PROMETHEUS}"'
+&& $(JQ) --slurp add $(@F) ../__inputs.json \
+| $(JQ) '.templating.list[].datasource = "$${DS_PROMETHEUS}"' \
+| $(JQ) '.panels[].datasource = "$${DS_PROMETHEUS}"'
 endef
 .PHONY: Erlang-Distribution.json
 Erlang-Distribution.json: $(JQ)
