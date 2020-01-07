@@ -129,7 +129,7 @@
         {2, disk_space_available_limit_bytes, gauge, "Free disk space low watermark in bytes", disk_free_limit},
         {2, erlang_processes_limit, gauge, "Erlang processes limit", proc_total},
         {2, erlang_scheduler_run_queue, gauge, "Erlang scheduler run queue", run_queue},
-        {2, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval in seconds", net_ticktime}
+        {2, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval", net_ticktime}
     ]},
 
     {node_persister_metrics, [
@@ -155,8 +155,7 @@
         {3, raft_log_snapshot_index, gauge, "Raft log snapshot index"},
         {4, raft_log_last_applied_index, gauge, "Raft log last applied index"},
         {5, raft_log_commit_index, gauge, "Raft log commit index"},
-        {6, raft_log_last_written_index, gauge, "Raft log last written index"},
-        {7, raft_entry_commit_latency, gauge, "Time taken for an entry to be committed"}
+        {6, raft_log_last_written_index, gauge, "Raft log last written index"}
     ]},
 
     {queue_coarse_metrics, [
@@ -201,10 +200,12 @@
         {2, 1000000, io_sync_time_seconds_total, counter, "Total I/O sync time", io_sync_time},
         {2, 1000000, io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time},
         {2, 1000000, io_open_attempt_time_seconds_total, counter, "Total file open attempts time", io_file_handle_open_attempt_time}
+    ]},
+
+    {ra_metrics, [
+        {7, 1000, raft_entry_commit_latency_seconds, gauge, "Time taken for a log entry to be committed"}
     ]}
 ]).
-
--define(METRICS, ?METRICS_RAW ++ ?METRICS_REQUIRING_CONVERSIONS).
 
 -define(TOTALS, [
     %% ordering differs from metrics above, refer to list comprehension
@@ -227,7 +228,11 @@ collect_mf(_Registry, Callback) ->
     [begin
          Data = ets:tab2list(Table),
          mf(Callback, Contents, Data)
-     end || {Table, Contents} <- ?METRICS],
+     end || {Table, Contents} <- ?METRICS_RAW],
+    [begin
+         Data = ets:tab2list(Table),
+         mf_convert(Callback, Contents, Data)
+     end || {Table, Contents} <- ?METRICS_REQUIRING_CONVERSIONS],
     [begin
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
@@ -295,7 +300,21 @@ mf(Callback, Contents, Data) ->
                 {Type, Fun, Data}
             )
         )
-    end || {Index, Name, Type, Help, Key} <- Contents],
+    end || {Index, Name, Type, Help, Key} <- Contents].
+
+mf_convert(Callback, Contents, Data) ->
+    [begin
+        Fun = fun(D) -> element(Index, D) / BaseUnitConversionFactor end,
+        Callback(
+            create_mf(
+                ?METRIC_NAME(Name),
+                Help,
+                catch_boolean(Type),
+                ?MODULE,
+                {Type, Fun, Data}
+            )
+        )
+    end || {Index, BaseUnitConversionFactor, Name, Type, Help} <- Contents],
     [begin
         Fun = fun(D) -> proplists:get_value(Key, element(Index, D)) / BaseUnitConversionFactor end,
         Callback(

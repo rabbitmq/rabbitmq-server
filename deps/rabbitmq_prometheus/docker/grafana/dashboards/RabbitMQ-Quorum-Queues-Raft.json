@@ -43,7 +43,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1575376605605,
+  "iteration": 1578410270904,
   "links": [
     {
       "icon": "doc",
@@ -227,7 +227,7 @@
       "reverseYBuckets": false,
       "targets": [
         {
-          "expr": "rabbitmq_raft_entry_commit_latency * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rabbitmq_raft_entry_commit_latency_seconds * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -250,7 +250,7 @@
       "xBucketSize": null,
       "yAxis": {
         "decimals": null,
-        "format": "ms",
+        "format": "s",
         "logBase": 1,
         "max": null,
         "min": "0",

@@ -198,6 +198,7 @@ metrics_test(Config) ->
     %% Checking the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds{", [{capture, none}, multiline])),
     %% Checking the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
 
