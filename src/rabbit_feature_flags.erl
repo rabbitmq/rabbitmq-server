@@ -508,8 +508,8 @@ is_supported_remotely([Node | Rest], FeatureNames, Timeout) ->
             false
     end;
 is_supported_remotely([], FeatureNames, _) ->
-    rabbit_log:info("Feature flags: all running remote nodes support `~p`",
-                    [FeatureNames]),
+    rabbit_log:debug("Feature flags: all running remote nodes support `~p`",
+                     [FeatureNames]),
     true.
 
 -spec is_enabled(feature_name() | [feature_name()]) -> boolean().
