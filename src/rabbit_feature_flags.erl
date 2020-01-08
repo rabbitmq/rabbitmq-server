@@ -680,8 +680,8 @@ info(Options) when is_map(Options) ->
 %% @returns `enabled', `disabled' or `unavailable'.
 
 get_state(FeatureName) when is_atom(FeatureName) ->
-    IsEnabled = rabbit_feature_flags:is_enabled(FeatureName),
-    IsSupported = rabbit_feature_flags:is_supported(FeatureName),
+    IsEnabled = is_enabled(FeatureName),
+    IsSupported = is_supported(FeatureName),
     case IsEnabled of
         true  -> enabled;
         false -> case IsSupported of
