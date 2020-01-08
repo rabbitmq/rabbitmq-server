@@ -659,8 +659,9 @@ runtime_parameter_definition(Param) ->
 list_global_runtime_parameters() ->
     [global_runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list_global()].
 
-global_runtime_parameter_definition(Param) ->
-    maps:from_list(Param).
+global_runtime_parameter_definition(P0) ->
+    P = [{rabbit_data_coercion:to_binary(K), V} || {K, V} <- P0],
+    maps:from_list(P).
 
 list_policies() ->
     [policy_definition(P) || P <- rabbit_policy:list()].
