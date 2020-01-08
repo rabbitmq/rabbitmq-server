@@ -678,13 +678,15 @@ policy_definition(Policy) ->
 list_permissions() ->
     [permission_definition(P) || P <- rabbit_auth_backend_internal:list_permissions()].
 
-permission_definition(P) ->
+permission_definition(P0) ->
+    P = [{rabbit_data_coercion:to_binary(K), V} || {K, V} <- P0],
     maps:from_list(P).
 
 list_topic_permissions() ->
     [topic_permission_definition(P) || P <- rabbit_auth_backend_internal:list_topic_permissions()].
 
-topic_permission_definition(P) ->
+topic_permission_definition(P0) ->
+    P = [{rabbit_data_coercion:to_binary(K), V} || {K, V} <- P0],
     maps:from_list(P).
 
 tags_as_binaries(Tags) ->
