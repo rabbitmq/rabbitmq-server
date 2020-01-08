@@ -22,8 +22,13 @@
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5]).
-%% export
+
 -export([all_definitions/0]).
+-export([
+  list_users/0, list_vhosts/0, list_permissions/0, list_topic_permissions/0,
+  list_runtime_parameters/0, list_global_runtime_parameters/0, list_policies/0,
+  list_exchanges/0, list_queues/0, list_bindings/0
+]).
 -export([decode/1, decode/2, args/1]).
 
 -import(rabbit_misc, [pget/2]).
