@@ -10,10 +10,11 @@ protocol despite the name — [consider this one](https://github.com/rabbitmq/ra
 
 ## Project Maturity and Status
 
-This project is young and not 100% feature complete. It is used in the cross-protocol version of the
-RabbitMQ Shovel plugin (available as of 3.7.0).
+This client is used in the cross-protocol version of the RabbitMQ Shovel plugin. It is not 100%
+feature complete but moderately mature and was tested against at least three AMQP 1.0 servers:
+RabbitMQ, Azure ServiceBus, ActiveMQ.
 
-This client library is not officially supported by Pivotal at this time.
+This client library is not officially supported by VMware at this time.
 
 ## Usage
 
