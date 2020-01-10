@@ -134,9 +134,10 @@ client.onMessageArrived = function (message) {
 
 var options = {
     timeout: 3,
+    keepAliveInterval: 30,
     onSuccess: function () {
         debug("CONNECTION SUCCESS");
-        client.subscribe('/topic/bunny', {qos: 1});
+        client.subscribe("bunny", {qos: 1});
     },
     onFailure: function (message) {
         debug("CONNECTION FAILURE - " + message.errorMessage);
@@ -159,7 +160,7 @@ $('#first input').focus(function() {
 
 send = function(data) {
   message = new Paho.MQTT.Message(data);
-  message.destinationName = "/topic/bunny";
+  message.destinationName = "bunny";
   debug("SEND ON " + message.destinationName + " PAYLOAD " + data);
   client.send(message);
 };
