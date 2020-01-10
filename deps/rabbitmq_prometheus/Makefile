@@ -6,6 +6,12 @@ DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
 
+define PROJECT_ENV
+[
+ {enable_metric_aggregation, false}
+]
+endef
+
 PROJECT := rabbitmq_prometheus
 PROJECT_MOD := rabbit_prometheus_app
 DEPS = rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
