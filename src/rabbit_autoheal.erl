@@ -381,6 +381,11 @@ restart_loser(State, Winner) ->
                       not_healing;
                   autoheal_safe_to_start ->
                       State
+                  after 60000 ->
+                      rabbit_log:warning(
+                          "Autoheal: Timed out waiting for autoheal_safe_to_start, 
+                           winner is ~p; Start and retry autoheal", [Winner]),
+                      not_healing
               end,
               erlang:demonitor(MRef, [flush]),
               %% During the restart, the autoheal state is lost so we
