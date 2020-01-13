@@ -300,28 +300,31 @@ list(Which, Stability)
 %%   dependency tree are left unchanged).
 
 enable(FeatureName) when is_atom(FeatureName) ->
-    rabbit_log:debug("Feature flag `~s`: REQUEST TO ENABLE",
-                     [FeatureName]),
+    rabbit_log_feature_flags:debug(
+      "Feature flag `~s`: REQUEST TO ENABLE",
+      [FeatureName]),
     case is_enabled(FeatureName) of
         true ->
-            rabbit_log:debug("Feature flag `~s`: already enabled",
-                             [FeatureName]),
+            rabbit_log_feature_flags:debug(
+              "Feature flag `~s`: already enabled",
+              [FeatureName]),
             ok;
         false ->
-            rabbit_log:debug("Feature flag `~s`: not enabled, "
-                             "check if supported by cluster",
-                             [FeatureName]),
+            rabbit_log_feature_flags:debug(
+              "Feature flag `~s`: not enabled, check if supported by cluster",
+              [FeatureName]),
             %% The feature flag must be supported locally and remotely
             %% (i.e. by all members of the cluster).
             case is_supported(FeatureName) of
                 true ->
-                    rabbit_log:info("Feature flag `~s`: supported, "
-                                    "attempt to enable...",
-                                    [FeatureName]),
+                    rabbit_log_feature_flags:info(
+                      "Feature flag `~s`: supported, attempt to enable...",
+                      [FeatureName]),
                     do_enable(FeatureName);
                 false ->
-                    rabbit_log:error("Feature flag `~s`: not supported",
-                                     [FeatureName]),
+                    rabbit_log_feature_flags:error(
+                      "Feature flag `~s`: not supported",
+                      [FeatureName]),
                     {error, unsupported}
             end
     end;
@@ -459,22 +462,23 @@ is_supported_remotely(FeatureNames) ->
 is_supported_remotely(FeatureName, Timeout) when is_atom(FeatureName) ->
     is_supported_remotely([FeatureName], Timeout);
 is_supported_remotely([], _) ->
-    rabbit_log:debug("Feature flags: skipping query for feature flags "
-                     "support as the given list is empty",
-                     []),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: skipping query for feature flags support as the "
+      "given list is empty"),
     true;
 is_supported_remotely(FeatureNames, Timeout) when is_list(FeatureNames) ->
     case running_remote_nodes() of
         [] ->
-            rabbit_log:debug("Feature flags: isolated node; "
-                             "skipping remote node query "
-                             "=> consider `~p` supported",
-                             [FeatureNames]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: isolated node; skipping remote node query "
+              "=> consider `~p` supported",
+              [FeatureNames]),
             true;
         RemoteNodes ->
-            rabbit_log:debug("Feature flags: about to query these remote nodes "
-                             "about support for `~p`: ~p",
-                             [FeatureNames, RemoteNodes]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: about to query these remote nodes about "
+              "support for `~p`: ~p",
+              [FeatureNames, RemoteNodes]),
             is_supported_remotely(RemoteNodes, FeatureNames, Timeout)
     end.
 
@@ -493,23 +497,24 @@ is_supported_remotely(FeatureNames, Timeout) when is_list(FeatureNames) ->
 %%   all nodes, or `false' if one of them is not or the RPC timed out.
 
 is_supported_remotely(_, [], _) ->
-    rabbit_log:debug("Feature flags: skipping query for feature flags "
-                     "support as the given list is empty",
-                     []),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: skipping query for feature flags support as the "
+      "given list is empty"),
     true;
 is_supported_remotely([Node | Rest], FeatureNames, Timeout) ->
     case does_node_support(Node, FeatureNames, Timeout) of
         true ->
             is_supported_remotely(Rest, FeatureNames, Timeout);
         false ->
-            rabbit_log:debug("Feature flags: stopping query "
-                             "for support for `~p` here",
-                             [FeatureNames]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: stopping query for support for `~p` here",
+              [FeatureNames]),
             false
     end;
 is_supported_remotely([], FeatureNames, _) ->
-    rabbit_log:debug("Feature flags: all running remote nodes support `~p`",
-                     [FeatureNames]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: all running remote nodes support `~p`",
+      [FeatureNames]),
     true.
 
 -spec is_enabled(feature_name() | [feature_name()]) -> boolean().
@@ -877,13 +882,14 @@ initialize_registry(NewSupportedFeatureFlags,
 
     case Proceed of
         true ->
-            rabbit_log:debug("Feature flags: (re)initialize registry", []),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: (re)initialize registry"),
             do_initialize_registry(AllFeatureFlags,
                                    FeatureStates,
                                    WrittenToDisk);
         false ->
-            rabbit_log:debug("Feature flags: registry already up-to-date, "
-                             "skipping init", []),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: registry already up-to-date, skipping init"),
             ok
     end.
 
@@ -921,10 +927,11 @@ do_initialize_registry(AllFeatureFlags,
                        FeatureStates,
                        WrittenToDisk) ->
     %% We log the state of those feature flags.
-    rabbit_log:info("Feature flags: list of feature flags found:", []),
+    rabbit_log_feature_flags:info(
+      "Feature flags: list of feature flags found:"),
     lists:foreach(
       fun(FeatureName) ->
-              rabbit_log:info(
+              rabbit_log_feature_flags:info(
                 "Feature flags:   [~s] ~s",
                 [case maps:is_key(FeatureName, FeatureStates) of
                      true ->
@@ -937,17 +944,24 @@ do_initialize_registry(AllFeatureFlags,
                  end,
                  FeatureName])
       end, lists:sort(maps:keys(AllFeatureFlags))),
-    rabbit_log:info("Feature flags: feature flag states written to disk: ~s",
-                    [case WrittenToDisk of
-                         true  -> "yes";
-                         false -> "no"
-                     end]),
+    rabbit_log_feature_flags:info(
+      "Feature flags: feature flag states written to disk: ~s",
+      [case WrittenToDisk of
+           true  -> "yes";
+           false -> "no"
+       end]),
 
     %% We request the registry to be regenerated and reloaded with the
     %% new state.
-    regen_registry_mod(AllFeatureFlags,
-                       FeatureStates,
-                       WrittenToDisk).
+    T0 = erlang:timestamp(),
+    Ret = regen_registry_mod(AllFeatureFlags,
+                             FeatureStates,
+                             WrittenToDisk),
+    T1 = erlang:timestamp(),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: time to regen registry: ~p µs",
+      [timer:now_diff(T1, T0)]),
+    Ret.
 
 -spec query_supported_feature_flags() -> feature_flags().
 %% @private
@@ -981,26 +995,38 @@ module_attributes_from_testsuite() ->
     end.
 
 query_supported_feature_flags() ->
-    rabbit_log:debug(
+    rabbit_log_feature_flags:debug(
       "Feature flags: query feature flags in loaded applications + test "
       "module"),
-    AttributesPerApp = rabbit_misc:all_module_attributes(rabbit_feature_flag),
+    T0 = erlang:timestamp(),
+    AttributesPerApp = rabbit_misc:all_module_attributes(
+                         rabbit_feature_flag),
     AttributesFromTestsuite = module_attributes_from_testsuite(),
+    T1 = erlang:timestamp(),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: time to find supported feature flags: ~p µs",
+      [timer:now_diff(T1, T0)]),
     AllAttributes = AttributesPerApp ++ AttributesFromTestsuite,
     prepare_queried_feature_flags(AllAttributes, #{}).
 -else.
 query_supported_feature_flags() ->
-    rabbit_log:debug(
+    rabbit_log_feature_flags:debug(
       "Feature flags: query feature flags in loaded applications"),
-    AttributesPerApp = rabbit_misc:all_module_attributes(rabbit_feature_flag),
+    T0 = erlang:timestamp(),
+    AttributesPerApp = rabbit_misc:all_module_attributes(
+                         rabbit_feature_flag),
+    T1 = erlang:timestamp(),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: time to find supported feature flags: ~p µs",
+      [timer:now_diff(T1, T0)]),
     prepare_queried_feature_flags(AttributesPerApp, #{}).
 -endif.
 
 prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
                               AllFeatureFlags) ->
-    rabbit_log:debug("Feature flags: application `~s` "
-                    "has ~b feature flags",
-                    [App, length(Attributes)]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: application `~s` has ~b feature flags",
+      [App, length(Attributes)]),
     AllFeatureFlags1 = lists:foldl(
                          fun({FeatureName, FeatureProps}, AllFF) ->
                                  merge_new_feature_flags(AllFF,
@@ -1212,10 +1238,11 @@ regen_registry_mod(AllFeatureFlags,
         {ok, Mod, Bin, _} ->
             load_registry_mod(Mod, Bin);
         {error, Errors, Warnings} ->
-            rabbit_log:error("Feature flags: registry compilation:~n"
-                             "Errors: ~p~n"
-                             "Warnings: ~p",
-                             [Errors, Warnings]),
+            rabbit_log_feature_flags:error(
+              "Feature flags: registry compilation:~n"
+              "Errors: ~p~n"
+              "Warnings: ~p",
+              [Errors, Warnings]),
             {error, {compilation_failure, Errors, Warnings}}
     end.
 
@@ -1225,7 +1252,7 @@ maybe_log_registry_source_code(Forms) ->
         false ->
             ok;
         _ ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "== FEATURE FLAGS REGISTRY ==~n"
               "~s~n"
               "== END ==~n",
@@ -1241,7 +1268,8 @@ maybe_log_registry_source_code(_) ->
 %% @private
 
 load_registry_mod(Mod, Bin) ->
-    rabbit_log:debug("Feature flags: registry module ready, loading it..."),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: registry module ready, loading it..."),
     FakeFilename = "Compiled and loaded by " ++ ?MODULE_STRING,
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
@@ -1252,11 +1280,13 @@ load_registry_mod(Mod, Bin) ->
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
         {module, _} ->
-            rabbit_log:debug("Feature flags: registry module loaded"),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: registry module loaded"),
             ok;
         {error, Reason} ->
-            rabbit_log:error("Feature flags: failed to load registry "
-                             "module: ~p", [Reason]),
+            rabbit_log_feature_flags:error(
+              "Feature flags: failed to load registry module: ~p",
+              [Reason]),
             throw({feature_flag_registry_reload_failure, Reason})
     end.
 
@@ -1301,7 +1331,7 @@ try_to_read_enabled_feature_flags_list() ->
             %% feature flags to be empty.
             [];
         {error, Reason} = Error ->
-            rabbit_log:error(
+            rabbit_log_feature_flags:error(
               "Feature flags: failed to read the `feature_flags` "
               "file at `~s`: ~s",
               [File, file:format_error(Reason)]),
@@ -1351,7 +1381,7 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
         ok ->
             ok;
         {error, Reason} = Error ->
-            rabbit_log:error(
+            rabbit_log_feature_flags:error(
               "Feature flags: failed to write the `feature_flags` "
               "file at `~s`: ~s",
               [File, file:format_error(Reason)]),
@@ -1415,7 +1445,7 @@ enable_locally(FeatureName) when is_atom(FeatureName) ->
         true ->
             ok;
         false ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flag `~s`: enable locally (as part of feature "
               "flag states synchronization)",
               [FeatureName]),
@@ -1447,8 +1477,9 @@ do_enable_locally(FeatureName) ->
 enable_dependencies(FeatureName, Everywhere) ->
     FeatureProps = rabbit_ff_registry:get(FeatureName),
     DependsOn = maps:get(depends_on, FeatureProps, []),
-    rabbit_log:debug("Feature flag `~s`: enable dependencies: ~p",
-                     [FeatureName, DependsOn]),
+    rabbit_log_feature_flags:debug(
+      "Feature flag `~s`: enable dependencies: ~p",
+      [FeatureName, DependsOn]),
     enable_dependencies(FeatureName, DependsOn, Everywhere).
 
 -spec enable_dependencies(feature_name(), [feature_name()], boolean()) ->
@@ -1479,26 +1510,26 @@ run_migration_fun(FeatureName, FeatureProps, Arg) ->
     case maps:get(migration_fun, FeatureProps, none) of
         {MigrationMod, MigrationFun}
           when is_atom(MigrationMod) andalso is_atom(MigrationFun) ->
-            rabbit_log:debug("Feature flag `~s`: run migration function ~p "
-                             "with arg: ~p",
-                             [FeatureName, MigrationFun, Arg]),
+            rabbit_log_feature_flags:debug(
+              "Feature flag `~s`: run migration function ~p with arg: ~p",
+              [FeatureName, MigrationFun, Arg]),
             try
                 erlang:apply(MigrationMod,
                              MigrationFun,
                              [FeatureName, FeatureProps, Arg])
             catch
                 _:Reason:Stacktrace ->
-                    rabbit_log:error("Feature flag `~s`: migration function "
-                                     "crashed: ~p~n~p",
-                                     [FeatureName, Reason, Stacktrace]),
+                    rabbit_log_feature_flags:error(
+                      "Feature flag `~s`: migration function crashed: ~p~n~p",
+                      [FeatureName, Reason, Stacktrace]),
                     {error, {migration_fun_crash, Reason, Stacktrace}}
             end;
         none ->
             {error, no_migration_fun};
         Invalid ->
-            rabbit_log:error("Feature flag `~s`: invalid migration "
-                             "function: ~p",
-                             [FeatureName, Invalid]),
+            rabbit_log_feature_flags:error(
+              "Feature flag `~s`: invalid migration function: ~p",
+              [FeatureName, Invalid]),
             {error, {invalid_migration_fun, Invalid}}
     end.
 
@@ -1519,8 +1550,9 @@ mark_as_enabled(FeatureName, IsEnabled) ->
 %% @private
 
 mark_as_enabled_locally(FeatureName, IsEnabled) ->
-    rabbit_log:info("Feature flag `~s`: mark as enabled=~p",
-                    [FeatureName, IsEnabled]),
+    rabbit_log_feature_flags:info(
+      "Feature flag `~s`: mark as enabled=~p",
+      [FeatureName, IsEnabled]),
     EnabledFeatureNames = maps:keys(list(enabled)),
     NewEnabledFeatureNames = case IsEnabled of
                                  true ->
@@ -1569,16 +1601,16 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
     FailedNodes = [Node || {Node, Ret} <- Rets, Ret =/= ok],
     case FailedNodes of
         [] ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: `~s` successfully marked as enabled=~p on all "
               "nodes", [FeatureName, IsEnabled]),
             ok;
         _ ->
             T1 = erlang:timestamp(),
-            rabbit_log:error(
+            rabbit_log_feature_flags:error(
               "Feature flags: failed to mark feature flag `~s` as enabled=~p "
               "on the following nodes:", [FeatureName, IsEnabled]),
-            [rabbit_log:error(
+            [rabbit_log_feature_flags:error(
                "Feature flags:   - ~s: ~p",
                [Node, Ret])
              || {Node, Ret} <- Rets,
@@ -1586,7 +1618,7 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
             NewTimeout = Timeout - (timer:now_diff(T1, T0) div 1000),
             if
                 NewTimeout > 0 ->
-                    rabbit_log:debug(
+                    rabbit_log_feature_flags:debug(
                       "Feature flags:   retrying with a timeout of ~b "
                       "milliseconds", [NewTimeout]),
                     mark_as_enabled_remotely(FailedNodes,
@@ -1594,7 +1626,7 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
                                              IsEnabled,
                                              NewTimeout);
                 true ->
-                    rabbit_log:debug(
+                    rabbit_log_feature_flags:debug(
                       "Feature flags:   not retrying; RPC went over the "
                       "~b milliseconds timeout", [Timeout]),
                     %% FIXME: Is crashing the process the best solution here?
@@ -1630,8 +1662,9 @@ query_running_remote_nodes(Node, Timeout) ->
 %% @private
 
 does_node_support(Node, FeatureNames, Timeout) ->
-    rabbit_log:debug("Feature flags: querying `~p` support on node ~s...",
-                     [FeatureNames, Node]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: querying `~p` support on node ~s...",
+      [FeatureNames, Node]),
     Ret = case node() of
               Node ->
                   is_supported_locally(FeatureNames);
@@ -1644,24 +1677,27 @@ does_node_support(Node, FeatureNames, Timeout) ->
             %% See run_feature_flags_mod_on_remote_node/4 for
             %% an explanation why we consider this node a 3.7.x
             %% pre-feature-flags node.
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: no feature flags support on node `~s`, "
               "consider the feature flags unsupported: ~p",
               [Node, FeatureNames]),
             false;
         {error, Reason} ->
-            rabbit_log:error("Feature flags: error while querying `~p` "
-                             "support on node ~s: ~p",
-                             [FeatureNames, Node, Reason]),
+            rabbit_log_feature_flags:error(
+              "Feature flags: error while querying `~p` support on "
+              "node ~s: ~p",
+              [FeatureNames, Node, Reason]),
             false;
         true ->
-            rabbit_log:debug("Feature flags: node `~s` supports `~p`",
-                             [Node, FeatureNames]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: node `~s` supports `~p`",
+              [Node, FeatureNames]),
             true;
         false ->
-            rabbit_log:debug("Feature flags: node `~s` does not support `~p`; "
-                             "stopping query here",
-                             [Node, FeatureNames]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: node `~s` does not support `~p`; "
+              "stopping query here",
+              [Node, FeatureNames]),
             false
     end.
 
@@ -1714,27 +1750,31 @@ check_node_compatibility(Node, Timeout) ->
     %% Ça ne devrait sans doute pas être le cas...
 
     %% We can now proceed with the actual compatibility check.
-    rabbit_log:debug("Feature flags: node `~s` compatibility check, part 1/2",
-                     [Node]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: node `~s` compatibility check, part 1/2",
+      [Node]),
     Part1 = local_enabled_feature_flags_is_supported_remotely(Node, Timeout),
-    rabbit_log:debug("Feature flags: node `~s` compatibility check, part 2/2",
-                     [Node]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: node `~s` compatibility check, part 2/2",
+      [Node]),
     Part2 = remote_enabled_feature_flags_is_supported_locally(Node, Timeout),
     case {Part1, Part2} of
         {true, true} ->
-            rabbit_log:debug("Feature flags: node `~s` is compatible", [Node]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: node `~s` is compatible",
+              [Node]),
             ok;
         {false, _} ->
-            rabbit_log:error("Feature flags: node `~s` is INCOMPATIBLE: "
-                             "feature flags enabled locally are not "
-                             "supported remotely",
-                             [Node]),
+            rabbit_log_feature_flags:error(
+              "Feature flags: node `~s` is INCOMPATIBLE: "
+              "feature flags enabled locally are not supported remotely",
+              [Node]),
             {error, incompatible_feature_flags};
         {_, false} ->
-            rabbit_log:error("Feature flags: node `~s` is INCOMPATIBLE: "
-                             "feature flags enabled remotely are not "
-                             "supported locally",
-                             [Node]),
+            rabbit_log_feature_flags:error(
+              "Feature flags: node `~s` is INCOMPATIBLE: "
+              "feature flags enabled remotely are not supported locally",
+              [Node]),
             {error, incompatible_feature_flags}
     end.
 
@@ -1815,13 +1855,13 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
             %% (rabbit_misc:version_minor_equivalent/2) called from
             %% rabbit_mnesia:check_rabbit_consistency/2 already blocked
             %% this situation from happening before we reach this point.
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: ~s:~s~p unavailable on node `~s`: "
               "assuming it is a RabbitMQ 3.7.x pre-feature-flags node",
               [?MODULE, Function, Args, Node]),
             {error, pre_feature_flags_rabbitmq};
         {badrpc, Reason} = Error ->
-            rabbit_log:error(
+            rabbit_log_feature_flags:error(
               "Feature flags: error while running ~s:~s~p "
               "on node `~s`: ~p",
               [?MODULE, Function, Args, Node, Reason]),
@@ -1837,29 +1877,30 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
 %% @private
 
 query_remote_feature_flags(Node, Which, Timeout) ->
-    rabbit_log:debug("Feature flags: querying ~s feature flags "
-                     "on node `~s`...",
-                     [Which, Node]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: querying ~s feature flags on node `~s`...",
+      [Which, Node]),
     case run_feature_flags_mod_on_remote_node(Node, list, [Which], Timeout) of
         {error, pre_feature_flags_rabbitmq} ->
             %% See run_feature_flags_mod_on_remote_node/4 for
             %% an explanation why we consider this node a 3.7.x
             %% pre-feature-flags node.
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: no feature flags support on node `~s`, "
               "consider the list of feature flags empty", [Node]),
             #{};
         {error, Reason} = Error ->
-            rabbit_log:error(
+            rabbit_log_feature_flags:error(
               "Feature flags: error while querying ~s feature flags "
               "on node `~s`: ~p",
               [Which, Node, Reason]),
             Error;
         RemoteFeatureFlags when is_map(RemoteFeatureFlags) ->
             RemoteFeatureNames = maps:keys(RemoteFeatureFlags),
-            rabbit_log:debug("Feature flags: querying ~s feature flags "
-                             "on node `~s` done; ~s features: ~p",
-                             [Which, Node, Which, RemoteFeatureNames]),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: querying ~s feature flags on node `~s` "
+              "done; ~s features: ~p",
+              [Which, Node, Which, RemoteFeatureNames]),
             RemoteFeatureFlags
     end.
 
@@ -1887,7 +1928,7 @@ merge_feature_flags_from_unknown_apps(FeatureFlags)
       end,
       #{},
       FeatureFlags),
-    rabbit_log:debug(
+    rabbit_log_feature_flags:debug(
       "Feature flags: register feature flags provided by applications "
       "unknown locally: ~p",
       [maps:keys(FeatureFlagsFromUnknownApps)]),
@@ -1950,7 +1991,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
             FeatureNames = get_forced_feature_flag_names(),
             case remote_nodes() of
                 [] when FeatureNames =:= undefined ->
-                    rabbit_log:debug(
+                    rabbit_log_feature_flags:debug(
                       "Feature flags: starting an unclustered node "
                       "for the first time: all feature flags will be "
                       "enabled by default"),
@@ -1958,7 +1999,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
                 [] ->
                     case FeatureNames of
                         [] ->
-                            rabbit_log:debug(
+                            rabbit_log_feature_flags:debug(
                               "Feature flags: starting an unclustered "
                               "node for the first time: all feature "
                               "flags are forcibly left disabled from "
@@ -1966,7 +2007,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
                               "variable"),
                             ok;
                         _ ->
-                            rabbit_log:debug(
+                            rabbit_log_feature_flags:debug(
                               "Feature flags: starting an unclustered "
                               "node for the first time: only the "
                               "following feature flags specified in "
@@ -1979,7 +2020,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
                     ok
             end;
         false ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: starting an unclustered node which is "
               "already initialized: all feature flags left in their "
               "current state"),
@@ -1994,14 +2035,15 @@ sync_feature_flags_with_cluster1([], _) ->
     ok;
 sync_feature_flags_with_cluster1(RemoteNodes, Timeout) ->
     RandomRemoteNode = pick_one_node(RemoteNodes),
-    rabbit_log:debug("Feature flags: SYNCING FEATURE FLAGS with node `~s`...",
-                     [RandomRemoteNode]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: SYNCING FEATURE FLAGS with node `~s`...",
+      [RandomRemoteNode]),
     case query_remote_feature_flags(RandomRemoteNode, enabled, Timeout) of
         {error, _} = Error ->
             Error;
         RemoteFeatureFlags ->
             RemoteFeatureNames = maps:keys(RemoteFeatureFlags),
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: enabling locally feature flags already "
               "enabled on node `~s`...",
               [RandomRemoteNode]),
@@ -2016,7 +2058,7 @@ sync_feature_flags_with_cluster1(RemoteNodes, Timeout) ->
 
 sync_feature_flags_with_cluster2(RandomRemoteNode, Timeout) ->
     LocalFeatureNames = maps:keys(list(enabled)),
-    rabbit_log:debug(
+    rabbit_log_feature_flags:debug(
       "Feature flags: enabling on node `~s` feature flags already "
       "enabled locally...",
       [RandomRemoteNode]),
@@ -2070,12 +2112,13 @@ get_forced_feature_flag_names() ->
           end,
     case Ret of
         undefined -> ok;
-        []        -> rabbit_log:info("Feature flags: automatic enablement "
-                                     "of feature flags disabled (i.e. none "
-                                     "will be enabled automatically)", []);
-        _         -> rabbit_log:info("Feature flags: automatic enablement "
-                                     "of feature flags limited to the "
-                                     "following list: ~p", [Ret])
+        []        -> rabbit_log_feature_flags:info(
+                       "Feature flags: automatic enablement of feature "
+                       "flags disabled (i.e. none will be enabled "
+                       "automatically)");
+        _         -> rabbit_log_feature_flags:info(
+                       "Feature flags: automatic enablement of feature "
+                       "flags limited to the following list: ~p", [Ret])
     end,
     Ret.
 
@@ -2114,7 +2157,8 @@ get_forced_feature_flag_names_from_config() ->
 verify_which_feature_flags_are_actually_enabled() ->
     AllFeatureFlags = list(all),
     EnabledFeatureNames = read_enabled_feature_flags_list(),
-    rabbit_log:debug("Feature flags: double-checking feature flag states..."),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: double-checking feature flag states..."),
     %% In case the previous instance of the node failed to write the
     %% feature flags list file, we want to double-check the list of
     %% enabled feature flags read from disk. For each feature flag,
@@ -2147,7 +2191,7 @@ verify_which_feature_flags_are_actually_enabled() ->
     WereDisabled = EnabledFeatureNames -- RepairedEnabledFeatureNames,
     case {WereEnabled, WereDisabled} of
         {[], []} -> ok;
-        _        -> rabbit_log:warning(
+        _        -> rabbit_log_feature_flags:warning(
                       "Feature flags: the previous instance of this node "
                       "must have failed to write the `feature_flags` "
                       "file at `~s`:",
@@ -2155,13 +2199,13 @@ verify_which_feature_flags_are_actually_enabled() ->
     end,
     case WereEnabled of
         [] -> ok;
-        _  -> rabbit_log:warning(
+        _  -> rabbit_log_feature_flags:warning(
                 "Feature flags:   - list of previously enabled "
                 "feature flags now marked as such: ~p", [WereEnabled])
     end,
     case WereDisabled of
         [] -> ok;
-        _  -> rabbit_log:warning(
+        _  -> rabbit_log_feature_flags:warning(
                 "Feature flags:   - list of previously disabled "
                 "feature flags now marked as such: ~p", [WereDisabled])
     end,
@@ -2172,7 +2216,7 @@ verify_which_feature_flags_are_actually_enabled() ->
         EnabledFeatureNames ->
             ok;
         _ ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: write the repaired list of enabled feature "
               "flags"),
             WrittenToDisk = ok =:= try_to_write_enabled_feature_flags_list(
@@ -2190,7 +2234,7 @@ verify_which_feature_flags_are_actually_enabled() ->
 refresh_feature_flags_after_app_load([]) ->
     ok;
 refresh_feature_flags_after_app_load(Apps) ->
-    rabbit_log:debug(
+    rabbit_log_feature_flags:debug(
       "Feature flags: new apps loaded: ~p -> refreshing feature flags",
       [Apps]),
 
@@ -2211,7 +2255,7 @@ refresh_feature_flags_after_app_load(Apps) ->
         [] ->
             ok;
         _ ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: new apps loaded: feature flags already "
               "supported: ~p",
               [lists:sort(AlreadySupportedFeatureNames)])
@@ -2230,7 +2274,7 @@ refresh_feature_flags_after_app_load(Apps) ->
         [] ->
             ok;
         NewSupportedFeatureNames ->
-            rabbit_log:debug(
+            rabbit_log_feature_flags:debug(
               "Feature flags: new apps loaded: new feature flags (unseen so "
               "far): ~p ",
               [lists:sort(NewSupportedFeatureNames)])
