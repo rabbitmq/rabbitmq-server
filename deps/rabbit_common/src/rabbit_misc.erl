@@ -58,7 +58,10 @@
 -export([version_minor_equivalent/2, strict_version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, maps_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
--export([all_module_attributes/1, build_acyclic_graph/3]).
+-export([all_module_attributes/1,
+         rabbitmq_related_module_attributes/1,
+         module_attributes_from_apps/2,
+         build_acyclic_graph/3]).
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
@@ -935,11 +938,30 @@ module_attributes(Module) ->
     end.
 
 all_module_attributes(Name) ->
+    Apps = [App || {App, _, _} <- application:loaded_applications()],
+    module_attributes_from_apps(Name, Apps).
+
+rabbitmq_related_module_attributes(Name) ->
+    Apps = rabbitmq_related_apps(),
+    module_attributes_from_apps(Name, Apps).
+
+rabbitmq_related_apps() ->
+    [App
+     || {App, _, _} <- application:loaded_applications(),
+        %% Only select RabbitMQ-related applications.
+        App =:= rabbit_common orelse
+        App =:= rabbitmq_prelaunch orelse
+        App =:= rabbit orelse
+        lists:member(
+          rabbit,
+          element(2, application:get_key(App, applications)))].
+
+module_attributes_from_apps(Name, Apps) ->
     Targets =
         lists:usort(
           lists:append(
             [[{App, Module} || Module <- Modules] ||
-                {App, _, _}   <- application:loaded_applications(),
+                App           <- Apps,
                 {ok, Modules} <- [application:get_key(App, modules)]])),
     lists:foldl(
       fun ({App, Module}, Acc) ->
