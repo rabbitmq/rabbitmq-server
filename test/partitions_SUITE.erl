@@ -21,7 +21,7 @@
 
 -compile(export_all).
 
-%% We set ticktime to 1s and setuptime is 7s so to make sure it
+%% We set ticktime to 1s and setup time is 7s so to make sure it
 %% passes...
 -define(DELAY, 8000).
 
@@ -119,7 +119,7 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases.
 %% -------------------------------------------------------------------
 
 ignore(Config) ->
@@ -400,6 +400,7 @@ partial_pause_minority(Config) ->
     ok.
 
 partial_pause_if_all_down(Config) ->
+    rabbit_ct_broker_helpers:rpc_all(Config, application, set_env, [rabbit, autoheal_state_transition_timeout, 3000]),
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     set_mode(Config, {pause_if_all_down, [B], ignore}),
     block([{A, B}]),
