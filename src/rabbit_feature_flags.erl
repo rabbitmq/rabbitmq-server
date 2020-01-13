@@ -985,7 +985,7 @@ query_supported_feature_flags() ->
       "Feature flags: query feature flags in loaded applications "
       "+ testsuite"),
     T0 = erlang:timestamp(),
-    AttributesPerApp = rabbit_misc:all_module_attributes(
+    AttributesPerApp = rabbit_misc:rabbitmq_related_module_attributes(
                          rabbit_feature_flag),
     AttributesFromTestsuite = module_attributes_from_testsuite(),
     T1 = erlang:timestamp(),
@@ -999,7 +999,7 @@ query_supported_feature_flags() ->
     rabbit_log_feature_flags:debug(
       "Feature flags: query feature flags in loaded applications"),
     T0 = erlang:timestamp(),
-    AttributesPerApp = rabbit_misc:all_module_attributes(
+    AttributesPerApp = rabbit_misc:rabbitmq_related_module_attributes(
                          rabbit_feature_flag),
     T1 = erlang:timestamp(),
     rabbit_log_feature_flags:debug(
