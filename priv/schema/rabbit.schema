@@ -1,3 +1,4 @@
+% vim:ft=erlang:
 % ==============================
 % Rabbit app section
 % ==============================
@@ -1108,6 +1109,23 @@ end}.
 {mapping, "consumer_timeout", "rabbit.consumer_timeout", [
     {datatype, integer},
     {validators, ["non_zero_positive_integer"]}
+]}.
+
+%% Product name & version overrides.
+
+{mapping, "product.name", "rabbit.product_name", [
+    {datatype, string}
+]}.
+{mapping, "product.version", "rabbit.product_version", [
+    {datatype, string}
+]}.
+
+%% Message of the day file.
+%% The content of that file is added to the banners, both logged and
+%% printed.
+
+{mapping, "motd_file", "rabbit.motd_file", [
+    {datatype, string}
 ]}.
 
 % ==========================
