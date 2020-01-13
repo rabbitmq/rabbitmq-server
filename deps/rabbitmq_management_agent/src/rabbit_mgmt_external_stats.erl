@@ -144,8 +144,8 @@ get_used_fd({win32, _}) ->
     Handle = rabbit_misc:os_cmd(
                "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
     case Handle of
-        [] -> log_fd_error("Could not find handle.exe, please install from "
-                           "sysinternals~n", []);
+        [] -> rabbit_log:warning("Could not find handle.exe, please install from "
+                                 "sysinternals~n", []);
         _  -> case find_files_line(string:tokens(Handle, "\r\n")) of
                   unknown ->
                       log_fd_error("handle.exe output did not contain "
