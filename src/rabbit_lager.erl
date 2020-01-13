@@ -664,27 +664,7 @@ maybe_configure_handler_backends([{Backend, _}|Backends]) ->
     maybe_configure_handler_backends(Backends).
 
 list_expected_sinks() ->
-    case application:get_env(rabbit, lager_extra_sinks) of
-        {ok, List} ->
-            List;
-        undefined ->
-            CompileOptions = proplists:get_value(options,
-                                                 ?MODULE:module_info(compile),
-                                                 []),
-            AutoList = [lager_util:make_internal_sink_name(M)
-                        || M <- proplists:get_value(lager_extra_sinks,
-                                                    CompileOptions, [])],
-            List = case lists:member(?LAGER_SINK, AutoList) of
-                true  -> AutoList;
-                false -> [?LAGER_SINK | AutoList]
-            end,
-            %% Store the list in the application environment. If this
-            %% module is later cover-compiled, the compile option will
-            %% be lost, so we will be able to retrieve the list from the
-            %% application environment.
-            ok = application:set_env(rabbit, lager_extra_sinks, List),
-            List
-    end.
+    rabbit_prelaunch_early_logging:list_expected_sinks().
 
 maybe_remove_logger_handler() ->
     M = logger,
