@@ -56,6 +56,7 @@ define PROJECT_ENV
 	    {reverse_dns_lookups, false},
 	    {cluster_partition_handling, ignore},
 	    {cluster_keepalive_interval, 10000},
+	    {autoheal_state_transition_timeout, 60000},
 	    {tcp_listen_options, [{backlog,       128},
 	                          {nodelay,       true},
 	                          {linger,        {true, 0}},
