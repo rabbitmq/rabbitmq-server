@@ -225,14 +225,6 @@ is_plugin_provided_by_otp(#plugin{name = eldap}) ->
 is_plugin_provided_by_otp(_) ->
     false.
 
-is_skipped_plugin(#plugin{name = syslog}) ->
-    % syslog is shipped as an .ez file, but it's not an actual plugin and
-    % it's not a direct dependency of the rabbit application, so we must
-    % skip it here
-    true;
-is_skipped_plugin(_) ->
-    false.
-
 %% Make sure we don't list OTP apps in here, and also that we detect
 %% missing dependencies.
 ensure_dependencies(Plugins) ->
@@ -659,10 +651,54 @@ list_all_deps([], Deps) ->
     Deps.
 
 remove_plugins(Plugins) ->
-    Fun = fun(P) ->
-             not (is_plugin_provided_by_otp(P) orelse is_skipped_plugin(P))
-          end,
-    lists:filter(Fun, Plugins).
+    %% We want to filter out all Erlang applications in the plugins
+    %% directories which are not actual RabbitMQ plugin.
+    %%
+    %% A RabbitMQ plugin must depend on `rabbit`. We also want to keep
+    %% all applications they depend on, except Erlang/OTP applications.
+    %% In the end, we will skip:
+    %%   * Erlang/OTP applications
+    %%   * All applications which do not depend on `rabbit` and which
+    %%     are not direct or indirect dependencies of plugins.
+    ActualPlugins = [Plugin
+                     || #plugin{dependencies = Deps} = Plugin <- Plugins,
+                        lists:member(rabbit, Deps)],
+    %% As said above, we want to keep all non-plugins which are
+    %% dependencies of plugins.
+    PluginDeps = lists:usort(
+                   lists:flatten(
+                     [resolve_deps(Plugins, Plugin)
+                      || Plugin <- ActualPlugins])),
+    lists:filter(
+      fun(#plugin{name = Name} = Plugin) ->
+              IsOTPApp = is_plugin_provided_by_otp(Plugin),
+              IsAPlugin =
+              lists:member(Plugin, ActualPlugins) orelse
+              lists:member(Name, PluginDeps),
+              if
+                  IsOTPApp ->
+                      rabbit_log:debug(
+                        "Plugins discovery: "
+                        "ignoring ~s, Erlang/OTP application",
+                        [Name]);
+                  not IsAPlugin ->
+                      rabbit_log:debug(
+                        "Plugins discovery: "
+                        "ignoring ~s, not a RabbitMQ plugin",
+                        [Name]);
+                  true ->
+                      ok
+              end,
+              not (IsOTPApp orelse not IsAPlugin)
+      end, Plugins).
+
+resolve_deps(Plugins, #plugin{dependencies = Deps}) ->
+    IndirectDeps = [case lists:keyfind(Dep, #plugin.name, Plugins) of
+                        false     -> [];
+                        DepPlugin -> resolve_deps(Plugins, DepPlugin)
+                    end
+                    || Dep <- Deps],
+    Deps ++ IndirectDeps.
 
 maybe_report_plugin_loading_problems([]) ->
     ok;
