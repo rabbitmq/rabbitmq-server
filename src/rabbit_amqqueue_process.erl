@@ -33,6 +33,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 -export([format/1]).
+-export([is_policy_applicable/2]).
 
 %% Queue's state
 -record(q, {
@@ -1782,6 +1783,10 @@ format(Q) when ?is_amqqueue(Q) ->
              {synchronised_slave_nodes, [node(S) || S <- SSlaves]},
              {node, node(amqqueue:get_pid(Q))}]
     end.
+
+-spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
+is_policy_applicable(_Q, _Policy) ->
+    true.
 
 log_delete_exclusive({ConPid, _ConRef}, State) ->
     log_delete_exclusive(ConPid, State);
