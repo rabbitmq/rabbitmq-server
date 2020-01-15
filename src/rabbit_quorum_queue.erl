@@ -444,6 +444,16 @@ stop(VHost) ->
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()}.
 
+delete(Q, true, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    rabbit_misc:protocol_error(
+      not_implemented,
+      "cannot delete ~s. queue.delete operations with if-unused flag set are not supported by quorum queues",
+      [rabbit_misc:rs(amqqueue:get_name(Q))]);
+delete(Q, _IfUnused, true, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    rabbit_misc:protocol_error(
+      not_implemented,
+      "cannot delete ~s. queue.delete operations with if-empty flag set are not supported by quorum queues",
+      [rabbit_misc:rs(amqqueue:get_name(Q))]);
 delete(Q,
        _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
