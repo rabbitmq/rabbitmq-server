@@ -137,6 +137,8 @@
     clear_permissions/4,
     clear_permissions/5,
 
+    set_vhost_limit/5,
+
     enable_plugin/3,
     disable_plugin/3,
 
@@ -1295,6 +1297,18 @@ clear_permissions(Config, Node, Username, VHost, ActingUser) ->
         [rabbit_data_coercion:to_binary(Username),
          rabbit_data_coercion:to_binary(VHost),
          ActingUser]).
+
+set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
+    Limit = case Limit0 of
+      max_connections -> <<"max-connections">>;
+      max_queues      -> <<"max-queues">>;
+      Other -> rabbit_data_coercion:to_binary(Other)
+    end,
+    Definition = rabbit_json:encode(#{Limit => Value}),
+    rpc(Config, Node,
+        rabbit_vhost_limit,
+        set,
+        [VHost, Definition, <<"ct-tests">>]).
 
 %% Functions to execute code on a remote node/broker.
 
