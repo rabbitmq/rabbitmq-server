@@ -13,7 +13,7 @@ volumes:
 services:
   rmq0: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.183-2020.01.07
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.191-2020.01.15
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -168,3 +168,15 @@ services:
       CONSUMERS: 0
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
       METRICS_PROMETHEUS: "true"
+  # many-queues:
+  #   image: *perf-test-image
+  #   networks:
+  #     - "rabbitmq-prometheus"
+  #   environment:
+  #     URI: "amqp://guest:guest@rmq1:5672/%2f"
+  #     QUEUE_PATTERN: "mq%d"
+  #     QUEUE_PATTERN_FROM: 1
+  #     QUEUE_PATTERN_TO: 1000
+  #     RATE: 1
+  #     SERVERS_STARTUP_TIMEOUT: *startup_timeout
+  #     METRICS_PROMETHEUS: "true"
