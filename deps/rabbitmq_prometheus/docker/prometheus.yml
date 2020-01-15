@@ -61,7 +61,7 @@ scrape_configs:
           # docker-compose-dist-tls.yml
           - 'stress-dist-tls:8080'
           # docker-compose-qq.yml
-          - 'stress-qq:8080'
+          - 'qq-moderate-load:8080'
   - job_name: 'rabbitmq-exporter'
     scrape_interval: 60s
     scrape_timeout: 59s
