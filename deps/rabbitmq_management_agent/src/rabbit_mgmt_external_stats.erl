@@ -44,6 +44,8 @@
                      db_dir, config_files, net_ticktime, enabled_plugins,
                      mem_calculation_strategy, ra_open_file_metrics]).
 
+-define(TEN_MINUTES_AS_SECONDS, 600).
+
 %%--------------------------------------------------------------------
 
 -record(state, {
@@ -51,7 +53,8 @@
     fhc_stats,
     node_owners,
     last_ts,
-    interval
+    interval,
+    error_logged_time
 }).
 
 %%--------------------------------------------------------------------
@@ -61,50 +64,56 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 
-get_used_fd() ->
+get_used_fd(State0) ->
     try
-        case get_used_fd(os:type()) of
-            Fd when is_number(Fd) ->
-                Fd;
-            _Other ->
+        case get_used_fd(os:type(), State0) of
+            {State1, UsedFd} when is_number(UsedFd) ->
+                {State1, UsedFd};
+            {State1, _Other} ->
                 %% Defaults to 0 if data is not available
-                0
+                {State1, 0}
         end
     catch
         _:Error ->
-            log_fd_error("Could not infer the number of file handles used: ~p~n",
-                         [Error]),
-            0
+            State2 = log_fd_error("Could not infer the number of file handles used: ~p~n", [Error], State0),
+            {State2, 0}
     end.
 
-get_used_fd({unix, linux}) ->
+get_used_fd({unix, linux}, State0) ->
     case file:list_dir("/proc/" ++ os:getpid() ++ "/fd") of
-        {ok, Files} -> length(Files);
-        {error, _}  -> get_used_fd({unix, generic})
+        {ok, Files} ->
+            {State0, length(Files)};
+        {error, _}  ->
+            get_used_fd({unix, generic}, State0)
     end;
 
-get_used_fd({unix, BSD})
+get_used_fd({unix, BSD}, State0)
   when BSD == openbsd; BSD == freebsd; BSD == netbsd ->
-    Digit = fun (D) -> lists:member(D, "0123456789*") end,
+    IsDigit = fun (D) -> lists:member(D, "0123456789*") end,
     Output = os:cmd("fstat -p " ++ os:getpid()),
     try
-        length(
-          lists:filter(
-            fun (Line) ->
-                    lists:all(Digit, (lists:nth(4, string:tokens(Line, " "))))
-            end, string:tokens(Output, "\n")))
+        F = fun (Line) ->
+                    lists:all(IsDigit, lists:nth(4, string:tokens(Line, " ")))
+            end,
+        UsedFd = length(lists:filter(F, string:tokens(Output, "\n"))),
+        {State0, UsedFd}
     catch _:Error ->
-            log_fd_error("Could not parse fstat output:~n~s~n~p~n",
-                         [Output, {Error, erlang:get_stacktrace()}])
+              State1 = log_fd_error("Could not parse fstat output:~n~s~n~p~n",
+                                    [Output, {Error, erlang:get_stacktrace()}], State0),
+              {State1, 0}
     end;
 
-get_used_fd({unix, _}) ->
+get_used_fd({unix, _}, State0) ->
     Cmd = rabbit_misc:format(
             "lsof -d \"0-9999999\" -lna -p ~s || echo failed", [os:getpid()]),
     Res = os:cmd(Cmd),
     case string:right(Res, 7) of
-        "failed\n" -> log_fd_error("Could not obtain lsof output~n", []);
-        _          -> string:words(Res, $\n) - 1
+        "failed\n" ->
+            State1 = log_fd_error("Could not obtain lsof output~n", [], State0),
+            {State1, 0};
+        _ ->
+            UsedFd = string:words(Res, $\n) - 1,
+            {State0, UsedFd}
     end;
 
 %% handle.exe can be obtained from
@@ -134,27 +143,55 @@ get_used_fd({unix, _}) ->
 %%   WindowStation   : 2
 %% Total handles: 238
 
+%% Nthandle v4.22 - Handle viewer
+%% Copyright (C) 1997-2019 Mark Russinovich
+%% Sysinternals - www.sysinternals.com
+%%
+%% Handle type summary:
+%%   <Unknown type>  : 1
+%%   <Unknown type>  : 166
+%%   ALPC Port       : 11
+%%   Desktop         : 1
+%%   Directory       : 2
+%%   Event           : 226
+%%   File            : 122
+%%   IoCompletion    : 8
+%%   IRTimer         : 6
+%%   Key             : 42
+%%   Mutant          : 7
+%%   Process         : 3
+%%   Section         : 2
+%%   Semaphore       : 43
+%%   Thread          : 36
+%%   TpWorkerFactory : 3
+%%   WaitCompletionPacket: 25
+%%   WindowStation   : 2
+%% Total handles: 706
+
 %% Note that the "File" number appears to include network sockets too; I assume
 %% that's the number we care about. Note also that if you omit "-s" you will
 %% see a list of file handles *without* network sockets. If you then add "-a"
 %% you will see a list of handles of various types, including network sockets
 %% shown as file handles to \Device\Afd.
 
-get_used_fd({win32, _}) ->
+get_used_fd({win32, _}, State0) ->
     Handle = rabbit_misc:os_cmd(
                "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
     case Handle of
-        [] -> rabbit_log:warning("Could not find handle.exe, please install from "
-                                 "sysinternals~n", []);
-        _  -> case find_files_line(string:tokens(Handle, "\r\n")) of
-                  unknown ->
-                      log_fd_error("handle.exe output did not contain "
-                                   "a line beginning with '  File ', unable "
-                                   "to determine used file descriptor "
-                                   "count: ~p~n", [Handle]);
-                  Any ->
-                      Any
-              end
+        [] ->
+            State1 = log_fd_error("Could not find handle.exe, please install from sysinternals~n", [], State0),
+            {State1, 0};
+        _  ->
+            case find_files_line(string:tokens(Handle, "\r\n")) of
+                unknown ->
+                    State1 = log_fd_error("handle.exe output did not contain "
+                                          "a line beginning with '  File ', unable "
+                                          "to determine used file descriptor "
+                                          "count: ~p~n", [Handle], State0),
+                    {State1, 0};
+                UsedFd ->
+                    {State0, UsedFd}
+            end
     end.
 
 find_files_line([]) ->
@@ -177,66 +214,112 @@ get_disk_free_limit() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free_limit(),
 get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
 
-log_fd_error(Fmt, Args) ->
-    rabbit_log:error(Fmt, Args).
+log_fd_error(Fmt, Args, #state{error_logged_time = undefined}=State) ->
+    % rabbitmq/rabbitmq-management#90
+    % no errors have been logged, so log it and make a note of when
+    Now = erlang:monotonic_time(second),
+    ok = rabbit_log:error(Fmt, Args),
+    State#state{error_logged_time = Now};
+log_fd_error(Fmt, Args, #state{error_logged_time = Time}=State) ->
+    Now = erlang:monotonic_time(second),
+    case Now >= Time + ?TEN_MINUTES_AS_SECONDS of
+        true ->
+            % rabbitmq/rabbitmq-management#90
+            % it has been longer than 10 minutes,
+            % re-log the error
+            ok = rabbit_log:error(Fmt, Args),
+            State#state{error_logged_time = Now};
+        _ ->
+            % 10 minutes have not yet passed
+            State
+    end.
 %%--------------------------------------------------------------------
 
-infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
+infos([], Acc, State) ->
+    {State, lists:reverse(Acc)};
+infos([Item|T], Acc0, State0) ->
+    {State1, Infos} = i(Item, State0),
+    Acc1 = [{Item, Infos}|Acc0],
+    infos(T, Acc1, State1).
 
-i(name,            _State) -> node();
-i(partitions,      _State) -> rabbit_node_monitor:partitions();
-i(fd_used,         _State) -> get_used_fd();
-i(fd_total, #state{fd_total = FdTotal}) -> FdTotal;
-i(sockets_used,    _State) ->
-    proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]));
-i(sockets_total,   _State) ->
-    proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]));
-i(os_pid,          _State) -> list_to_binary(os:getpid());
-
-i(mem_used,        _State) -> vm_memory_monitor:get_process_memory();
-i(mem_calculation_strategy, _State) -> vm_memory_monitor:get_memory_calculation_strategy();
-i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
-i(mem_alarm,       _State) -> resource_alarm_set(memory);
-i(proc_used,       _State) -> erlang:system_info(process_count);
-i(proc_total,      _State) -> erlang:system_info(process_limit);
-i(run_queue,       _State) -> erlang:statistics(run_queue);
-i(processors,      _State) -> erlang:system_info(logical_processors);
-i(disk_free_limit, _State) -> get_disk_free_limit();
-i(disk_free,       _State) -> get_disk_free();
-i(disk_free_alarm, _State) -> resource_alarm_set(disk);
-i(contexts,        _State) -> rabbit_web_dispatch_contexts();
-i(uptime,          _State) -> {Total, _} = erlang:statistics(wall_clock),
-                                Total;
-i(rates_mode,      _State) -> rabbit_mgmt_db_handler:rates_mode();
-i(exchange_types,  _State) -> list_registry_plugins(exchange);
-i(log_files,       _State) -> [list_to_binary(F) || F <- rabbit:log_locations()];
-i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
-i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
-i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
-i(persister_stats,  State) -> persister_stats(State);
-i(enabled_plugins, _State) -> {ok, Dir} = application:get_env(
-                                           rabbit, enabled_plugins_file),
-                              rabbit_plugins:read_enabled(Dir);
-i(auth_mechanisms, _State) ->
+i(name, State) ->
+    {State, node()};
+i(partitions, State) ->
+    {State, rabbit_node_monitor:partitions()};
+i(fd_used, State) ->
+    get_used_fd(State);
+i(fd_total, #state{fd_total = FdTotal}=State) ->
+    {State, FdTotal};
+i(sockets_used, State) ->
+    {State, proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]))};
+i(sockets_total, State) ->
+    {State, proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]))};
+i(os_pid, State) ->
+    {State, list_to_binary(os:getpid())};
+i(mem_used, State) ->
+    {State, vm_memory_monitor:get_process_memory()};
+i(mem_calculation_strategy, State) ->
+    {State, vm_memory_monitor:get_memory_calculation_strategy()};
+i(mem_limit, State) ->
+    {State, vm_memory_monitor:get_memory_limit()};
+i(mem_alarm, State) ->
+    {State, resource_alarm_set(memory)};
+i(proc_used, State) ->
+    {State, erlang:system_info(process_count)};
+i(proc_total, State) ->
+    {State, erlang:system_info(process_limit)};
+i(run_queue, State) ->
+    {State, erlang:statistics(run_queue)};
+i(processors, State) ->
+    {State, erlang:system_info(logical_processors)};
+i(disk_free_limit, State) ->
+    {State, get_disk_free_limit()};
+i(disk_free, State) ->
+    {State, get_disk_free()};
+i(disk_free_alarm, State) ->
+    {State, resource_alarm_set(disk)};
+i(contexts, State) ->
+    {State, rabbit_web_dispatch_contexts()};
+i(uptime, State) ->
+    {Total, _} = erlang:statistics(wall_clock),
+    {State, Total};
+i(rates_mode, State) ->
+    {State, rabbit_mgmt_db_handler:rates_mode()};
+i(exchange_types, State) ->
+    {State, list_registry_plugins(exchange)};
+i(log_files, State) ->
+    {State, [list_to_binary(F) || F <- rabbit:log_locations()]};
+i(db_dir, State) ->
+    {State, list_to_binary(rabbit_mnesia:dir())};
+i(config_files, State) ->
+    {State, [list_to_binary(F) || F <- rabbit:config_files()]};
+i(net_ticktime, State) ->
+    {State, net_kernel:get_net_ticktime()};
+i(persister_stats, State) ->
+    {State, persister_stats(State)};
+i(enabled_plugins, State) ->
+    {ok, Dir} = application:get_env(rabbit, enabled_plugins_file),
+    {State, rabbit_plugins:read_enabled(Dir)};
+i(auth_mechanisms, State) ->
     {ok, Mechanisms} = application:get_env(rabbit, auth_mechanisms),
-    list_registry_plugins(
-      auth_mechanism,
-      fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
-i(applications,    _State) ->
-    [format_application(A) ||
-        A <- lists:keysort(1, rabbit_misc:which_applications())];
-i(gc_num, _State) ->
+    F = fun (N) ->
+                lists:member(list_to_atom(binary_to_list(N)), Mechanisms)
+        end,
+    {State, list_registry_plugins(auth_mechanism, F)};
+i(applications, State) ->
+    {State, [format_application(A) || A <- lists:keysort(1, rabbit_misc:which_applications())]};
+i(gc_num, State) ->
     {GCs, _, _} = erlang:statistics(garbage_collection),
-    GCs;
-i(gc_bytes_reclaimed, _State) ->
+    {State, GCs};
+i(gc_bytes_reclaimed, State) ->
     {_, Words, _} = erlang:statistics(garbage_collection),
-    Words * erlang:system_info(wordsize);
-i(context_switches, _State) ->
+    {State, Words * erlang:system_info(wordsize)};
+i(context_switches, State) ->
     {Sw, 0} = erlang:statistics(context_switches),
-    Sw;
-i(ra_open_file_metrics, _State) ->
-    [{ra_log_wal, ra_metrics(ra_log_wal)},
-     {ra_log_segment_writer, ra_metrics(ra_log_segment_writer)}].
+    {State, Sw};
+i(ra_open_file_metrics, State) ->
+    {State, [{ra_log_wal, ra_metrics(ra_log_wal)},
+             {ra_log_segment_writer, ra_metrics(ra_log_segment_writer)}]}.
 
 ra_metrics(K) ->
     try
@@ -384,16 +467,18 @@ code_change(_, State, _) -> {ok, State}.
 %%--------------------------------------------------------------------
 
 emit_update(State0) ->
-    State = update_state(State0),
-    MStats = infos(?METRICS_KEYS, State),
-    [{persister_stats, PStats0}] = PStats = infos(?PERSISTER_KEYS, State),
-    [{name, _Name} | OStats0] = OStats = infos(?OTHER_KEYS, State),
+    State1 = update_state(State0),
+    {State2, MStats} = infos(?METRICS_KEYS, [], State1),
+    {State3, PStats} = infos(?PERSISTER_KEYS, [], State2),
+    {State4, OStats} = infos(?OTHER_KEYS, [], State3),
+    [{persister_stats, PStats0}] = PStats,
+    [{name, _Name} | OStats0] = OStats,
     rabbit_core_metrics:node_stats(persister_metrics, PStats0),
     rabbit_core_metrics:node_stats(coarse_metrics, MStats),
     rabbit_core_metrics:node_stats(node_metrics, OStats0),
     rabbit_event:notify(node_stats, PStats ++ MStats ++ OStats),
-    erlang:send_after(State#state.interval, self(), emit_update),
-    emit_node_node_stats(State).
+    erlang:send_after(State4#state.interval, self(), emit_update),
+    emit_node_node_stats(State4).
 
 emit_node_node_stats(State = #state{node_owners = Owners}) ->
     Links = cluster_links(),
