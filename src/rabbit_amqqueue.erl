@@ -60,6 +60,8 @@
 -export([rebalance/3]).
 -export([collect_info_all/2]).
 
+-export([is_policy_applicable/2]).
+
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
@@ -458,6 +460,17 @@ policy_changed(Q1, Q2) ->
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     notify_policy_changed(Q1).
+
+is_policy_applicable(QName, Policy) ->
+    case lookup(QName) of
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            rabbit_quorum_queue:is_policy_applicable(Q, Policy);
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            rabbit_amqqueue_process:is_policy_applicable(Q, Policy);
+        _ ->
+            %% Defaults to previous behaviour. Apply always
+            true
+    end.
 
 -spec lookup
         (name()) ->

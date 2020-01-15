@@ -463,8 +463,9 @@ match(Name, Policies) ->
 match_all(Name, Policies) ->
    lists:sort(fun sort_pred/2, [P || P <- Policies, matches(Name, P)]).
 
-matches(#resource{name = Name, kind = Kind, virtual_host = VHost}, Policy) ->
+matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
     matches_type(Kind, pget('apply-to', Policy)) andalso
+        is_applicable(Resource, pget(definition, Policy)) andalso
         match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
         VHost =:= pget(vhost, Policy).
 
@@ -475,6 +476,11 @@ matches_type(queue,    <<"all">>)       -> true;
 matches_type(_,        _)               -> false.
 
 sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
+
+is_applicable(#resource{kind = queue} = Resource, Policy) ->
+    rabbit_amqqueue:is_policy_applicable(Resource, Policy);
+is_applicable(_, _) ->
+    true.
 
 %%----------------------------------------------------------------------------
 
