@@ -496,5 +496,5 @@ empty_histogram(Buckets) ->
 
 position([Bound | L], Value) when Value > Bound ->
     position(L, Value);
-position([Bound | _], Value) ->
+position([Bound | _], _) ->
     Bound.
