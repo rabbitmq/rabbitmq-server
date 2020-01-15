@@ -133,7 +133,9 @@ all_tests() ->
      queue_length_in_memory_purge,
      in_memory,
      consumer_metrics,
-     invalid_policy
+     invalid_policy,
+     delete_if_empty,
+     delete_if_unused
     ].
 
 memory_tests() ->
@@ -2326,6 +2328,34 @@ consumer_metrics(Config) ->
     ?assertMatch([{consumers, 1}], lists:filter(fun({Key, _}) ->
                                                         Key == consumers
                                                 end, PropList)).
+
+delete_if_empty(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Try to delete the quorum queue
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+                amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
+                                                      if_empty = true})).
+
+delete_if_unused(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Try to delete the quorum queue
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+                amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
+                                                      if_unused = true})).
 
 %%----------------------------------------------------------------------------
 
