@@ -17,6 +17,11 @@
          initial_pass_finished/0,
          shutdown_func/1]).
 
+-ifdef(TEST).
+-export([store_context/1,
+         clear_context_cache/0]).
+-endif.
+
 -define(PT_KEY_CONTEXT,       {?MODULE, context}).
 -define(PT_KEY_BOOT_STATE,    {?MODULE, boot_state}).
 -define(PT_KEY_INITIAL_PASS,  {?MODULE, initial_pass_finished}).
@@ -124,6 +129,11 @@ get_context() ->
         undefined -> undefined;
         Context   -> Context#{initial_pass => is_initial_pass()}
     end.
+
+-ifdef(TEST).
+clear_context_cache() ->
+    persistent_term:erase(?PT_KEY_CONTEXT).
+-endif.
 
 get_boot_state() ->
     persistent_term:get(?PT_KEY_BOOT_STATE, stopped).

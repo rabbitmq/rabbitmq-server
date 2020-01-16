@@ -41,10 +41,8 @@ boot() ->
   seed_user_provided_cluster_name().
 
 name_type() ->
-    case os:getenv("RABBITMQ_USE_LONGNAME") of
-        "true" -> longnames;
-        _      -> shortnames
-    end.
+    #{nodename_type := NodeType} = rabbit_prelaunch:get_context(),
+    NodeType.
 
 -spec names(string()) ->
           rabbit_types:ok_or_error2([{string(), integer()}], term()).

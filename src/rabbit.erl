@@ -396,10 +396,9 @@ maybe_sd_notify() ->
     end.
 
 sd_notify_ready() ->
-    case {os:type(), os:getenv("NOTIFY_SOCKET")} of
-        {{win32, _}, _} ->
-            true;
-        {_, [_|_]} -> %% Non-empty NOTIFY_SOCKET, give it a try
+    case rabbit_prelaunch:get_context() of
+        #{systemd_notify_socket := Socket} when Socket =/= undefined ->
+            %% Non-empty NOTIFY_SOCKET, give it a try
             sd_notify_legacy() orelse sd_notify_socat();
         _ ->
             true
@@ -442,9 +441,11 @@ socat_socket_arg(UnixSocket) ->
     "unix-sendto:" ++ UnixSocket.
 
 sd_open_port() ->
+    #{systemd_notify_socket := Socket} = rabbit_prelaunch:get_context(),
+    true = Socket =/= undefined,
     open_port(
       {spawn_executable, os:find_executable("socat")},
-      [{args, [socat_socket_arg(os:getenv("NOTIFY_SOCKET")), "STDIO"]},
+      [{args, [socat_socket_arg(Socket), "STDIO"]},
        use_stdio, out]).
 
 sd_notify_socat(Unit) ->
