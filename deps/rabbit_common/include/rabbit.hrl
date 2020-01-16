@@ -152,7 +152,7 @@
                  version,          %% string()
                  description,      %% string()
                  type,             %% 'ez' or 'dir'
-                 dependencies,     %% [{atom(), string()}]
+                 dependencies,     %% [atom()]
                  location,         %% string()
                  %% List of supported broker version ranges,
                  %% e.g. ["3.5.7", "3.6.1"]
