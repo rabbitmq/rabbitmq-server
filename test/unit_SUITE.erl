@@ -942,7 +942,12 @@ listing_plugins_from_multiple_directories(Config) ->
     lists:foreach(fun({Dir, AppName, Vsn}) ->
                           EzName = filename:join([Dir, io_lib:format("~s-~s.ez", [AppName, Vsn])]),
                           AppFileName = lists:flatten(io_lib:format("~s-~s/ebin/~s.app", [AppName, Vsn, AppName])),
-                          AppFileContents = list_to_binary(io_lib:format("~p.", [{application, AppName, [{vsn, Vsn}]}])),
+                          AppFileContents = list_to_binary(
+                                              io_lib:format(
+                                                "~p.",
+                                                [{application, AppName,
+                                                  [{vsn, Vsn},
+                                                   {applications, [kernel, stdlib, rabbit]}]}])),
                           {ok, {_, EzData}} = zip:zip(EzName, [{AppFileName, AppFileContents}], [memory]),
                           ok = file:write_file(EzName, EzData)
                   end,
