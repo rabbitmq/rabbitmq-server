@@ -812,7 +812,7 @@ dead_letter_policy(Config) ->
     test_dead_lettering(false, Config, Ch, Servers, RaName, QQ, CQ).
 
 invalid_policy(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
