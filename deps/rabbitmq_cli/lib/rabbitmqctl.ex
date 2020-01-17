@@ -387,6 +387,9 @@ defmodule RabbitMQCtl do
   defp format_validation_error(:node_not_running),
     do: "this command requires the target node to be running."
 
+  defp format_validation_error(:unsupported_formatter),
+    do: "the requested formatter is not supported by this command"
+
   defp format_validation_error(err), do: inspect(err)
 
   defp exit_program(code) do

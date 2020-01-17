@@ -53,8 +53,7 @@ defmodule ErlangCookieHashCommandTest do
 
   test "run: returns the erlang cookie hash", context do
     res = @command.run([], context[:opts])
-    # assert that we have a list of characters, a base64 encoded to string
-    assert length(res) > 0 and :io_lib.char_list(res)
+    assert is_bitstring(res)
   end
 
 end

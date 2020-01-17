@@ -20,6 +20,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand do
   def scopes(), do: [:diagnostics]
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
+
+  def validate(_, %{formatter: "json"}) do
+    {:validation_failure, :unsupported_formatter}
+  end
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do

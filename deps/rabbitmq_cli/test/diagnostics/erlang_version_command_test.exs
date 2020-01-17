@@ -66,19 +66,16 @@ defmodule ErlangVersionCommandTest do
 
   test "run: returns Erlang/OTP version on the target node", context do
     res = @command.run([], context[:opts])
-    # assert that we have a list of characters
-    assert length(res) > 0 and :io_lib.char_list(res)
+    assert is_bitstring(res)
   end
 
   test "run with --details: returns Erlang/OTP version on the target node", context do
     res = @command.run([], Map.merge(%{details: true}, context[:opts]))
-    # assert that we have a list of characters
-    assert length(res) > 0 and :io_lib.char_list(res)
+    assert is_bitstring(res)
   end
 
   test "run: when --offline is used, returns local Erlang/OTP version", context do
     res = @command.run([], Map.merge(context[:opts], %{offline: true}))
-    # assert that we have a list of characters
-    assert length(res) > 0 and :io_lib.char_list(res)
+    assert is_bitstring(res)
   end
 end
