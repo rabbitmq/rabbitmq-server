@@ -1,0 +1,18 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ template "agentmq.fullname" . }}-headless
+  labels:
+    app: {{ template "agentmq.name" . }}
+    chart: {{ include "agentmq.chart" .  }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+{{ toYaml .Values.headlessServicePorts | indent 2 }}
+  selector:
+    app: {{ .Values.service.selector.name }}
+    release: "{{ .Release.Name }}"
+

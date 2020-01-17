@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "haproxy.fullname" . }}-metrics
+  labels:
+    app.kubernetes.io/name: {{ include "haproxy.name" . }}
+    helm.sh/chart: {{ include "haproxy.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8100
+      targetPort: stats
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: {{ include "haproxy.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
