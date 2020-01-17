@@ -24,11 +24,26 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsBootingCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit, :is_booting, [node_name], timeout)
   end
 
-  def output(true, %{node: node_name} = _options) do
+  def output(true, %{node: node_name, formatter: "json"}) do
+    m = %{
+      "result" => true,
+      "message" => "RabbitMQ on node #{node_name} is booting"
+    }
+    {:ok, m}
+  end
+
+  def output(false, %{node: node_name, formatter: "json"}) do
+    m = %{
+      "result" => false,
+      "message" => "RabbitMQ on node #{node_name} is fully booted (check with is_running), stopped or has not started booting yet"
+    }
+    {:ok, m}
+  end
+  def output(true, %{node: node_name}) do
     {:ok, "RabbitMQ on node #{node_name} is booting"}
   end
 
-  def output(false, %{node: node_name} = _options) do
+  def output(false, %{node: node_name}) do
     {:ok,
      "RabbitMQ on node #{node_name} is fully booted (check with is_running), stopped or has not started booting yet"}
   end

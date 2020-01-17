@@ -21,10 +21,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
+    :rabbit_data_coercion.to_binary(
+      :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout))
   end
 
-  def output(result, _options) when is_list(result) do
+  def output(result, %{formatter: "json"}) do
+    {:ok, %{"result" => "ok", "value" => result}}
+  end
+  def output(result, _options) when is_bitstring(result) do
     {:ok, result}
   end
 
