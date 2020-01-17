@@ -22,6 +22,9 @@ alias RabbitMQ.CLI.Formatters.FormatterHelpers
 defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
+  def format_output(output, opts) when is_bitstring(output) do
+    format_output(%{"message" => output}, opts)
+  end
   def format_output(output, _opts) do
     {:ok, json} = JSON.encode(keys_to_atoms(output))
     json

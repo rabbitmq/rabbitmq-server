@@ -30,23 +30,30 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   def run([], %{details: details, offline: true}) do
     case details do
       true ->
-        :rabbit_misc.otp_system_version()
+        :rabbit_data_coercion.to_binary(
+          :rabbit_misc.otp_system_version())
 
       false ->
-        :rabbit_misc.platform_and_version()
+        :rabbit_data_coercion.to_binary(
+          :rabbit_misc.platform_and_version())
     end
   end
   def run([], %{node: node_name, timeout: timeout, details: details}) do
     case details do
       true ->
-        :rabbit_misc.rpc_call(node_name, :rabbit_misc, :otp_system_version, [], timeout)
+        :rabbit_data_coercion.to_binary(
+          :rabbit_misc.rpc_call(node_name, :rabbit_misc, :otp_system_version, [], timeout))
 
       false ->
-        :rabbit_misc.rpc_call(node_name, :rabbit_misc, :platform_and_version, [], timeout)
+      :rabbit_data_coercion.to_binary(
+        :rabbit_misc.rpc_call(node_name, :rabbit_misc, :platform_and_version, [], timeout))
     end
   end
 
-  def output(result, _options) when is_list(result) do
+  def output(result, %{formatter: "json"}) do
+    {:ok, %{"result" => "ok", "value" => result}}
+  end
+  def output(result, _opts) when is_bitstring(result) do
     {:ok, result}
   end
 
