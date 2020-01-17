@@ -36,7 +36,7 @@
                                 req/4, auth_header/2,
                                 assert_permanent_redirect/3,
                                 uri_base_from/2, format_for_upload/1,
-                                amqp_port/1]).
+                                amqp_port/1, req/6]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -151,7 +151,8 @@ all_tests() -> [
     single_active_consumer_cq_test,
     single_active_consumer_qq_test,
     oauth_test,
-    disable_basic_auth_test].
+    disable_basic_auth_test,
+    login_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -3150,6 +3151,37 @@ oauth_test(Config) ->
     %% cleanup
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                  [rabbitmq_management, enable_uaa]).
+
+login_test(Config) ->
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags,     <<"management">>}], {group, '2xx'}),
+    %% Let's do a post without any other form of authorization
+    {ok, {{_, CodeAct, _}, Headers, _}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=myuser&password=myuser">>),
+    ?assertEqual(200, CodeAct),
+
+    %% Extract the authorization header
+    [Cookie, _Version] = binary:split(list_to_binary(proplists:get_value("set-cookie", Headers)),
+                                      <<";">>, [global]),
+    [_, Auth] = binary:split(Cookie, <<"=">>, []),
+
+    %% Request the overview with the auth obtained
+    {ok, {{_, CodeAct1, _}, _, _}} =
+        req(Config, get, "/overview", [{"Authorization", "Basic " ++ binary_to_list(Auth)}]),
+    ?assertEqual(200, CodeAct1),
+
+    %% Let's request a login with an unknown user
+    {ok, {{_, CodeAct2, _}, Headers2, _}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=misteryusernumber1&password=myuser">>),
+    ?assertEqual(401, CodeAct2),
+    ?assert(not proplists:is_defined("set-cookie", Headers2)),
+
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    passed.
 
 disable_basic_auth_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
