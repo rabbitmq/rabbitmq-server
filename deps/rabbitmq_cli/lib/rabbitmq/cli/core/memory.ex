@@ -96,7 +96,7 @@ defmodule RabbitMQ.CLI.Core.Memory do
       err           -> err
     end
   end
-  def parse_watermark(n) when is_float(n) do
+  def parse_watermark(n) when is_float(n) or is_integer(n) do
     n
   end
 
