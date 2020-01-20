@@ -46,11 +46,13 @@
          "RABBITMQ_DIST_PORT",
          "RABBITMQ_ENABLED_PLUGINS",
          "RABBITMQ_ENABLED_PLUGINS_FILE",
+         "RABBITMQ_FEATURE_FLAGS",
          "RABBITMQ_FEATURE_FLAGS_FILE",
          "RABBITMQ_HOME",
          "RABBITMQ_KEEP_PID_FILE_ON_EXIT",
          "RABBITMQ_LOG",
          "RABBITMQ_LOG_BASE",
+         "RABBITMQ_LOG_FF_REGISTRY",
          "RABBITMQ_LOGS",
          "RABBITMQ_MNESIA_BASE",
          "RABBITMQ_MNESIA_DIR",
@@ -83,8 +85,10 @@ get_context_before_logging_init(TakeFromRemoteNode) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
+             fun os_type/1,
              fun log_levels/1,
-             fun shell/1
+             fun interactive_shell/1,
+             fun output_supports_colors/1
             ],
 
     run_context_steps(context_base(TakeFromRemoteNode), Steps).
@@ -93,7 +97,10 @@ get_context_after_logging_init(Context) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
+             fun sys_prefix/1,
+             fun rabbitmq_base/1,
              fun data_dir/1,
+             fun rabbitmq_home/1,
              fun config_base_dir/1,
              fun load_conf_env_file/1,
              fun log_levels/1
@@ -105,46 +112,77 @@ get_context_after_reloading_env(Context) ->
     %% The order of steps below is important because some of them
     %% depends on previous steps.
     Steps = [
-             fun node_name_and_type/1,
+             fun nodename_type/1,
+             fun nodename/1,
+             fun split_nodename/1,
+             fun systemd_notify_socket/1,
              fun maybe_setup_dist_for_remote_query/1,
              fun dbg_config/1,
-             fun config_files/1,
-             fun log_files/1,
+             fun main_config_file/1,
+             fun advanced_config_file/1,
+             fun log_base_dir/1,
+             fun main_log_file/1,
+             fun upgrade_log_file/1,
+             fun mnesia_base_dir/1,
              fun mnesia_dir/1,
-             fun quorum_dir/1,
+             fun quorum_queue_dir/1,
              fun pid_file/1,
+             fun keep_pid_file_on_exit/1,
              fun feature_flags_file/1,
-             fun plugins_dirs/1,
+             fun forced_feature_flags_on_init/1,
+             fun log_feature_flags_registry/1,
+             fun plugins_path/1,
+             fun plugins_expand_dir/1,
+             fun enabled_plugins_file/1,
+             fun enabled_plugins/1,
              fun maybe_stop_dist_for_remote_query/1,
-             fun tcp_configuration/1
+             fun amqp_ipaddr/1,
+             fun amqp_tcp_port/1,
+             fun erlang_dist_tcp_port/1
             ],
 
     run_context_steps(Context, Steps).
 
 context_base(TakeFromRemoteNode) ->
-    OSType = get_os_type(),
-    Context = #{os_type => OSType},
+    Context = #{},
     case TakeFromRemoteNode of
         false ->
             Context;
         offline ->
-            Context#{from_remote_node => TakeFromRemoteNode};
+            update_context(Context,
+                           from_remote_node,
+                           offline);
         _ when is_atom(TakeFromRemoteNode) ->
-            Context#{from_remote_node => {TakeFromRemoteNode, 10000}};
+            update_context(Context,
+                           from_remote_node,
+                           {TakeFromRemoteNode, 10000});
         {RemoteNode, infinity}
           when is_atom(RemoteNode) ->
-            Context#{from_remote_node => TakeFromRemoteNode};
+            update_context(Context,
+                           from_remote_node,
+                           TakeFromRemoteNode);
         {RemoteNode, Timeout}
           when is_atom(RemoteNode) andalso
                is_integer(Timeout) andalso
                Timeout >= 0 ->
-            Context#{from_remote_node => TakeFromRemoteNode}
+            update_context(Context,
+                           from_remote_node,
+                           {TakeFromRemoteNode, Timeout})
     end.
 
 -ifdef(TEST).
-get_os_type() -> persistent_term:get({?MODULE, os_type}, os:type()).
+os_type(Context) ->
+    {OSType, Origin} =
+    try
+        {persistent_term:get({?MODULE, os_type}), environment}
+    catch
+        _:badarg ->
+            {os:type(), default}
+    end,
+    update_context(Context, os_type, OSType, Origin).
 -else.
-get_os_type() -> os:type().
+os_type(Context) ->
+    update_context(Context, os_type, os:type(), default).
 -endif.
 
 run_context_steps(Context, Steps) ->
@@ -152,6 +190,23 @@ run_context_steps(Context, Steps) ->
       fun(Step, Context1) -> Step(Context1) end,
       Context,
       Steps).
+
+update_context(Context, Key, Value) ->
+    Context#{Key => Value}.
+
+-define(origin_is_valid(O),
+        O =:= default orelse
+        O =:= environment orelse
+        O =:= remote_node).
+
+update_context(#{var_origins := Origins} = Context, Key, Value, Origin)
+  when ?origin_is_valid(Origin) ->
+    Context#{Key => Value,
+             var_origins => Origins#{Key => Origin}};
+update_context(Context, Key, Value, Origin)
+  when ?origin_is_valid(Origin) ->
+    Context#{Key => Value,
+             var_origins => #{Key => Origin}}.
 
 log_process_env() ->
     rabbit_log_prelaunch:debug("Process environment:"),
@@ -222,7 +277,8 @@ context_to_app_env_vars1(
             ok
     end,
     case Context of
-        #{amqp_ipaddr_and_tcp_port := {IpAddr, TcpPort}}
+        #{amqp_ipaddr := IpAddr,
+          amqp_tcp_port := TcpPort}
           when IpAddr /= undefined andalso TcpPort /= undefined ->
             Fun({rabbit, tcp_listeners, [{IpAddr, TcpPort}]});
         _ ->
@@ -232,20 +288,7 @@ context_to_app_env_vars1(
 
 context_to_code_path(#{plugins_path := PluginsPath}) ->
     Dirs = get_user_lib_dirs(PluginsPath),
-    add_paths_to_code_path(Dirs).
-
-add_paths_to_code_path(Dirs) ->
-    Path = code:get_path(),
-    add_paths_to_code_path1(Path, lists:reverse(Dirs)).
-
-add_paths_to_code_path1(Path, [Dir | Rest]) ->
-    case lists:member(Dir, Path) of
-        true  -> ok;
-        false -> code:add_patha(Dir)
-    end,
-    add_paths_to_code_path1(Path, Rest);
-add_paths_to_code_path1(_, []) ->
-    ok.
+    code:add_pathsa(lists:reverse(Dirs)).
 
 %% -------------------------------------------------------------------
 %% Code copied from `kernel/src/code_server.erl`.
@@ -405,41 +448,43 @@ archive_extension() ->
 %%   of short ones.
 %%   Default: unset (use short names)
 
-node_name_and_type(Context) ->
-    NameType = get_node_name_type(),
-    Nodename = get_node_name(NameType),
-    Context#{nodename => Nodename,
-             split_nodename => rabbit_nodes_common:parts(Nodename),
-             nodename_type => NameType}.
-
-get_node_name_type() ->
-    UseLongname = get_prefixed_env_var("RABBITMQ_USE_LONGNAME"),
-    case UseLongname of
-        false -> shortnames;
-        Value -> case value_is_yes(Value) of
-                     true  -> longnames;
-                     false -> shortnames
-                 end
+nodename_type(Context) ->
+    case get_prefixed_env_var("RABBITMQ_USE_LONGNAME") of
+        false ->
+            update_context(Context, nodename_type, shortnames, default);
+        Value ->
+            NameType = case value_is_yes(Value) of
+                           true  -> longnames;
+                           false -> shortnames
+                       end,
+            update_context(Context, nodename_type, NameType, environment)
     end.
 
-get_node_name(NameType) ->
+nodename(#{nodename_type := NameType} = Context) ->
     LongHostname = net_adm:localhost(),
     ShortHostname = re:replace(LongHostname, "\\..*$", "", [{return, list}]),
     case get_prefixed_env_var("RABBITMQ_NODENAME") of
         false when NameType =:= shortnames ->
-            rabbit_nodes_common:make({"rabbit", ShortHostname});
+            Nodename = rabbit_nodes_common:make({"rabbit", ShortHostname}),
+            update_context(Context, nodename, Nodename, default);
         false when NameType =:= longnames ->
-            rabbit_nodes_common:make({"rabbit", LongHostname});
+            Nodename = rabbit_nodes_common:make({"rabbit", LongHostname}),
+            update_context(Context, nodename, Nodename, default);
         Value ->
-            case string:find(Value, "@") of
-                nomatch when NameType =:= shortnames ->
-                    rabbit_nodes_common:make({Value, ShortHostname});
-                nomatch when NameType =:= longnames ->
-                    rabbit_nodes_common:make({Value, LongHostname});
-                _ ->
-                    rabbit_nodes_common:make(Value)
-            end
+            Nodename = case string:find(Value, "@") of
+                           nomatch when NameType =:= shortnames ->
+                               rabbit_nodes_common:make({Value, ShortHostname});
+                           nomatch when NameType =:= longnames ->
+                               rabbit_nodes_common:make({Value, LongHostname});
+                           _ ->
+                               rabbit_nodes_common:make(Value)
+                       end,
+            update_context(Context, nodename, Nodename, environment)
     end.
+
+split_nodename(#{nodename := Nodename} = Context) ->
+    update_context(Context,
+                   split_nodename, rabbit_nodes_common:parts(Nodename)).
 
 %% -------------------------------------------------------------------
 %%
@@ -456,38 +501,36 @@ get_node_name(NameType) ->
 %%   Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/advanced.config
 %%         (Windows) ${RABBITMQ_BASE}\advanced.config
 
-config_base_dir(Context) ->
-    ConfigBaseDir = get_config_base_dir(Context),
-    Context#{config_base_dir => ConfigBaseDir}.
-
-get_config_base_dir(#{os_type := {unix, _}}) ->
-    SysPrefix = get_sys_prefix(),
+config_base_dir(#{os_type := {unix, _},
+                  sys_prefix := SysPrefix} = Context) ->
     Dir = filename:join([SysPrefix, "etc", "rabbitmq"]),
-    normalize_path(Dir);
-get_config_base_dir(#{os_type := {win32, _}}) ->
-    Dir = get_rabbitmq_base(),
-    normalize_path(Dir).
+    update_context(Context, config_base_dir, Dir);
+config_base_dir(#{os_type := {win32, _},
+                  rabbitmq_base := Dir} = Context) ->
+    update_context(Context, config_base_dir, Dir).
 
-config_files(Context) ->
-    MainConfigFile = get_main_config_file(Context),
-    AdvancedConfigFile = get_advanced_config_file(Context),
-    Context#{main_config_file => MainConfigFile,
-             advanced_config_file => AdvancedConfigFile}.
-
-get_main_config_file(Context) ->
-    File = get_prefixed_env_var(
-             "RABBITMQ_CONFIG_FILE",
-             get_default_main_config_file(Context)),
-    normalize_path(File).
+main_config_file(Context) ->
+    case get_prefixed_env_var("RABBITMQ_CONFIG_FILE") of
+        false ->
+            File = get_default_main_config_file(Context),
+            update_context(Context, main_config_file, File, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, main_config_file, File, environment)
+    end.
 
 get_default_main_config_file(#{config_base_dir := ConfigBaseDir}) ->
     filename:join(ConfigBaseDir, "rabbitmq").
 
-get_advanced_config_file(Context) ->
-    File = get_prefixed_env_var(
-             "RABBITMQ_ADVANCED_CONFIG_FILE",
-             get_default_advanced_config_file(Context)),
-    normalize_path(File).
+advanced_config_file(Context) ->
+    case get_prefixed_env_var("RABBITMQ_ADVANCED_CONFIG_FILE") of
+        false ->
+            File = get_default_advanced_config_file(Context),
+            update_context(Context, advanced_config_file, File, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, advanced_config_file, File, environment)
+    end.
 
 get_default_advanced_config_file(#{config_base_dir := ConfigBaseDir}) ->
     filename:join(ConfigBaseDir, "advanced.config").
@@ -517,51 +560,41 @@ get_default_advanced_config_file(#{config_base_dir := ConfigBaseDir}) ->
 %%   Default: (undefined)
 
 log_levels(Context) ->
-    LogLevels = get_log_levels(),
-    Context#{log_levels => LogLevels}.
-
-log_files(Context) ->
-    LogBaseDir = get_log_base_dir(Context),
-    MainLogFile = get_main_log_file(Context, LogBaseDir),
-    UpgradeLogFile = get_upgrade_log_file(Context, LogBaseDir),
-    Context#{log_base_dir => LogBaseDir,
-             main_log_file => MainLogFile,
-             upgrade_log_file => UpgradeLogFile}.
-
-get_log_levels() ->
-    LogValue = get_prefixed_env_var("RABBITMQ_LOG"),
-    case LogValue of
-        false -> undefined;
-        _     -> get_log_levels1(string:lexemes(LogValue, ","), #{})
+    case get_prefixed_env_var("RABBITMQ_LOG") of
+        false ->
+            update_context(Context, log_levels, undefined, default);
+        Value ->
+            LogLevels = parse_log_levels(string:lexemes(Value, ","), #{}),
+            update_context(Context, log_levels, LogLevels, environment)
     end.
 
-get_log_levels1([CategoryValue | Rest], Result) ->
+parse_log_levels([CategoryValue | Rest], Result) ->
     case string:lexemes(CategoryValue, "=") of
         ["+color"] ->
             Result1 = Result#{color => true},
-            get_log_levels1(Rest, Result1);
+            parse_log_levels(Rest, Result1);
         ["-color"] ->
             Result1 = Result#{color => false},
-            get_log_levels1(Rest, Result1);
+            parse_log_levels(Rest, Result1);
         [CategoryOrLevel] ->
             case parse_level(CategoryOrLevel) of
                 undefined ->
                     Result1 = Result#{CategoryOrLevel => info},
-                    get_log_levels1(Rest, Result1);
+                    parse_log_levels(Rest, Result1);
                 Level ->
                     Result1 = Result#{global => Level},
-                    get_log_levels1(Rest, Result1)
+                    parse_log_levels(Rest, Result1)
             end;
         [Category, Level0] ->
             case parse_level(Level0) of
                 undefined ->
-                    get_log_levels1(Rest, Result);
+                    parse_log_levels(Rest, Result);
                 Level ->
                     Result1 = Result#{Category => Level},
-                    get_log_levels1(Rest, Result1)
+                    parse_log_levels(Rest, Result1)
             end
     end;
-get_log_levels1([], Result) ->
+parse_log_levels([], Result) ->
     Result.
 
 parse_level("debug")     -> debug;
@@ -575,27 +608,46 @@ parse_level("emergency") -> emergency;
 parse_level("none")      -> none;
 parse_level(_)           -> undefined.
 
-get_log_base_dir(#{os_type := {unix, _}}) ->
-    SysPrefix = get_sys_prefix(),
-    Default = filename:join([SysPrefix, "var", "log", "rabbitmq"]),
-    normalize_path(get_prefixed_env_var("RABBITMQ_LOG_BASE", Default));
-get_log_base_dir(#{os_type := {win32, _}}) ->
-    RabbitmqBase = get_rabbitmq_base(),
-    Default = filename:join([RabbitmqBase, "log"]),
-    normalize_path(get_prefixed_env_var("RABBITMQ_LOG_BASE", Default)).
-
-get_main_log_file(#{nodename := Nodename}, LogBaseDir) ->
-    Default = filename:join(LogBaseDir, atom_to_list(Nodename) ++ ".log"),
-    Value = get_prefixed_env_var("RABBITMQ_LOGS", Default),
-    case Value of
-        "-" -> Value;
-        _   -> normalize_path(Value)
+log_base_dir(#{os_type := OSType} = Context) ->
+    case {get_prefixed_env_var("RABBITMQ_LOG_BASE"), OSType} of
+        {false, {unix, _}} ->
+            #{sys_prefix := SysPrefix} = Context,
+            Dir = filename:join([SysPrefix, "var", "log", "rabbitmq"]),
+            update_context(Context, log_base_dir, Dir, default);
+        {false, {win32, _}} ->
+            #{rabbitmq_base := RabbitmqBase} = Context,
+            Dir = filename:join([RabbitmqBase, "log"]),
+            update_context(Context, log_base_dir, Dir, default);
+        {Value, _} ->
+            Dir = normalize_path(Value),
+            update_context(Context, log_base_dir, Dir, environment)
     end.
 
-get_upgrade_log_file(#{nodename := Nodename}, LogBaseDir) ->
-    Default = filename:join(LogBaseDir,
-                            atom_to_list(Nodename) ++ "_upgrade.log"),
-    normalize_path(get_prefixed_env_var("RABBITMQ_UPGRADE_LOG", Default)).
+main_log_file(#{nodename := Nodename,
+                log_base_dir := LogBaseDir} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_LOGS") of
+        false ->
+            File= filename:join(LogBaseDir,
+                                atom_to_list(Nodename) ++ ".log"),
+            update_context(Context, main_log_file, File, default);
+        "-" ->
+            update_context(Context, main_log_file, "-", environment);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, main_log_file, File, environment)
+    end.
+
+upgrade_log_file(#{nodename := Nodename,
+                   log_base_dir := LogBaseDir} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_UPGRADE_LOG") of
+        false ->
+            File = filename:join(LogBaseDir,
+                                 atom_to_list(Nodename) ++ "_upgrade.log"),
+            update_context(Context, upgrade_log_file, File, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, upgrade_log_file, File, environment)
+    end.
 
 dbg_config() ->
     {Mods, Output} = get_dbg_config(),
@@ -654,37 +706,34 @@ get_dbg_config1([], Mods, Output) ->
 %%   Default: (Unix) ${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
 %%         (Windows) ${RABBITMQ_MNESIA_BASE}\${RABBITMQ_NODENAME}-mnesia
 
-mnesia_dir(Context) ->
-    MnesiaBaseDir = get_mnesia_base_dir(Context),
-    MnesiaDir = get_mnesia_dir(Context, MnesiaBaseDir),
-    Context#{mnesia_base_dir => MnesiaBaseDir,
-             mnesia_dir => MnesiaDir}.
-
-get_mnesia_base_dir(#{from_remote_node := Remote}) ->
+mnesia_base_dir(#{from_remote_node := Remote} = Context) ->
     case get_prefixed_env_var("RABBITMQ_MNESIA_BASE") of
         false when Remote =:= offline ->
-            undefined;
+            update_context(Context, mnesia_base_dir, undefined, default);
         false ->
-            get_mnesia_base_dir_from_node(Remote);
-        Dir ->
-            normalize_path(Dir)
+            mnesia_base_dir_from_node(Context);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, mnesia_base_dir, Dir, environment)
     end;
-get_mnesia_base_dir(Context) ->
-    get_mnesia_base_dir_from_env(Context).
+mnesia_base_dir(Context) ->
+    mnesia_base_dir_from_env(Context).
 
-get_mnesia_base_dir_from_env(Context) ->
-    Default = get_default_mnesia_base_dir(Context),
-    Dir = get_prefixed_env_var("RABBITMQ_MNESIA_BASE", Default),
-    normalize_path(Dir).
+mnesia_base_dir_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_MNESIA_BASE") of
+        false ->
+            Dir = get_default_mnesia_base_dir(Context),
+            update_context(Context, mnesia_base_dir, Dir, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, mnesia_base_dir, Dir, environment)
+    end.
 
-get_mnesia_base_dir_from_node(_Remote) ->
-    %% This variable is used to compute other variables but is not
-    %% stored anywhere. Therefore, we can't know what a remote node used
-    %% initially.
-    %%
-    %% That's ok because we don't really need to know that value anyway:
-    %% only the variables based on it are relevant.
-    undefined.
+mnesia_base_dir_from_node(Context) ->
+    %% This variable is used to compute other variables only, we
+    %% don't need to know what a remote node used initially. Only the
+    %% variables based on it are relevant.
+    update_context(Context, mnesia_base_dir, undefined, default).
 
 get_default_mnesia_base_dir(#{data_dir := DataDir} = Context) ->
     Basename = case Context of
@@ -693,38 +742,50 @@ get_default_mnesia_base_dir(#{data_dir := DataDir} = Context) ->
                end,
     filename:join(DataDir, Basename).
 
-get_mnesia_dir(#{from_remote_node := Remote}, _) ->
+mnesia_dir(#{from_remote_node := Remote} = Context) ->
     case get_prefixed_env_var("RABBITMQ_MNESIA_DIR") of
         false when Remote =:= offline ->
-            undefined;
+            update_context(Context, mnesia_dir, undefined, default);
         false ->
-            get_mnesia_dir_from_node(Remote);
-        Dir ->
-            normalize_path(Dir)
+            mnesia_dir_from_node(Context);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, mnesia_dir, Dir, environment)
     end;
-get_mnesia_dir(Context, MnesiaBaseDir) ->
-    get_mnesia_dir_from_env(Context, MnesiaBaseDir).
+mnesia_dir(Context) ->
+    mnesia_dir_from_env(Context).
 
-get_mnesia_dir_from_env(Context, MnesiaBaseDir) ->
-    Dir = get_prefixed_env_var(
-            "RABBITMQ_MNESIA_DIR",
-            get_default_mnesia_dir(Context, MnesiaBaseDir)),
-    normalize_path(Dir).
+mnesia_dir_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_MNESIA_DIR") of
+        false ->
+            Dir = get_default_mnesia_dir(Context),
+            update_context(Context, mnesia_dir, Dir, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, mnesia_dir, Dir, environment)
+    end.
 
-get_mnesia_dir_from_node(Remote) ->
+mnesia_dir_from_node(#{from_remote_node := Remote} = Context) ->
     Ret = query_remote(Remote, application, get_env, [mnesia, dir]),
     case Ret of
         {ok, undefined} ->
             throw({query, Remote, {mnesia, dir, undefined}});
-        {ok, {ok, Dir}} ->
-            normalize_path(Dir);
+        {ok, {ok, Value}} ->
+            Dir = normalize_path(Value),
+            update_context(Context, mnesia_dir, Dir, remote_node);
         {badrpc, nodedown} ->
-            undefined
+            update_context(Context, mnesia_dir, undefined, default)
     end.
 
-get_default_mnesia_dir(#{os_type := {unix, _}, nodename := Nodename}, MnesiaBaseDir) ->
+get_default_mnesia_dir(#{os_type := {unix, _},
+                         nodename := Nodename,
+                         mnesia_base_dir := MnesiaBaseDir})
+  when MnesiaBaseDir =/= undefined ->
     filename:join(MnesiaBaseDir, atom_to_list(Nodename));
-get_default_mnesia_dir(#{os_type := {win32, _}, nodename := Nodename}, MnesiaBaseDir) ->
+get_default_mnesia_dir(#{os_type := {win32, _},
+                         nodename := Nodename,
+                         mnesia_base_dir := MnesiaBaseDir})
+  when MnesiaBaseDir =/= undefined ->
     filename:join(MnesiaBaseDir, atom_to_list(Nodename) ++ "-mnesia").
 
 %% -------------------------------------------------------------------
@@ -733,14 +794,17 @@ get_default_mnesia_dir(#{os_type := {win32, _}, nodename := Nodename}, MnesiaBas
 %%   Directory where to store Ra state for quorum queues.
 %%   Default: ${RABBITMQ_MNESIA_DIR}/quorum
 
-quorum_dir(Context) ->
-    QuorumQueueDir = get_quorum_queue_dir(Context),
-    Context#{quorum_queue_dir => QuorumQueueDir}.
-
-get_quorum_queue_dir(#{mnesia_dir := MnesiaDir}) ->
-    Default = filename:join(MnesiaDir, "quorum"),
-    Dir = get_prefixed_env_var("RABBITMQ_QUORUM_DIR", Default),
-    normalize_path(Dir).
+quorum_queue_dir(#{mnesia_dir := MnesiaDir} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_QUORUM_DIR") of
+        false when MnesiaDir =/= undefined ->
+            Dir = filename:join(MnesiaDir, "quorum"),
+            update_context(Context, quorum_queue_dir, Dir, default);
+        false when MnesiaDir =:= undefined ->
+            update_context(Context, quorum_queue_dir, undefined, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, quorum_queue_dir, Dir, environment)
+    end.
 
 %% -------------------------------------------------------------------
 %%
@@ -752,23 +816,27 @@ get_quorum_queue_dir(#{mnesia_dir := MnesiaDir}) ->
 %%   Whether to keep or remove the PID file on Erlang VM exit.
 %%   Default: true
 
-pid_file(Context) ->
-    PidFile = get_pid_file_path(Context),
-    KeepPidFile = keep_pid_file_on_exit(),
-    Context#{pid_file => PidFile,
-             keep_pid_file_on_exit => KeepPidFile}.
+pid_file(#{mnesia_base_dir := MnesiaBaseDir,
+           nodename := Nodename} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_PID_FILE") of
+        false when MnesiaBaseDir =/= undefined ->
+            File = filename:join(MnesiaBaseDir,
+                                 atom_to_list(Nodename) ++ ".pid"),
+            update_context(Context, pid_file, File, default);
+        false when MnesiaBaseDir =:= undefined ->
+            update_context(Context, pid_file, undefined, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, pid_file, File, environment)
+    end.
 
-get_pid_file_path(#{mnesia_base_dir := MnesiaBaseDir,
-                    nodename := Nodename}) ->
-    File = get_prefixed_env_var(
-             "RABBITMQ_PID_FILE",
-             filename:join(MnesiaBaseDir, atom_to_list(Nodename) ++ ".pid")),
-    normalize_path(File).
-
-keep_pid_file_on_exit() ->
+keep_pid_file_on_exit(Context) ->
     case get_prefixed_env_var("RABBITMQ_KEEP_PID_FILE_ON_EXIT") of
-        false -> false;
-        Value -> value_is_yes(Value)
+        false ->
+            update_context(Context, keep_pid_file_on_exit, false, default);
+        Value ->
+            Keep = value_is_yes(Value),
+            update_context(Context, keep_pid_file_on_exit, Keep, environment)
     end.
 
 %% -------------------------------------------------------------------
@@ -777,39 +845,68 @@ keep_pid_file_on_exit() ->
 %%   File used to store enabled feature flags.
 %%   Default: ${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-feature_flags
 
-feature_flags_file(Context) ->
-    FFFile = get_feature_flags_file(Context),
-    Context#{feature_flags_file => FFFile}.
-
-get_feature_flags_file(#{from_remote_node := Remote}) ->
+feature_flags_file(#{from_remote_node := Remote} = Context) ->
     case get_prefixed_env_var("RABBITMQ_FEATURE_FLAGS_FILE") of
         false when Remote =:= offline ->
-            undefined;
+            update_context(Context, feature_flags_file, undefined, default);
         false ->
-            get_feature_flags_file_from_node(Remote);
-        File ->
-            normalize_path(File)
+            feature_flags_file_from_node(Context);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, feature_flags_file, File, environment)
     end;
-get_feature_flags_file(Context) ->
-    get_feature_flags_file_from_env(Context).
+feature_flags_file(Context) ->
+    feature_flags_file_from_env(Context).
 
-get_feature_flags_file_from_env(#{mnesia_base_dir := MnesiaBaseDir,
-                                  nodename := Nodename}) ->
-    Default = filename:join(MnesiaBaseDir,
-                            atom_to_list(Nodename) ++ "-feature_flags"),
-    File = get_env_var("RABBITMQ_FEATURE_FLAGS_FILE", Default),
-    normalize_path(File).
+feature_flags_file_from_env(#{mnesia_base_dir := MnesiaBaseDir,
+                              nodename := Nodename} = Context) ->
+    case get_env_var("RABBITMQ_FEATURE_FLAGS_FILE") of
+        false ->
+            File = filename:join(MnesiaBaseDir,
+                                 atom_to_list(Nodename) ++ "-feature_flags"),
+            update_context(Context, feature_flags_file, File, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, feature_flags_file, File, environment)
+    end.
 
-get_feature_flags_file_from_node(Remote) ->
+feature_flags_file_from_node(#{from_remote_node := Remote} = Context) ->
     Ret = query_remote(Remote,
                         application, get_env, [rabbit, feature_flags_file]),
     case Ret of
         {ok, undefined} ->
             throw({query, Remote, {rabbit, feature_flags_file, undefined}});
-        {ok, {ok, File}} ->
-            normalize_path(File);
+        {ok, {ok, Value}} ->
+            File = normalize_path(Value),
+            update_context(Context, feature_flags_file, File, remote_node);
         {badrpc, nodedown} ->
-            undefined
+            update_context(Context, feature_flags_file, undefined, default)
+    end.
+
+forced_feature_flags_on_init(Context) ->
+    Value = get_prefixed_env_var("RABBITMQ_FEATURE_FLAGS",
+                                 [keep_empty_string_as_is]),
+    case Value of
+        false ->
+            %% get_prefixed_env_var() considers an empty string
+            %% is the same as an undefined environment variable.
+            update_context(Context,
+                           forced_feature_flags_on_init, undefined, default);
+        _ ->
+            Flags = [list_to_atom(V) || V <- string:lexemes(Value, ",")],
+            update_context(Context,
+                           forced_feature_flags_on_init, Flags, environment)
+    end.
+
+log_feature_flags_registry(Context) ->
+    case get_prefixed_env_var("RABBITMQ_LOG_FF_REGISTRY") of
+        false ->
+            update_context(Context,
+                           log_feature_flags_registry, false, default);
+        Value ->
+            Log = value_is_yes(Value),
+            update_context(Context,
+                           log_feature_flags_registry, Log, environment)
     end.
 
 %% -------------------------------------------------------------------
@@ -838,41 +935,36 @@ get_feature_flags_file_from_node(Remote) ->
 %%     a list of plugin names, separated by a coma (',')
 %%   Default: Empty (i.e. use ${RABBITMQ_ENABLED_PLUGINS_FILE})
 
-plugins_dirs(Context) ->
-    PluginsPath = get_plugins_path(Context),
-    PluginsExpandDir = get_plugins_expand_dir(Context),
-    EnabledPluginsFile = get_enabled_plugins_file(Context),
-    EnabledPlugins = get_enabled_plugins(),
-    Context#{plugins_path => PluginsPath,
-             plugins_expand_dir => PluginsExpandDir,
-             enabled_plugins_file => EnabledPluginsFile,
-             enabled_plugins => EnabledPlugins}.
-
-get_plugins_path(#{from_remote_node := Remote}) ->
+plugins_path(#{from_remote_node := Remote} = Context) ->
     case get_prefixed_env_var("RABBITMQ_PLUGINS_DIR") of
         false when Remote =:= offline ->
-            undefined;
+            update_context(Context, plugins_path, undefined, default);
         false ->
-            get_plugins_path_from_node(Remote);
+            plugins_path_from_node(Context);
         Path ->
-            Path
+            update_context(Context, plugins_path, Path, environment)
     end;
-get_plugins_path(Context) ->
-    get_plugins_path_from_env(Context).
+plugins_path(Context) ->
+    plugins_path_from_env(Context).
 
-get_plugins_path_from_env(Context) ->
-    get_prefixed_env_var(
-      "RABBITMQ_PLUGINS_DIR", get_default_plugins_path_from_env(Context)).
+plugins_path_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_PLUGINS_DIR") of
+        false ->
+            Path = get_default_plugins_path_from_env(Context),
+            update_context(Context, plugins_path, Path, default);
+        Path ->
+            update_context(Context, plugins_path, Path, environment)
+    end.
 
-get_plugins_path_from_node(Remote) ->
+plugins_path_from_node(#{from_remote_node := Remote} = Context) ->
     Ret = query_remote(Remote, application, get_env, [rabbit, plugins_dir]),
     case Ret of
         {ok, undefined} ->
             throw({query, Remote, {rabbit, plugins_dir, undefined}});
         {ok, {ok, Path}} ->
-            Path;
+            update_context(Context, plugins_path, Path, remote_node);
         {badrpc, nodedown} ->
-            undefined
+            update_context(Context, plugins_path, undefined, default)
     end.
 
 get_default_plugins_path(#{from_remote_node := offline}) ->
@@ -915,53 +1007,71 @@ get_default_plugins_path_from_node(Remote) ->
             undefined
     end.
 
-get_plugins_expand_dir(#{mnesia_base_dir := MnesiaBaseDir,
-                         nodename := Nodename}) ->
-    Dir = get_prefixed_env_var(
-            "RABBITMQ_PLUGINS_EXPAND_DIR",
-            filename:join(MnesiaBaseDir,
-                          atom_to_list(Nodename) ++ "-plugins-expand")),
-    normalize_path(Dir).
+plugins_expand_dir(#{mnesia_base_dir := MnesiaBaseDir,
+                     nodename := Nodename} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_PLUGINS_EXPAND_DIR") of
+        false when MnesiaBaseDir =/= undefined ->
+            Dir = filename:join(
+                    MnesiaBaseDir,
+                    atom_to_list(Nodename) ++ "-plugins-expand"),
+            update_context(Context, plugins_expand_dir, Dir, default);
+        false when MnesiaBaseDir =:= undefined ->
+            update_context(Context, plugins_expand_dir, undefined, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, plugins_expand_dir, Dir, environment)
+    end.
 
-get_enabled_plugins_file(#{from_remote_node := Remote}) ->
+enabled_plugins_file(#{from_remote_node := Remote} = Context) ->
     case get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS_FILE") of
         false when Remote =:= offline ->
-            undefined;
+            update_context(Context, enabled_plugins_file, undefined, default);
         false ->
-            get_enabled_plugins_file_from_node(Remote);
-        File ->
-            normalize_path(File)
+            enabled_plugins_file_from_node(Context);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, enabled_plugins_file, File, environment)
     end;
-get_enabled_plugins_file(Context) ->
-    get_enabled_plugins_file_from_env(Context).
+enabled_plugins_file(Context) ->
+    enabled_plugins_file_from_env(Context).
 
-get_enabled_plugins_file_from_env(Context) ->
-    File = get_prefixed_env_var(
-             "RABBITMQ_ENABLED_PLUGINS_FILE",
-             get_default_enabled_plugins_file(Context)),
-    normalize_path(File).
+enabled_plugins_file_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS_FILE") of
+        false ->
+            File = get_default_enabled_plugins_file(Context),
+            update_context(Context, enabled_plugins_file, File, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, enabled_plugins_file, File, environment)
+    end.
 
 get_default_enabled_plugins_file(#{config_base_dir := ConfigBaseDir}) ->
     filename:join(ConfigBaseDir, "enabled_plugins").
 
-get_enabled_plugins_file_from_node(Remote) ->
+enabled_plugins_file_from_node(#{from_remote_node := Remote} = Context) ->
     Ret = query_remote(Remote,
                        application, get_env, [rabbit, enabled_plugins_file]),
     case Ret of
         {ok, undefined} ->
             throw({query, Remote, {rabbit, enabled_plugins_file, undefined}});
-        {ok, {ok, File}} ->
-            File;
+        {ok, {ok, Value}} ->
+            File = normalize_path(Value),
+            update_context(Context, enabled_plugins_file, File, remote_node);
         {badrpc, nodedown} ->
-            undefined
+            update_context(Context, enabled_plugins_file, undefined, default)
     end.
 
-get_enabled_plugins() ->
+enabled_plugins(Context) ->
     case get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS") of
-        false  -> undefined;
-        "ALL"  -> all;
-        "NONE" -> [];
-        Value  -> [list_to_atom(P) || P <- string:lexemes(Value, ",")]
+        false ->
+            update_context(Context, enabled_plugins, undefined, default);
+        "ALL" ->
+            update_context(Context, enabled_plugins, all, environment);
+        "NONE" ->
+            update_context(Context, enabled_plugins, [], environment);
+        Value ->
+            Plugins = [list_to_atom(P) || P <- string:lexemes(Value, ",")],
+            update_context(Context, enabled_plugins, Plugins, environment)
     end.
 
 %% -------------------------------------------------------------------
@@ -978,24 +1088,22 @@ get_enabled_plugins() ->
 %%   Erlang distribution TCP port.
 %%   Default: ${RABBITMQ_NODE_PORT} + 20000
 
-tcp_configuration(Context) ->
-    AmqpIpAddress = get_amqp_ipaddr(),
-    AmqpTcpPort = get_amqp_tcp_port(),
-    DistTcpPort = get_erlang_dist_tcp_port(AmqpTcpPort),
-    Context#{amqp_ipaddr_and_tcp_port => {AmqpIpAddress, AmqpTcpPort},
-             erlang_dist_tcp_port => DistTcpPort}.
+amqp_ipaddr(Context) ->
+    case get_prefixed_env_var("RABBITMQ_NODE_IP_ADDRESS") of
+        false ->
+            update_context(Context, amqp_ipaddr, "auto", default);
+        Value ->
+            update_context(Context, amqp_ipaddr, Value, environment)
+    end.
 
-get_amqp_ipaddr() ->
-    get_prefixed_env_var("RABBITMQ_NODE_IP_ADDRESS", "auto").
-
-get_amqp_tcp_port() ->
-    Default = 5672,
+amqp_tcp_port(Context) ->
     case get_prefixed_env_var("RABBITMQ_NODE_PORT") of
         false ->
-            Default;
+            update_context(Context, amqp_tcp_port, 5672, default);
         TcpPortStr ->
             try
-                erlang:list_to_integer(TcpPortStr)
+                TcpPort = erlang:list_to_integer(TcpPortStr),
+                update_context(Context, amqp_tcp_port, TcpPort, environment)
             catch
                 _:badarg ->
                     rabbit_log_prelaunch:error(
@@ -1005,14 +1113,16 @@ get_amqp_tcp_port() ->
             end
     end.
 
-get_erlang_dist_tcp_port(AmqpTcpPort) ->
-    Default = AmqpTcpPort + 20000,
+erlang_dist_tcp_port(#{amqp_tcp_port := AmqpTcpPort} = Context) ->
     case get_prefixed_env_var("RABBITMQ_DIST_PORT") of
         false ->
-            Default;
+            TcpPort = AmqpTcpPort + 20000,
+            update_context(Context, erlang_dist_tcp_port, TcpPort, default);
         TcpPortStr ->
             try
-                erlang:list_to_integer(TcpPortStr)
+                TcpPort = erlang:list_to_integer(TcpPortStr),
+                update_context(Context,
+                               erlang_dist_tcp_port, TcpPort, environment)
             catch
                 _:badarg ->
                     rabbit_log_prelaunch:error(
@@ -1024,45 +1134,69 @@ get_erlang_dist_tcp_port(AmqpTcpPort) ->
 
 %% -------------------------------------------------------------------
 %%
-%%  SYS_PREFIX [Unix only]
-%%    Default: ""
+%% NOTIFY_SOCKET [Linux only]
+%%   Default: unset
+
+systemd_notify_socket(Context) ->
+    case get_env_var("NOTIFY_SOCKET") of
+        false ->
+            update_context(Context,
+                           systemd_notify_socket, undefined, default);
+        Socket ->
+            update_context(Context,
+                           systemd_notify_socket, Socket, environment)
+    end.
+
+%% -------------------------------------------------------------------
 %%
-%%  RABBITMQ_BASE [Windows only]
-%%    Directory where to put RabbitMQ data.
-%%    Default: !APPDATA!\RabbitMQ
+%% SYS_PREFIX [Unix only]
+%%   Default: ""
+%%
+%% RABBITMQ_BASE [Windows only]
+%%   Directory where to put RabbitMQ data.
+%%   Default: !APPDATA!\RabbitMQ
 
-data_dir(Context) ->
-    DataDir = get_rabbitmq_data_dir(Context),
-    RabbitmqHome = get_rabbitmq_home(Context),
-    Context#{data_dir => DataDir,
-             rabbitmq_home => RabbitmqHome}.
+sys_prefix(#{os_type := {unix, _}} = Context) ->
+    case get_env_var("SYS_PREFIX") of
+        false ->
+            update_context(Context, sys_prefix, "", default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, sys_prefix, Dir, environment)
+    end;
+sys_prefix(Context) ->
+    Context.
 
-get_rabbitmq_data_dir(#{os_type := {unix, _}}) ->
-    SysPrefix = get_sys_prefix(),
-    filename:join([SysPrefix, "var", "lib", "rabbitmq"]);
-get_rabbitmq_data_dir(#{os_type := {win32, _}}) ->
-    get_rabbitmq_base().
+rabbitmq_base(#{os_type := {win32, _}} = Context) ->
+    case get_env_var("RABBITMQ_BASE") of
+        false ->
+            AppData = normalize_path(get_env_var("APPDATA")),
+            Dir = filename:join(AppData, "RabbitMQ"),
+            update_context(Context, rabbitmq_base, Dir, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, rabbitmq_base, Dir, environment)
+    end;
+rabbitmq_base(Context) ->
+    Context.
 
-get_sys_prefix() ->
-    Dir = get_env_var("SYS_PREFIX", ""),
-    normalize_path(Dir).
+data_dir(#{os_type := {unix, _},
+           sys_prefix := SysPrefix} = Context) ->
+    Dir = filename:join([SysPrefix, "var", "lib", "rabbitmq"]),
+    update_context(Context, data_dir, Dir);
+data_dir(#{os_type := {win32, _},
+           rabbitmq_base := RabbitmqBase} = Context) ->
+    update_context(Context, data_dir, RabbitmqBase).
 
-get_rabbitmq_base() ->
-    Dir = case get_env_var("RABBITMQ_BASE") of
-              false ->
-                  AppData = get_env_var("APPDATA"),
-                  filename:join(AppData, "RabbitMQ");
-              Value ->
-                  Value
-          end,
-    normalize_path(Dir).
-
-get_rabbitmq_home(Context) ->
-    Dir = case get_env_var("RABBITMQ_HOME") of
-              false -> filename:dirname(get_default_plugins_path(Context));
-              Value -> Value
-          end,
-    normalize_path(Dir).
+rabbitmq_home(Context) ->
+    case get_env_var("RABBITMQ_HOME") of
+        false ->
+            Dir = filename:dirname(get_default_plugins_path(Context)),
+            update_context(Context, rabbitmq_home, Dir, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, rabbitmq_home, Dir, environment)
+    end.
 
 %% -------------------------------------------------------------------
 %%
@@ -1070,30 +1204,39 @@ get_rabbitmq_home(Context) ->
 %%    Indicate if an Erlang shell is started or not.
 %%    Default: false
 
-shell(Context) ->
-    IsInteractive = get_allow_input(),
-    ColorSupport = does_output_support_color(Context),
-    Context#{interactive_shell => IsInteractive,
-             output_supports_colors => ColorSupport}.
+interactive_shell(Context) ->
+    case get_env_var("RABBITMQ_ALLOW_INPUT") of
+        false ->
+            update_context(Context,
+                           interactive_shell, false, default);
+        Value ->
+            update_context(Context,
+                           interactive_shell, value_is_yes(Value), environment)
+    end.
 
-get_allow_input() ->
-    value_is_yes(get_env_var("RABBITMQ_ALLOW_INPUT")).
-
-% FIXME: We would need a way to call isatty(3) to make sure the output
-% is a terminal.
-does_output_support_color(#{os_type := {unix, _}}) -> true;
-does_output_support_color(#{os_type := {win32, _}}) -> false.
+%% FIXME: We would need a way to call isatty(3) to make sure the output
+%% is a terminal.
+output_supports_colors(#{os_type := {unix, _}} = Context) ->
+    update_context(Context, output_supports_colors, true, default);
+output_supports_colors(#{os_type := {win32, _}} = Context) ->
+    update_context(Context, output_supports_colors, false, default).
 
 %% -------------------------------------------------------------------
 %% Loading of rabbitmq-env.conf.
 %% -------------------------------------------------------------------
 
-load_conf_env_file(#{os_type := {unix, _}} = Context) ->
-    SysPrefix = get_sys_prefix(),
-    Default = filename:join(
-                [SysPrefix, "etc", "rabbitmq", "rabbitmq-env.conf"]),
-    ConfEnvFile = get_prefixed_env_var("RABBITMQ_CONF_ENV_FILE", Default),
-    Context1 = Context#{conf_env_file => ConfEnvFile},
+load_conf_env_file(#{os_type := {unix, _},
+                     sys_prefix := SysPrefix} = Context) ->
+    {ConfEnvFile, Origin} =
+    case get_prefixed_env_var("RABBITMQ_CONF_ENV_FILE") of
+        false ->
+            File = filename:join(
+                     [SysPrefix, "etc", "rabbitmq", "rabbitmq-env.conf"]),
+            {File, default};
+        Value ->
+            {normalize_path(Value), environment}
+    end,
+    Context1 = update_context(Context, conf_env_file, ConfEnvFile, Origin),
     case loading_conf_env_file_enabled(Context1) of
         true ->
             case filelib:is_regular(ConfEnvFile) of
@@ -1115,12 +1258,17 @@ load_conf_env_file(#{os_type := {unix, _}} = Context) ->
               [ConfEnvFile]),
             Context1
     end;
-load_conf_env_file(#{os_type := {win32, _}} = Context) ->
-    RabbitmqBase = get_rabbitmq_base(),
-    Default = filename:join(
-                [RabbitmqBase, "rabbitmq-env-conf.bat"]),
-    ConfEnvFile = get_prefixed_env_var("RABBITMQ_CONF_ENV_FILE", Default),
-    Context1 = Context#{conf_env_file => ConfEnvFile},
+load_conf_env_file(#{os_type := {win32, _},
+                     rabbitmq_base := RabbitmqBase} = Context) ->
+    {ConfEnvFile, Origin} =
+    case get_prefixed_env_var("RABBITMQ_CONF_ENV_FILE") of
+        false ->
+            File = filename:join([RabbitmqBase, "rabbitmq-env-conf.bat"]),
+            {File, default};
+        Value ->
+            {normalize_path(Value), environment}
+    end,
+    Context1 = update_context(Context, conf_env_file, ConfEnvFile, Origin),
     case loading_conf_env_file_enabled(Context1) of
         true ->
             rabbit_log_prelaunch:notice(
@@ -1163,8 +1311,8 @@ do_load_conf_env_file(Context, Sh, ConfEnvFile) ->
                "set", [ConfEnvFile, Marker]),
     Args = ["-ex", "-c", Script],
 
-    SysPrefix = get_sys_prefix(),
-    RabbitmqHome = get_rabbitmq_home(Context),
+    #{sys_prefix := SysPrefix,
+      rabbitmq_home := RabbitmqHome} = Context,
     MainConfigFile = re:replace(
                        get_default_main_config_file(Context),
                        "\\.(conf|config)$", "", [{return, list}]),
@@ -1304,27 +1452,23 @@ skip_sh_function(Context, [_ | Lines], Vars) ->
 %% -------------------------------------------------------------------
 
 get_env_var(VarName) ->
+    get_env_var(VarName, []).
+
+get_env_var(VarName, Options) ->
+    KeepEmptyString = lists:member(keep_empty_string_as_is, Options),
     case os:getenv(VarName) of
-        false -> false;
-        ""    -> false;
-        Value -> Value
+        false                       -> false;
+        "" when not KeepEmptyString -> false;
+        Value                       -> Value
     end.
 
-get_env_var(VarName, DefaultValue) ->
-    case get_env_var(VarName) of
-        false -> DefaultValue;
-        Value -> Value
-    end.
+get_prefixed_env_var(VarName) ->
+    get_prefixed_env_var(VarName, []).
 
-get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName) ->
-    case get_env_var(VarName) of
-        false -> get_env_var(Suffix);
-        Value -> Value
-    end.
-
-get_prefixed_env_var(VarName, DefaultValue) ->
-    case get_prefixed_env_var(VarName) of
-        false -> DefaultValue;
+get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName,
+                     Options) ->
+    case get_env_var(VarName, Options) of
+        false -> get_env_var(Suffix, Options);
         Value -> Value
     end.
 
@@ -1376,7 +1520,7 @@ maybe_setup_dist_for_remote_query(
     case is_rabbitmq_loaded_on_remote_node(Context1) of
         true  -> Context1;
         false -> maybe_stop_dist_for_remote_query(
-                   Context#{from_remote_node => offline})
+                   update_context(Context, from_remote_node, offline))
     end;
 maybe_setup_dist_for_remote_query(Context) ->
     Context.
@@ -1394,7 +1538,7 @@ setup_dist_for_remote_query(#{from_remote_node := {Remote, _}} = Context,
     Nodename = rabbit_nodes_common:make({RndNamePart, HostPart}),
     case net_kernel:start([Nodename, NameType]) of
         {ok, _} ->
-            Context#{dist_started_for_remote_query => true};
+            update_context(Context, dist_started_for_remote_query, true);
         {error, {already_started, _}} ->
             Context;
         {error, {{already_started, _}, _}} ->
