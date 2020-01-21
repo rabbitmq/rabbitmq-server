@@ -1343,8 +1343,6 @@ var_is_set(Var) ->
 value_is_yes(Value) when is_list(Value) orelse is_binary(Value) ->
     Options = [{capture, none}, caseless],
     re:run(string:trim(Value), "^(1|yes|true)$", Options) =:= match;
-value_is_yes(Value) when is_boolean(Value) ->
-    Value;
 value_is_yes(_) ->
     false.
 
