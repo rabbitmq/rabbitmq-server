@@ -976,17 +976,7 @@ get_default_plugins_path(Context) ->
 
 get_default_plugins_path_from_env(#{os_type := OSType}) ->
     ThisModDir = this_module_dir(),
-    PluginsDir = case filename:basename(ThisModDir) of
-                     "ebin" ->
-                         filename:dirname(
-                           filename:dirname(
-                             filename:dirname(ThisModDir)));
-                     _ ->
-                         filename:join(
-                           filename:dirname(
-                             filename:dirname(ThisModDir)),
-                           "plugins")
-                 end,
+    PluginsDir = rabbit_common_mod_location_to_plugins_dir(ThisModDir),
     case {OSType, PluginsDir} of
         {{unix, _}, "/usr/lib/rabbitmq/" ++ _} ->
             UserPluginsDir = filename:join(
@@ -997,14 +987,36 @@ get_default_plugins_path_from_env(#{os_type := OSType}) ->
     end.
 
 get_default_plugins_path_from_node(Remote) ->
-    Ret = query_remote(Remote, code, lib_dir, [rabbit_common]),
+    Ret = query_remote(Remote, code, where_is_file, ["rabbit_common.app"]),
     case Ret of
-        {ok, {error, _} = Error} ->
-            throw({query, Remote, {code, lib_dir, Error}});
+        {ok, non_existing = Error} ->
+            throw({query, Remote, {code, where_is_file, Error}});
         {ok, Path} ->
-            filename:dirname(Path);
+            rabbit_common_mod_location_to_plugins_dir(filename:dirname(Path));
         {badrpc, nodedown} ->
             undefined
+    end.
+
+rabbit_common_mod_location_to_plugins_dir(ModDir) ->
+    case filename:basename(ModDir) of
+        "ebin" ->
+            case filelib:is_dir(ModDir) of
+                false ->
+                    %% rabbit_common in the plugin's .ez archive.
+                    filename:dirname(
+                      filename:dirname(
+                        filename:dirname(ModDir)));
+                true ->
+                    %% rabbit_common in the plugin's directory.
+                    filename:dirname(
+                      filename:dirname(ModDir))
+            end;
+        _ ->
+            %% rabbit_common in the CLI escript.
+            filename:join(
+              filename:dirname(
+                filename:dirname(ModDir)),
+              "plugins")
     end.
 
 plugins_expand_dir(#{mnesia_base_dir := MnesiaBaseDir,
@@ -1496,10 +1508,12 @@ normalize_path(Path) ->
     filename:join(filename:split(Path)).
 
 this_module_dir() ->
-    {_, _, File} = code:get_object_code(?MODULE),
+    File = code:which(?MODULE),
     %% Possible locations:
-    %%   - the rabbit_common plugin:
+    %%   - the rabbit_common plugin (as an .ez archive):
     %%     .../plugins/rabbit_common-$version.ez/rabbit_common-$version/ebin
+    %%   - the rabbit_common plugin (as a directory):
+    %%     .../plugins/rabbit_common-$version/ebin
     %%   - the CLI:
     %%     .../escript/$cli
     filename:dirname(File).
