@@ -1,87 +1,86 @@
 $(document).ready(function() {
     if (enable_uaa) {
         switch (oauth2_implementation) {
-          case uaa_oauth2_implementation:
-            get(uaa_location + "/info", "application/json", function(req) {
-                if (req.status !== 200) {
-                    replace_content('outer', format('login_uaa', {}));
-                    replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + 
-                                                    '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Single Log On</button>');
-                } else {
-                    replace_content('outer', format('login_uaa', {}));
-                }
-            });
-            break;
-          case identityServer_oauth2_implementation:
-            siteURI = new URL(window.location.href);
-            hostOrigin = siteURI.origin;
-
-            oidcClientSettings = {
-                authority: uaa_location,
-                client_id: uaa_client_id,
-                redirect_uri: hostOrigin + "/callback.html",
-                response_type: "id_token token",
-                scope: oauth2_scopes,
-                post_logout_redirect_uri: hostOrigin + "/index.html",
-                silent_redirect_uri: hostOrigin + "/silent.html",
-                automaticSilentRenew: true,
-                loadUserInfo: true
-            };
-            
-            // Uncomment for debug    
-            //Oidc.Log.logger = console;
-            oidcClient = new Oidc.UserManager(oidcClientSettings);
-
-            if (!oidcClientEventInitialized) {
-
-                oidcClientEventInitialized = true;
-                oidcClient.events.addAccessTokenExpiring(function (e) {
-                    oidcClient.signinSilentCallback();
-                });
-                oidcClient.events.addAccessTokenExpired(function (e) {
-                    oidcClient.removeUser().then(function() {
+            case uaa_oauth2_implementation:
+                get(uaa_location + "/info", "application/json", function(req) {
+                    if (req.status !== 200) {
                         replace_content('outer', format('login_uaa', {}));
-                        replace_content('login-status', '<p class="warning">' + " Access token expired! User Logged out!"  + 
-                                                        '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
-                        console.warn("Access token has expired. User logged out.");
-                    });
+                        replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + 
+                                                        '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Single Log On</button>');
+                    } else {
+                        replace_content('outer', format('login_uaa', {}));
+                    }
                 });
-                oidcClient.events.addSilentRenewError(function (e) {
-                    console.warn("Automatic silent token renew has failed: ", e.message);
-                });
-                oidcClient.events.addUserLoaded(function (user) {
-                    set_auth_pref(uaa_client_id + ':' + user.access_token);
-                    store_pref('jwt_token', user.access_token);
-                });
-                oidcClient.events.addUserUnloaded(function (e) {
-                    clear_pref('auth');
-                    clear_pref('jwt_token');
-                    clear_cookie_value('auth');
-                    replace_content('outer', format('login_uaa', {}));
-                    replace_content('login-status', '<p class="success">' + "Logged out successfully!" +
-                                                    '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
-                    console.log("User session has been terminated. Token cleared.");
-                });
-            }
+                break;
+            case identityServer_oauth2_implementation:
+                siteURI = new URL(window.location.href);
+                hostOrigin = siteURI.origin;
 
-            get(uaa_location + "/.well-known/openid-configuration", "application/json", function(req) {
-                if (req.status !== 200) {
-                    replace_content('outer', format('login_uaa', {}));
-                    replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running IdentityServer instance!" + '</p>');
-                } else {
-                    oidcClient.getUser().then(function(user) {
-                        if (user) {
-                            if (Math.round(new Date().getTime() / 1000) > user.expires_at){
-                                oauth2_logout();
-                            }
-                        }
-                        oauth2_login();
-                    });
+                oidcClientSettings = {
+                    authority: uaa_location,
+                    client_id: uaa_client_id,
+                    redirect_uri: hostOrigin + "/postSigninCallback.html",
+                    response_type: "id_token token",
+                    scope: identityserver_scopes,
+                    post_logout_redirect_uri: hostOrigin + "/index.html",
+                    silent_redirect_uri: hostOrigin + "/silentTokenRenewal.html",
+                    automaticSilentRenew: true,
+                    loadUserInfo: true
                 };
-            });
-            break;
-          default:
-            break;
+            
+                // Uncomment for debug    
+                //Oidc.Log.logger = console;
+                oidcClient = new Oidc.UserManager(oidcClientSettings);
+
+                if (!oidcClientEventInitialized) {
+                    oidcClientEventInitialized = true;
+                    oidcClient.events.addAccessTokenExpiring(function (e) {
+                        oidcClient.signinSilentCallback();
+                    });
+                    oidcClient.events.addAccessTokenExpired(function (e) {
+                        oidcClient.removeUser().then(function() {
+                            replace_content('outer', format('login_uaa', {}));
+                            replace_content('login-status', '<p class="warning">' + " Access token expired! User Logged out!"  + 
+                                                            '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
+                            console.warn("Access token has expired. User logged out.");
+                        });
+                    });
+                    oidcClient.events.addSilentRenewError(function (e) {
+                        console.warn("Automatic silent token renew has failed: ", e.message);
+                    });
+                    oidcClient.events.addUserLoaded(function (user) {
+                        set_auth_pref(uaa_client_id + ':' + user.access_token);
+                        store_pref('jwt_token', user.access_token);
+                    });
+                    oidcClient.events.addUserUnloaded(function (e) {
+                        clear_pref('auth');
+                        clear_pref('jwt_token');
+                        clear_cookie_value('auth');
+                        replace_content('outer', format('login_uaa', {}));
+                        replace_content('login-status', '<p class="success">' + "Logged out successfully!" +
+                                                        '</p> <button id="loginWindow" style="text-align: center; margin: 0 auto;" onclick="oauth2_login()">Log in</button>');
+                        console.log("User session has been terminated. Token cleared.");
+                    });
+                }
+
+                get(uaa_location + "/.well-known/openid-configuration", "application/json", function(req) {
+                    if (req.status !== 200) {
+                        replace_content('outer', format('login_uaa', {}));
+                        replace_content('login-status', '<p class="warning">' + uaa_location + " does not appear to be a running IdentityServer instance!" + '</p>');
+                    } else {
+                        oidcClient.getUser().then(function(user) {
+                            if (user) {
+                                if (Math.round(new Date().getTime() / 1000) > user.expires_at){
+                                    oauth2_logout();
+                                }
+                            }
+                            oauth2_login();
+                        });
+                    };
+                });
+                break;
+            default:
+                break;
         }
     } else {
         replace_content('outer', format('login', {}));
@@ -256,7 +255,6 @@ function check_login() {
                     oidcClient = new Oidc.UserManager(oidcClientSettings);
                     oidcClient.getUser().then(function(user){
                         if (user){
-                            user.token
                             oidcClient.removeUser().then(function() {
                                 replace_content('outer', format('login_uaa', {}));
                                 replace_content('login-status', '<p class="warning">' + " Unauthorized access! User Logged out!"  + 
@@ -1871,4 +1869,35 @@ function get_chart_range_type(arg) {
 
     console.log('[WARNING]: range type not found for arg: ' + arg);
     return 'basic';
+}
+
+function initialize_uaa(uaa_location, uaa_client_id) {
+    Singular.init({
+        singularLocation: './js/singular/',
+        uaaLocation: uaa_location,
+        clientId: uaa_client_id,
+        onIdentityChange: function (identity) {
+          oauth2_user_logged_in = true;
+          start_app_login();
+        },
+        onLogout: function () {
+          oauth2_user_logged_in = false;
+          var hash = window.location.hash.substring(1);
+          var params = {}
+          hash.split('&').map(hk => {
+          let temp = hk.split('=');
+          params[temp[0]] = temp[1]
+          });
+          if (params.error) {
+            uaa_invalid = true;
+            replace_content('login-status', '<p class="warning">' + decodeURIComponent(params.error) + ':' + decodeURIComponent(params.error_description) + '</p> <button id="loginWindow" onclick="oauth2_login()">Click here to log out - biatch!</button>');
+            } else {
+            replace_content('login-status', '<button id="loginWindow" onclick="oauth2_login()">Click here to log in</button>');
+            }
+          }
+        });
+}
+
+function initialize_identityserver() {
+    // nothing to initialize
 }

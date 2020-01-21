@@ -49,20 +49,20 @@ to_json(ReqData, Context) ->
                         identityserver ->
                             UAAClientId = application:get_env(rabbitmq_management, uaa_client_id, ""),
                             UAALocation = application:get_env(rabbitmq_management, uaa_location, ""),
-                            OAuth2Scopes = application:get_env(rabbitmq_management, oauth2_scopes, ""),
-                            case is_invalid([UAAClientId, UAALocation, OAuth2Scopes]) of
+                            IdentityServerScopes = application:get_env(rabbitmq_management, identityserver_scopes, ""),
+                            case is_invalid([UAAClientId, UAALocation, IdentityServerScopes]) of
                                 true ->
                                     log_invalid_configuration(),
                                     [{enable_uaa, false}, 
                                     {uaa_client_id, <<>>},
                                     {uaa_location, <<>>},
-                                    {oauth2_scopes, <<>>},
+                                    {identityserver_scopes, <<>>},
                                     {oauth2_implementation, identityserver}];
                                 false ->
                                     [{enable_uaa, true},
                                     {uaa_client_id, rabbit_data_coercion:to_binary(UAAClientId)},
                                     {uaa_location, rabbit_data_coercion:to_binary(UAALocation)},
-                                    {oauth2_scopes, rabbit_data_coercion:to_binary(OAuth2Scopes)},
+                                    {identityserver_scopes, rabbit_data_coercion:to_binary(IdentityServerScopes)},
                                     {oauth2_implementation, rabbit_data_coercion:to_binary(OAuth2Implementation)}]
                             end
                         end;
@@ -70,7 +70,7 @@ to_json(ReqData, Context) ->
                         [{enable_uaa, false},
                         {uaa_client_id, <<>>},
                         {uaa_location, <<>>},
-                        {oauth2_scopes, <<>>},
+                        {identityserver_scopes, <<>>},
                         {oauth2_implementation, uaa}]
                 end,
     rabbit_mgmt_util:reply(Data, ReqData, Context).

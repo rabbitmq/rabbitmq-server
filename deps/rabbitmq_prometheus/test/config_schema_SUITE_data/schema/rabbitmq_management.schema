@@ -386,7 +386,7 @@ end}.
 {mapping, "management.uaa_location", "rabbitmq_management.uaa_location",
     [{datatype, string}]}.
 
-{mapping, "management.oauth2_scopes", "rabbitmq_management.oauth2_scopes",
+{mapping, "management.identityserver_scopes", "rabbitmq_management.identityserver_scopes",
     [{datatype, string}]}.
 
 {mapping, "management.oauth2_implementation", "rabbitmq_management.oauth2_implementation",

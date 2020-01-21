@@ -796,7 +796,7 @@ var last_page_out_of_range_error = 0;
 var enable_uaa;
 var uaa_client_id;
 var uaa_location;
-var oauth2_scopes;
+var identityserver_scopes;
 var oauth2_implementation;
 
 var uaa_oauth2_implementation = 'uaa';

@@ -3333,12 +3333,12 @@ oauth_test(Config) ->
                                 [rabbitmq_management, uaa_location]),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                 [rabbitmq_management, oauth2_implementation, identityserver]),
-    %% IdentityServer misconfiguration - Missings params - Client_Id, UAA_Location, OAuth2_Scopes
+    %% IdentityServer misconfiguration - Missings params - client_id, uaa_Location, identityserver_scopes
     Map4 = http_get(Config, "/auth", ?OK),
     ?assertEqual(false, maps:get(enable_uaa, Map4)),
     ?assertEqual(<<>>, maps:get(uaa_client_id, Map4)),
     ?assertEqual(<<>>, maps:get(uaa_location, Map4)),
-    ?assertEqual(<<>>, maps:get(oauth2_scopes, Map4)),
+    ?assertEqual(<<>>, maps:get(identityserver_scopes, Map4)),
     ?assertEqual(<<"identityserver">>, maps:get(oauth2_implementation, Map4)),
     %% Valid IdentityServer config
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
@@ -3346,12 +3346,12 @@ oauth_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbitmq_management, uaa_location, "http://localhost:5000/identityserver"]),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, oauth2_scopes, "rabbitmq.read:*/* rabbitmq.write:*/*"]),
+                                 [rabbitmq_management, identityserver_scopes, "rabbitmq.read:*/* rabbitmq.write:*/*"]),
     Map5 = http_get(Config, "/auth", ?OK),
     ?assertEqual(true, maps:get(enable_uaa, Map5)),
     ?assertEqual(<<"rabbitmq">>, maps:get(uaa_client_id, Map5)),
     ?assertEqual(<<"http://localhost:5000/identityserver">>, maps:get(uaa_location, Map5)),
-    ?assertEqual(<<"rabbitmq.read:*/* rabbitmq.write:*/*">>, maps:get(oauth2_scopes, Map5)),
+    ?assertEqual(<<"rabbitmq.read:*/* rabbitmq.write:*/*">>, maps:get(identityserver_scopes, Map5)),
     ?assertEqual(<<"identityserver">>, maps:get(oauth2_implementation, Map5)),
     %% Cleanup after IdentityServer
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,

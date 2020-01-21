@@ -30,38 +30,16 @@
       oauth2_implementation = auth.oauth2_implementation;
       uaa_client_id = auth.uaa_client_id;
       uaa_location = auth.uaa_location;
-      oauth2_scopes = auth.oauth2_scopes;
+      identityserver_scopes = auth.identityserver_scopes;
       oauth2_implementation = oauth2_implementation.toLowerCase()
       
       if (enable_uaa) {
         switch (oauth2_implementation) {
           case uaa_oauth2_implementation:
-            Singular.init({
-            singularLocation: './js/singular/',
-            uaaLocation: uaa_location,
-            clientId: uaa_client_id,
-            onIdentityChange: function (identity) {
-              oauth2_user_logged_in = true;
-              start_app_login();
-            },
-            onLogout: function () {
-              oauth2_user_logged_in = false;
-              var hash = window.location.hash.substring(1);
-              var params = {}
-              hash.split('&').map(hk => {
-              let temp = hk.split('=');
-              params[temp[0]] = temp[1]
-              });
-              if (params.error) {
-                uaa_invalid = true;
-                replace_content('login-status', '<p class="warning">' + decodeURIComponent(params.error) + ':' + decodeURIComponent(params.error_description) + '</p> <button id="loginWindow" onclick="oauth2_login()">Click here to log out - biatch!</button>');
-                } else {
-                replace_content('login-status', '<button id="loginWindow" onclick="oauth2_login()">Click here to log in</button>');
-                }
-              }
-            });
+            initialize_uua(uaa_location, uaa_client_id);
             break;
           case identityServer_oauth2_implementation:
+            initialize_identityserver();
             break;
           default:
             enable_uaa = false;
