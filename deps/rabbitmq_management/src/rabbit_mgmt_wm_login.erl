@@ -41,6 +41,8 @@ content_types_provided(ReqData, Context) ->
 content_types_accepted(ReqData, Context) ->
    {[{<<"application/x-www-form-urlencoded">>, accept_content}], ReqData, Context}.
 
+is_authorized(#{method := <<"OPTIONS">>} = ReqData, Context) ->
+    {true, ReqData, Context};
 is_authorized(ReqData0, Context) ->
     {ok, Body, ReqData} = cowboy_req:read_urlencoded_body(ReqData0),
     Username = proplists:get_value(<<"username">>, Body),
