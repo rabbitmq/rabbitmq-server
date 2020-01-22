@@ -25,6 +25,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
 
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
+  def scopes(), do: [:diagnostics, :queues]
+
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
