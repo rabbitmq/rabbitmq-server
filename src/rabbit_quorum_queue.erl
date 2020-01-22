@@ -963,8 +963,12 @@ transfer_leadership(Q, Destination) ->
     {RaName, _} = Pid = amqqueue:get_pid(Q),
     case ra:transfer_leadership(Pid, {RaName, Destination}) of
         ok ->
-            {_, _, {_, NewNode}} = ra:members(Pid),
-            {migrated, NewNode};
+          case ra:members(Pid) of
+            {_, _, {_, NewNode}} ->
+              {migrated, NewNode};
+            {timeout, _} ->
+              {not_migrated, ra_members_timeout}
+          end;
         already_leader ->
             {not_migrated, already_leader};
         {error, Reason} ->
