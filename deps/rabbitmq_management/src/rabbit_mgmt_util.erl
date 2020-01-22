@@ -21,6 +21,7 @@
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
          is_authorized_admin/3, vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
+         is_authorized_user/4,
          is_authorized_monitor/2, is_authorized_policies/2,
          is_authorized_vhost_visible/2,
          is_authorized_global_parameters/2]).
@@ -240,6 +241,11 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
                     {{false, ?AUTH_REALM}, ReqData, Context}
             end
     end.
+
+is_authorized_user(ReqData, Context, Username, Password) ->
+    Msg = <<"User not authorized">>,
+    Fun = fun(_) -> true end,
+    is_authorized(ReqData, Context, Username, Password, Msg, Fun).
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     ErrFun = fun (Msg) ->
