@@ -1524,10 +1524,7 @@ maybe_setup_dist_for_remote_query(
 maybe_setup_dist_for_remote_query(
   #{from_remote_node := {RemoteNode, _}} = Context) ->
     {NamePart, HostPart} = rabbit_nodes_common:parts(RemoteNode),
-    NameType = case string:find(HostPart, ".") of
-                   nomatch -> shortnames;
-                   _       -> longnames
-               end,
+    NameType = rabbit_nodes_common:name_type(RemoteNode),
     ok = rabbit_nodes_common:ensure_epmd(),
     Context1 = setup_dist_for_remote_query(
                  Context, NamePart, HostPart, NameType, 50),

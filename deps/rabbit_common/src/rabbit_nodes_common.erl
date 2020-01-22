@@ -26,7 +26,7 @@
 %% API
 %%
 
--export([make/1, parts/1, names/1, ensure_epmd/0, is_running/2, is_process_running/2]).
+-export([make/1, parts/1, names/1, name_type/1, ensure_epmd/0, is_running/2, is_process_running/2]).
 -export([cookie_hash/0, epmd_port/0, diagnostics/1]).
 
 -spec make({string(), string()} | string()) -> node().
@@ -62,6 +62,13 @@ parts(NodeStr) ->
         {Prefix, []}     -> {_, Suffix} = parts(node()),
                             {Prefix, Suffix};
         {Prefix, Suffix} -> {Prefix, tl(Suffix)}
+    end.
+
+name_type(Node) ->
+    {_, HostPart} = parts(Node),
+    case lists:member($., HostPart) of
+        false -> shortnames;
+        true  -> longnames
     end.
 
 epmd_port() ->
