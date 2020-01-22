@@ -281,4 +281,5 @@ become(BecomeNode) ->
 
 start_distribution(Name) ->
     rabbit_nodes:ensure_epmd(),
-    net_kernel:start([Name, rabbit_nodes:name_type()]).
+    NameType = rabbit_nodes_common:name_type(Name),
+    net_kernel:start([Name, NameType]).
