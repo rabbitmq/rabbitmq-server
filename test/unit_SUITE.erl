@@ -81,16 +81,18 @@ end_per_group(_, Config) -> Config.
 
 init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined ->
+                                   TC =:= decrypt_start_app_undefined;
+                                   TC =:= decrypt_start_app_wrong_passphrase ->
     application:load(rabbit),
-    application:set_env(rabbit, feature_flags_file, ""),
+    application:set_env(rabbit, feature_flags_file, "", [{persistent, true}]),
     Config;
 init_per_testcase(_Testcase, Config) ->
     Config.
 
 end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined ->
+                                   TC =:= decrypt_start_app_undefined;
+                                   TC =:= decrypt_start_app_wrong_passphrase ->
     application:unload(rabbit),
     application:unload(rabbit_shovel_test);
 end_per_testcase(decrypt_config, _Config) ->
@@ -262,12 +264,8 @@ decrypt_start_app_undefined(Config) ->
     %% Attempt to start our test application.
     %%
     %% We expect a failure during decryption because the passphrase is missing.
-    try
-        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
-    catch
-        exit:{bad_configuration, config_entry_decoder} -> ok;
-        _:Exception -> exit({unexpected_exception, Exception})
-    end.
+    ?assertExit({bad_configuration, config_entry_decoder},
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})).
 
 decrypt_start_app_wrong_passphrase(Config) ->
     %% Configure rabbit for decrypting configuration.
@@ -282,12 +280,8 @@ decrypt_start_app_wrong_passphrase(Config) ->
     %% Attempt to start our test application.
     %%
     %% We expect a failure during decryption because the passphrase is wrong.
-    try
-        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
-    catch
-        exit:{decryption_error,_,_} -> ok;
-        _:Exception -> exit({unexpected_exception, Exception})
-    end.
+    ?assertExit({decryption_error, _, _},
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})).
 
 rabbitmqctl_encode(_Config) ->
     % list ciphers and hashes
@@ -944,7 +938,12 @@ listing_plugins_from_multiple_directories(Config) ->
     lists:foreach(fun({Dir, AppName, Vsn}) ->
                           EzName = filename:join([Dir, io_lib:format("~s-~s.ez", [AppName, Vsn])]),
                           AppFileName = lists:flatten(io_lib:format("~s-~s/ebin/~s.app", [AppName, Vsn, AppName])),
-                          AppFileContents = list_to_binary(io_lib:format("~p.", [{application, AppName, [{vsn, Vsn}]}])),
+                          AppFileContents = list_to_binary(
+                                              io_lib:format(
+                                                "~p.",
+                                                [{application, AppName,
+                                                  [{vsn, Vsn},
+                                                   {applications, [kernel, stdlib, rabbit]}]}])),
                           {ok, {_, EzData}} = zip:zip(EzName, [{AppFileName, AppFileContents}], [memory]),
                           ok = file:write_file(EzName, EzData)
                   end,
