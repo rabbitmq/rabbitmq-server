@@ -36,10 +36,10 @@ allowed_methods(ReqData, Context) ->
     {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
+    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{<<"application/x-www-form-urlencoded">>, accept_content}], ReqData, Context}.
+    {[{{<<"application">>, <<"x-www-form-urlencoded">>, '*'}, accept_content}], ReqData, Context}.
 
 is_authorized(#{method := <<"OPTIONS">>} = ReqData, Context) ->
     {true, ReqData, Context};
