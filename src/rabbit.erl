@@ -599,21 +599,27 @@ start_apps(Apps) ->
 -spec start_apps([app_name()],
                  #{app_name() => restart_type()}) -> 'ok'.
 
+%% TODO: start_apps/2 and start_loaded_apps/2 are now specific to
+%% plugins. Those function should be moved over `rabbit_plugins`, along
+%% with top_apps/1, once the latter stops using app_utils as well.
+
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
     ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(Apps),
     start_loaded_apps(Apps, RestartTypes).
 
 start_loaded_apps(Apps, RestartTypes) ->
+    false = lists:member(rabbit, Apps), %% Assertion.
     rabbit_prelaunch_conf:decrypt_config(Apps),
-    OrderedApps = app_utils:app_dependency_order(Apps, false),
-    case lists:member(rabbit, Apps) of
-        false -> rabbit_boot_steps:run_boot_steps(Apps); %% plugin activation
-        true  -> ok                    %% will run during start of rabbit app
-    end,
-    ok = app_utils:start_applications(OrderedApps,
-                                      handle_app_error(could_not_start),
-                                      RestartTypes).
+    lists:foreach(
+      fun(App) ->
+              RestartType = maps:get(App, RestartTypes, temporary),
+              ok = rabbit_boot_steps:run_boot_steps([App]),
+              case application:ensure_all_started(App, RestartType) of
+                  {ok, _}         -> ok;
+                  {error, Reason} -> throw({could_not_start, App, Reason})
+              end
+      end, Apps).
 
 -spec stop_apps([app_name()]) -> 'ok'.
 
