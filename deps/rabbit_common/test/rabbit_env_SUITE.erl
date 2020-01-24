@@ -648,6 +648,11 @@ check_RABBITMQ_ENABLED_PLUGINS(_) ->
     check_prefixed_variable("RABBITMQ_ENABLED_PLUGINS",
                             enabled_plugins,
                             '_',
+                            "", [],
+                            "", []),
+    check_prefixed_variable("RABBITMQ_ENABLED_PLUGINS",
+                            enabled_plugins,
+                            '_',
                             rabbit_misc:format("~s,~s", Value1), Value1,
                             rabbit_misc:format("~s,~s", Value2), Value2).
 

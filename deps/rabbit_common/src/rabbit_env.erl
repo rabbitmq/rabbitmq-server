@@ -931,7 +931,7 @@ log_feature_flags_registry(Context) ->
 %%   List of plugins to enable on startup.
 %%   Values are:
 %%     "ALL" to enable all plugins
-%%     "NONE" to enable no plugin
+%%     "" to enable no plugin
 %%     a list of plugin names, separated by a coma (',')
 %%   Default: Empty (i.e. use ${RABBITMQ_ENABLED_PLUGINS_FILE})
 
@@ -1074,14 +1074,17 @@ enabled_plugins_file_from_node(#{from_remote_node := Remote} = Context) ->
     end.
 
 enabled_plugins(Context) ->
-    case get_prefixed_env_var("RABBITMQ_ENABLED_PLUGINS") of
+    Value = get_prefixed_env_var(
+              "RABBITMQ_ENABLED_PLUGINS",
+              [keep_empty_string_as_is]),
+    case Value of
         false ->
             update_context(Context, enabled_plugins, undefined, default);
         "ALL" ->
             update_context(Context, enabled_plugins, all, environment);
-        "NONE" ->
+        "" ->
             update_context(Context, enabled_plugins, [], environment);
-        Value ->
+        _ ->
             Plugins = [list_to_atom(P) || P <- string:lexemes(Value, ",")],
             update_context(Context, enabled_plugins, Plugins, environment)
     end.
