@@ -145,9 +145,9 @@ virgin-node-tmpdir:
 .PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
 ifdef LEAVE_PLUGINS_DISABLED
-RABBITMQ_ENABLED_PLUGINS = NONE
+RABBITMQ_ENABLED_PLUGINS ?=
 else
-RABBITMQ_ENABLED_PLUGINS = ALL
+RABBITMQ_ENABLED_PLUGINS ?= ALL
 endif
 
 # --------------------------------------------------------------------
