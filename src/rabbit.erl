@@ -983,18 +983,28 @@ do_run_postlaunch_phase() ->
         rabbit_log_prelaunch:debug("== Plugins =="),
 
         rabbit_log_prelaunch:debug("Setting plugins up"),
+        %% `Plugins` contains all the enabled plugins, plus their
+        %% dependencies. The order is important: dependencies appear
+        %% before plugin which depend on them.
         Plugins = rabbit_plugins:setup(),
         rabbit_log_prelaunch:debug(
           "Starting the following plugins: ~p", [Plugins]),
+        %% We can load all plugins and refresh their feature flags at
+        %% once, because it does not involve running code from the
+        %% plugins.
         app_utils:load_applications(Plugins),
         ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(
                Plugins),
+        %% However, we want to run their boot steps and actually start
+        %% them one by one, to ensure a dependency is fully started
+        %% before a plugin which depends on it gets a chance to start.
         lists:foreach(
           fun(Plugin) ->
-              case application:ensure_all_started(Plugin) of
-                  {ok, _} -> rabbit_boot_steps:run_boot_steps([Plugin]);
-                  Error   -> throw(Error)
-              end
+                  ok = rabbit_boot_steps:run_boot_steps([Plugin]),
+                  case application:ensure_all_started(Plugin) of
+                      {ok, _} -> ok;
+                      Error   -> throw(Error)
+                  end
           end, Plugins),
 
         rabbit_log_prelaunch:debug("Marking RabbitMQ as running"),
