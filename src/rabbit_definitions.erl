@@ -37,6 +37,26 @@
 %% API
 %%
 
+-type definition_category() :: 'users' |
+                               'vhosts' |
+                               'permissions' |
+                               'topic_permissions' |
+                               'parameters' |
+                               'global_parameters' |
+                               'policies' |
+                               'queues' |
+                               'bindings' |
+                               'exchanges'.
+
+-type definition_object() :: #{binary() => any()}.
+-type definition_list() :: [definition_object()].
+
+-type definitions() :: #{
+    definition_category() => definition_list()
+}.
+
+-export_type([definition_object/0, definition_list/0, definition_category/0, definitions/0]).
+
 maybe_load_definitions() ->
     %% this feature was a part of rabbitmq-management for a long time,
     %% so we check rabbit_management.load_definitions for backward compatibility.
