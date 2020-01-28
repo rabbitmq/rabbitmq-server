@@ -710,7 +710,7 @@ ack([], State) ->
 ack([SeqId], State) ->
     case remove_pending_ack(true, SeqId, State) of
         {none, _} ->
-            State;
+            {[], State};
         {#msg_status { msg_id        = MsgId,
                        is_persistent = IsPersistent,
                        msg_in_store  = MsgInStore,
