@@ -13,7 +13,7 @@ volumes:
 services:
   rmq0-qq: &rabbitmq
     # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.76-2019.10.30
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.3-alpha.73-2020.01.29
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -47,7 +47,7 @@ services:
       - "15681:15672"
       - "15701:15692"
   stress-qq:
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.9.1-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.10.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
