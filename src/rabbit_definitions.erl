@@ -27,7 +27,8 @@
 -export([
   list_users/0, list_vhosts/0, list_permissions/0, list_topic_permissions/0,
   list_runtime_parameters/0, list_global_runtime_parameters/0, list_policies/0,
-  list_exchanges/0, list_queues/0, list_bindings/0
+  list_exchanges/0, list_queues/0, list_bindings/0,
+  is_internal_parameter/1
 ]).
 -export([decode/1, decode/2, args/1]).
 
@@ -677,11 +678,19 @@ runtime_parameter_definition(Param) ->
     }.
 
 list_global_runtime_parameters() ->
-    [global_runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list_global()].
+    [global_runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list_global(), not is_internal_parameter(P)].
 
 global_runtime_parameter_definition(P0) ->
     P = [{rabbit_data_coercion:to_binary(K), V} || {K, V} <- P0],
     maps:from_list(P).
+
+-define(INTERNAL_GLOBAL_PARAM_PREFIX, "internal").
+
+is_internal_parameter(Param) ->
+    Name = rabbit_data_coercion:to_list(pget(name, Param)),
+    %% if global parameter name starts with an "internal", consider it to be internal
+    %% and exclude it from definition export
+    string:left(Name, length(?INTERNAL_GLOBAL_PARAM_PREFIX)) =:= ?INTERNAL_GLOBAL_PARAM_PREFIX.
 
 list_policies() ->
     [policy_definition(P) || P <- rabbit_policy:list()].
