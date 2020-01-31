@@ -31,17 +31,22 @@
 -export([get_file/2]).
 
 
-init(Req, [{App, Path}]) ->
-    do_init(Req, App, Path);
-init(Req, [{App, Path}|Tail]) ->
-    PathInfo = cowboy_req:path_info(Req),
+init(Req0, {priv_file, _App, _Path}=Opts) ->
+    Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
+    cowboy_static:init(Req1, Opts);
+init(Req0, [{App, Path}]) ->
+    Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
+    do_init(Req1, App, Path);
+init(Req0, [{App, Path}|Tail]) ->
+    Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
+    PathInfo = cowboy_req:path_info(Req1),
     Filepath = filename:join([code:priv_dir(App), Path|PathInfo]),
     %% We use erl_prim_loader because the file may be inside an .ez archive.
     FileInfo = erl_prim_loader:read_file_info(binary_to_list(Filepath)),
     case FileInfo of
-        {ok, #file_info{type = regular}} -> do_init(Req, App, Path);
-        {ok, #file_info{type = symlink}} -> do_init(Req, App, Path);
-        _                                -> init(Req, Tail)
+        {ok, #file_info{type = regular}} -> do_init(Req1, App, Path);
+        {ok, #file_info{type = symlink}} -> do_init(Req1, App, Path);
+        _                                -> init(Req0, Tail)
     end.
 
 do_init(Req, App, Path) ->
