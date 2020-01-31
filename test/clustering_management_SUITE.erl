@@ -56,7 +56,8 @@ groups() ->
               status_with_alarm,
               pid_file_and_await_node_startup,
               await_running_count,
-              start_with_invalid_schema_in_path
+              start_with_invalid_schema_in_path,
+              persistent_cluster_id
             ]},
           {cluster_size_4, [], [
               forget_promotes_offline_slave
@@ -120,9 +121,8 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases
 %% -------------------------------------------------------------------
-
 
 start_with_invalid_schema_in_path(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
@@ -136,6 +136,19 @@ start_with_invalid_schema_in_path(Config) ->
         ok  -> ok;
         ErrRabbit -> error({unable_to_start_with_bad_schema_in_work_dir, ErrRabbit})
     end.
+
+persistent_cluster_id(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    ClusterIDA1 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
+    ClusterIDB1 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
+    ?assertEqual(ClusterIDA1, ClusterIDB1),
+
+    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
+    ClusterIDA2 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
+    rabbit_ct_broker_helpers:restart_node(Config, Hare),
+    ClusterIDB2 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
+    ?assertEqual(ClusterIDA1, ClusterIDA2),
+    ?assertEqual(ClusterIDA2, ClusterIDB2).
 
 create_bad_schema(Rabbit, Hare, Config) ->
 
