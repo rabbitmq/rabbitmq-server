@@ -2987,7 +2987,7 @@ csp_headers_test(Config) ->
     Headers = [{"origin", "https://rabbitmq.com"}, AuthHeader],
     {ok, {_, HdGetCsp0, _}} = req(Config, get, "/whoami", Headers),
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp0)),
-    {ok, {_, HdGetCsp1, _}} = req(Config, get, "/index.html", Headers),
+    {ok, {_, HdGetCsp1, _}} = req(Config, get_static, "/index.html", Headers),
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp1)).
 
 %% -------------------------------------------------------------------
