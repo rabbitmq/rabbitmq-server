@@ -96,6 +96,8 @@ assert_permanent_redirect(Config, Path, ExpectedLocation) ->
 req(Config, Type, Path, Headers) ->
     req(Config, 0, Type, Path, Headers).
 
+req(Config, Node, get_static, Path, Headers) ->
+    httpc:request(get, {uri_base_from(Config, Node, "") ++ Path, Headers}, ?HTTPC_OPTS, []);
 req(Config, Node, Type, Path, Headers) ->
     httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers}, ?HTTPC_OPTS, []).
 
