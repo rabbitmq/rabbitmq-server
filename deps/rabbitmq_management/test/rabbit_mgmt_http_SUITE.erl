@@ -152,7 +152,9 @@ all_tests() -> [
     single_active_consumer_qq_test,
     oauth_test,
     disable_basic_auth_test,
-    login_test].
+    login_test,
+    csp_headers_test
+].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -3182,6 +3184,14 @@ login_test(Config) ->
 
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
+
+csp_headers_test(Config) ->
+    AuthHeader = auth_header("guest", "guest"),
+    Headers = [{"origin", "https://rabbitmq.com"}, AuthHeader],
+    {ok, {_, HdGetCsp0, _}} = req(Config, get, "/whoami", Headers),
+    ?assert(lists:keymember("content-security-policy", 1, HdGetCsp0)),
+    {ok, {_, HdGetCsp1, _}} = req(Config, get, "/index.html", Headers),
+    ?assert(lists:keymember("content-security-policy", 1, HdGetCsp1)).
 
 disable_basic_auth_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
