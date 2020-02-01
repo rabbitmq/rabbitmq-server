@@ -38,6 +38,9 @@ handle_event(sigquit, State) ->
 handle_event(sigusr1, State) ->
     rabbit_log:info("Received a SIGUSR1, ignoring it"),
     {ok, State};
+handle_event(sigusr2, State) ->
+    rabbit_log:info("Received a SIGUSR2, ignoring it"),
+    {ok, State};
 %% note: SIGHUP can/will be handled by shells and process managers
 handle_event(sighup, State) ->
     rabbit_log:info("Received a SIGHUP, ignoring it"),
