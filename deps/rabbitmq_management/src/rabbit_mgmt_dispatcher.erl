@@ -45,10 +45,10 @@ build_routes(Ignore) ->
     [{'_', Routes2}].
 
 build_root_index_routes("", ManagementApp) ->
-    [{"/", cowboy_static, root_idx_file(ManagementApp)}];
+    [{"/", rabbit_mgmt_wm_static, root_idx_file(ManagementApp)}];
 build_root_index_routes(Prefix, ManagementApp) ->
     [{"/", rabbit_mgmt_wm_redirect, Prefix ++ "/"},
-     {Prefix, cowboy_static, root_idx_file(ManagementApp)}].
+     {Prefix, rabbit_mgmt_wm_static, root_idx_file(ManagementApp)}].
 
 build_redirect_route(Path, Location) ->
     {Path, rabbit_mgmt_wm_redirect, Location}.
