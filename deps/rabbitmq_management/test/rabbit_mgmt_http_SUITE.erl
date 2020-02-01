@@ -143,7 +143,8 @@ all_tests() -> [
     vhost_limits_list_test,
     vhost_limit_set_test,
     rates_test,
-    login_test].
+    login_test,
+    csp_headers_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -2980,6 +2981,14 @@ login_test(Config) ->
 
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
+
+csp_headers_test(Config) ->
+    AuthHeader = auth_header("guest", "guest"),
+    Headers = [{"origin", "https://rabbitmq.com"}, AuthHeader],
+    {ok, {_, HdGetCsp0, _}} = req(Config, get, "/whoami", Headers),
+    ?assert(lists:keymember("content-security-policy", 1, HdGetCsp0)),
+    {ok, {_, HdGetCsp1, _}} = req(Config, get, "/index.html", Headers),
+    ?assert(lists:keymember("content-security-policy", 1, HdGetCsp1)).
 
 %% -------------------------------------------------------------------
 %% Helpers.
