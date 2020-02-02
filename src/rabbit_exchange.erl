@@ -55,9 +55,6 @@
 -spec assert_args_equivalence
         (rabbit_types:exchange(), rabbit_framing:amqp_table())
         -> 'ok' | rabbit_types:connection_exit().
--spec lookup
-        (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
-                    rabbit_types:error('not_found').
 -spec lookup_or_die
         (name()) -> rabbit_types:exchange() |
                     rabbit_types:channel_exit().
@@ -253,6 +250,18 @@ assert_args_equivalence(#exchange{ name = Name, arguments = Args },
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, Name,
                                         [<<"alternate-exchange">>]).
 
+-spec lookup
+        (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
+                    rabbit_types:error('not_found');
+        ([name()]) ->
+            [rabbit_types:exchange()].
+
+lookup([])     -> [];
+lookup([Name]) -> ets:lookup(rabbit_exchange, Name);
+lookup(Names) when is_list(Names) ->
+    %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
+    %% expensive for reasons explained in rabbit_misc:dirty_read/1.
+    lists:append([ets:lookup(rabbit_exchange, Name) || Name <- Names]);
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_exchange, Name}).
 
