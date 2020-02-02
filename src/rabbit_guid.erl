@@ -40,8 +40,6 @@
 -spec filename() -> string().
 -spec gen() -> guid().
 -spec gen_secure() -> guid().
--spec string(guid(), any()) -> string().
--spec binary(guid(), any()) -> binary().
 
 %%----------------------------------------------------------------------------
 
