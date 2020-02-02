@@ -22,7 +22,7 @@
          forget_all_durable/1, delete_crashed/1, delete_crashed/2,
          delete_crashed_internal/2]).
 -export([pseudo_queue/2, pseudo_queue/3, immutable/1]).
--export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
+-export([lookup/1, lookup_many/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver/3, requeue/4, ack/4, reject/5]).
@@ -487,6 +487,11 @@ lookup(Names) when is_list(Names) ->
     lists:append([ets:lookup(rabbit_queue, Name) || Name <- Names]);
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_queue, Name}).
+
+-spec lookup_many ([name()]) -> [amqqueue:amqqueue()].
+
+lookup_many(Names) when is_list(Names) ->
+    lookup(Names).
 
 -spec not_found_or_absent(name()) -> not_found_or_absent().
 
