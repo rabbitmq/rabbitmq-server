@@ -138,17 +138,23 @@ start_with_invalid_schema_in_path(Config) ->
     end.
 
 persistent_cluster_id(Config) ->
-    [Rabbit, Hare] = cluster_members(Config),
-    ClusterIDA1 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
-    ClusterIDB1 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
-    ?assertEqual(ClusterIDA1, ClusterIDB1),
+    case os:getenv("SECONDARY_UMBRELLA") of
+      false ->
+        [Rabbit, Hare] = cluster_members(Config),
+        ClusterIDA1 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
+        ClusterIDB1 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
+        ?assertEqual(ClusterIDA1, ClusterIDB1),
 
-    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
-    ClusterIDA2 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
-    rabbit_ct_broker_helpers:restart_node(Config, Hare),
-    ClusterIDB2 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
-    ?assertEqual(ClusterIDA1, ClusterIDA2),
-    ?assertEqual(ClusterIDA2, ClusterIDB2).
+        rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
+        ClusterIDA2 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
+        rabbit_ct_broker_helpers:restart_node(Config, Hare),
+        ClusterIDB2 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
+        ?assertEqual(ClusterIDA1, ClusterIDA2),
+        ?assertEqual(ClusterIDA2, ClusterIDB2);
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
 
 create_bad_schema(Rabbit, Hare, Config) ->
 
