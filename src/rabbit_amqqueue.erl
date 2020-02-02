@@ -22,7 +22,7 @@
          forget_all_durable/1, delete_crashed/1, delete_crashed/2,
          delete_crashed_internal/2]).
 -export([pseudo_queue/2, immutable/1]).
--export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
+-export([lookup/1, lookup_many/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
@@ -94,13 +94,6 @@
 -spec update
         (name(), fun((rabbit_types:amqqueue()) -> rabbit_types:amqqueue())) ->
             'not_found' | rabbit_types:amqqueue().
--spec lookup
-        (name()) ->
-            rabbit_types:ok(rabbit_types:amqqueue()) |
-            rabbit_types:error('not_found');
-        ([name()]) ->
-            [rabbit_types:amqqueue()].
--spec not_found_or_absent(name()) -> not_found_or_absent().
 -spec with(name(), qfun(A)) ->
           A | rabbit_types:error(not_found_or_absent()).
 -spec with(name(), qfun(A), fun((not_found_or_absent()) -> B)) -> A | B.
@@ -436,6 +429,13 @@ add_default_binding(#amqqueue{name = QueueName}) ->
                                 args        = []},
                        ?INTERNAL_USER).
 
+-spec lookup
+        (name()) ->
+            rabbit_types:ok(rabbit_types:amqqueue()) |
+            rabbit_types:error('not_found');
+        ([name()]) ->
+            [rabbit_types:amqqueue()].
+
 lookup([])     -> [];                             %% optimisation
 lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
 lookup(Names) when is_list(Names) ->
@@ -444,6 +444,14 @@ lookup(Names) when is_list(Names) ->
     lists:append([ets:lookup(rabbit_queue, Name) || Name <- Names]);
 lookup(Name) ->
     rabbit_misc:dirty_read({rabbit_queue, Name}).
+
+
+-spec lookup_many ([name()]) -> [amqqueue:amqqueue()].
+
+lookup_many(Names) when is_list(Names) ->
+    lookup(Names).
+
+-spec not_found_or_absent(name()) -> not_found_or_absent().
 
 not_found_or_absent(Name) ->
     %% NB: we assume that the caller has already performed a lookup on
