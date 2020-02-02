@@ -143,8 +143,15 @@ gen_secure() ->
 %%
 %% employs base64url encoding, which is safer in more contexts than
 %% plain base64.
-string(G, Prefix) ->
-    Prefix ++ "-" ++ rabbit_misc:base64url(G).
+
+-spec string(guid() | string(), any()) -> string().
+
+string(G, Prefix) when is_list(Prefix) ->
+    Prefix ++ "-" ++ rabbit_misc:base64url(G);
+string(G, Prefix) when is_binary(Prefix) ->
+    binary_to_list(Prefix) ++ "-" ++ rabbit_misc:base64url(G).
+
+-spec binary(guid() | string(), any()) -> binary().
 
 binary(G, Prefix) ->
     list_to_binary(string(G, Prefix)).
