@@ -257,7 +257,9 @@ do-dist:: $(DIST_EZS)
 		$(wildcard $(DIST_DIR)/*))'; \
 	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -rf $$unwanted)
 
+ifneq ($(PROJECT),rabbit_common)
 test-build:: install-cli
+endif
 
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock

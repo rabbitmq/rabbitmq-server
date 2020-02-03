@@ -45,7 +45,8 @@ groups() ->
             pid_decompose_compose,
             platform_and_version,
             frame_encoding_does_not_fail_with_empty_binary_payload,
-            amqp_table_conversion
+            amqp_table_conversion,
+            name_type
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -435,3 +436,9 @@ set_stats_interval(Interval) ->
 reset_stats_interval() ->
     application:unset_env(rabbit, collect_statistics),
     application:unset_env(rabbit, collect_statistics_interval).
+
+name_type(_) ->
+    ?assertEqual(shortnames, rabbit_nodes_common:name_type(rabbit)),
+    ?assertEqual(shortnames, rabbit_nodes_common:name_type(rabbit@localhost)),
+    ?assertEqual(longnames, rabbit_nodes_common:name_type('rabbit@localhost.example.com')),
+    ok.
