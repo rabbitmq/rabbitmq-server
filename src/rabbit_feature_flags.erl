@@ -1246,22 +1246,17 @@ regen_registry_mod(AllFeatureFlags,
             {error, {compilation_failure, Errors, Warnings}}
     end.
 
--ifdef(TEST).
 maybe_log_registry_source_code(Forms) ->
-    case os:getenv("LOG_FF_REGISTRY") of
-        false ->
-            ok;
-        _ ->
+    case rabbit_prelaunch:get_context() of
+        #{log_feature_flags_registry := true} ->
             rabbit_log_feature_flags:debug(
               "== FEATURE FLAGS REGISTRY ==~n"
               "~s~n"
               "== END ==~n",
-              [erl_prettypr:format(erl_syntax:form_list(Forms))])
+              [erl_prettypr:format(erl_syntax:form_list(Forms))]);
+        _ ->
+            ok
     end.
--else.
-maybe_log_registry_source_code(_) ->
-    ok.
--endif.
 
 -spec load_registry_mod(atom(), binary()) ->
     ok | {error, any()} | no_return().
@@ -2003,7 +1998,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
                               "Feature flags: starting an unclustered "
                               "node for the first time: all feature "
                               "flags are forcibly left disabled from "
-                              "the RABBITMQ_FEATURE_FLAGS environment "
+                              "the $RABBITMQ_FEATURE_FLAGS environment "
                               "variable"),
                             ok;
                         _ ->
@@ -2011,7 +2006,7 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
                               "Feature flags: starting an unclustered "
                               "node for the first time: only the "
                               "following feature flags specified in "
-                              "the RABBITMQ_FEATURE_FLAGS environment "
+                              "the $RABBITMQ_FEATURE_FLAGS environment "
                               "variable will be enabled: ~p",
                               [FeatureNames]),
                             enable(FeatureNames)
@@ -2126,9 +2121,12 @@ get_forced_feature_flag_names() ->
 %% @private
 
 get_forced_feature_flag_names_from_env() ->
-    case os:getenv("RABBITMQ_FEATURE_FLAGS") of
-        false -> undefined;
-        Value -> [list_to_atom(V) ||V <- string:lexemes(Value, ",")]
+    case rabbit_prelaunch:get_context() of
+        #{forced_feature_flags_on_init := ForcedFFs}
+          when is_list(ForcedFFs) ->
+            ForcedFFs;
+        _ ->
+            undefined
     end.
 
 -spec get_forced_feature_flag_names_from_config() -> [feature_name()] | undefined.

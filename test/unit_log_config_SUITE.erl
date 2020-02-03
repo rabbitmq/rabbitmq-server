@@ -56,7 +56,7 @@ init_per_testcase(_, Config) ->
     application:unset_env(lager, handlers),
     application:unset_env(lager, rabbit_handlers),
     application:unset_env(lager, extra_sinks),
-    os:unsetenv("RABBITMQ_LOGS_source"),
+    unset_logs_var_origin(),
     Config.
 
 end_per_testcase(_, Config) ->
@@ -67,7 +67,7 @@ end_per_testcase(_, Config) ->
     application:unset_env(lager, handlers),
     application:unset_env(lager, rabbit_handlers),
     application:unset_env(lager, extra_sinks),
-    os:unsetenv("RABBITMQ_LOGS_source"),
+    unset_logs_var_origin(),
     application:unload(rabbit),
     application:unload(lager),
     Config.
@@ -564,7 +564,7 @@ env_var_overrides_config(_) ->
     ConfigLogFile = "rabbit_not_default.log",
     application:set_env(rabbit, log, [{file, [{file, ConfigLogFile}]}]),
 
-    os:putenv("RABBITMQ_LOGS_source", "environment"),
+    set_logs_var_origin(environment),
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = default_expected_handlers(EnvLogFile),
@@ -577,7 +577,7 @@ env_var_disable_log(_) ->
     ConfigLogFile = "rabbit_not_default.log",
     application:set_env(rabbit, log, [{file, [{file, ConfigLogFile}]}]),
 
-    os:putenv("RABBITMQ_LOGS_source", "environment"),
+    set_logs_var_origin(environment),
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = [],
@@ -712,7 +712,7 @@ env_var_tty(_) ->
     application:set_env(rabbit, lager_default_file, tty),
     application:set_env(rabbit, lager_upgrade_file, tty),
     %% tty can only be set explicitly
-    os:putenv("RABBITMQ_LOGS_source", "environment"),
+    set_logs_var_origin(environment),
 
     rabbit_lager:configure_lager(),
 
@@ -723,6 +723,15 @@ env_var_tty(_) ->
     %% Upgrade sink will be different.
     ExpectedSinks = tty_expected_sinks(),
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
+
+set_logs_var_origin(Origin) ->
+    Context = #{var_origins => #{main_log_file => Origin}},
+    rabbit_prelaunch:store_context(Context),
+    ok.
+
+unset_logs_var_origin() ->
+    rabbit_prelaunch:clear_context_cache(),
+    ok.
 
 tty_expected_handlers() ->
     [{lager_console_backend,
