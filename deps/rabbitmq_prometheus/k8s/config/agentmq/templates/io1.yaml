@@ -1,0 +1,13 @@
+{{- if .Values.persistence.enabled }}
+{{- if eq .Values.persistence.storageClass "io1-fast" }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: io1-fast
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: io1
+  iopsPerGB: {{ .Values.persistence.iopsPerGB | default "10" | quote }}
+  fsType: ext4
+{{- end }}
+{{- end }}

@@ -24,11 +24,11 @@ ENV OPENSSL_SOURCE_SHA256="1e3a91bc1f9dfce01af26026f856e064eab4c8ee0a8f457b5ae30
 # https://www.openssl.org/community/omc.html
 ENV OPENSSL_PGP_KEY_IDS="0x8657ABB260F056B1E5190839D9C4D26D0E604491 0x5B2545DAB21995F4088CEFAA36CEE4DEB00CFE33 0xED230BEC4D4F2518B9D7DF41F0DB4D21C1D35231 0xC1F33DD8CE1D4CC613AF14DA9195C48241FBF7DD 0x7953AC1FBC3DC8B3B292393ED5E9E43F7DF9EE8C 0xE5E52560DD91C556DDBDA5D02064C53641C25E5D"
 
-# Use the latest stable Erlang/OTP release - gmake find-latest-otp - https://github.com/erlang/otp/tags
-ENV OTP_VERSION 22.2.4
-# TODO add PGP checking when the feature will be added to Erlang/OTP's build system
-# http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
-ENV OTP_SOURCE_SHA256="7aab2285b46462332a7fdad395d4629e6465d5da324cf7e081e8d62fdb5b38f1"
+# Use the latest stable Erlang/OTP release - make find-latest-otp - https://github.com/erlang/otp/tags
+ARG OTP_VERSION
+ENV OTP_VERSION ${OTP_VERSION}
+ARG OTP_SHA256
+ENV OTP_SOURCE_SHA256=${OTP_SHA256}
 
 # Install dependencies required to build Erlang/OTP from source
 # http://erlang.org/doc/installation_guide/INSTALL.html

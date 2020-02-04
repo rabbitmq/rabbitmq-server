@@ -5,6 +5,15 @@ DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
+# make find-latest-otp
+OTP_VERSION := 22.2.5
+OTP_SHA256 := a2359af240c7f629a4f9f19a9c0ba94e6ba024ed9fc4728c8ae55ea7c8c0e260
+
+define PROJECT_ENV
+[
+ {enable_metric_aggregation, false}
+]
+endef
 
 PROJECT := rabbitmq_prometheus
 PROJECT_MOD := rabbit_prometheus_app
@@ -95,6 +104,8 @@ di: docker-image
 docker-image-build: ## dib | Build Docker image locally - make tests
 	@docker build --pull \
 	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
+	  --build-arg OTP_VERSION=$(OTP_VERSION) \
+	  --build-arg OTP_SHA256=$(OTP_SHA256) \
 	  --build-arg RABBITMQ_VERSION=$(BASED_ON_RABBITMQ_VERSION) \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(RABBITMQ_VERSION) \
 	  --tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION) \

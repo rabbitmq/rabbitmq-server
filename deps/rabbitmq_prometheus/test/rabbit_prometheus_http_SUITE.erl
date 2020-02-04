@@ -28,7 +28,8 @@ all() ->
      {group, default_config},
      {group, config_path},
      {group, config_port},
-     {group, with_metrics}
+     {group, with_metrics},
+     {group, with_aggregation}
     ].
 
 groups() ->
@@ -36,7 +37,8 @@ groups() ->
      {default_config, [], all_tests()},
      {config_path, [], all_tests()},
      {config_port, [], all_tests()},
-     {with_metrics, [], [metrics_test, build_info_test, identity_info_test]}
+     {with_metrics, [], [metrics_test, build_info_test, identity_info_test]},
+     {with_aggregation, [], [aggregated_metrics_test, build_info_test, identity_info_test]}
     ].
 
 all_tests() ->
@@ -60,6 +62,10 @@ init_per_group(config_port, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15772}]}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_port, Config1, [{prometheus_port, 15772}]);
+init_per_group(with_aggregation, Config0) ->
+    PathConfig = {rabbitmq_prometheus, [{enable_metric_aggregation, true}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
+    init_per_group(with_metrics, Config1);
 init_per_group(with_metrics, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
         Config0,
@@ -193,8 +199,40 @@ metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers{", [{capture, none}, multiline])),
+    %% Checking the first metric value in each ETS table that requires converting
+    ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
+    %% Checking the first TOTALS metric value
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
+
+aggregated_metrics_test(Config) ->
+    {_Headers, Body} = http_get(Config, [], 200),
+    %% Checking that the body looks like a valid response
+    ct:pal(Body),
+    ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
+    ?assertEqual(nomatch, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
+    %% Checking the first metric value from each ETS table owned by rabbitmq_metrics
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_process_reductions_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_channel_get_ack_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections_opened_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_bytes_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_packets_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_published_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds_count ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds_sum ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds_bucket{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ", [{capture, none}, multiline])),
     %% Checking the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
