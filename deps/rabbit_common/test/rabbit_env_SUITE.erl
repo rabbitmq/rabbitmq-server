@@ -144,6 +144,8 @@ check_default_values(_) ->
     persistent_term:erase({rabbit_env, os_type}),
     persistent_term:erase({rabbit_env, load_conf_env_file}),
 
+    {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
+
     Node = get_default_nodename(),
     NodeS = atom_to_list(Node),
 
@@ -156,7 +158,7 @@ check_default_values(_) ->
       enabled_plugins_file => default,
       erlang_dist_tcp_port => default,
       feature_flags_file => default,
-      forced_feature_flags_on_init => default,
+      forced_feature_flags_on_init => RFFOrigin,
       interactive_shell => default,
       keep_pid_file_on_exit => default,
       log_base_dir => default,
@@ -193,7 +195,7 @@ check_default_values(_) ->
          erlang_dist_tcp_port => 25672,
          feature_flags_file =>
            "/var/lib/rabbitmq/mnesia/" ++ NodeS ++ "-feature_flags",
-         forced_feature_flags_on_init => undefined,
+         forced_feature_flags_on_init => RFFValue,
          interactive_shell => false,
          keep_pid_file_on_exit => false,
          log_base_dir => "/var/log/rabbitmq",
@@ -237,7 +239,7 @@ check_default_values(_) ->
          erlang_dist_tcp_port => 25672,
          feature_flags_file =>
            "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-feature_flags",
-         forced_feature_flags_on_init => undefined,
+         forced_feature_flags_on_init => RFFValue,
          interactive_shell => false,
          keep_pid_file_on_exit => false,
          log_base_dir => "%APPDATA%/RabbitMQ/log",
@@ -266,6 +268,15 @@ check_default_values(_) ->
 
          var_origins => Origins#{rabbitmq_base => default}},
        Win32Context).
+
+forced_feature_flags_on_init_expect() ->
+    %% In the case of mixed-versions-cluster testing in CI, the test
+    %% sets $RABBITMQ_FEATURE_FLAGS to an empty string. This obviously
+    %% changes the context returned by rabbit_env.
+    case os:getenv("RABBITMQ_FEATURE_FLAGS") of
+        false -> {undefined, default};
+        ""    -> {[], environment}
+    end.
 
 check_values_from_reachable_remote_node(Config) ->
     PrivDir = ?config(priv_dir, Config),
@@ -336,6 +347,8 @@ check_values_from_reachable_remote_node(Config) ->
         persistent_term:erase({rabbit_env, os_type}),
         persistent_term:erase({rabbit_env, load_conf_env_file}),
 
+        {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
+
         Origins = #{
           advanced_config_file => default,
           amqp_ipaddr => default,
@@ -345,7 +358,7 @@ check_values_from_reachable_remote_node(Config) ->
           enabled_plugins_file => remote_node,
           erlang_dist_tcp_port => default,
           feature_flags_file => remote_node,
-          forced_feature_flags_on_init => default,
+          forced_feature_flags_on_init => RFFOrigin,
           interactive_shell => default,
           keep_pid_file_on_exit => default,
           log_base_dir => default,
@@ -381,7 +394,7 @@ check_values_from_reachable_remote_node(Config) ->
              enabled_plugins_file => EnabledPluginsFile,
              erlang_dist_tcp_port => 25672,
              feature_flags_file => FeatureFlagsFile,
-             forced_feature_flags_on_init => undefined,
+             forced_feature_flags_on_init => RFFValue,
              from_remote_node => {Node, 10000},
              interactive_shell => false,
              keep_pid_file_on_exit => false,
@@ -445,6 +458,8 @@ check_values_from_offline_remote_node(_) ->
     persistent_term:erase({rabbit_env, load_conf_env_file}),
     os:unsetenv("RABBITMQ_NODENAME"),
 
+    {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
+
     Origins = #{
       advanced_config_file => default,
       amqp_ipaddr => default,
@@ -454,7 +469,7 @@ check_values_from_offline_remote_node(_) ->
       enabled_plugins_file => default,
       erlang_dist_tcp_port => default,
       feature_flags_file => default,
-      forced_feature_flags_on_init => default,
+      forced_feature_flags_on_init => RFFOrigin,
       interactive_shell => default,
       keep_pid_file_on_exit => default,
       log_base_dir => default,
@@ -490,7 +505,7 @@ check_values_from_offline_remote_node(_) ->
          enabled_plugins_file => undefined,
          erlang_dist_tcp_port => 25672,
          feature_flags_file => undefined,
-         forced_feature_flags_on_init => undefined,
+         forced_feature_flags_on_init => RFFValue,
          from_remote_node => offline,
          interactive_shell => false,
          keep_pid_file_on_exit => false,
