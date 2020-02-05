@@ -57,6 +57,10 @@
 % Some metrics require to be converted, mostly those that represent time.
 % It is a Prometheus best practice to use specific base units: https://prometheus.io/docs/practices/naming/#base-units
 % Extra context: https://github.com/prometheus/docs/pull/1414#issuecomment-522337895
+
+-define(MILLISECOND, 1000).
+-define(MICROSECOND, 1000000).
+
 -define(METRICS_RAW, [
     {channel_metrics, [
         {2, undefined, channel_consumers, gauge, "Consumers on a channel", consumer_count},
@@ -135,7 +139,7 @@
         {2, undefined, erlang_processes_limit, gauge, "Erlang processes limit", proc_total},
         {2, undefined, erlang_scheduler_run_queue, gauge, "Erlang scheduler run queue", run_queue},
         {2, undefined, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval", net_ticktime},
-        {2, 1000, erlang_uptime_seconds, gauge, "Node uptime", uptime}
+        {2, ?MILLISECOND, erlang_uptime_seconds, gauge, "Node uptime", uptime}
     ]},
 
     {node_persister_metrics, [
@@ -154,11 +158,11 @@
         {2, undefined, queue_index_read_ops_total, counter, "Total number of Queue Index read operations", queue_index_read_count},
         {2, undefined, queue_index_write_ops_total, counter, "Total number of Queue Index write operations", queue_index_write_count},
         {2, undefined, queue_index_journal_write_ops_total, counter, "Total number of Queue Index Journal write operations", queue_index_journal_write_count},
-        {2, 1000000, io_read_time_seconds_total, counter, "Total I/O read time", io_read_time},
-        {2, 1000000, io_write_time_seconds_total, counter, "Total I/O write time", io_write_time},
-        {2, 1000000, io_sync_time_seconds_total, counter, "Total I/O sync time", io_sync_time},
-        {2, 1000000, io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time},
-        {2, 1000000, io_open_attempt_time_seconds_total, counter, "Total file open attempts time", io_file_handle_open_attempt_time}
+        {2, ?MICROSECOND, io_read_time_seconds_total, counter, "Total I/O read time", io_read_time},
+        {2, ?MICROSECOND, io_write_time_seconds_total, counter, "Total I/O write time", io_write_time},
+        {2, ?MICROSECOND, io_sync_time_seconds_total, counter, "Total I/O sync time", io_sync_time},
+        {2, ?MICROSECOND, io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time},
+        {2, ?MICROSECOND, io_open_attempt_time_seconds_total, counter, "Total file open attempts time", io_file_handle_open_attempt_time}
     ]},
 
     {ra_metrics, [
@@ -167,7 +171,7 @@
         {4, undefined, raft_log_last_applied_index, gauge, "Raft log last applied index"},
         {5, undefined, raft_log_commit_index, gauge, "Raft log commit index"},
         {6, undefined, raft_log_last_written_index, gauge, "Raft log last written index"},
-        {7, raft_entry_commit_latency, gauge, "Time taken for an entry to be committed"}
+        {7, ?MILLISECOND, raft_entry_commit_latency_seconds, gauge, "Time taken for an entry to be committed"}
     ]},
 
     {queue_coarse_metrics, [
@@ -458,18 +462,13 @@ get_data(Table, true) when Table == channel_exchange_metrics;
                   ({_, V1, V2, V3, V4}, {T, A1, A2, A3, A4}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
                   ({_, V1, V2, V3, V4, V5, V6}, {T, A1, A2, A3, A4, A5, A6}) ->
-                       %% ra_metrics: latency is a histogram.
-                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, update_histogram(V6, A6)};
+                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6};
                   ({_, V1, V2, V3, V4, V5, V6, V7, _}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6, V7 + A7}
                end, empty(Table), Table)];
 
 get_data(Table, _) ->
     ets:tab2list(Table).
-
-update_histogram(Value, {H, C, S}) ->
-    NH = maps:update_with(position(?BUCKETS, Value), fun(V) -> V + 1 end, H),
-    {NH, C + 1, S + Value}.
 
 empty(T) when T == channel_queue_exchange_metrics; T == channel_process_metrics ->
     {T, 0};
@@ -478,7 +477,7 @@ empty(T) when T == connection_coarse_metrics ->
 empty(T) when T == channel_exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
     {T, 0, 0, 0, 0};
 empty(T) when T == ra_metrics ->
-    {T, 0, 0, 0, 0, 0, empty_histogram(?BUCKETS)};
+    {T, 0, 0, 0, 0, 0, 0};
 empty(T) when T == channel_queue_metrics; T == channel_metrics ->
     {T, 0, 0, 0, 0, 0, 0, 0};
 empty(queue_metrics = T) ->
@@ -490,11 +489,3 @@ sum('', B) ->
     B;
 sum(A, B) ->
     A + B.
-
-empty_histogram(Buckets) ->
-    {maps:from_list([{B, 0} || B <- Buckets]), 0, 0}.
-
-position([Bound | L], Value) when Value > Bound ->
-    position(L, Value);
-position([Bound | _], _) ->
-    Bound.
