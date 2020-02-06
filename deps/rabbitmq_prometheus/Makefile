@@ -11,7 +11,7 @@ OTP_SHA256 := 92df7d22239b09f7580572305c862da1fb030a97cef7631ba060ac51fa3864cc
 
 define PROJECT_ENV
 [
- {enable_metric_aggregation, false}
+	{enable_metrics_aggregation, false}
 ]
 endef
 
