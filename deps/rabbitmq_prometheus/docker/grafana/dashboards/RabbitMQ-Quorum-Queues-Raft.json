@@ -43,7 +43,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1578410270904,
+  "iteration": 1581011566961,
   "links": [
     {
       "icon": "doc",
@@ -72,6 +72,7 @@
         "x": 0,
         "y": 0
       },
+      "hiddenSeries": false,
       "id": 64,
       "legend": {
         "alignAsTable": true,
@@ -277,6 +278,7 @@
         "x": 0,
         "y": 9
       },
+      "hiddenSeries": false,
       "id": 62,
       "legend": {
         "alignAsTable": true,
@@ -417,6 +419,7 @@
         "x": 12,
         "y": 9
       },
+      "hiddenSeries": false,
       "id": 63,
       "legend": {
         "alignAsTable": true,
@@ -564,6 +567,7 @@
         "x": 0,
         "y": 18
       },
+      "hiddenSeries": false,
       "id": 18,
       "legend": {
         "alignAsTable": true,
@@ -686,7 +690,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 20,
+  "schemaVersion": 21,
   "style": "dark",
   "tags": [
     "rabbitmq-prometheus"

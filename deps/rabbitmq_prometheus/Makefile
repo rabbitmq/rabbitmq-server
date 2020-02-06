@@ -1,13 +1,13 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.9 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.9.0-alpha.191
+BASED_ON_RABBITMQ_VERSION := 3.9.0-alpha.212
 DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
 # make find-latest-otp
-OTP_VERSION := 22.2.2
-OTP_SHA256 := 92df7d22239b09f7580572305c862da1fb030a97cef7631ba060ac51fa3864cc
+OTP_VERSION := 22.2.6
+OTP_SHA256 := 4cf44ed12f657c309a2c00e7806f36f56a88e5b74de6814058796561f3842f66
 
 define PROJECT_ENV
 [
