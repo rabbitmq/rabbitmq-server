@@ -23,8 +23,7 @@
                                    create_mf/5,
                                    gauge_metric/2,
                                    counter_metric/2,
-                                   untyped_metric/2,
-                                   histogram_metric/4]).
+                                   untyped_metric/2]).
 
 -include_lib("prometheus/include/prometheus.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -210,9 +209,6 @@
     {queue_metrics, queues, gauge, "Queues available"}
 ]).
 
--define(BUCKETS, [100, 300, 500, 750, 1000, 2500, 5000, 7500, 10000,
-                  30000, 60000, 90000, infinity]).
- 
 %%====================================================================
 %% Collector API
 %%====================================================================
@@ -223,7 +219,7 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf(_Registry, Callback) ->
-    {ok, Enable} = application:get_env(rabbitmq_prometheus, enable_metric_aggregation),
+    {ok, Enable} = application:get_env(rabbitmq_prometheus, enable_metrics_aggregation),
     [begin
          Data = get_data(Table, Enable),
          mf(Callback, Contents, Data)
@@ -343,8 +339,6 @@ metric(counter, Labels, Value) ->
     emit_counter_metric_if_defined(Labels, Value);
 metric(gauge, Labels, Value) ->
     emit_gauge_metric_if_defined(Labels, Value);
-metric(histogram, Labels, Value) ->
-    emit_histogram_metric(Labels, Value);
 metric(untyped, Labels, Value) ->
     untyped_metric(Labels, Value);
 metric(boolean, Labels, Value0) ->
@@ -380,11 +374,6 @@ emit_gauge_metric_if_defined(Labels, Value) ->
     Value ->
       gauge_metric(Labels, Value)
   end.
-
-emit_histogram_metric(Labels, {Buckets, Count, Sum}) ->
-    histogram_metric(Labels, maps:to_list(Buckets), Count, Sum);
-emit_histogram_metric(Labels, Value) ->
-    emit_gauge_metric_if_defined(Labels, Value).
 
 get_data(connection_metrics = Table, true) ->
     {Table, A1, A2, A3, A4} = ets:foldl(fun({_, Props}, {T, A1, A2, A3, A4}) ->
@@ -451,7 +440,7 @@ get_data(Table, true) when Table == channel_exchange_metrics;
                            Table == channel_queue_exchange_metrics;
                            Table == ra_metrics;
                            Table == channel_process_metrics ->
-    [ets:foldl(fun({_, V1}, {T, A1}) ->
+    Result = ets:foldl(fun({_, V1}, {T, A1}) ->
                        {T, V1 + A1};
                   ({_, V1, _}, {T, A1}) ->
                        {T, V1 + A1};
@@ -462,13 +451,23 @@ get_data(Table, true) when Table == channel_exchange_metrics;
                   ({_, V1, V2, V3, V4}, {T, A1, A2, A3, A4}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
                   ({_, V1, V2, V3, V4, V5, V6}, {T, A1, A2, A3, A4, A5, A6}) ->
-                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6};
+                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, accumulate_count_and_sum(V6, A6)};
                   ({_, V1, V2, V3, V4, V5, V6, V7, _}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6, V7 + A7}
-               end, empty(Table), Table)];
-
+               end, empty(Table), Table),
+    case Table of
+        %% raft_entry_commit_latency_seconds needs to be an average
+        ra_metrics ->
+            {Count, Sum} = element(7, Result),
+            [setelement(7, Result, Sum / Count)];
+        _ ->
+            [Result]
+    end;
 get_data(Table, _) ->
     ets:tab2list(Table).
+
+accumulate_count_and_sum(Value, {Count, Sum}) ->
+    {Count + 1, Sum + Value}.
 
 empty(T) when T == channel_queue_exchange_metrics; T == channel_process_metrics ->
     {T, 0};
@@ -477,7 +476,7 @@ empty(T) when T == connection_coarse_metrics ->
 empty(T) when T == channel_exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
     {T, 0, 0, 0, 0};
 empty(T) when T == ra_metrics ->
-    {T, 0, 0, 0, 0, 0, 0};
+    {T, 0, 0, 0, 0, 0, {0, 0}};
 empty(T) when T == channel_queue_metrics; T == channel_metrics ->
     {T, 0, 0, 0, 0, 0, 0, 0};
 empty(queue_metrics = T) ->

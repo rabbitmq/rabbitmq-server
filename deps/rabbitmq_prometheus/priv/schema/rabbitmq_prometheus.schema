@@ -4,6 +4,10 @@
 %% See https://rabbitmq.com/prometheus.html for details
 %% ----------------------------------------------------------------------------
 
+%% Option to enable metrics aggregation
+{mapping, "prometheus.enable_metrics_aggregation", "rabbitmq_prometheus.enable_metrics_aggregation",
+    [{datatype, {enum, [true, false]}}]}.
+
 %% Endpoint path
 {mapping, "prometheus.path", "rabbitmq_prometheus.path",
     [{datatype, string}]}.

@@ -1,17 +1,18 @@
-# Prometheus Exporter of Core (Raw, Unaggregated) RabbitMQ Metrics
+# Prometheus Exporter of Core RabbitMQ Metrics
 
 ## Getting Started
 
-This is a Prometheus exporter of core (raw, unaggregated) RabbitMQ metrics, developed by the RabbitMQ core team.
+This is a Prometheus exporter of core RabbitMQ metrics, developed by the RabbitMQ core team.
 It is largely a "clean room" design that reuses some prior work from Prometheus exporters done by the community.
 
 ## Project Maturity
 
-This plugin is new and relatively immature. It shipped in the RabbitMQ distribution starting with `3.8.0`.
+This plugin is new as of RabbitMQ `3.8.0`.
 
 ## Documentation
 
 See [Monitoring RabbitMQ with Prometheus and Grafana](https://www.rabbitmq.com/prometheus.html).
+
 
 ## Installation
 
@@ -22,7 +23,6 @@ To enable it with [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugin
 
     rabbitmq-plugins enable rabbitmq_prometheus
 
-
 ## Usage
 
 See the [documentation guide](https://www.rabbitmq.com/prometheus.html).
@@ -30,13 +30,17 @@ See the [documentation guide](https://www.rabbitmq.com/prometheus.html).
 Default port used by the plugin is `15692`. In most environments there would be no configuration
 necessary.
 
-See the entire list of [metrics](metrics.md) exposed via the default port. 
+See the entire list of [metrics](metrics.md) exposed via the default port.
+
 
 ## Configuration
 
 This exporter supports the following options via a set of `prometheus.*` configuration keys:
 
- * `prometheus.path` defines a scrape endpoint. Default is `"/metrics"`.
+ * `prometheus.enable_metrics_aggregation` returns all metrics aggregated (default is `false`).
+    Nodes with over 50k objects (queues, connections, channels) can take 30 seconds or more to return metrics without this option.
+    See #26 for more details.
+ * `prometheus.path` defines a scrape endpoint (default is `"/metrics"`).
  * `prometheus.tcp.*` controls HTTP listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#configuration)
  * `prometheus.ssl.*` controls TLS (HTTPS) listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#single-listener-https)
 
@@ -44,6 +48,7 @@ Sample configuration snippet:
 
 ``` ini
 # these values are defaults
+prometheus.enable_metrics_aggregation = false
 prometheus.path = /metrics
 prometheus.tcp.port =  15692
 ```
