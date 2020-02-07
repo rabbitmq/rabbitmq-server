@@ -767,9 +767,13 @@ queue_fold(Fun, Init, Q) ->
         {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
     end.
 
-%% Sorts a list of AMQP table fields as per the AMQP spec
+%% Sorts a list of AMQP 0-9-1 table fields as per the AMQP 0-9-1 spec
 sort_field_table([]) ->
     [];
+sort_field_table(M) when is_map(M) andalso map_size(M) =:= 0 ->
+    [];
+sort_field_table(Arguments) when is_map(Arguments) ->
+    sort_field_table(maps:to_list(Arguments));
 sort_field_table(Arguments) ->
     lists:keysort(1, Arguments).
 
