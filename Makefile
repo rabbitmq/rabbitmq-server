@@ -349,6 +349,20 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
 
+# Docker is different because we need to build & publish
+OTP_VERSION := 22.2.6
+OTP_SHA256 := 4cf44ed12f657c309a2c00e7806f36f56a88e5b74de6814058796561f3842f66
+docker-image:
+	$(verbose) docker build --pull \
+	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
+	  --build-arg OTP_VERSION=$(OTP_VERSION) \
+	  --build-arg OTP_SHA256=$(OTP_SHA256) \
+	  --build-arg RABBITMQ_VERSION=$(RABBITMQ_VERSION) \
+	  --build-arg RABBITMQ_BUILD=PACKAGES/rabbitmq_server-$(PROJECT_VERSION) \
+	  --tag pivotalrabbitmq/rabbitmq:$(RABBITMQ_VERSION) \
+	  . \
+	&& docker push pivotalrabbitmq/rabbitmq:$(RABBITMQ_VERSION)
+
 # --------------------------------------------------------------------
 # Installation.
 # --------------------------------------------------------------------
