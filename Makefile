@@ -276,12 +276,15 @@ $(SOURCE_DIST).manifest: $(SOURCE_DIST)
 		find $(notdir $(SOURCE_DIST)) | LC_COLLATE=C sort > $@
 
 ifeq ($(shell tar --version | grep -c "GNU tar"),0)
+# Skip all flags if this is Darwin (a.k.a. macOS, a.k.a. OS X)
+ifeq ($(shell uname | grep -c "Darwin"),0)
 TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --uid 0 \
 				    --gid 0 \
 				    --numeric-owner \
 				    --no-acls \
 				    --no-fflags \
 				    --no-xattrs
+endif
 else
 TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --owner 0 \
 				    --group 0 \
