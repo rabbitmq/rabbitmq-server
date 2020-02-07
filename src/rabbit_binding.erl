@@ -18,11 +18,11 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
--export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/3]).
+-export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/2, remove/3, remove/4]).
 -export([list/1, list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2, list_explicit/0]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
-         process_deletions/2]).
+         process_deletions/2, binding_action/3]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
@@ -30,6 +30,7 @@
          remove_default_exchange_binding_rows_of/1]).
 
 -export([implicit_for_destination/1, reverse_binding/1]).
+-export([new/4]).
 
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
                                               kind = exchange,
@@ -62,6 +63,20 @@
 -type deletions() :: dict:dict().
 
 %%----------------------------------------------------------------------------
+
+-spec new(rabbit_types:exchange(),
+          key(),
+          rabbit_types:exchange() | amqqueue:amqqueue(),
+          rabbit_framing:amqp_table()) ->
+    rabbit_types:binding().
+
+new(Src, RoutingKey, Dst, #{}) ->
+    new(Src, RoutingKey, Dst, []);
+new(Src, RoutingKey, Dst, Arguments) when is_map(Arguments) ->
+    new(Src, RoutingKey, Dst, maps:to_list(Arguments));
+new(Src, RoutingKey, Dst, Arguments) ->
+    #binding{source = Src, key = RoutingKey, destination = Dst, args = Arguments}.
+
 
 -define(INFO_KEYS, [source_name, source_kind,
                     destination_name, destination_kind,
@@ -186,12 +201,14 @@ add(Src, Dst, B, ActingUser) ->
             info(B) ++ [{user_who_performed_action, ActingUser}])
     end.
 
--spec remove(rabbit_types:binding())              -> bind_res().
-
+-spec remove(rabbit_types:binding()) -> bind_res().
 remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end, ?INTERNAL_USER).
 
--spec remove(rabbit_types:binding(), inner_fun(), rabbit_types:username()) -> bind_res().
+-spec remove(rabbit_types:binding(), rabbit_types:username()) -> bind_res().
+remove(Binding, ActingUser) -> remove(Binding, fun (_Src, _Dst) -> ok end, ActingUser).
 
+
+-spec remove(rabbit_types:binding(), inner_fun(), rabbit_types:username()) -> bind_res().
 remove(Binding, InnerFun, ActingUser) ->
     binding_action(
       Binding,
