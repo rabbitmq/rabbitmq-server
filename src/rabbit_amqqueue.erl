@@ -765,7 +765,13 @@ priv_absent(QueueName, _QPid, _IsDurable, crashed) ->
 priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
     rabbit_misc:protocol_error(
       not_found,
-      "failed to perform operation on ~s due to timeout", [rabbit_misc:rs(QueueName)]).
+      "failed to perform operation on ~s due to timeout", [rabbit_misc:rs(QueueName)]);
+
+priv_absent(QueueName, QPid, _IsDurable, alive) ->
+    rabbit_misc:protocol_error(
+      not_found,
+      "failed to perform operation on ~s due to its inconsistent pid ~s",
+      [rabbit_misc:rs(QueueName), QPid]).
 
 -spec assert_equivalence
         (amqqueue:amqqueue(), boolean(), boolean(),
