@@ -353,7 +353,8 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 OTP_VERSION := 22.2.6
 OTP_SHA256 := 4cf44ed12f657c309a2c00e7806f36f56a88e5b74de6814058796561f3842f66
 docker-image:
-	$(verbose) docker build --pull \
+	$(verbose) (cd PACKAGES && tar xjvf rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz) \
+	&& docker build --pull \
 	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
