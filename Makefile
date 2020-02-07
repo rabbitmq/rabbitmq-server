@@ -265,7 +265,7 @@ define dump_hex_cache_to_erl_term
     Key =:= write_concurrency orelse
     Key =:= compressed],
   Entries = ets:tab2list(Tab),
-  ok = file:write_file(Out, io_lib:format("~p.~n~p.~n", [Props, Entries])),
+  ok = file:write_file(Out, io_lib:format("~w.~n~w.~n", [Props, Entries])),
   ok = file:delete(In),
   init:stop().
 endef
