@@ -115,7 +115,6 @@ get_context_after_reloading_env(Context) ->
              fun nodename_type/1,
              fun nodename/1,
              fun split_nodename/1,
-             fun systemd_notify_socket/1,
              fun maybe_setup_dist_for_remote_query/1,
              fun dbg_config/1,
              fun main_config_file/1,
@@ -1145,21 +1144,6 @@ erlang_dist_tcp_port(#{amqp_tcp_port := AmqpTcpPort} = Context) ->
                       [TcpPortStr]),
                     throw({exit, ex_config})
             end
-    end.
-
-%% -------------------------------------------------------------------
-%%
-%% NOTIFY_SOCKET [Linux only]
-%%   Default: unset
-
-systemd_notify_socket(Context) ->
-    case get_env_var("NOTIFY_SOCKET") of
-        false ->
-            update_context(Context,
-                           systemd_notify_socket, undefined, default);
-        Socket ->
-            update_context(Context,
-                           systemd_notify_socket, Socket, environment)
     end.
 
 %% -------------------------------------------------------------------
