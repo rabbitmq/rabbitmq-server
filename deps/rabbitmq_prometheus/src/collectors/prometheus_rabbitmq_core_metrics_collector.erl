@@ -459,12 +459,17 @@ get_data(Table, true) when Table == channel_exchange_metrics;
         %% raft_entry_commit_latency_seconds needs to be an average
         ra_metrics ->
             {Count, Sum} = element(7, Result),
-            [setelement(7, Result, Sum / Count)];
+            [setelement(7, Result, division(Sum, Count))];
         _ ->
             [Result]
     end;
 get_data(Table, _) ->
     ets:tab2list(Table).
+
+division(0, 0) ->
+    0;
+division(A, B) ->
+    A/B.
 
 accumulate_count_and_sum(Value, {Count, Sum}) ->
     {Count + 1, Sum + Value}.
