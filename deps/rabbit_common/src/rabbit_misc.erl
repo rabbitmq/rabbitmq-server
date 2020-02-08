@@ -331,7 +331,7 @@ absent(#amqqueue{name = QueueName}, timeout) ->
 
 absent(#amqqueue{name = QueueName, pid = QPid}, alive) ->
    protocol_error(not_found,
-                  "failed to perform operation on ~s due to its inconsistent pid ~s",
+                  "failed to perform operation on ~s: its master replica ~w may be stopping or being demoted",
                   [rs(QueueName), QPid]).
 
 type_class(byte)          -> int;
