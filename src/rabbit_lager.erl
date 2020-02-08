@@ -444,7 +444,29 @@ default_handler_config(lager_file_backend) ->
      {date, ""},
      {size, 0}].
 
-default_config_value(level) -> info;
+default_config_value(level) ->
+    LogConfig = application:get_env(rabbit, log, []),
+    FoldFun = fun
+                  ({_, Cfg}, LL) when is_list(Cfg) ->
+                      NewLL = proplists:get_value(level, Cfg, LL),
+                      case LL of
+                          undefined ->
+                              NewLL;
+                          _ ->
+                              MoreVerbose = lager_util:level_to_num(NewLL) > lager_util:level_to_num(LL),
+                              case MoreVerbose of
+                                  true  -> NewLL;
+                                  false -> LL
+                              end
+                      end;
+                  (_, LL) ->
+                      LL
+              end,
+    FoundLL = lists:foldl(FoldFun, undefined, LogConfig),
+    case FoundLL of
+        undefined -> info;
+        _         -> FoundLL
+    end;
 default_config_value(formatter_config) ->
     [date, " ", time, " ", color, "[", severity, "] ",
        {pid, ""},
@@ -580,7 +602,7 @@ generate_lager_sinks(SinkNames, SinkConfigs) ->
                     undefined ->
                         %% Create a new file handler.
                         %% `info` is a default level here.
-                        FileLevel = proplists:get_value(level, SinkConfig, default_config_value(level)),
+                        FileLevel = proplists:get_value(level, SinkConfig, DefaultLogLevel),
                         generate_lager_handlers([{file, [{file, File}, {level, FileLevel}]}]);
                     FileHandler ->
                         %% Replace a filename in the handler
