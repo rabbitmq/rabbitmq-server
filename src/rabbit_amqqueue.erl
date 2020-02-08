@@ -770,7 +770,7 @@ priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
 priv_absent(QueueName, QPid, _IsDurable, alive) ->
     rabbit_misc:protocol_error(
       not_found,
-      "failed to perform operation on ~s due to its inconsistent pid ~s",
+      "failed to perform operation on ~s: its master replica ~s may be stopping or being demoted",
       [rabbit_misc:rs(QueueName), QPid]).
 
 -spec assert_equivalence
