@@ -16,6 +16,9 @@
 
 -module(mirrored_supervisor).
 
+%% pg2 is deprecated in OTP 23.
+-compile(nowarn_deprecated_function).
+
 %% Mirrored Supervisor
 %% ===================
 %%
