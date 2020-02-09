@@ -327,7 +327,12 @@ absent(#amqqueue{name = QueueName}, crashed) ->
 
 absent(#amqqueue{name = QueueName}, timeout) ->
     protocol_error(not_found,
-                   "failed to perform operation on ~s due to timeout", [rs(QueueName)]).
+                   "failed to perform operation on ~s due to timeout", [rs(QueueName)]);
+
+absent(#amqqueue{name = QueueName, pid = QPid}, alive) ->
+   protocol_error(not_found,
+                  "failed to perform operation on ~s: its master replica ~w may be stopping or being demoted",
+                  [rs(QueueName), QPid]).
 
 type_class(byte)          -> int;
 type_class(short)         -> int;
