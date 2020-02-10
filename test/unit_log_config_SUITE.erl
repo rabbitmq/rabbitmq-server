@@ -109,7 +109,7 @@ sink_rewrite_sinks() ->
             {lager_file_backend,
                     [{date, ""},
                      {file, "federation.log"},
-                     {formatter_config, formatter_config()},
+                     {formatter_config, formatter_config(file)},
                      {level, warning},
                      {size, 0}]},
             {lager_console_backend, [{level, warning}]},
@@ -119,7 +119,7 @@ sink_rewrite_sinks() ->
             {lager_file_backend,
                     [{date, ""},
                      {file, "federation.log"},
-                     {formatter_config, formatter_config()},
+                     {formatter_config, formatter_config(file)},
                      {level, warning},
                      {size, 0}]},
             {lager_console_backend, [{level, warning}]},
@@ -155,8 +155,9 @@ sink_rewrite_sinks() ->
      ].
 
 sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
+    DefaultLevel = debug,
     application:set_env(rabbit, log, [
-        {file,     [{file, "rabbit_file.log"}, {level, debug}]},
+        {file,     [{file, "rabbit_file.log"}, {level, DefaultLevel}]},
         {console,  [{enabled, true}, {level, error}]},
         {exchange, [{enabled, true}, {level, error}]},
         {categories, [
@@ -183,18 +184,18 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
 
     ExpectedSinks = sort_sinks([
         {error_logger_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_channel_lager_event,
             [{handlers,[
                 {lager_console_backend, [{level, error},
-                                         {formatter_config, formatter_config()}]},
+                                         {formatter_config, formatter_config(console)}]},
                 {lager_exchange_backend, [{level, error},
-                                        {formatter_config, formatter_config()}]},
+                                        {formatter_config, formatter_config(exchange)}]},
                 {lager_file_backend,
                     [{date, ""},
                      {file, "channel_log.log"},
-                     {formatter_config, formatter_config()},
+                     {formatter_config, formatter_config(file)},
                      {level, warning},
                      {size, 0}]},
                 {lager_console_backend, [{level, debug}]},
@@ -204,13 +205,13 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
                 ]},
              {rabbit_handlers,[
                 {lager_console_backend, [{level, error},
-                                         {formatter_config, formatter_config()}]},
+                                         {formatter_config, formatter_config(console)}]},
                 {lager_exchange_backend, [{level, error},
-                                        {formatter_config, formatter_config()}]},
+                                        {formatter_config, formatter_config(exchange)}]},
                 {lager_file_backend,
                     [{date, ""},
                      {file, "channel_log.log"},
-                     {formatter_config, formatter_config()},
+                     {formatter_config, formatter_config(file)},
                      {level, warning},
                      {size, 0}]}]}
              ]},
@@ -219,38 +220,38 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
                         {lager_file_backend, [{file, "connection_lager.log"}, {level, info}]}]},
              {rabbit_handlers,[{lager_forwarder_backend,[lager_event,debug]}]}]},
          {rabbit_log_feature_flags_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_federation_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_ldap_lager_event,
-                   [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
+                   [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
                     {rabbit_handlers,
-                     [{lager_forwarder_backend,[lager_event,info]}]}]},
+                     [{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_mirroring_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_prelaunch_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_queue_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_ra_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
              {rabbit_handlers,
-            [{lager_forwarder_backend,[lager_event,info]}]}]},
+            [{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_shovel_lager_event,
-            [{handlers, [{lager_forwarder_backend,[lager_event,info]}]},
+            [{handlers, [{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
              {rabbit_handlers,
-              [{lager_forwarder_backend,[lager_event,info]}]}]},
+              [{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
          {rabbit_log_upgrade_lager_event,
-            [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]}]),
+            [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+             {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]}]),
 
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
@@ -349,10 +350,11 @@ config_sink_file(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
 
+    DefaultLevel = error,
     application:set_env(rabbit, log, [
         {console, [{enabled, true}]},
         {exchange, [{enabled, true}]},
-        {file, [{level, error}]},
+        {file, [{level, DefaultLevel}]},
         {categories, [
             {connection, [{file, "connection.log"}, {level, warning}]}
         ]}
@@ -360,7 +362,7 @@ config_sink_file(_) ->
 
     rabbit_lager:configure_lager(),
 
-    ExpectedSinks = sort_sinks(file_sinks()),
+    ExpectedSinks = sort_sinks(file_sinks(DefaultLevel)),
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 config_sink_file_override_config_handler_file(_) ->
@@ -369,8 +371,9 @@ config_sink_file_override_config_handler_file(_) ->
 
     NonDefaultLogFile = "rabbit_not_default.log",
 
+    DefaultLevel = error,
     application:set_env(rabbit, log, [
-        {file, [{file, NonDefaultLogFile}, {level, error}]},
+        {file, [{file, NonDefaultLogFile}, {level, DefaultLevel}]},
         {console, [{enabled, true}]},
         {exchange, [{enabled, true}]},
         {categories, [
@@ -380,73 +383,76 @@ config_sink_file_override_config_handler_file(_) ->
 
     rabbit_lager:configure_lager(),
 
-    ExpectedSinks = sort_sinks(file_sinks()),
+    ExpectedSinks = sort_sinks(file_sinks(DefaultLevel)),
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 file_sinks() ->
+    file_sinks(info).
+
+file_sinks(DefaultLevel) ->
     [{error_logger_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_channel_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_connection_lager_event,
         [{handlers,[
             {lager_console_backend, [{level, warning},
-                                     {formatter_config, formatter_config()}]},
+                                     {formatter_config, formatter_config(console)}]},
             {lager_exchange_backend, [{level, warning},
-                                    {formatter_config, formatter_config()}]},
+                                    {formatter_config, formatter_config(exchange)}]},
             {lager_file_backend,
                 [{date, ""},
                  {file, "connection.log"},
-                 {formatter_config, formatter_config()},
+                 {formatter_config, formatter_config(file)},
                  {level, error},
                  {size, 0}]}]},
          {rabbit_handlers,[
             {lager_console_backend, [{level, warning},
-                                     {formatter_config, formatter_config()}]},
+                                     {formatter_config, formatter_config(console)}]},
             {lager_exchange_backend, [{level, warning},
-                                    {formatter_config, formatter_config()}]},
+                                    {formatter_config, formatter_config(exchange)}]},
             {lager_file_backend,
                 [{date, ""},
                  {file, "connection.log"},
-                 {formatter_config, formatter_config()},
+                 {formatter_config, formatter_config(backend)},
                  {level, error},
                  {size, 0}]}]}
          ]},
      {rabbit_log_feature_flags_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_federation_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_ldap_lager_event,
-               [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
+               [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
                 {rabbit_handlers,
-                 [{lager_forwarder_backend,[lager_event,info]}]}]},
+                 [{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_mirroring_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_prelaunch_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_queue_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_ra_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
          {rabbit_handlers,
-        [{lager_forwarder_backend,[lager_event,info]}]}]},
+        [{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_shovel_lager_event,
-        [{handlers, [{lager_forwarder_backend,[lager_event,info]}]},
+        [{handlers, [{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
          {rabbit_handlers,
-          [{lager_forwarder_backend,[lager_event,info]}]}]},
+          [{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]},
      {rabbit_log_upgrade_lager_event,
-        [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
-         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]}
+        [{handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]},
+         {rabbit_handlers,[{lager_forwarder_backend,[lager_event,DefaultLevel]}]}]}
      ].
 
 config_multiple_handlers(_) ->
@@ -509,14 +515,14 @@ expected_console_handler() ->
 
 expected_console_handler(Level) ->
     [{lager_console_backend, [{level, Level},
-                              {formatter_config, formatter_config()}]}].
+                              {formatter_config, formatter_config(console)}]}].
 
 expected_rabbit_handler() ->
     expected_rabbit_handler(debug).
 
 expected_rabbit_handler(Level) ->
     [{lager_exchange_backend, [{level, Level},
-                             {formatter_config, formatter_config()}]}].
+                             {formatter_config, formatter_config(exchange)}]}].
 
 config_syslog_handler(_) ->
     DefaultLogFile = "rabbit_default.log",
@@ -647,7 +653,7 @@ default_expected_handlers(File, Level, RotSize, RotDate, Extra) ->
     [{lager_file_backend,
         [{date, RotDate},
          {file, File},
-         {formatter_config, formatter_config()},
+         {formatter_config, formatter_config(file)},
          {level, Level},
          {size, RotSize}] ++ Extra}].
 
@@ -696,14 +702,14 @@ default_expected_sinks(UpgradeFile) ->
             [{lager_file_backend,
                 [{date,[]},
                  {file, UpgradeFile},
-                 {formatter_config, formatter_config()},
+                 {formatter_config, formatter_config(file)},
                  {level,info},
                  {size,0}]}]},
          {rabbit_handlers,
             [{lager_file_backend,
                 [{date,[]},
                  {file, UpgradeFile},
-                 {formatter_config, formatter_config()},
+                 {formatter_config, formatter_config(file)},
                  {level,info},
                  {size,0}]}]}]}].
 
@@ -735,7 +741,7 @@ unset_logs_var_origin() ->
 
 tty_expected_handlers() ->
     [{lager_console_backend,
-        [{formatter_config, formatter_config()},
+        [{formatter_config, formatter_config(console)},
          {level, debug}]}].
 
 tty_expected_sinks() ->
@@ -807,8 +813,10 @@ sort_handlers(Handlers) ->
             end,
             Handlers)).
 
-formatter_config() ->
-    [date," ",time," ",color,"[",severity, "] ", {pid,[]}, " ",message,"\r\n"].
+formatter_config(console) ->
+    [date," ",time," ",color,"[",severity, "] ", {pid,[]}, " ",message,"\r\n"];
+formatter_config(_) ->
+    [date," ",time," ",color,"[",severity, "] ", {pid,[]}, " ",message,"\n"].
 
 syslog_formatter_config() ->
-    [color,"[",severity, "] ", {pid,[]}, " ",message,"\r\n"].
+    [color,"[",severity, "] ", {pid,[]}, " ",message,"\n"].
