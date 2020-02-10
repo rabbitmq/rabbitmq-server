@@ -54,7 +54,8 @@
                       send_fun,
                       peer_addr,
                       mqtt2amqp_fun,
-                      amqp2mqtt_fun }).
+                      amqp2mqtt_fun,
+                      register_state }).
 
 -record(auth_state, {username,
                      user,

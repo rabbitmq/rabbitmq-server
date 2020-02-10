@@ -190,6 +190,13 @@ handle_info(keepalive_timeout, State = #state {conn_name = ConnStr,
 handle_info(emit_stats, State) ->
     {noreply, emit_stats(State), hibernate};
 
+handle_info({ra_event, _From, Evt},
+            #state{proc_state = PState} = State) ->
+    %% handle applied event to ensure registration command actually got applied
+    %% handle not_leader notification in case we send the command to a non-leader
+    PState1 = rabbit_mqtt_processor:handle_ra_event(Evt, PState),
+    {noreply, State#state{proc_state = PState1}, hibernate};
+
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
