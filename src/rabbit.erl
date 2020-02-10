@@ -1055,13 +1055,13 @@ do_run_postlaunch_phase() ->
     end.
 
 prep_stop(State) ->
-  rabbit_peer_discovery:maybe_unregister(),
-  State.
+    rabbit_prelaunch:set_boot_state(stopping),
+    rabbit_peer_discovery:maybe_unregister(),
+    State.
 
 -spec stop(_) -> 'ok'.
 
 stop(State) ->
-    rabbit_prelaunch:set_boot_state(stopping),
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
              true  -> ok;
