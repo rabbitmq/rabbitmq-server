@@ -426,40 +426,42 @@ default_handler_config(lager_console_backend) ->
     %% messages here.
     DefaultConfigVal = debug,
     [{level, DefaultConfigVal},
-     {formatter_config, default_config_value(formatter_config)}];
+     {formatter_config, default_config_value({formatter_config, console})}];
 default_handler_config(lager_exchange_backend) ->
     %% The default log level is set to `debug` because the actual
     %% filtering is made at the sink level. We want to accept all
     %% messages here.
     DefaultConfigVal = debug,
     [{level, DefaultConfigVal},
-     {formatter_config, default_config_value(formatter_config)}];
+     {formatter_config, default_config_value({formatter_config, exchange})}];
 default_handler_config(lager_file_backend) ->
     %% The default log level is set to `debug` because the actual
     %% filtering is made at the sink level. We want to accept all
     %% messages here.
     DefaultConfigVal = debug,
     [{level, DefaultConfigVal},
-     {formatter_config, default_config_value(formatter_config)},
+     {formatter_config, default_config_value({formatter_config, file})},
      {date, ""},
      {size, 0}].
 
 default_config_value(level) -> info;
-default_config_value(formatter_config) ->
+default_config_value({formatter_config, console}) ->
+    EOL = case application:get_env(lager, colored) of
+              {ok, true}  -> "\e[0m\r\n";
+              _           -> "\r\n"
+          end,
     [date, " ", time, " ", color, "[", severity, "] ",
        {pid, ""},
-       " ", message, eol()].
+       " ", message, EOL];
+default_config_value({formatter_config, _}) ->
+    [date, " ", time, " ", color, "[", severity, "] ",
+       {pid, ""},
+       " ", message, "\n"].
 
 syslog_formatter_config() ->
     [color, "[", severity, "] ",
        {pid, ""},
-       " ", message, eol()].
-
-eol() ->
-    case application:get_env(lager, colored) of
-        {ok, true}  -> "\e[0m\r\n";
-        _           -> "\r\n"
-    end.
+       " ", message, "\n"].
 
 prepare_rabbit_log_config() ->
     %% If RABBIT_LOGS is not set, we should ignore it.
