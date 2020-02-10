@@ -561,7 +561,33 @@ generate_lager_sinks(SinkNames, SinkConfigs) ->
                           #{global := LogLevel} ->
                               LogLevel;
                           _ ->
-                              default_config_value(level)
+                              LogConfig = application:get_env(rabbit, log, []),
+                              FoundLL =
+                              lists:foldl(
+                                fun
+                                    ({_, Cfg}, LL) when is_list(Cfg) ->
+                                        NewLL = proplists:get_value(
+                                                  level, Cfg, LL),
+                                        case LL of
+                                            undefined ->
+                                                NewLL;
+                                            _ ->
+                                                MoreVerbose =
+                                                lager_util:level_to_num(NewLL)
+                                                >
+                                                lager_util:level_to_num(LL),
+                                                case MoreVerbose of
+                                                    true  -> NewLL;
+                                                    false -> LL
+                                                end
+                                        end;
+                                    (_, LL) ->
+                                        LL
+                                end, undefined, LogConfig),
+                              case FoundLL of
+                                  undefined -> default_config_value(level);
+                                  _         -> FoundLL
+                              end
                       end,
     lists:map(fun(SinkName) ->
         SinkConfig = proplists:get_value(SinkName, SinkConfigs, []),
