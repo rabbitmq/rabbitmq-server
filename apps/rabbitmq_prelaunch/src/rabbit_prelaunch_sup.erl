@@ -8,10 +8,15 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+    BootStateSup = #{id => bootstate,
+                     start => {rabbit_boot_state_sup, start_link, []},
+                     type => supervisor},
     %% `rabbit_prelaunch` does not start a process, it only configures
     %% the node.
     Prelaunch = #{id => prelaunch,
                   start => {rabbit_prelaunch, run_prelaunch_first_phase, []},
                   restart => transient},
-    Procs = [Prelaunch],
-    {ok, {{one_for_one, 1, 5}, Procs}}.
+    Procs = [BootStateSup, Prelaunch],
+    {ok, {#{strategy => one_for_one,
+            intensity => 1,
+            period => 5}, Procs}}.
