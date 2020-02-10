@@ -620,17 +620,16 @@ start_apps(Apps) ->
 -spec start_apps([app_name()],
                  #{app_name() => restart_type()}) -> 'ok'.
 
-%% TODO: start_apps/2 and start_loaded_apps/2 are now specific to
-%% plugins. Those function should be moved over `rabbit_plugins`, along
-%% with top_apps/1, once the latter stops using app_utils as well.
+%% TODO: start_apps/2 and is now specific to plugins. This function
+%% should be moved over `rabbit_plugins`, along with stop_apps/1, once
+%% the latter stops using app_utils as well.
 
 start_apps(Apps, RestartTypes) ->
+    false = lists:member(rabbit, Apps), %% Assertion.
+    %% We need to load all applications involved in order to be able to
+    %% find new feature flags.
     app_utils:load_applications(Apps),
     ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(Apps),
-    start_loaded_apps(Apps, RestartTypes).
-
-start_loaded_apps(Apps, RestartTypes) ->
-    false = lists:member(rabbit, Apps), %% Assertion.
     rabbit_prelaunch_conf:decrypt_config(Apps),
     lists:foreach(
       fun(App) ->
