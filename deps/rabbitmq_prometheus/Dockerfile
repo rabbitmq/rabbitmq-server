@@ -298,18 +298,10 @@ RUN rabbitmq-plugins enable --offline rabbitmq_top && \
     rabbitmq-plugins is_enabled rabbitmq_top --offline
 
 # rabbitmq_prometheus
-RUN rm /plugins/rabbit_common*.ez
-COPY plugins/rabbit_common*.ez  /plugins/
-RUN rm /plugins/accept*.ez
-COPY plugins/accept*.ez /plugins/
 RUN rm /plugins/prometheus*.ez
 COPY plugins/prometheus*.ez /plugins/
-RUN rm /plugins/rabbitmq_management*.ez
-COPY plugins/rabbitmq_management*.ez  /plugins/
 RUN rm /plugins/rabbitmq_prometheus*.ez
 COPY plugins/rabbitmq_prometheus*.ez  /plugins/
-RUN rm /plugins/ra-*.ez
-COPY plugins/ra-*.ez  /plugins/
 
 ARG RABBITMQ_PROMETHEUS_VERSION
 RUN chmod --recursive --verbose a+r /plugins/*.ez && \
