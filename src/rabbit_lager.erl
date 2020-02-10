@@ -426,40 +426,42 @@ default_handler_config(lager_console_backend) ->
     %% messages here.
     DefaultConfigVal = debug,
     [{level, DefaultConfigVal},
-     {formatter_config, default_config_value(formatter_config)}];
+     {formatter_config, default_config_value({formatter_config, console})}];
 default_handler_config(lager_exchange_backend) ->
     %% The default log level is set to `debug` because the actual
     %% filtering is made at the sink level. We want to accept all
     %% messages here.
     DefaultConfigVal = debug,
     [{level, DefaultConfigVal},
-     {formatter_config, default_config_value(formatter_config)}];
+     {formatter_config, default_config_value({formatter_config, exchange})}];
 default_handler_config(lager_file_backend) ->
     %% The default log level is set to `debug` because the actual
     %% filtering is made at the sink level. We want to accept all
     %% messages here.
     DefaultConfigVal = debug,
     [{level, DefaultConfigVal},
-     {formatter_config, default_config_value(formatter_config)},
+     {formatter_config, default_config_value({formatter_config, file})},
      {date, ""},
      {size, 0}].
 
 default_config_value(level) -> info;
-default_config_value(formatter_config) ->
+default_config_value({formatter_config, console}) ->
+    EOL = case application:get_env(lager, colored) of
+              {ok, true}  -> "\e[0m\r\n";
+              _           -> "\r\n"
+          end,
     [date, " ", time, " ", color, "[", severity, "] ",
        {pid, ""},
-       " ", message, eol()].
+       " ", message, EOL];
+default_config_value({formatter_config, _}) ->
+    [date, " ", time, " ", color, "[", severity, "] ",
+       {pid, ""},
+       " ", message, "\n"].
 
 syslog_formatter_config() ->
     [color, "[", severity, "] ",
        {pid, ""},
-       " ", message, eol()].
-
-eol() ->
-    case application:get_env(lager, colored) of
-        {ok, true}  -> "\e[0m\r\n";
-        _           -> "\r\n"
-    end.
+       " ", message, "\n"].
 
 prepare_rabbit_log_config() ->
     %% If RABBIT_LOGS is not set, we should ignore it.
@@ -559,7 +561,33 @@ generate_lager_sinks(SinkNames, SinkConfigs) ->
                           #{global := LogLevel} ->
                               LogLevel;
                           _ ->
-                              default_config_value(level)
+                              LogConfig = application:get_env(rabbit, log, []),
+                              FoundLL =
+                              lists:foldl(
+                                fun
+                                    ({_, Cfg}, LL) when is_list(Cfg) ->
+                                        NewLL = proplists:get_value(
+                                                  level, Cfg, LL),
+                                        case LL of
+                                            undefined ->
+                                                NewLL;
+                                            _ ->
+                                                MoreVerbose =
+                                                lager_util:level_to_num(NewLL)
+                                                >
+                                                lager_util:level_to_num(LL),
+                                                case MoreVerbose of
+                                                    true  -> NewLL;
+                                                    false -> LL
+                                                end
+                                        end;
+                                    (_, LL) ->
+                                        LL
+                                end, undefined, LogConfig),
+                              case FoundLL of
+                                  undefined -> default_config_value(level);
+                                  _         -> FoundLL
+                              end
                       end,
     lists:map(fun(SinkName) ->
         SinkConfig = proplists:get_value(SinkName, SinkConfigs, []),
