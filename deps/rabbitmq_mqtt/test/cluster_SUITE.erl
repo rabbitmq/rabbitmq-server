@@ -91,7 +91,7 @@ connection_id_tracking(Config) ->
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
+    assert_connection_count(Config, 10, 2, 1),
 
     %% connect to the same node (A or 0)
     {ok, MRef2, _C2} = connect_to_node(Config, 0, ID),
@@ -101,7 +101,7 @@ connection_id_tracking(Config) ->
 
     %% connect to a different node (C or 2)
     {ok, _, C3} = connect_to_node(Config, 2, ID),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
+    assert_connection_count(Config, 10, 2, 1),
 
     %% C2 is disconnected
     await_disconnection(MRef2),
@@ -114,11 +114,11 @@ connection_id_tracking_on_nodedown(Config) ->
     emqttc:subscribe(C, <<"TopicA">>, qos0),
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
-
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
+    assert_connection_count(Config, 10, 2, 1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
     await_disconnection(MRef),
-    [] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []).
+    assert_connection_count(Config, 10, 2, 0),
+    ok.
 
 connection_id_tracking_with_decommissioned_node(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -127,14 +127,29 @@ connection_id_tracking_with_decommissioned_node(Config) ->
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
 
-    [_] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []),
+    assert_connection_count(Config, 10, 2, 1),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
     await_disconnection(MRef),
-    [] = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_collector, list, []).
+    assert_connection_count(Config, 10, 2, 0),
+    ok.
 
 %%
 %% Helpers
 %%
+
+assert_connection_count(_Config, 0,  _, _) ->
+    ct:fail("failed to complete rabbit_mqtt_collector:list/0");
+assert_connection_count(Config, Retries, NodeId, NumElements) ->
+    List = rabbit_ct_broker_helpers:rpc(Config, NodeId, rabbit_mqtt_collector, list, []),
+    case length(List) == NumElements of
+        true ->
+            ok;
+        false ->
+            timer:sleep(200),
+            assert_connection_count(Config, Retries-1, NodeId, NumElements)
+    end.
+
+
 
 connect_to_node(Config, Node, ClientID) ->
   Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mqtt),
