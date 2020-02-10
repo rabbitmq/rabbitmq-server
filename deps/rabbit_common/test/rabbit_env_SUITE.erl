@@ -177,7 +177,6 @@ check_default_values(_) ->
       plugins_path => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
-      systemd_notify_socket => default,
       upgrade_log_file => default
      },
 
@@ -218,7 +217,6 @@ check_default_values(_) ->
          rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
-         systemd_notify_socket => undefined,
          upgrade_log_file =>
            "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
@@ -262,7 +260,6 @@ check_default_values(_) ->
          rabbitmq_base => "%APPDATA%/RabbitMQ",
          rabbitmq_home => maps:get(rabbitmq_home, Win32Context),
          split_nodename => rabbit_nodes_common:parts(Node),
-         systemd_notify_socket => undefined,
          upgrade_log_file =>
            "%APPDATA%/RabbitMQ/log/" ++ NodeS ++ "_upgrade.log",
 
@@ -377,7 +374,6 @@ check_values_from_reachable_remote_node(Config) ->
           plugins_path => remote_node,
           quorum_queue_dir => default,
           rabbitmq_home => default,
-          systemd_notify_socket => default,
           upgrade_log_file => default
          },
 
@@ -416,7 +412,6 @@ check_values_from_reachable_remote_node(Config) ->
              rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
              split_nodename => rabbit_nodes_common:parts(Node),
              sys_prefix => "",
-             systemd_notify_socket => undefined,
              upgrade_log_file =>
                "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
@@ -488,7 +483,6 @@ check_values_from_offline_remote_node(_) ->
       plugins_path => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
-      systemd_notify_socket => default,
       upgrade_log_file => default
      },
 
@@ -527,7 +521,6 @@ check_values_from_offline_remote_node(_) ->
          rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
-         systemd_notify_socket => undefined,
          upgrade_log_file =>
            "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
