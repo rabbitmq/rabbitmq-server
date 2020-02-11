@@ -16,6 +16,9 @@
 
 -module(rabbit_federation_queue_link).
 
+%% pg2 is deprecated in OTP 23.
+-compile(nowarn_deprecated_function).
+
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
