@@ -115,11 +115,11 @@ dep_cowboy = hex 2.6.1
 dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.9.0
 dep_lager = hex 3.8.0
-dep_prometheus = hex 4.4.0
+dep_prometheus = hex 4.5.0
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.0
-dep_observer_cli = hex 1.5.2
+dep_observer_cli = hex 1.5.3
 dep_stdout_formatter = hex 0.2.2
 dep_sysmon_handler = hex 1.2.0
 
