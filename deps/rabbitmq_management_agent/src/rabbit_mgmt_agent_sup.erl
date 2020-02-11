@@ -16,6 +16,9 @@
 
 -module(rabbit_mgmt_agent_sup).
 
+%% pg2 is deprecated in OTP 23.
+-compile(nowarn_deprecated_function).
+
 -behaviour(supervisor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
