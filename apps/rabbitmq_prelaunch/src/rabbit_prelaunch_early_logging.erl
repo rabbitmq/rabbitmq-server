@@ -35,8 +35,9 @@ do_setup_early_logging(#{log_levels := LogLevels} = Context,
                             #{global := Level} -> Level;
                             _                  -> warning
                         end,
-            lager_app:start_handler(
-              lager_event, ConsoleBackend, [{level, GLogLevel}]);
+            _ = lager_app:start_handler(
+                  lager_event, ConsoleBackend, [{level, GLogLevel}]),
+            ok;
         false ->
             ok
     end,
@@ -99,8 +100,10 @@ get_log_level(LogLevels, Sink) ->
 
 enable_quick_dbg(#{dbg_output := Output, dbg_mods := Mods}) ->
     case Output of
-        stdout -> {ok, _} = dbg:tracer();
-        _      -> {ok, _} = dbg:tracer(port, dbg:trace_port(file, Output))
+        stdout -> {ok, _} = dbg:tracer(),
+                  ok;
+        _      -> {ok, _} = dbg:tracer(port, dbg:trace_port(file, Output)),
+                  ok
     end,
     {ok, _} = dbg:p(all, c),
     lists:foreach(fun(M) -> {ok, _} = dbg:tp(M, cx) end, Mods).

@@ -103,7 +103,10 @@ log_message(Message) ->
               ?BOOT_FAILED_FOOTER,
               [$\n],
               all),
-    [rabbit_log_prelaunch:error("~s", [Line]) || Line <- Lines],
-    [io:format(standard_error, "~s~n", [Line]) || Line <- Lines],
+    lists:foreach(
+      fun(Line) ->
+              rabbit_log_prelaunch:error("~s", [Line]),
+              io:format(standard_error, "~s~n", [Line])
+      end, Lines),
     timer:sleep(1000),
     ok.
