@@ -219,6 +219,7 @@ remove_pid_file(#{pid_file := PidFile, keep_pid_file_on_exit := true}) ->
     ok;
 remove_pid_file(#{pid_file := PidFile}) ->
     rabbit_log_prelaunch:debug("Deleting PID file: ~s", [PidFile]),
-    _ = file:delete(PidFile);
+    _ = file:delete(PidFile),
+    ok;
 remove_pid_file(_) ->
     ok.

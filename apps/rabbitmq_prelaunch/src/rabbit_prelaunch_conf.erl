@@ -192,8 +192,11 @@ generate_config_from_cuttlefish_files(Context,
         _ ->
             rabbit_log_prelaunch:debug(
               "Configuration schemas found:~n", []),
-            [rabbit_log_prelaunch:debug("  - ~ts", [SchemaFile])
-             || SchemaFile <- SchemaFiles],
+            lists:foreach(
+              fun(SchemaFile) ->
+                      rabbit_log_prelaunch:debug("  - ~ts", [SchemaFile])
+              end,
+              SchemaFiles),
             ok
     end,
     Schema = cuttlefish_schema:files(SchemaFiles),
@@ -201,15 +204,17 @@ generate_config_from_cuttlefish_files(Context,
     %% Load configuration.
     rabbit_log_prelaunch:debug(
       "Loading configuration files (Cuttlefish based):"),
-    [rabbit_log_prelaunch:debug(
-       "  - ~ts", [ConfigFile]) || ConfigFile <- ConfigFiles],
+    lists:foreach(
+      fun(ConfigFile) ->
+              rabbit_log_prelaunch:debug("  - ~ts", [ConfigFile])
+      end, ConfigFiles),
     case cuttlefish_conf:files(ConfigFiles) of
         {errorlist, Errors} ->
             rabbit_log_prelaunch:error("Error generating configuration:", []),
-            [rabbit_log_prelaunch:error(
-               "  - ~ts",
-               [cuttlefish_error:xlate(Error)])
-             || Error <- Errors],
+            lists:foreach(
+              fun(Error) ->
+                      rabbit_log_prelaunch:error("  - ~ts", [cuttlefish_error:xlate(Error)])
+              end, Errors),
             throw({error, failed_to_generate_configuration_file});
         Config0 ->
             %% Finalize configuration, based on the schema.
@@ -219,10 +224,12 @@ generate_config_from_cuttlefish_files(Context,
                              rabbit_log_prelaunch:error(
                                "Error generating configuration in phase ~ts:",
                                [Phase]),
-                             [rabbit_log_prelaunch:error(
-                                "  - ~ts",
-                                [cuttlefish_error:xlate(Error)])
-                              || Error <- Errors],
+                             lists:foreach(
+                               fun(Error) ->
+                                       rabbit_log_prelaunch:error(
+                                         "  - ~ts",
+                                         [cuttlefish_error:xlate(Error)])
+                               end, Errors),
                              throw(
                                {error, failed_to_generate_configuration_file});
                          ValidConfig ->
@@ -294,7 +301,8 @@ list_schemas_in_app(App) ->
                    []
            end,
     case Unload of
-        true  -> application:unload(App);
+        true  -> _ = application:unload(App),
+                 ok;
         false -> ok
     end,
     List.
@@ -447,11 +455,11 @@ get_passphrase(ConfigEntryDecoder) ->
     case proplists:get_value(passphrase, ConfigEntryDecoder) of
         prompt ->
             IoDevice = get_input_iodevice(),
-            io:setopts(IoDevice, [{echo, false}]),
+            ok = io:setopts(IoDevice, [{echo, false}]),
             PP = lists:droplast(io:get_line(IoDevice,
                 "\nPlease enter the passphrase to unlock encrypted "
                 "configuration entries.\n\nPassphrase: ")),
-            io:setopts(IoDevice, [{echo, true}]),
+            ok = io:setopts(IoDevice, [{echo, true}]),
             io:format(IoDevice, "~n", []),
             PP;
         {file, Filename} ->

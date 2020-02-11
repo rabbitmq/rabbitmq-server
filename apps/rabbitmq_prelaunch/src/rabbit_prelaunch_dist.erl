@@ -33,9 +33,11 @@ do_setup(#{nodename := Node, nodename_type := NameType}) ->
             %% "minimum transition traffic interval" as defined in
             %% net_kernel:set_net_ticktime/1.
             MTTI = Ticktime * 1000 div 4,
-            {ok, _} = net_kernel:start([Node, NameType, MTTI]);
+            {ok, _} = net_kernel:start([Node, NameType, MTTI]),
+            ok;
         _ ->
-            {ok, _} = net_kernel:start([Node, NameType])
+            {ok, _} = net_kernel:start([Node, NameType]),
+            ok
     end,
     ok.
 
@@ -53,7 +55,7 @@ duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
                 true ->
                     throw({error, {duplicate_node_name, NodeName, NodeHost}});
                 false ->
-                    net_kernel:stop(),
+                    ok = net_kernel:stop(),
                     ok
             end;
         {error, EpmdReason} ->
