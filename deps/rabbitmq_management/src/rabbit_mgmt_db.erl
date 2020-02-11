@@ -16,6 +16,9 @@
 
 -module(rabbit_mgmt_db).
 
+%% pg2 is deprecated in OTP 23.
+-compile(nowarn_deprecated_function).
+
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
