@@ -368,7 +368,9 @@ else
 
     # Signal handlers. They all stop RabbitMQ properly, using
     # rabbitmqctl stop. This script will exit with different exit codes:
-    #   SIGHUP SIGTERM SIGTSTP
+    #   SIGHUP, SIGTSTP + SIGCONT
+    #     Ignored until we implement a useful behavior.
+    #   SIGTERM
     #	  Exits 0 since this is considered a normal process termination.
     #   SIGINT
     #     Exits 128 + $signal_number where $signal_number is 2 for SIGINT (see
@@ -377,7 +379,12 @@ else
     #     don't need to specify this exit code because the shell propagates it.
     #     Unfortunately, the signal handler doesn't work as expected in Dash,
     #     thus we need to explicitly restate the exit code.
-    trap "stop_rabbitmq_server; exit 0" HUP TERM TSTP
+    #
+    # The behaviors below should remain consistent with the
+    # equivalent signal handlers in the Erlang code
+    # (see src/rabbit_os_signal_handler.erl).
+    trap '' HUP TSTP CONT
+    trap "stop_rabbitmq_server; exit 0" TERM
     trap "stop_rabbitmq_server; exit 130" INT
 
     start_rabbitmq_server "$@" &
