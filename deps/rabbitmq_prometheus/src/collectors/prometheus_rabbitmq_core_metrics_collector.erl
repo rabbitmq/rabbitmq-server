@@ -219,9 +219,9 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf(_Registry, Callback) ->
-    {ok, Enable} = application:get_env(rabbitmq_prometheus, enable_metrics_aggregation),
+    {ok, PerObjectMetrics} = application:get_env(rabbitmq_prometheus, return_per_object_metrics),
     [begin
-         Data = get_data(Table, Enable),
+         Data = get_data(Table, PerObjectMetrics),
          mf(Callback, Contents, Data)
      end || {Table, Contents} <- ?METRICS_RAW],
     [begin
@@ -375,7 +375,7 @@ emit_gauge_metric_if_defined(Labels, Value) ->
       gauge_metric(Labels, Value)
   end.
 
-get_data(connection_metrics = Table, true) ->
+get_data(connection_metrics = Table, false) ->
     {Table, A1, A2, A3, A4} = ets:foldl(fun({_, Props}, {T, A1, A2, A3, A4}) ->
                                             {T,
                                              sum(proplists:get_value(recv_cnt, Props), A1),
@@ -384,9 +384,7 @@ get_data(connection_metrics = Table, true) ->
                                              sum(proplists:get_value(channels, Props), A4)}
                                     end, empty(Table), Table),
     [{Table, [{recv_cnt, A1}, {send_cnt, A2}, {send_pend, A3}, {channels, A4}]}];
-
-
-get_data(channel_metrics = Table, true) ->
+get_data(channel_metrics = Table, false) ->
     {Table, A1, A2, A3, A4, A5, A6, A7} =
         ets:foldl(fun({_, Props}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
                           {T,
@@ -401,8 +399,7 @@ get_data(channel_metrics = Table, true) ->
      [{Table, [{consumer_count, A1}, {messages_unacknowledged, A2}, {messages_unconfirmed, A3},
                {messages_uncommitted, A4}, {acks_uncommitted, A5}, {prefetch_count, A6},
                {global_prefetch_count, A7}]}];
-
-get_data(queue_metrics = Table, true) ->
+get_data(queue_metrics = Table, false) ->
     {Table, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16} =
         ets:foldl(fun({_, Props, _}, {T, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10,
                                       A11, A12, A13, A14, A15, A16}) ->
@@ -432,8 +429,7 @@ get_data(queue_metrics = Table, true) ->
                {message_bytes_ready, A11}, {message_bytes_unacknowledged, A12},
                {messages_paged_out, A13}, {message_bytes_paged_out, A14},
                {disk_reads, A15}, {disk_writes, A16}]}];
-
-get_data(Table, true) when Table == channel_exchange_metrics;
+get_data(Table, false) when Table == channel_exchange_metrics;
                            Table == queue_coarse_metrics;
                            Table == channel_queue_metrics;
                            Table == connection_coarse_metrics;
@@ -469,7 +465,7 @@ get_data(Table, _) ->
 division(0, 0) ->
     0;
 division(A, B) ->
-    A/B.
+    A / B.
 
 accumulate_count_and_sum(Value, {Count, Sum}) ->
     {Count + 1, Sum + Value}.

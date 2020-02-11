@@ -29,7 +29,7 @@ all() ->
      {group, config_path},
      {group, config_port},
      {group, aggregated_metrics},
-     {group, individual_metrics}
+     {group, per_object_metrics}
     ].
 
 groups() ->
@@ -38,7 +38,7 @@ groups() ->
      {config_path, [], all_tests()},
      {config_port, [], all_tests()},
      {aggregated_metrics, [], [aggregated_metrics_test, build_info_test, identity_info_test]},
-     {individual_metrics, [], [individual_metrics_test, build_info_test, identity_info_test]}
+     {per_object_metrics, [], [per_object_metrics_test, build_info_test, identity_info_test]}
     ].
 
 all_tests() ->
@@ -62,8 +62,8 @@ init_per_group(config_port, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15772}]}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_port, Config1, [{prometheus_port, 15772}]);
-init_per_group(individual_metrics, Config0) ->
-    PathConfig = {rabbitmq_prometheus, [{enable_metrics_aggregation, false}]},
+init_per_group(per_object_metrics, Config0) ->
+    PathConfig = {rabbitmq_prometheus, [{return_per_object_metrics, true}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(aggregated_metrics, Config1);
 init_per_group(aggregated_metrics, Config0) ->
@@ -209,7 +209,7 @@ aggregated_metrics_test(Config) ->
     %% Checking raft_entry_commit_latency_seconds because we are aggregating it
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds ", [{capture, none}, multiline])).
 
-individual_metrics_test(Config) ->
+per_object_metrics_test(Config) ->
     {_Headers, Body} = http_get(Config, [], 200),
     %% Checking that the body looks like a valid response
     ct:pal(Body),

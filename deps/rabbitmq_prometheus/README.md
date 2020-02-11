@@ -37,7 +37,7 @@ See the entire list of [metrics](metrics.md) exposed via the default port.
 
 This exporter supports the following options via a set of `prometheus.*` configuration keys:
 
- * `prometheus.enable_metrics_aggregation` returns all metrics aggregated (default is `true`). See #26 for more details.
+ * `prometheus.return_per_object_metrics` returns all metrics per object, unaggregated (default is `false`). See #26 for more details.
  * `prometheus.path` defines a scrape endpoint (default is `"/metrics"`).
  * `prometheus.tcp.*` controls HTTP listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#configuration)
  * `prometheus.ssl.*` controls TLS (HTTPS) listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#single-listener-https)
@@ -46,25 +46,25 @@ Sample configuration snippet:
 
 ```ini
 # these values are defaults
-prometheus.enable_metrics_aggregation = true
+prometheus.return_per_object_metrics = false
 prometheus.path = /metrics
 prometheus.tcp.port =  15692
 ```
 
-When raw metrics are enabled, nodes with 80k queues have been measured to take 58 seconds to return 1.9 million metrics in a 98MB response payload.
+When metrics are returned per object, nodes with 80k queues have been measured to take 58 seconds to return 1.9 million metrics in a 98MB response payload.
 In order to not put unnecessary pressure on your metrics system, metrics are aggregated by default.
 
-When debugging, it may be useful to enable per-object (unaggregated) metrics.
+When debugging, it may be useful to return metrics per object (unaggregated).
 This can be enabled on-the-fly, without restarting or configuring RabbitMQ, using the following command:
 
 ```
-rabbitmqctl eval 'application:set_env(rabbitmq_prometheus, enable_metric_aggregation, true).'
+rabbitmqctl eval 'application:set_env(rabbitmq_prometheus, return_per_object_metrics, true).'
 ```
 
 To go back to aggregated metrics on-the-fly, run the following command:
 
 ```
-rabbitmqctl eval 'application:set_env(rabbitmq_prometheus, enable_metric_aggregation, false).'
+rabbitmqctl eval 'application:set_env(rabbitmq_prometheus, return_per_object_metrics, false).'
 ```
 
 
