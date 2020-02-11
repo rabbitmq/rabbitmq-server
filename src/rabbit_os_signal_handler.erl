@@ -6,48 +6,44 @@
          handle_event/2, handle_call/2, handle_info/2,
          terminate/2]).
 
-%%
-%% API
-%%
+%% CAUTION: Signal handling in this module must be kept consistent
+%% with the same handling in rabbitmq-server(8).
 
 start_link() ->
-    rabbit_log:info("Swapping OS signal event handler (erl_signal_server) for our own"),
-    %% delete any previous incarnations, otherwise we would be accumulating
-    %% handlers
-    _ = gen_event:delete_handler(erl_signal_server, ?MODULE, []),
-    %% swap the standard OTP signal handler if there is one
-    ok = gen_event:swap_sup_handler(
-        erl_signal_server,
-        %% what to swap
-        {erl_signal_handler, []},
-        %% new event handler
-        {?MODULE, []}),
-    gen_event:start_link({local, ?MODULE}).
+    case os:type() of
+        {unix, _} ->
+            rabbit_log:info("Swapping OS signal event handler (erl_signal_server) for our own"),
+            %% delete any previous incarnations, otherwise we would be accumulating
+            %% handlers
+            _ = gen_event:delete_handler(erl_signal_server, ?MODULE, []),
+            %% swap the standard OTP signal handler if there is one
+            ok = gen_event:swap_sup_handler(
+                   erl_signal_server,
+                   %% what to swap
+                   {erl_signal_handler, []},
+                   %% new event handler
+                   {?MODULE, []}),
+            gen_event:start_link({local, ?MODULE});
+        _ ->
+            ok
+    end.
 
 init(_) ->
+    ok = os:set_signal(sigterm, handle),
+    ok = os:set_signal(sighup, ignore),
+    ok = os:set_signal(sigtstp, ignore),
     {ok, #{}}.
 
 handle_event(sigterm, State) ->
-    rabbit_log:info("Received a SIGTERM, will shut down gracefully"),
+    error_logger:info_msg("Received a SIGTERM, will shut down gracefully"),
     rabbit:stop_and_halt(),
-    {ok, State};
-handle_event(sigquit, State) ->
-    rabbit_log:info("Received a SIGQUIT, will shut down gracefully"),
-    rabbit:stop_and_halt(),
-    {ok, State};
-handle_event(sigusr1, State) ->
-    rabbit_log:info("Received a SIGUSR1, ignoring it"),
-    {ok, State};
-handle_event(sigusr2, State) ->
-    rabbit_log:info("Received a SIGUSR2, ignoring it"),
-    {ok, State};
-%% note: SIGHUP can/will be handled by shells and process managers
-handle_event(sighup, State) ->
-    rabbit_log:info("Received a SIGHUP, ignoring it"),
     {ok, State};
 handle_event(Msg, S) ->
-    %% delegate all unknown events to the default OTP signal handler
-    erl_signal_handler:handle_event(Msg, S),
+    %% Delegate all unknown events to the default OTP signal handler.
+    %% FIXME: We call erl_signal_handler's internal functions, this is
+    %% fragile.
+    {ok, ESHState} = erl_signal_handler:init(undefined),
+    _ = erl_signal_handler:handle_event(Msg, ESHState),
     {ok, S}.
 
 handle_info(_, State) ->
