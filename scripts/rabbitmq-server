@@ -155,7 +155,7 @@ else
     #
     # The behaviors below should remain consistent with the
     # equivalent signal handlers in the Erlang code
-    # (see src/rabbit_os_signal_handler.erl).
+    # (see apps/rabbitmq_prelaunch/src/rabbit_prelaunch_sighandler.erl).
     trap '' HUP TSTP CONT
     trap "stop_rabbitmq_server; exit 0" TERM
     trap "stop_rabbitmq_server; exit 130" INT
