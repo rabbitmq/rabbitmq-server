@@ -52,6 +52,7 @@ services:
       - "rabbitmq-prometheus"
     environment:
       URIS: "amqp://guest:guest@rmq0-qq:5672/%2f,amqp://guest:guest@rmq1-qq:5672/%2f,amqp://guest:guest@rmq2-qq:5672/%2f"
+      CONFIRM: 50
       QUEUE_PATTERN: "qq%d"
       QUEUE_PATTERN_FROM: 1
       QUEUE_PATTERN_TO: 10
