@@ -257,6 +257,8 @@ opened(Frame, State) ->
                              [Frame, State]),
     {next_state, opened, State}.
 
+close_sent(heartbeat, State) ->
+    {next_state, close_sent, State};
 close_sent(#'v1_0.close'{}, State) ->
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
