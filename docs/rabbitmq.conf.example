@@ -425,17 +425,16 @@
 ## =====================
 ##
 
-## Set (internal) statistics collection granularity.
-##
-## Can be none, coarse or fine
-# collect_statistics = none
-
-# collect_statistics = coarse
-
 ## Statistics collection interval (in milliseconds). Increasing
 ## this will reduce the load on management database.
 ##
 # collect_statistics_interval = 5000
+
+## Fine vs. coarse statistics
+#
+# This value is no longer meant to be configured directly.
+#
+# See https://www.rabbitmq.com/management.html#fine-stats.
 
 ##
 ## Misc/Advanced Options
