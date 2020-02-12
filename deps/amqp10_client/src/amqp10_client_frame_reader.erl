@@ -197,12 +197,16 @@ handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
     % do not stop as may want to read the peer's close frame
     {next_state, StateName, State}.
 
+terminate(normal, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
+    maybe_close_socket(Socket);
 terminate(Reason, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
     error_logger:warning_msg("terminating reader with '~p'~n", [Reason]),
-    case Socket of
-        undefined -> ok;
-        _ -> close_socket(Socket)
-    end.
+    maybe_close_socket(Socket).
+
+maybe_close_socket(undefined) ->
+    ok;
+maybe_close_socket(Socket) ->
+    close_socket(Socket).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.

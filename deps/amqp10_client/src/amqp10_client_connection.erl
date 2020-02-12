@@ -293,12 +293,12 @@ handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.
 
-handle_info({'DOWN', MRef, _, _, Info}, StateName, State = #state{reader_m_ref = MRef,
+handle_info({'DOWN', MRef, _, _, _Info}, StateName, State = #state{reader_m_ref = MRef,
                                                                   config = Config})
   when StateName =/= close_sent ->
     % reader has gone down and we are not already shutting down
     ok = notify_closed(Config, shutdown),
-    error_logger:info_msg("Conn received DOWN from Reader ~p ~p~n", [Info, StateName]),
+    error_logger:warning_msg("Conn received a DOWN message from its reader in state ~p~n", [StateName]),
     {stop, normal, State};
 handle_info(Info, StateName, State) ->
     error_logger:info_msg("Conn handle_info ~p ~p~n", [Info, StateName]),
@@ -306,7 +306,7 @@ handle_info(Info, StateName, State) ->
 
 terminate(Reason, _StateName, #state{connection_sup = Sup,
                                      config = Config}) ->
-    error_logger:warning_msg("terminating connection with '~p'~n", [Reason]),
+    error_logger:warning_msg("terminating connection with reason '~p'~n", [Reason]),
     ok = notify_closed(Config, Reason),
     case Reason of
         normal -> sys:terminate(Sup, normal);
