@@ -1,10 +1,12 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
-# Use the latest alpha RabbitMQ 3.9 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-BASED_ON_RABBITMQ_VERSION := 3.9.0-alpha.217
+# Use the latest alpha RabbitMQ 3.9 release - https://ci.rabbitmq.com/teams/main/pipelines/server-release:v3.9.x/jobs/build-test-package-generic-unix-latest-toolchain
+BASED_ON_RABBITMQ_VERSION := 3.9.0-alpha.221
 DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
+# This is taken from the CI job above
+RABBITMQ_BUILD_NUMBER := 238
 # make find-latest-otp
 OTP_VERSION := 22.2.6
 OTP_SHA256 := 4cf44ed12f657c309a2c00e7806f36f56a88e5b74de6814058796561f3842f66
@@ -107,6 +109,7 @@ docker-image-build: ## dib | Build Docker image locally - make tests
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
 	  --build-arg RABBITMQ_VERSION=$(BASED_ON_RABBITMQ_VERSION) \
+	  --build-arg RABBITMQ_BUILD_NUMBER=$(RABBITMQ_BUILD_NUMBER) \
 	  --build-arg RABBITMQ_PROMETHEUS_VERSION=$(RABBITMQ_VERSION) \
 	  --tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION) \
 	  --tag $(DOCKER_IMAGE_NAME):latest .
