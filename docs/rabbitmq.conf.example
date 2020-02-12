@@ -578,7 +578,8 @@
 # management.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
 # management.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384
 
-
+## URL path prefix for HTTP API and management UI
+management.path_prefix = /a-prefix
 
 ## One of 'basic', 'detailed' or 'none'. See
 ## https://rabbitmq.com/management.html#fine-stats for more details.
