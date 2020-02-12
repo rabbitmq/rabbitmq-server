@@ -213,7 +213,7 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-        RABBITMQ_SOURCE_URL="https://s3-eu-west-1.amazonaws.com/server-release-pipeline/v3.9.x/unverified-packages/rabbitmq-server-${RABBITMQ_VERSION}-build-${RABBITMQ_BUILD_NUMBER}-generic-unix-latest-toolchain.tar"; \
+        RABBITMQ_SOURCE_URL="https://s3-eu-west-1.amazonaws.com/server-release-pipeline/v3.8.x/unverified-packages/rabbitmq-server-${RABBITMQ_VERSION}-build-${RABBITMQ_BUILD_NUMBER}-generic-unix-latest-toolchain.tar"; \
 	RABBITMQ_PATH="/usr/local/src/rabbitmq-$RABBITMQ_VERSION"; \
 	\
 	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
