@@ -156,7 +156,8 @@ define test_rabbitmq_config
   {rabbit, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}$(comma),)
       {loopback_users, []},
-      {log, [{file, [{level, debug}]}]}
+      {log, [{file, [{level, debug}]},
+             {console, [{level, debug}]}]}
     ]},
   {rabbitmq_management, [
 $(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
