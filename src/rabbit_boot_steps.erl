@@ -44,21 +44,17 @@ find_steps(Apps) ->
     [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].
 
 run_step(Attributes, AttributeName) ->
-    case [MFA || {Key, MFA} <- Attributes,
-                 Key =:= AttributeName] of
-        [] ->
-            ok;
-        MFAs ->
-            [begin
-              rabbit_log:debug("Applying MFA: M = ~s, F = ~s, A = ~p",
-                               [M, F, A]),
-              case apply(M,F,A) of
-                   ok              -> ok;
-                   {error, Reason} -> exit({error, Reason})
-               end
-            end || {M,F,A} <- MFAs],
-            ok
-    end.
+    [begin
+        rabbit_log:debug("Applying MFA: M = ~s, F = ~s, A = ~p",
+                        [M, F, A]),
+        case apply(M,F,A) of
+            ok              -> ok;
+            {error, Reason} -> exit({error, Reason})
+        end
+     end
+      || {Key, {M,F,A}} <- Attributes,
+          Key =:= AttributeName],
+    ok.
 
 vertices({AppName, _Module, Steps}) ->
     [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
