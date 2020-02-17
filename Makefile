@@ -65,6 +65,8 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '_build/'			\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
+	       --exclude 'doc/'				\
+	       --exclude 'docker/'			\
 	       --exclude 'ebin/'			\
 	       --exclude 'erl_crash.dump'		\
 	       --exclude 'escript/'			\
