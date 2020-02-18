@@ -588,7 +588,8 @@ list_exchanges() ->
     %% exclude internal exchanges, they are not meant to be declared or used by
     %% applications
     [exchange_definition(X) || X <- lists:filter(fun(#exchange{internal = true}) -> false;
-                                                    (#exchange{}) -> true
+                                                    (#exchange{name = #resource{name = <<>>}}) -> false;
+                                                    (X) -> not rabbit_exchange:is_amq_prefixed(X)
                                                  end,
                                                  rabbit_exchange:list())].
 
@@ -664,7 +665,7 @@ list_users() ->
      end || U <- rabbit_auth_backend_internal:list_users()].
 
 list_runtime_parameters() ->
-    [runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list()].
+    [runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list(), is_list(P)].
 
 runtime_parameter_definition(Param) ->
     #{
