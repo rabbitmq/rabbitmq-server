@@ -1751,7 +1751,6 @@ build_index(Gatherer, Left, [],
                                sum_file_size    = SumFileSize }) ->
     case gatherer:out(Gatherer) of
         empty ->
-            unlink(Gatherer),
             ok = gatherer:stop(Gatherer),
             ok = index_clean_up_temporary_reference_count_entries(State),
             Offset = case ets:lookup(FileSummaryEts, Left) of
