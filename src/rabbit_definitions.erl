@@ -308,8 +308,7 @@ sequential_for_all(Category, ActingUser, Definitions, Fun) ->
             end,
             [begin
                  %% keys are expected to be atoms
-                 Atomized = atomize_keys(M),
-                 Fun(Atomized, ActingUser)
+                 Fun(atomize_keys(M), ActingUser)
              end || M <- List, is_map(M)]
     end.
 
@@ -317,9 +316,7 @@ sequential_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
 
     case maps:get(rabbit_data_coercion:to_atom(Name), Definitions, undefined) of
         undefined -> ok;
-        List      -> [Fun(VHost, maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)]),
-                          ActingUser) ||
-                         M <- List, is_map(M)]
+        List      -> [Fun(VHost, atomize_keys(M), ActingUser) || M <- List, is_map(M)]
     end.
 
 concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
@@ -333,12 +330,11 @@ concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
             {ok, Gatherer} = gatherer:start_link(),
             [begin
                  %% keys are expected to be atoms
-                 Atomized = atomize_keys(M),
                  ok = gatherer:fork(Gatherer),
                  worker_pool:submit_async(
                      ?IMPORT_WORK_POOL,
                      fun() ->
-                         Fun(Atomized, ActingUser),
+                         Fun(atomize_keys(M), ActingUser),
                          gatherer:finish(Gatherer)
                      end)
              end || M <- List, is_map(M)],
@@ -353,12 +349,11 @@ concurrent_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
             {ok, Gatherer} = gatherer:start_link(),
             [begin
                  %% keys are expected to be atoms
-                 Atomized = M = atomize_keys(M),
                  ok = gatherer:fork(Gatherer),
                  worker_pool:submit_async(
                      ?IMPORT_WORK_POOL,
                      fun() ->
-                         Fun(VHost, Atomized, ActingUser),
+                         Fun(VHost, atomize_keys(M), ActingUser),
                          gatherer:finish(Gatherer)
                      end)
              end || M <- List, is_map(M)],
