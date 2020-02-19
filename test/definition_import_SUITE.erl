@@ -45,7 +45,8 @@ groups() ->
                                import_case8,
                                import_case9,
                                import_case10,
-                               import_case11
+                               import_case11,
+                               import_case12
                               ]}
     ].
 
@@ -105,10 +106,16 @@ import_case5(Config) ->
                   {<<"1884">>,<<"vhost2">>}]).
 
 import_case11(Config) -> import_file_case(Config, "case11").
+import_case12(Config) -> import_invalid_file_case(Config, "failing_case12").
 
 import_file_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_import_case, [CasePath]),
+    ok.
+
+import_invalid_file_case(Config, CaseName) ->
+    CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath]),
     ok.
 
 import_from_directory_case(Config, CaseName) ->
@@ -143,4 +150,14 @@ run_import_case(Path) ->
      {error, E} ->
        ct:pal("Import case ~p failed: ~p~n", [Path, E]),
        ct:fail({failure, Path, E})
+   end.
+
+run_invalid_import_case(Path) ->
+   {ok, Body} = file:read_file(Path),
+   ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
+   case rabbit_definitions:import_raw(Body) of
+     ok ->
+       ct:pal("Expected import case ~p to fail~n", [Path]),
+       ct:fail({failure, Path});
+     {error, _E} -> ok
    end.

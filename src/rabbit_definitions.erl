@@ -334,12 +334,21 @@ concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
                  worker_pool:submit_async(
                      ?IMPORT_WORK_POOL,
                      fun() ->
-                         Fun(atomize_keys(M), ActingUser),
+                         try
+                             Fun(atomize_keys(M), ActingUser)
+                         catch _:E        -> gatherer:in(Gatherer, {error, E});
+                               {error, E} -> gatherer:in(Gatherer, {error, E})
+                         end,
                          gatherer:finish(Gatherer)
                      end)
              end || M <- List, is_map(M)],
-            gatherer:out(Gatherer),
-            gatherer:stop(Gatherer)
+            case gatherer:out(Gatherer) of
+                empty ->
+                    ok = gatherer:stop(Gatherer);
+                {value, {error, E}} ->
+                    ok = gatherer:stop(Gatherer),
+                    throw({error, E})
+            end
     end.
 
 concurrent_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
@@ -353,12 +362,21 @@ concurrent_for_all(Name, ActingUser, Definitions, VHost, Fun) ->
                  worker_pool:submit_async(
                      ?IMPORT_WORK_POOL,
                      fun() ->
-                         Fun(VHost, atomize_keys(M), ActingUser),
+                         try
+                             Fun(VHost, atomize_keys(M), ActingUser)
+                         catch _:E        -> gatherer:in(Gatherer, {error, E});
+                               {error, E} -> gatherer:in(Gatherer, {error, E})
+                         end,
                          gatherer:finish(Gatherer)
                      end)
              end || M <- List, is_map(M)],
-            gatherer:out(Gatherer),
-            gatherer:stop(Gatherer)
+            case gatherer:out(Gatherer) of
+                empty ->
+                    ok = gatherer:stop(Gatherer);
+                {value, {error, E}} ->
+                    ok = gatherer:stop(Gatherer),
+                    throw({error, E})
+            end
     end.
 
 -spec atomize_keys(#{any() => any()}) -> #{atom() => any()}.
