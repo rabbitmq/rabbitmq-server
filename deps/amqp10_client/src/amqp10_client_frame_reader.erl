@@ -176,7 +176,7 @@ handle_info({Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
 
 handle_info({TcpError, _, Reason}, StateName, State)
   when TcpError == tcp_error orelse TcpError == ssl_error ->
-    error_logger:warning_msg("Socket errored while in state '~s' with reason '~p'~n",
+    error_logger:warning_msg("AMQP 1.0 connection socket errored, connection state: '~s', reason: '~p'~n",
                              [StateName, Reason]),
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
@@ -184,7 +184,7 @@ handle_info({TcpError, _, Reason}, StateName, State)
     {stop, {error, Reason}, State1};
 handle_info({TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
-    error_logger:warning_msg("Socket closed while in state '~s'~n",
+    error_logger:warning_msg("AMQP 1.0 connection socket was closed, connection state: '~s'~n",
                              [StateName]),
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
@@ -199,8 +199,7 @@ handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
 
 terminate(normal, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
     maybe_close_socket(Socket);
-terminate(Reason, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
-    error_logger:warning_msg("terminating reader with '~p'~n", [Reason]),
+terminate(_Reason, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
     maybe_close_socket(Socket).
 
 maybe_close_socket(undefined) ->
