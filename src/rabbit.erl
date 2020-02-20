@@ -99,7 +99,7 @@
                     {enables,     worker_pool}]}).
 
 -rabbit_boot_step({worker_pool,
-                   [{description, "worker pool"},
+                   [{description, "default worker pool"},
                     {mfa,         {rabbit_sup, start_supervisor_child,
                                    [worker_pool_sup]}},
                     {requires,    pre_boot},
@@ -239,6 +239,11 @@
 -rabbit_boot_step({pre_flight,
                    [{description, "ready to communicate with peers and clients"},
                     {requires,    [core_initialized, recovery, routing_ready]}]}).
+
+-rabbit_boot_step({definition_import_worker_pool,
+                   [{description, "dedicated worker pool for definition import"},
+                    {mfa,         {rabbit_definitions, boot, []}},
+                    {requires,    pre_flight}]}).
 
 -rabbit_boot_step({cluster_name,
                    [{description, "sets cluster name if configured"},

@@ -56,6 +56,7 @@ start_link() ->
 -spec stop(pid()) -> 'ok'.
 
 stop(Pid) ->
+    unlink(Pid),
     gen_server2:call(Pid, stop, infinity).
 
 -spec fork(pid()) -> 'ok'.
