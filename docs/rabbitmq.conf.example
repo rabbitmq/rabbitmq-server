@@ -520,6 +520,17 @@
 ##
 # proxy_protocol = false
 
+## Overriden product name and version.
+## They are set to "RabbitMQ" and the release version by default.
+# product.name = RabbitMQ
+# product.version = 1.2.3
+
+## "Message of the day" file.
+## Its content is used to expand the logged and printed banners.
+## Default to /etc/rabbitmq/motd on Unix, %APPDATA%\RabbitMQ\motd.txt
+## on Windows.
+# motd_file = /etc/rabbitmq/motd
+
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##

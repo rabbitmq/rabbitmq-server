@@ -30,6 +30,11 @@
 
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
+-export([product_info/0,
+         product_name/0,
+         product_version/0,
+         motd_file/0,
+         motd/0]).
 -export([log_locations/0, config_files/0]). %% for testing and mgmt-agent
 -export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
 
@@ -435,10 +440,12 @@ stop() ->
         ok ->
             case rabbit_boot_state:get() of
                 ready ->
-                    rabbit_log:info("RabbitMQ is asked to stop..."),
+                    Product = product_name(),
+                    rabbit_log:info("~s is asked to stop...", [Product]),
                     do_stop(),
                     rabbit_log:info(
-                      "Successfully stopped RabbitMQ and its dependencies"),
+                      "Successfully stopped ~s and its dependencies",
+                      [Product]),
                     ok;
                 stopped ->
                     ok
@@ -462,7 +469,9 @@ stop_and_halt() ->
     try
         stop()
     catch Type:Reason ->
-        rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason]),
+        rabbit_log:error(
+          "Error trying to stop ~s: ~p:~p",
+          [product_name(), Type, Reason]),
         error({Type, Reason})
     after
         %% Enclose all the logging in the try block.
@@ -518,9 +527,9 @@ stop_apps([]) ->
     ok;
 stop_apps(Apps) ->
     rabbit_log:info(
-        lists:flatten(["Stopping RabbitMQ applications and their dependencies in the following order:~n",
+        lists:flatten(["Stopping ~s applications and their dependencies in the following order:~n",
                        ["    ~p~n" || _ <- Apps]]),
-        lists:reverse(Apps)),
+        [product_name() | lists:reverse(Apps)]),
     ok = app_utils:stop_applications(
            Apps, handle_app_error(error_during_shutdown)),
     case lists:member(rabbit, Apps) of
@@ -663,7 +672,7 @@ maybe_print_boot_progress(true, IterationsLeft) ->
                {memory, any()}].
 
 status() ->
-    {ok, Version} = application:get_key(rabbit, vsn),
+    Version = product_version(),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
@@ -816,9 +825,10 @@ start(normal, []) ->
     try
         run_prelaunch_second_phase(),
 
-        rabbit_log:info("~n Starting RabbitMQ ~s on Erlang ~s~n ~s~n ~s~n",
-                        [rabbit_misc:version(), rabbit_misc:otp_release(),
+        rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
+                        [product_name(), product_version(), rabbit_misc:otp_release(),
                          ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+        log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
 
         %% Compatibility with older RabbitMQ versions + required by
@@ -904,7 +914,7 @@ do_run_postlaunch_phase() ->
                   end
           end, Plugins),
 
-        rabbit_log_prelaunch:debug("Marking RabbitMQ as running"),
+        rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
         rabbit_boot_state:set(ready),
 
         ok = rabbit_lager:broker_is_started(),
@@ -1058,8 +1068,8 @@ log_broker_started(Plugins) ->
         "~n  " ?BG32_START "          " ?C_END "  ~s").
 
 print_banner() ->
-    {ok, Product} = application:get_key(description),
-    {ok, Version} = application:get_key(vsn),
+    Product = product_name(),
+    Version = product_version(),
     LineListFormatter = fun (Placeholder, [_ | Tail] = LL) ->
                               LF = lists:flatten([Placeholder || _ <- lists:seq(1, length(Tail))]),
                               {LF, LL};
@@ -1082,8 +1092,21 @@ print_banner() ->
     %% padded list lines
     {LogFmt, LogLocations} = LineListFormatter("~n        ~ts", log_locations()),
     {CfgFmt, CfgLocations} = LineListFormatter("~n                  ~ts", config_locations()),
+    {MOTDFormat, MOTDArgs} = case motd() of
+                                 undefined ->
+                                     {"", []};
+                                 MOTD ->
+                                     Lines = string:split(MOTD, "\n", all),
+                                     Padded = [case Line of
+                                                   <<>> -> "\n";
+                                                   _    -> ["  ", Line, "\n"]
+                                               end
+                                               || Line <- Lines],
+                                     {"~n~ts", [Padded]}
+                             end,
     io:format(Logo ++
-              "~n"
+              "~n" ++
+              MOTDFormat ++
               "~n  Doc guides: https://rabbitmq.com/documentation.html"
               "~n  Support:    https://rabbitmq.com/contact.html"
               "~n  Tutorials:  https://rabbitmq.com/getstarted.html"
@@ -1093,8 +1116,23 @@ print_banner() ->
               "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
               "~n  Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
+              MOTDArgs ++
               LogLocations ++
               CfgLocations).
+
+log_motd() ->
+    case motd() of
+        undefined ->
+            ok;
+        MOTD ->
+            Lines = string:split(MOTD, "\n", all),
+            Padded = [case Line of
+                          <<>> -> "\n";
+                          _    -> [" ", Line, "\n"]
+                      end
+                      || Line <- Lines],
+            rabbit_log:info("~n~ts", [string:trim(Padded, trailing, [$\r, $\n])])
+    end.
 
 log_banner() ->
     {FirstLog, OtherLogs} = case log_locations() of
@@ -1232,6 +1270,123 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
                         [IoBatchSize, InitialCredit]}});
                true ->
                     ok
+            end
+    end.
+
+-spec product_name() -> string().
+
+product_name() ->
+    #{name := ProductName} = product_info(),
+    ProductName.
+
+-spec product_version() -> string().
+
+product_version() ->
+    #{version := ProductVersion} = product_info(),
+    ProductVersion.
+
+-spec product_info() -> #{name := string(),
+                           version := string()}.
+
+product_info() ->
+    PTKey = {?MODULE, product},
+    try
+        %% The value is cached the first time to avoid calling the
+        %% application master many times just for that.
+        persistent_term:get(PTKey)
+    catch
+        error:badarg ->
+            {NameFromEnv, VersionFromEnv} =
+            case rabbit_env:get_context() of
+                #{product_name := NFE,
+                  product_version := VFE} -> {NFE, VFE};
+                _                         -> {undefined, undefined}
+            end,
+
+            Info =
+            if
+                NameFromEnv =/= undefined andalso
+                VersionFromEnv =/= undefined ->
+                    #{name => NameFromEnv,
+                      version => VersionFromEnv};
+                true ->
+                    Name = case NameFromEnv of
+                               undefined ->
+                                   string_from_app_env(
+                                     product_name,
+                                     base_product_name());
+                               _ ->
+                                   NameFromEnv
+                           end,
+                    Version = case VersionFromEnv of
+                                  undefined ->
+                                      string_from_app_env(
+                                        product_version,
+                                        base_product_version());
+                                  _ ->
+                                      VersionFromEnv
+                              end,
+                    #{name => Name,
+                      version => Version}
+            end,
+            persistent_term:put(PTKey, Info),
+            Info
+    end.
+
+string_from_app_env(Key, Default) ->
+    case application:get_env(rabbit, Key) of
+        {ok, Val} ->
+            case io_lib:deep_char_list(Val) of
+                true ->
+                    case lists:flatten(Val) of
+                        ""     -> Default;
+                        String -> String
+                    end;
+                false ->
+                    Default
+            end;
+        undefined ->
+            Default
+    end.
+
+base_product_name() ->
+    %% This function assumes the `rabbit` application was loaded in
+    %% product_info().
+    {ok, Product} = application:get_key(rabbit, description),
+    Product.
+
+base_product_version() ->
+    %% This function assumes the `rabbit` application was loaded in
+    %% product_info().
+    rabbit_misc:version().
+
+motd_file() ->
+    %% Precendence is:
+    %%   1. The environment variable;
+    %%   2. The `motd_file` configuration parameter;
+    %%   3. The default value.
+    Context = rabbit_env:get_context(),
+    case Context of
+        #{motd_file := File,
+          var_origins := #{motd_file := environment}}
+          when File =/= undefined ->
+            File;
+        _ ->
+            Default = case Context of
+                          #{motd_file := File} -> File;
+                          _                    -> undefined
+                      end,
+            string_from_app_env(motd_file, Default)
+    end.
+
+motd() ->
+    case motd_file() of
+        undefined ->
+            undefined;
+        File ->
+            case file:read_file(File) of
+                {ok, MOTD} -> string:trim(MOTD, trailing, [$\r,$\n]);
+                {error, _} -> undefined
             end
     end.
 
