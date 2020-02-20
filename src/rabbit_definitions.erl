@@ -352,8 +352,8 @@ do_concurrent_for_all(List, WorkPoolFun) ->
            fun() ->
                    try
                        WorkPoolFun(M)
-                   catch _:E        -> gatherer:in(Gatherer, {error, E});
-                         {error, E} -> gatherer:in(Gatherer, {error, E})
+                   catch {error, E} -> gatherer:in(Gatherer, {error, E});
+                         _:E        -> gatherer:in(Gatherer, {error, E})
                    end,
                    gatherer:finish(Gatherer)
            end)
@@ -632,8 +632,6 @@ validate_vhost_queue_limit(VHost, AddCount, {true, Limit, QueueCount}) ->
     ErrInfo = [AddCount, VHost, Limit, QueueCount],
     ErrMsg = rabbit_misc:format(ErrFmt, ErrInfo),
     exit({vhost_limit_exceeded, ErrMsg}).
-
-atomise_name(N) -> rabbit_data_coercion:to_atom(N).
 
 get_or_missing(K, L) ->
     case maps:get(K, L, undefined) of
