@@ -258,10 +258,8 @@ opened(Frame, State) ->
     {next_state, opened, State}.
 
 close_sent(#'v1_0.close'{}, State) ->
-    % TODO: we should probably set up a timer before this to ensure
-    % we close down event if no reply is received
-
-    error_logger:info_msg("Conn close_sent Close received ~n", []),
+    %% TODO: we should probably set up a timer before this to ensure
+    %% we close down event if no reply is received
     {stop, normal, State}.
 
 handle_event({set_other_procs, OtherProcs}, StateName, State) ->
@@ -296,9 +294,8 @@ handle_sync_event(_Event, _From, StateName, State) ->
 handle_info({'DOWN', MRef, _, _, _Info}, StateName, State = #state{reader_m_ref = MRef,
                                                                   config = Config})
   when StateName =/= close_sent ->
-    % reader has gone down and we are not already shutting down
+    %% reader has gone down and we are not already shutting down
     ok = notify_closed(Config, shutdown),
-    error_logger:warning_msg("Conn received a DOWN message from its reader in state ~p~n", [StateName]),
     {stop, normal, State};
 handle_info(Info, StateName, State) ->
     error_logger:info_msg("Conn handle_info ~p ~p~n", [Info, StateName]),
@@ -306,7 +303,6 @@ handle_info(Info, StateName, State) ->
 
 terminate(Reason, _StateName, #state{connection_sup = Sup,
                                      config = Config}) ->
-    error_logger:warning_msg("terminating connection with reason '~p'~n", [Reason]),
     ok = notify_closed(Config, Reason),
     case Reason of
         normal -> sys:terminate(Sup, normal);
@@ -408,11 +404,25 @@ socket_shutdown({tcp, Socket}, Data) ->
 socket_shutdown({ssl, Socket}, Data) ->
     ssl:shutdown(Socket, Data).
 
-notify_opened(#{notify := Pid}) ->
+notify_opened(#{notify_when_opened := none}) ->
+    ok;
+notify_opened(#{notify_when_opened := Pid}) when is_pid(Pid) ->
     Pid ! amqp10_event(opened),
+    ok;
+notify_opened(#{notify := Pid}) when is_pid(Pid) ->
+    Pid ! amqp10_event(opened),
+    ok;
+notify_opened(_) ->
     ok.
 
-notify_closed(#{notify := Pid}, Reason) ->
+notify_closed(#{notify_when_closed := none}, _Reason) ->
+    ok;
+notify_closed(#{notify := none}, _Reason) ->
+    ok;
+notify_closed(#{notify_when_closed := Pid}, Reason) when is_pid(Pid) ->
+    Pid ! amqp10_event({closed, Reason}),
+    ok;
+notify_closed(#{notify := Pid}, Reason) when is_pid(Pid) ->
     Pid ! amqp10_event({closed, Reason}),
     ok.
 

@@ -114,7 +114,13 @@ open_connection(Addr, Port) ->
     supervisor:startchild_ret().
 open_connection(ConnectionConfig0) ->
     Notify = maps:get(notify, ConnectionConfig0, self()),
-    amqp10_client_connection:open(ConnectionConfig0#{notify => Notify}).
+    NotifyWhenOpened = maps:get(notify_when_opened, ConnectionConfig0, self()),
+    NotifyWhenClosed = maps:get(notify_when_closed, ConnectionConfig0, self()),
+    amqp10_client_connection:open(ConnectionConfig0#{
+        notify => Notify,
+        notify_when_opened => NotifyWhenOpened,
+        notify_when_closed => NotifyWhenClosed
+    }).
 
 %% @doc Opens a connection using a connection_config map
 %% This is asynchronous and will notify completion to the caller using
