@@ -100,7 +100,7 @@ handle_call({remove, Name}, _From,
             undefined) ->
     case listener_by_name(Name) of
         {error, not_found} ->
-            rabbit_log:warning("RabbitMQ HTTP listener registry could not find context ~p",
+            rabbit_log:warning("HTTP listener registry could not find context ~p",
                                [Name]),
             {reply, ok, undefined};
         {ok, Listener} ->
