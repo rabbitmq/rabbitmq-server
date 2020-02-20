@@ -351,8 +351,8 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
 
 # Docker is different because we need to build & publish
-OTP_VERSION := 22.2.6
-OTP_SHA256 := 4cf44ed12f657c309a2c00e7806f36f56a88e5b74de6814058796561f3842f66
+OTP_VERSION := 22.2.7
+OTP_SHA256 := 29487837a2dd6e3184257cdec067cd3f5c0cd9517fbfb2ffc962589d46afbf75
 docker-image:
 	$(verbose) (cd PACKAGES && tar xjvf rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz) \
 	&& docker build --pull \
