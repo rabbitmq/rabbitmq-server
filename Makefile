@@ -359,11 +359,11 @@ docker-image: package-generic-unix
 	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
-	  --build-arg RABBITMQ_VERSION=$(RABBITMQ_VERSION) \
+	  --build-arg RABBITMQ_VERSION=$(PROJECT_VERSION) \
 	  --build-arg RABBITMQ_BUILD=PACKAGES/rabbitmq_server-$(PROJECT_VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq:$(RABBITMQ_VERSION) \
+	  --tag pivotalrabbitmq/rabbitmq:$(PROJECT_VERSION) \
 	  . \
-	&& docker push pivotalrabbitmq/rabbitmq:$(RABBITMQ_VERSION)
+	&& docker push pivotalrabbitmq/rabbitmq:$(PROJECT_VERSION)
 
 # --------------------------------------------------------------------
 # Installation.
