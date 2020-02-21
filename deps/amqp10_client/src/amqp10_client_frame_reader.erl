@@ -112,8 +112,21 @@ unregister_session(Reader, Session, OutgoingChannel, IncomingChannel) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([Sup, #{address := Host, port := Port} = ConnConfig]) ->
-    case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
+init([Sup, ConnConfig]) when is_map(ConnConfig) ->
+    Port = maps:get(port, ConnConfig, 5672),
+    %% combined the list of `addresses' with the value of the original `address' option if provided
+    Addresses0 = maps:get(addresses, ConnConfig, []),
+    Addresses  = case maps:get(address, ConnConfig, undefined) of
+                     undefined -> Addresses0;
+                     Address   -> Addresses0 ++ [Address]
+                 end,
+    Result = lists:foldl(fun (Address,  {error, _}) ->
+                                gen_tcp:connect(Address, Port, ?RABBIT_TCP_OPTS);
+                             (_Address, {ok, Socket}) ->
+                                 {ok, Socket}
+                         end,
+                         {error, undefined}, Addresses),
+    case Result of
         {ok, Socket0} ->
             Socket = case ConnConfig of
                          #{tls_opts := {secure_port, Opts}} ->

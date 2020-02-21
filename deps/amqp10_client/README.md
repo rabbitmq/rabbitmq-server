@@ -22,11 +22,16 @@ This client library is not officially supported by VMware at this time.
 
 The `connection_config` map contains various configuration properties.
 
-```
+```                       
+-type address :: inet:socket_address() | inet:hostname().
+
 -type connection_config() ::
     #{container_id => binary(), % mandatory
-      address => inet:socket_address() | inet:hostname(), % mandatory
-      port => inet:port_number(), % mandatory
+      %% must provide a list of addresses or a single address
+      addresses => [address()],
+      address => address(), 
+      %% defaults to 5672, mandatory for TLS
+      port => inet:port_number(),
       % the dns name of the target host
       % required by some vendors such as Azure ServiceBus
       hostname => binary(),

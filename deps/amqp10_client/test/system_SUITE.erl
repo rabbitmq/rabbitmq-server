@@ -189,7 +189,8 @@ end_per_testcase(_Test, Config) ->
 open_close_connection(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    OpnConf = #{address => Hostname,
+    %% an address list
+    OpnConf = #{addresses => [Hostname],
                 port => Port,
                 notify => self(),
                 container_id => <<"open_close_connection_container">>,
@@ -206,6 +207,7 @@ open_close_connection(Config) ->
 open_connection_plain_sasl(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    %% single address
     OpnConf = #{address => Hostname,
                 port => Port,
                 notify => self(),
