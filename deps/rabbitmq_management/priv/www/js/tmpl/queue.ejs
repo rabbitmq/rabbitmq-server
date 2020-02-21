@@ -38,7 +38,7 @@
 <% } %>
 <% if (nodes_interesting) { %>
       <tr>
-      <% if (is_quorum(queue)) { %>
+      <% if (is_quorum(queue) || is_stream(queue)) { %>
         <th>Leader</th>
       <% } else { %>
         <th>Node</th>
@@ -49,7 +49,7 @@
         <td><%= fmt_node(queue.node) %></td>
       <% } %>
       </tr>
-  <% if (is_quorum(queue)) { %>
+  <% if (is_quorum(queue) || is_stream(queue)) { %>
       <tr>
         <th>Online</th>
                                               <td>
@@ -136,7 +136,7 @@
         <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
         <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
-      <% if (is_quorum(queue)) { %>
+      <% if (is_quorum(queue) || is_stream(queue)) { %>
       <tr>
         <th>Open files</th>
         <td><%= fmt_table_short(queue.open_files) %></td>

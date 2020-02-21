@@ -255,6 +255,11 @@
               <% } else { %>
                <option value="quorum">Quorum</option>
               <% } %>
+              <% if (queue_type == "stream") { %>
+               <option value="stream" selected>Stream</option>
+              <% } else { %>
+               <option value="stream">Stream</option>
+              <% } %>
             </select>
           </td>
         </tr>
@@ -328,6 +333,9 @@
                 <% if (queue_type == "quorum") { %>
                   <span class="argument-link" field="arguments" key="x-max-in-memory-length" type="number">Max in memory length</span><span class="help" id="queue-max-in-memory-length"></span><br/>
                   <span class="argument-link" field="arguments" key="x-max-in-memory-bytes" type="number">Max in memory bytes</span><span class="help" id="queue-max-in-memory-bytes"></span><br/>
+                <% } %>
+                <% if (queue_type == "stream") { %>
+                  | <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span><br/>
                 <% } %>
                 </td>
               </tr>
