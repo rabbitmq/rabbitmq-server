@@ -63,10 +63,13 @@
 
 -type milliseconds() :: non_neg_integer().
 
+-type address() :: inet:socket_address() | inet:hostname().
+
 -type connection_config() ::
     #{container_id => binary(), % AMQP container id
       hostname => binary(), % the dns name of the target host
-      address => inet:socket_address() | inet:hostname(),
+      addresses => [address()],
+      address => address(),
       port => inet:port_number(),
       tls_opts => {secure_port, [ssl:ssl_option()]},
       notify => pid(), % the pid to send connection events to
