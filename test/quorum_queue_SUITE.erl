@@ -70,6 +70,7 @@ groups() ->
                                             recover_from_multiple_failures,
                                             leadership_takeover,
                                             delete_declare,
+                                            delete_member_during_node_down,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
                                             consume_in_minority,
@@ -1412,6 +1413,26 @@ delete_member_not_a_member(Config) ->
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Server])).
+
+delete_member_during_node_down(Config) ->
+    [Server, DownServer, _] = rabbit_ct_broker_helpers:get_node_configs(
+                                    Config, nodename),
+
+    stop_node(Config, DownServer),
+    % rabbit_ct_broker_helpers:stop_node(Config, DownServer),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    % RaName = ra_name(QQ),
+    timer:sleep(200),
+    ?assertEqual(ok, rpc:call(Server, rabbit_quorum_queue, delete_member,
+                              [<<"/">>, QQ, Server])),
+
+    rabbit_ct_broker_helpers:start_node(Config, DownServer),
+    ?assertEqual(ok, rpc:call(Server, rabbit_quorum_queue, repair_amqqueue_nodes,
+                              [<<"/">>, QQ])),
+    ok.
 
 %% These tests check if node removal would cause any queues to lose (or not lose)
 %% their quorum. See rabbitmq/rabbitmq-cli#389 for background.
