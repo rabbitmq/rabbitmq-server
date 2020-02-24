@@ -59,6 +59,7 @@
          "RABBITMQ_PRODUCT_NAME",
          "RABBITMQ_PRODUCT_VERSION",
          "RABBITMQ_QUORUM_DIR",
+         "RABBITMQ_STREAM_DIR",
          "RABBITMQ_UPGRADE_LOG",
          "RABBITMQ_USE_LONGNAME",
          "SYS_PREFIX"
@@ -122,6 +123,7 @@ get_context_after_reloading_env(Context) ->
              fun mnesia_base_dir/1,
              fun mnesia_dir/1,
              fun quorum_queue_dir/1,
+             fun stream_queue_dir/1,
              fun pid_file/1,
              fun keep_pid_file_on_exit/1,
              fun feature_flags_file/1,
@@ -250,6 +252,7 @@ context_to_app_env_vars1(
   #{mnesia_dir := MnesiaDir,
     feature_flags_file := FFFile,
     quorum_queue_dir := QuorumQueueDir,
+    stream_queue_dir := StreamQueueDir,
     plugins_path := PluginsPath,
     plugins_expand_dir := PluginsExpandDir,
     enabled_plugins_file := EnabledPluginsFile} = Context,
@@ -266,6 +269,7 @@ context_to_app_env_vars1(
        {os_mon, start_memsup, false},
        {mnesia, dir, MnesiaDir},
        {ra, data_dir, QuorumQueueDir},
+       {osiris, data_dir, StreamQueueDir},
        {rabbit, feature_flags_file, FFFile},
        {rabbit, plugins_dir, PluginsPath},
        {rabbit, plugins_expand_dir, PluginsExpandDir},
@@ -831,6 +835,24 @@ quorum_queue_dir(#{mnesia_dir := MnesiaDir} = Context) ->
         Value ->
             Dir = normalize_path(Value),
             update_context(Context, quorum_queue_dir, Dir, environment)
+    end.
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_STREAM_DIR
+%%   Directory where to store Ra state for stream queues.
+%%   Default: ${RABBITMQ_MNESIA_DIR}/stream
+
+stream_queue_dir(#{mnesia_dir := MnesiaDir} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_STREAM_DIR") of
+        false when MnesiaDir =/= undefined ->
+            Dir = filename:join(MnesiaDir, "stream"),
+            update_context(Context, stream_queue_dir, Dir, default);
+        false when MnesiaDir =:= undefined ->
+            update_context(Context, stream_queue_dir, undefined, default);
+        Value ->
+            Dir = normalize_path(Value),
+            update_context(Context, stream_queue_dir, Dir, environment)
     end.
 
 %% -------------------------------------------------------------------
