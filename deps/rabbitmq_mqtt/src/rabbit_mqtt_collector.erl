@@ -23,7 +23,7 @@
 %%----------------------------------------------------------------------------
 -spec register(term(), pid()) -> {ok, reference()} | {error, term()}.
 register(ClientId, Pid) ->
-    {ClusterName, _} = NodeId = mqtt_node:node_id(),
+    {ClusterName, _} = NodeId = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of
         undefined ->
             case ra:members(NodeId) of
@@ -45,7 +45,7 @@ register(ServerId, ClientId, Pid) ->
     {ok, Corr}.
 
 unregister(ClientId, Pid) ->
-    {ClusterName, _} = mqtt_node:node_id(),
+    {ClusterName, _} = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of
         undefined ->
             ok;
@@ -54,7 +54,7 @@ unregister(ClientId, Pid) ->
     end.
 
 list() ->
-    {ClusterName, _} = mqtt_node:node_id(),
+    {ClusterName, _} = mqtt_node:server_id(),
      QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
     case ra_leaderboard:lookup_leader(ClusterName) of
         undefined ->
@@ -80,7 +80,7 @@ list() ->
 
 leave(NodeBin) ->
     Node = binary_to_atom(NodeBin, utf8),
-    ServerId = mqtt_node:node_id(),
+    ServerId = mqtt_node:server_id(),
     run_ra_command(ServerId, {leave, Node}),
     mqtt_node:leave(Node).
 
