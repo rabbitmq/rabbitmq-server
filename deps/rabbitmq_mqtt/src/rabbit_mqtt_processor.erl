@@ -142,14 +142,14 @@ process_request(?CONNECT,
                             {?CONNACK_ACCEPT, Conn, VHost, AState} ->
                                 case rabbit_mqtt_collector:register(ClientId, self()) of
                                     {ok, Corr} ->
-                                    RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
-                                    link(Conn),
+                                        RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
+                                        link(Conn),
                                     {ok, Ch} = amqp_connection:open_channel(Conn),
-                                    link(Ch),
-                                    amqp_channel:enable_delivery_flow_control(Ch),
-                                    Prefetch = rabbit_mqtt_util:env(prefetch),
-                                    #'basic.qos_ok'{} = amqp_channel:call(
-                                      Ch, #'basic.qos'{prefetch_count = Prefetch}),
+                                        link(Ch),
+                                        amqp_channel:enable_delivery_flow_control(Ch),
+                                        Prefetch = rabbit_mqtt_util:env(prefetch),
+                                        #'basic.qos_ok'{} = amqp_channel:call(Ch,
+                                            #'basic.qos'{prefetch_count = Prefetch}),
                                     rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
                                     PState3 = PState1#proc_state{
                                                 will_msg   = make_will_msg(Var),
