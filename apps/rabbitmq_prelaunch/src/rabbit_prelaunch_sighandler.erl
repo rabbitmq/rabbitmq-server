@@ -36,14 +36,19 @@
 -define(SERVER, erl_signal_server).
 
 setup() ->
-    case whereis(?SERVER) of
-        undefined ->
-            ok;
+    case os:type() of
+        {unix, _} ->
+            case whereis(?SERVER) of
+                undefined ->
+                    ok;
+                _ ->
+                    case lists:member(?MODULE, gen_event:which_handlers(?SERVER)) of
+                        true  -> ok;
+                        false -> gen_event:add_handler(?SERVER, ?MODULE, [])
+                    end
+            end;
         _ ->
-            case lists:member(?MODULE, gen_event:which_handlers(?SERVER)) of
-                true  -> ok;
-                false -> gen_event:add_handler(?SERVER, ?MODULE, [])
-            end
+            ok
     end.
 
 init(_Args) ->
