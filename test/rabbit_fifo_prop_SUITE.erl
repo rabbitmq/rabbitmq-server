@@ -44,6 +44,7 @@ all_tests() ->
      scenario18,
      scenario19,
      scenario20,
+     scenario21,
      single_active,
      single_active_01,
      single_active_02,
@@ -356,6 +357,24 @@ scenario20(_Config) ->
                         max_in_memory_length => 1}, Commands),
     ok.
 
+scenario21(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E,1,<<"1">>),
+                make_enqueue(E,2,<<"2">>),
+                make_enqueue(E,3,<<"3">>),
+                rabbit_fifo:make_discard(C1, [0]),
+                rabbit_fifo:make_settle(C1, [1])
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 1,
+                        dead_letter_handler => {?MODULE, banana, []}},
+                      Commands),
+    ok.
+
 single_active_01(_Config) ->
     C1Pid = test_util:fake_pid(rabbit@fake_node1),
     C1 = {<<0>>, C1Pid},
@@ -450,7 +469,7 @@ snapshots(_Config) ->
                                       oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined])
                                      }}]),
-                      ?FORALL(O, ?LET(Ops, log_gen(250), expand(Ops)),
+                      ?FORALL(O, ?LET(Ops, log_gen(256), expand(Ops)),
                               collect({log_size, length(O)},
                                       snapshots_prop(
                                         config(?FUNCTION_NAME,
@@ -607,10 +626,12 @@ in_memory_limit(_Config) ->
                                                InMemoryBytes), O))))
       end, [], Size).
 
-config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemoryBytes) ->
+config(Name, Length, Bytes, SingleActive, DeliveryLimit,
+       InMemoryLength, InMemoryBytes) ->
     #{name => Name,
       max_length => map_max(Length),
       max_bytes => map_max(Bytes),
+      dead_letter_handler => {?MODULE, banana, []},
       single_active_consumer_on => SingleActive,
       delivery_limit => map_max(DeliveryLimit),
       max_in_memory_length => map_max(InMemoryLength),
@@ -741,8 +762,8 @@ log_gen(Size, _Body) ->
                           {40, {input_event,
                                 frequency([{10, settle},
                                            {2, return},
-                                           {1, discard},
-                                           {1, requeue}])}},
+                                           {2, discard},
+                                           {2, requeue}])}},
                           {2, checkout_gen(oneof(CPids))},
                           {1, checkout_cancel_gen(oneof(CPids))},
                           {1, down_gen(oneof(EPids ++ CPids))},
