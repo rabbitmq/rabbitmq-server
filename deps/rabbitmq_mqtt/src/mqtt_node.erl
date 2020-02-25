@@ -35,7 +35,9 @@ all_node_ids() ->
                    can_participate_in_clientid_tracking(N)].
 
 start() ->
-    start(300, 10).
+    %% 3s to 6s randomized
+    Repetitions = rand:uniform(10) + 10,
+    start(300, Repetitions).
 
 start(_Delay, AttemptsLeft) when AttemptsLeft =< 0 ->
     start_server(),
