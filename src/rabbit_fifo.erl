@@ -146,7 +146,9 @@ update_config(Conf, State) ->
     SHICur = case State#?MODULE.cfg of
                  #cfg{release_cursor_interval = {_, C}} ->
                      C;
-                 #cfg{release_cursor_interval  = C} ->
+                 #cfg{release_cursor_interval = undefined} ->
+                     SHI;
+                 #cfg{release_cursor_interval = C} ->
                      C
              end,
 
@@ -1086,8 +1088,9 @@ snd(T) ->
 return(Meta, ConsumerId, Returned,
        Effects0, #?MODULE{service_queue = SQ0} = State0) ->
     {State1, Effects1} = maps:fold(
-                          fun(MsgId, {Tag, _} = Msg, {S0, E0}) when Tag == '$prefix_msg';
-                                                                    Tag == '$empty_msg'->
+                           fun(MsgId, {Tag, _} = Msg, {S0, E0})
+                                 when Tag == '$prefix_msg';
+                                      Tag == '$empty_msg'->
                                   return_one(MsgId, 0, Msg, S0, E0, ConsumerId);
                              (MsgId, {MsgNum, Msg}, {S0, E0}) ->
                                   return_one(MsgId, MsgNum, Msg, S0, E0,
@@ -1158,7 +1161,9 @@ dead_letter_effects(Reason, Discarded,
                     #?MODULE{cfg = #cfg{dead_letter_handler = {Mod, Fun, Args}}},
                     Effects) ->
     DeadLetters = maps:fold(fun(_, {_, {_, {_Header, Msg}}}, Acc) ->
-                                    [{Reason, Msg} | Acc]
+                                    [{Reason, Msg} | Acc];
+                               (_, _, Acc) ->
+                                    Acc
                             end, [], Discarded),
     [{mod_call, Mod, Fun, Args ++ [DeadLetters]} | Effects].
 
