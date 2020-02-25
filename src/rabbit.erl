@@ -33,6 +33,8 @@
 -export([product_info/0,
          product_name/0,
          product_version/0,
+         base_product_name/0,
+         base_product_version/0,
          motd_file/0,
          motd/0]).
 -export([log_locations/0, config_files/0]). %% for testing and mgmt-agent
@@ -672,12 +674,16 @@ maybe_print_boot_progress(true, IterationsLeft) ->
                {memory, any()}].
 
 status() ->
-    Version = product_version(),
+    Version = base_product_version(),
+    #{name := ProductName,
+      version := ProductVersion} = product_info(),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
           {rabbitmq_version,     Version},
+          {product_name,         ProductName},
+          {product_version,      ProductVersion},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
