@@ -82,6 +82,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "OS: #{m[:os]}",
       # TODO: format
       "Uptime (seconds): #{m[:uptime]}",
+      "Product name: #{m[:product_name]}",
+      "Product version: #{m[:product_version]}",
       "RabbitMQ version: #{m[:rabbitmq_version]}",
       "Node name: #{node_name}",
       "Erlang configuration: #{m[:erlang_version]}",
@@ -194,6 +196,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     %{
       os: os_name(Keyword.get(result, :os)),
       pid: Keyword.get(result, :pid),
+      product_name: Keyword.get(result, :product_name, "RabbitMQ") |> to_string,
+      product_version: Keyword.get(result, :product_version, Keyword.get(result, :rabbitmq_version)) |> to_string,
       rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
       erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
       uptime: Keyword.get(result, :uptime),
