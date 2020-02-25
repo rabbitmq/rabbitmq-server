@@ -1419,12 +1419,10 @@ delete_member_during_node_down(Config) ->
                                     Config, nodename),
 
     stop_node(Config, DownServer),
-    % rabbit_ct_broker_helpers:stop_node(Config, DownServer),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    % RaName = ra_name(QQ),
     timer:sleep(200),
     ?assertEqual(ok, rpc:call(Server, rabbit_quorum_queue, delete_member,
                               [<<"/">>, QQ, Server])),
