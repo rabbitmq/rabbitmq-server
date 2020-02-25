@@ -57,10 +57,8 @@ start(Delay, AttemptsLeft) ->
                       %% ahead of time, this is a best effort workaround. Multi-node consensus is apparently hard
                       %% to achieve without having consensus around expected cluster members.
                       rabbit_log:info("MQTT: will wait for ~p more ms for cluster members to join before triggering a Raft leader election", [Delay]),
-                      spawn(fun () ->
-                                timer:sleep(Delay),
-                                start(Delay, AttemptsLeft - 1)
-                            end);
+                      timer:sleep(Delay),
+                      start(Delay, AttemptsLeft - 1);
                   Peers ->
                       %% Trigger an election.
                       %% This is required when we start a node for the first time.
