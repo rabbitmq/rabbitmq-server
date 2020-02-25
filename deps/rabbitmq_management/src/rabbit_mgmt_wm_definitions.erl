@@ -66,10 +66,14 @@ all_definitions(ReqData, Context) ->
     QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
     Bs = [B || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                export_binding(B, QNames)],
-    {ok, Vsn} = application:get_key(rabbit, vsn),
+    Vsn = rabbit:base_product_version(),
+    #{name := ProductName,
+      version := ProductVersion} = rabbit:product_info(),
     rabbit_mgmt_util:reply(
       [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
-       {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)}] ++
+       {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)},
+       {product_name, rabbit_data_coercion:to_binary(ProductName)},
+       {product_version, rabbit_data_coercion:to_binary(ProductVersion)}] ++
       filter(
         [{users,             rabbit_mgmt_wm_users:users(all)},
          {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
