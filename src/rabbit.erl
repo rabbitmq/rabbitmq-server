@@ -348,21 +348,18 @@ run_prelaunch_second_phase() ->
     %% 2. Feature flags registry.
     ok = rabbit_prelaunch_feature_flags:setup(Context),
 
-    %% 3. Configuration check + loading.
-    ok = rabbit_prelaunch_conf:setup(Context),
-
-    %% 4. Logging.
+    %% 3. Logging.
     ok = rabbit_prelaunch_logging:setup(Context),
 
     case IsInitialPass of
         true ->
-            %% 5. HiPE compilation.
+            %% 4. HiPE compilation.
             ok = rabbit_prelaunch_hipe:setup(Context);
         false ->
             ok
     end,
 
-    %% 6. Clustering.
+    %% 5. Clustering.
     ok = rabbit_prelaunch_cluster:setup(Context),
 
     %% Start Mnesia now that everything is ready.
