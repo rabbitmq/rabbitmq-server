@@ -21,7 +21,6 @@ setup(Context) ->
     %% TODO: Check if directories/files are inside Mnesia dir.
 
     %% TODO: Support glob patterns & directories in RABBITMQ_CONFIG_FILE.
-    %% TODO: Always try parsing of both erlang and cuttlefish formats.
 
     ok = set_default_config(),
 
