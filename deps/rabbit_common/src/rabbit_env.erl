@@ -42,6 +42,7 @@
          "RABBITMQ_BASE",
          "RABBITMQ_CONF_ENV_FILE",
          "RABBITMQ_CONFIG_FILE",
+         "RABBITMQ_CONFIG_FILES",
          "RABBITMQ_DBG",
          "RABBITMQ_DIST_PORT",
          "RABBITMQ_ENABLED_PLUGINS",
@@ -118,6 +119,7 @@ get_context_after_reloading_env(Context) ->
              fun maybe_setup_dist_for_remote_query/1,
              fun dbg_config/1,
              fun main_config_file/1,
+             fun additional_config_files/1,
              fun advanced_config_file/1,
              fun log_base_dir/1,
              fun main_log_file/1,
@@ -489,10 +491,18 @@ split_nodename(#{nodename := Nodename} = Context) ->
 %%
 %% RABBITMQ_CONFIG_FILE
 %%   Main configuration file.
-%%   Extension is optional. `.config` for the old rlang-term-based
+%%   Extension is optional. `.config` for the old erlang-term-based
 %%   format, `.conf` for the new Cuttlefish-based format.
 %%   Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/rabbitmq
 %%         (Windows) ${RABBITMQ_BASE}\rabbitmq
+%%
+%% RABBITMQ_CONFIG_FILES
+%%   Additional configuration files.
+%%   If a directory, all files directly inside it are loaded.
+%%   If a glob pattern, all matching file are loaded.
+%%   Only considered if the main configuration file is Cuttlefish-based.
+%%   Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/conf.d/*.conf
+%%         (Windows) ${RABBITMQ_BASE}\conf.d\*.conf
 %%
 %% RABBITMQ_ADVANCED_CONFIG_FILE
 %%   Advanced configuration file.
@@ -520,6 +530,21 @@ main_config_file(Context) ->
 
 get_default_main_config_file(#{config_base_dir := ConfigBaseDir}) ->
     filename:join(ConfigBaseDir, "rabbitmq").
+
+additional_config_files(Context) ->
+    case get_prefixed_env_var("RABBITMQ_CONFIG_FILES") of
+        false ->
+            Pattern = get_default_additional_config_files(Context),
+            update_context(
+              Context, additional_config_files, Pattern, default);
+        Value ->
+            Pattern = normalize_path(Value),
+            update_context(
+              Context, additional_config_files, Pattern, environment)
+    end.
+
+get_default_additional_config_files(#{config_base_dir := ConfigBaseDir}) ->
+    filename:join([ConfigBaseDir, "conf.d", "*.conf"]).
 
 advanced_config_file(Context) ->
     case get_prefixed_env_var("RABBITMQ_ADVANCED_CONFIG_FILE") of
