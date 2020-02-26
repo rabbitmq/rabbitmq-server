@@ -74,8 +74,7 @@ ensure_endpoint(Dir, Channel, Endpoint, State) ->
     ensure_endpoint(Dir, Channel, Endpoint, [], State).
 
 ensure_endpoint(source, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel,
-                   proplists:get_value(check_exchange, Params, false)),
+    declare_exchange(Name, Channel, Params),
     Method = queue_declare_method(#'queue.declare'{}, exchange, Params),
     #'queue.declare_ok'{queue = Queue} = amqp_channel:call(Channel, Method),
     {ok, Queue, State};
@@ -106,8 +105,7 @@ ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
     {ok, Queue, State1};
 
 ensure_endpoint(dest, Channel, {exchange, {Name, _}}, Params, State) ->
-    check_exchange(Name, Channel,
-                   proplists:get_value(check_exchange, Params, false)),
+    declare_exchange(Name, Channel, Params),
     {ok, undefined, State};
 
 ensure_endpoint(dest, _Ch, {topic, _}, _Params, State) ->
@@ -155,13 +153,55 @@ dest_temp_queue(_)                  -> none.
 
 %% --------------------------------------------------------------------------
 
-check_exchange(_,            _,       false) ->
-    ok;
-check_exchange(ExchangeName, Channel, true) ->
-    XDecl = #'exchange.declare'{ exchange = list_to_binary(ExchangeName),
-                                 passive = true },
-    #'exchange.declare_ok'{} = amqp_channel:call(Channel, XDecl),
-    ok.
+update_exchange_declare_type(Method, Params) ->
+    case proplists:get_value(exchange_type, Params) of
+        undefined -> Method;
+        Val       -> Method#'exchange.declare'{type = Val}
+    end.
+
+update_exchange_declare_durable(Method, Params) ->
+    case proplists:get_value(exchange_durable, Params) of
+        undefined -> Method;
+        Val       -> Method#'exchange.declare'{durable = Val}
+    end.
+
+update_exchange_declare_auto_delete(Method, Params) ->
+    case proplists:get_value(exchange_auto_delete, Params) of
+        undefined -> Method;
+        Val       -> Method#'exchange.declare'{auto_delete = Val}
+    end.
+
+update_exchange_declare_arguments(Method, Params) ->
+    Method#'exchange.declare'{arguments =
+        proplists:get_value(exchange_arguments, Params, [])}.
+
+exchange_declare_method(#'exchange.declare'{} = Method, Params) ->
+    %% set exchange.declare fields from Params
+    lists:foldl(fun (F, Acc) -> F(Acc, Params) end,
+        Method, [fun update_exchange_declare_type/2,
+                 fun update_exchange_declare_durable/2,
+                 fun update_exchange_declare_auto_delete/2,
+                 fun update_exchange_declare_arguments/2]).
+
+declare_exchange(ExchangeName, Channel, Params) ->
+    Method = case proplists:get_value(declare_exchange, Params, false) of
+        true  -> exchange_declare_method(
+            #'exchange.declare'{ exchange = list_to_binary(ExchangeName) },
+            Params);
+        false ->
+            case proplists:get_value(check_exchange, Params, false) of
+                true  -> #'exchange.declare'{
+                             exchange = list_to_binary(ExchangeName),
+                             passive = true };
+                false -> none
+            end
+    end,
+
+    case Method of
+        none -> ok;
+        _ -> #'exchange.declare_ok'{} = amqp_channel:call(Channel, Method),
+             ok
+    end.
 
 update_queue_declare_arguments(Method, Params) ->
     Method#'queue.declare'{arguments =
