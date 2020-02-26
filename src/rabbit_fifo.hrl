@@ -119,6 +119,10 @@
          max_in_memory_bytes :: option(non_neg_integer())
         }).
 
+-type prefix_msgs() :: {list(), list()} |
+                       {non_neg_integer(), list(),
+                        non_neg_integer(), list()}.
+
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
@@ -161,8 +165,7 @@
          %% overflow calculations).
          %% This is done so that consumers are still served in a deterministic
          %% order on recovery.
-         prefix_msgs = {[], []} :: {Return :: [msg_header() | {'$empty_msg', msg_header()}],
-                                    PrefixMsgs :: [msg_header() | {msg_header(), 'empty'}]},
+         prefix_msgs = {0, [], 0, []} :: prefix_msgs(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% waiting consumers, one is picked active consumer is cancelled or dies

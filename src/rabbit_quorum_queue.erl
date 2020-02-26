@@ -246,7 +246,7 @@ all_replica_states() ->
 list_with_minimum_quorum() ->
     filter_quorum_critical(rabbit_amqqueue:list_local_quorum_queues()).
 
--spec list_with_minimum_quorum_for_cli() -> [amqqueue:amqqueue()].
+-spec list_with_minimum_quorum_for_cli() -> [#{binary() => term()}].
 list_with_minimum_quorum_for_cli() ->
     QQs = list_with_minimum_quorum(),
     [begin
