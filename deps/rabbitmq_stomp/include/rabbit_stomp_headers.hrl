@@ -14,10 +14,14 @@
 -define(HEADER_CONTENT_LENGTH, "content-length").
 -define(HEADER_CONTENT_TYPE, "content-type").
 -define(HEADER_CORRELATION_ID, "correlation-id").
+-define(HEADER_DECLARE_EXCHANGE, "declare-exchange").
 -define(HEADER_DESTINATION, "destination").
 -define(HEADER_DURABLE, "durable").
--define(HEADER_EXPIRATION, "expiration").
+-define(HEADER_EXCHANGE_AUTO_DELETE, "exchange-auto-delete").
+-define(HEADER_EXCHANGE_DURABLE, "exchange-durable").
+-define(HEADER_EXCHANGE_TYPE, "exchange-type").
 -define(HEADER_EXCLUSIVE, "exclusive").
+-define(HEADER_EXPIRATION, "expiration").
 -define(HEADER_HEART_BEAT, "heart-beat").
 -define(HEADER_HOST, "host").
 -define(HEADER_ID, "id").
@@ -66,8 +70,14 @@
                           ]).
 
 -define(HEADER_PARAMS, [
+                        %% Queue Params
                         ?HEADER_AUTO_DELETE,
                         ?HEADER_DURABLE,
                         ?HEADER_EXCLUSIVE,
-                        ?HEADER_PERSISTENT
+                        ?HEADER_PERSISTENT,
+                        %% Exchange Params
+                        ?HEADER_DECLARE_EXCHANGE,
+                        ?HEADER_EXCHANGE_AUTO_DELETE,
+                        ?HEADER_EXCHANGE_DURABLE,
+                        ?HEADER_EXCHANGE_TYPE
                        ]).
