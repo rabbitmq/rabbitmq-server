@@ -65,11 +65,14 @@ handle_event(Signal, State) when ?SIGNAL_HANDLED_BY_ERLANG(Signal) ->
     {ok, State};
 handle_event(Signal, State) ->
     case ?SIGNALS_HANDLED_BY_US of
-        #{Signal := stop} ->
-            error_logger:info_msg(
-              "~s received - shutting down~n",
-              [string:uppercase(atom_to_list(Signal))]),
-            ok = init:stop();
+        %% The code below can be uncommented if we introduce a signal
+        %% which should stop RabbitMQ.
+        %
+        %#{Signal := stop} ->
+        %    error_logger:info_msg(
+        %      "~s received - shutting down~n",
+        %      [string:uppercase(atom_to_list(Signal))]),
+        %    ok = init:stop();
         _ ->
             error_logger:info_msg(
               "~s received - unhandled signal~n",
