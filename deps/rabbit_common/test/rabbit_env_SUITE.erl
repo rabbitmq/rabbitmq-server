@@ -34,6 +34,7 @@
          check_context_to_code_path/1,
          check_RABBITMQ_ADVANCED_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILE/1,
+         check_RABBITMQ_CONFIG_FILES/1,
          check_RABBITMQ_DIST_PORT/1,
          check_RABBITMQ_ENABLED_PLUGINS/1,
          check_RABBITMQ_ENABLED_PLUGINS_FILE/1,
@@ -71,6 +72,7 @@ all() ->
      check_context_to_code_path,
      check_RABBITMQ_ADVANCED_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILE,
+     check_RABBITMQ_CONFIG_FILES,
      check_RABBITMQ_DIST_PORT,
      check_RABBITMQ_ENABLED_PLUGINS,
      check_RABBITMQ_ENABLED_PLUGINS_FILE,
@@ -156,6 +158,7 @@ check_default_values(_) ->
     NodeS = atom_to_list(Node),
 
     Origins = #{
+      additional_config_files => default,
       advanced_config_file => default,
       amqp_ipaddr => default,
       amqp_tcp_port => default,
@@ -190,7 +193,8 @@ check_default_values(_) ->
      },
 
     ?assertEqual(
-       #{advanced_config_file => "/etc/rabbitmq/advanced.config",
+       #{additional_config_files => "/etc/rabbitmq/conf.d/*.conf",
+         advanced_config_file => "/etc/rabbitmq/advanced.config",
          amqp_ipaddr => "auto",
          amqp_tcp_port => 5672,
          conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
@@ -236,7 +240,8 @@ check_default_values(_) ->
        UnixContext),
 
     ?assertEqual(
-       #{advanced_config_file => "%APPDATA%/RabbitMQ/advanced.config",
+       #{additional_config_files => "%APPDATA%/RabbitMQ/conf.d/*.conf",
+         advanced_config_file => "%APPDATA%/RabbitMQ/advanced.config",
          amqp_ipaddr => "auto",
          amqp_tcp_port => 5672,
          conf_env_file => "%APPDATA%/RabbitMQ/rabbitmq-env-conf.bat",
@@ -362,6 +367,7 @@ check_values_from_reachable_remote_node(Config) ->
         {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
 
         Origins = #{
+          additional_config_files => default,
           advanced_config_file => default,
           amqp_ipaddr => default,
           amqp_tcp_port => default,
@@ -396,7 +402,8 @@ check_values_from_reachable_remote_node(Config) ->
          },
 
         ?assertEqual(
-           #{advanced_config_file => "/etc/rabbitmq/advanced.config",
+           #{additional_config_files => "/etc/rabbitmq/conf.d/*.conf",
+             advanced_config_file => "/etc/rabbitmq/advanced.config",
              amqp_ipaddr => "auto",
              amqp_tcp_port => 5672,
              conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
@@ -477,6 +484,7 @@ check_values_from_offline_remote_node(_) ->
     {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
 
     Origins = #{
+      additional_config_files => default,
       advanced_config_file => default,
       amqp_ipaddr => default,
       amqp_tcp_port => default,
@@ -511,7 +519,8 @@ check_values_from_offline_remote_node(_) ->
      },
 
     ?assertEqual(
-       #{advanced_config_file => "/etc/rabbitmq/advanced.config",
+       #{additional_config_files => "/etc/rabbitmq/conf.d/*.conf",
+         advanced_config_file => "/etc/rabbitmq/advanced.config",
          amqp_ipaddr => "auto",
          amqp_tcp_port => 5672,
          conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
@@ -664,6 +673,15 @@ check_RABBITMQ_CONFIG_FILE(_) ->
     Value2 = random_string(),
     check_prefixed_variable("RABBITMQ_CONFIG_FILE",
                             main_config_file,
+                            '_',
+                            Value1, Value1,
+                            Value2, Value2).
+
+check_RABBITMQ_CONFIG_FILES(_) ->
+    Value1 = random_string(),
+    Value2 = random_string(),
+    check_prefixed_variable("RABBITMQ_CONFIG_FILES",
+                            additional_config_files,
                             '_',
                             Value1, Value1,
                             Value2, Value2).
