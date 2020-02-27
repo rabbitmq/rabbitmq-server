@@ -292,8 +292,8 @@ load_and_decode_cert(Provider, CertId, Attributes, Config) ->
                 {ok, Cert, Id};
             {error, Reason} -> {error, Reason}
         end
-    catch _:Error ->
-        {error, {Error, erlang:get_stacktrace()}}
+    catch _:Error:Stacktrace ->
+        {error, {Error, Stacktrace}}
     end.
 
 delete_cert(CertId, Provider) ->
