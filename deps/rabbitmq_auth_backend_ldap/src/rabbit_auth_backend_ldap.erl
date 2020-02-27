@@ -785,15 +785,15 @@ vhost_if_defined(VHost) -> [{vhost, VHost}].
 dn_lookup_when() ->
     case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
         {none, DnLookupBind} ->
-            rabbit_log_ldap:warning(
-              "dn_lookup_attribute is 'none' but dn_lookup_bind is ~p. No DN lookup bind will be performed~n",
-              [DnLookupBind]),
             never;
-        {_, as_user} -> postbind;
+        {_, as_user} ->
+            postbind;
         %% make it more obvious what the invariants are,
         %% see rabbitmq/rabbitmq-auth-backend-ldap#94. MK.
-        {_, anon} -> prebind;
-        {_, _} -> prebind
+        {_, anon} ->
+            prebind;
+        {_, _} ->
+            prebind
     end.
 
 username_to_dn_prebind(Username) ->
