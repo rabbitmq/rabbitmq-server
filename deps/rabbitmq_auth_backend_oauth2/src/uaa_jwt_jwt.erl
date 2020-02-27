@@ -13,8 +13,8 @@ decode(Token) ->
     try
         #jose_jwt{fields = Fields} = jose_jwt:peek_payload(Token),
         Fields
-    catch Type:Err ->
-        {error, {invalid_token, Type, Err, erlang:get_stacktrace()}}
+    catch Type:Err:Stacktrace ->
+        {error, {invalid_token, Type, Err, Stacktrace}}
     end.
 
 decode_and_verify(Jwk, Token) ->
@@ -29,8 +29,8 @@ get_key_id(Token) ->
             #jose_jws{fields = #{<<"kid">> := Kid}} -> {ok, Kid};
             #jose_jws{}                             -> get_default_key()
         end
-    catch Type:Err ->
-        {error, {invalid_token, Type, Err, erlang:get_stacktrace()}}
+    catch Type:Err:Stacktrace ->
+        {error, {invalid_token, Type, Err, Stacktrace}}
     end.
 
 
