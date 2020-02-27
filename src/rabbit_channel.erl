@@ -647,8 +647,8 @@ handle_cast({method, Method, Content, Flow},
         exit:Reason = #amqp_error{} ->
             MethodName = rabbit_misc:method_record_type(Method),
             handle_exception(Reason#amqp_error{method = MethodName}, State);
-        _:Reason ->
-            {stop, {Reason, erlang:get_stacktrace()}, State}
+        _:Reason:Stacktrace ->
+            {stop, {Reason, Stacktrace}, State}
     end;
 
 handle_cast(ready_for_close,

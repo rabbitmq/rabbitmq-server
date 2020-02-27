@@ -748,10 +748,10 @@ register_outside_app_process(Fun, WaitForExistingProcess) ->
 do_run_outside_app_fun(Fun) ->
     try
         Fun()
-    catch _:E ->
+    catch _:E:Stacktrace ->
             rabbit_log:error(
               "rabbit_outside_app_process:~n~p~n~p~n",
-              [E, erlang:get_stacktrace()])
+              [E, Stacktrace])
     end.
 
 wait_for_cluster_recovery(Condition) ->
