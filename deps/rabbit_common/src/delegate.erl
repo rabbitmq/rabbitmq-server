@@ -218,8 +218,8 @@ safe_invoke(Pids, FunOrMFA) when is_list(Pids) ->
 safe_invoke(Pid, FunOrMFA) when is_pid(Pid) ->
     try
         {ok, Pid, apply1(FunOrMFA, Pid)}
-    catch Class:Reason ->
-            {error, Pid, {Class, Reason, erlang:get_stacktrace()}}
+    catch Class:Reason:Stacktrace ->
+            {error, Pid, {Class, Reason, Stacktrace}}
     end.
 
 apply1({M, F, A}, Arg) -> apply(M, F, [Arg | A]);
