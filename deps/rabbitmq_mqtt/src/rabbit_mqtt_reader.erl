@@ -330,8 +330,8 @@ parse(Bytes, ParseState) ->
     try
         rabbit_mqtt_frame:parse(Bytes, ParseState)
     catch
-        _:Reason ->
-            {error, {cannot_parse, Reason, erlang:get_stacktrace()}}
+        _:Reason:Stacktrace ->
+            {error, {cannot_parse, Reason, Stacktrace}}
     end.
 
 send_will_and_terminate(PState, State) ->
