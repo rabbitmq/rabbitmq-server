@@ -49,6 +49,9 @@ validate(Username, Password) ->
 
 -spec validate(rabbit_types:username(), rabbit_types:password(), integer()) -> 'ok' | {'error', string(), [any()]}.
 
+%% passwordless users
+validate(_Username, undefined, MinLength) ->
+    {error, rabbit_misc:format("minimum required password length is ~B", [MinLength])};
 validate(_Username, Password, MinLength) ->
     case size(Password) >= MinLength of
         true  -> ok;
