@@ -107,6 +107,7 @@ all_tests() ->
      publish_and_restart,
      subscribe_should_fail_when_global_qos_true,
      dead_letter_to_classic_queue,
+     dead_letter_with_memory_limit,
      dead_letter_to_quorum_queue,
      dead_letter_from_classic_to_quorum_queue,
      dead_letter_policy,
@@ -768,6 +769,21 @@ dead_letter_to_classic_queue(Config) ->
     CQ = <<"classic-dead_letter_to_classic_queue">>,
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, CQ}
+                                 ])),
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    test_dead_lettering(true, Config, Ch, Servers, ra_name(QQ), QQ, CQ).
+
+dead_letter_with_memory_limit(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    CQ = <<"classic-dead_letter_with_memory_limit">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-in-memory-length">>, long, 0},
                                   {<<"x-dead-letter-exchange">>, longstr, <<>>},
                                   {<<"x-dead-letter-routing-key">>, longstr, CQ}
                                  ])),
