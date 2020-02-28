@@ -118,7 +118,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   #
 
   def wait_for(timeout, fun) do
-    sleep = round(timeout / 10)
+    sleep = 1000
 
     case wait_for_loop(timeout, sleep, fun) do
       {:error, :timeout} -> {:error, {:timeout, timeout}}
