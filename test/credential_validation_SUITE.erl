@@ -125,7 +125,11 @@ min_length_fails(_Config) ->
     Pwd3 = crypto:strong_rand_bytes(10),
     ?assertMatch({error, _}, F(?USERNAME, Pwd3, 15)),
     Pwd4 = crypto:strong_rand_bytes(50),
-    ?assertMatch({error, _}, F(?USERNAME, Pwd4, 60)).
+    ?assertMatch({error, _}, F(?USERNAME, Pwd4, 60)),
+    Pwd5 = undefined,
+    ?assertMatch({error, _}, F(?USERNAME, Pwd5, 60)),
+    Pwd6 = <<"">>,
+    ?assertMatch({error, _}, F(?USERNAME, Pwd6, 60)).
 
 min_length_succeeds(_Config) ->
     F = fun rabbit_credential_validator_min_password_length:validate/3,
