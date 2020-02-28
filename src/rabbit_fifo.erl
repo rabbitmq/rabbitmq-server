@@ -1087,7 +1087,7 @@ maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
 snd(T) ->
     element(2, T).
 
-return(Meta, ConsumerId, Returned,
+return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
        Effects0, #?MODULE{service_queue = SQ0} = State0) ->
     {State1, Effects1} = maps:fold(
                            fun(MsgId, {Tag, _} = Msg, {S0, E0})
@@ -1102,9 +1102,10 @@ return(Meta, ConsumerId, Returned,
     Con = Con0#consumer{credit = increase_credit(Con0, map_size(Returned))},
     {Cons, SQ, Effects2} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                 SQ0, Effects1),
-    State = State1#?MODULE{consumers = Cons,
+    State2 = State1#?MODULE{consumers = Cons,
                            service_queue = SQ},
-    checkout(Meta, State, Effects2).
+    {State, ok, Effects} = checkout(Meta, State2, Effects2),
+    update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 % used to processes messages that are finished
 complete(ConsumerId, Discarded,
