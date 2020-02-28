@@ -1162,12 +1162,26 @@ dead_letter_effects(_Reason, _Discarded,
 dead_letter_effects(Reason, Discarded,
                     #?MODULE{cfg = #cfg{dead_letter_handler = {Mod, Fun, Args}}},
                     Effects) ->
-    DeadLetters = maps:fold(fun(_, {_, {_, {_Header, Msg}}}, Acc) ->
-                                    [{Reason, Msg} | Acc];
-                               (_, _, Acc) ->
-                                    Acc
-                            end, [], Discarded),
-    [{mod_call, Mod, Fun, Args ++ [DeadLetters]} | Effects].
+    RaftIdxs = maps:fold(
+                    fun (_, {_, {RaftIdx, {_Header, 'empty'}}}, Acc) ->
+                            [RaftIdx | Acc];
+                        (_, _, Acc) ->
+                            Acc
+                    end, [], Discarded),
+    [{log, RaftIdxs,
+      fun (Log) ->
+              Lookup = maps:from_list(lists:zip(RaftIdxs, Log)),
+              DeadLetters = maps:fold(
+                              fun (_, {_, {RaftIdx, {_Header, 'empty'}}}, Acc) ->
+                                      {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
+                                      [{Reason, Msg} | Acc];
+                                  (_, {_, {_, {_Header, Msg}}}, Acc) ->
+                                      [{Reason, Msg} | Acc];
+                                  (_, _, Acc) ->
+                                      Acc
+                              end, [], Discarded),
+              [{mod_call, Mod, Fun, Args ++ [DeadLetters]}]
+      end} | Effects].
 
 cancel_consumer_effects(ConsumerId,
                         #?MODULE{cfg = #cfg{resource = QName}}, Effects) ->
@@ -1235,7 +1249,8 @@ return_one(MsgId, 0, {Tag, Header0},
             %% this should not affect the release cursor in any way
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked)},
             {Msg, State1} = case Tag of
-                                '$empty_msg' -> {Msg0, State0};
+                                '$empty_msg' ->
+                                    {Msg0, State0};
                                 _ -> case evaluate_memory_limit(Header, State0) of
                                          true ->
                                              {{'$empty_msg', Header}, State0};
@@ -1310,14 +1325,15 @@ checkout(#{index := Index}, State0, Effects0) ->
             {State, ok, Effects}
     end.
 
-checkout0({success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State}, Effects,
-          {SendAcc, LogAcc0}) ->
+checkout0({success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State},
+          Effects, {SendAcc, LogAcc0}) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
     LogAcc = maps:update_with(ConsumerId,
                               fun (M) -> [DelMsg | M] end,
                               [DelMsg], LogAcc0),
     checkout0(checkout_one(State), Effects, {SendAcc, LogAcc});
-checkout0({success, ConsumerId, MsgId, Msg, State}, Effects, {SendAcc0, LogAcc}) ->
+checkout0({success, ConsumerId, MsgId, Msg, State}, Effects,
+          {SendAcc0, LogAcc}) ->
     DelMsg = {MsgId, Msg},
     SendAcc = maps:update_with(ConsumerId,
                                fun (M) -> [DelMsg | M] end,
@@ -1326,10 +1342,12 @@ checkout0({success, ConsumerId, MsgId, Msg, State}, Effects, {SendAcc0, LogAcc})
 checkout0({Activity, State0}, Effects0, {SendAcc, LogAcc}) ->
     Effects1 = case Activity of
                    nochange ->
-                       append_send_msg_effects(append_log_effects(Effects0, LogAcc), SendAcc);
+                       append_send_msg_effects(
+                         append_log_effects(Effects0, LogAcc), SendAcc);
                    inactive ->
                        [{aux, inactive}
-                        | append_send_msg_effects(append_log_effects(Effects0, LogAcc), SendAcc)]
+                        | append_send_msg_effects(
+                            append_log_effects(Effects0, LogAcc), SendAcc)]
                end,
     {State0, ok, lists:reverse(Effects1)}.
 
@@ -1441,7 +1459,7 @@ send_log_effect({CTag, CPid}, IdxMsgs) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
     {log, RaftIdxs,
      fun(Log) ->
-             Msgs = lists:zipwith(fun({enqueue, _, _, Msg}, {MsgId, Header}) ->
+             Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {MsgId, Header}) ->
                                           {MsgId, {Header, Msg}}
                                   end, Log, Data),
              [{send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}]
