@@ -784,7 +784,7 @@ vhost_if_defined(VHost) -> [{vhost, VHost}].
 
 dn_lookup_when() ->
     case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
-        {none, DnLookupBind} ->
+        {none, _} ->
             never;
         {_, as_user} ->
             postbind;
