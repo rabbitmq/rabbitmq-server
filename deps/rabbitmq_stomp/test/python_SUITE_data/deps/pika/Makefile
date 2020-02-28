@@ -1,8 +1,8 @@
 UPSTREAM_GIT=https://github.com/pika/pika.git
-REVISION=0.12.0
+REVISION=1.1.0
 
 LIB_DIR=pika
-CHECKOUT_DIR=pika-git
+CHECKOUT_DIR=pika-$(REVISION)
 
 TARGETS=$(LIB_DIR)
 
@@ -19,8 +19,8 @@ $(LIB_DIR) : $(CHECKOUT_DIR)
 	cp -R $< $@
 
 $(CHECKOUT_DIR):
-	git clone $(UPSTREAM_GIT) $@
-	(cd $@ && git checkout $(REVISION)) || rm -rf $@
+	git clone --depth 1 --branch $(REVISION) $(UPSTREAM_GIT) $@ || \
+		(rm -rf $@; exit 1)
 
 echo-revision:
 	@echo $(REVISION)
