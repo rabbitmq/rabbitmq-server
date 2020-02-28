@@ -111,12 +111,15 @@ send_sighup(Config) ->
     ?assert(filelib:is_regular(PidFile)).
 
 send_sigterm(Config) ->
-    {_PidFile, Pid} = get_pidfile_and_pid(Config),
+    {PidFile, Pid} = get_pidfile_and_pid(Config),
 
     %% After sending a SIGTERM to the process, we expect the node to
     %% exit.
     send_signal(Pid, "TERM"),
-    wait_for_node_exit(Pid).
+    wait_for_node_exit(Pid),
+
+    %% After a clean exit, the PID file should be removed.
+    ?assertNot(filelib:is_regular(PidFile)).
 
 send_sigtstp(Config) ->
     {PidFile, Pid} = get_pidfile_and_pid(Config),
