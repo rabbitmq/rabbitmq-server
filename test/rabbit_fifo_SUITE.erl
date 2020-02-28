@@ -329,7 +329,7 @@ return_checked_out_limit_test(_) ->
     {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _},
                   {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
-    {#rabbit_fifo{ra_indexes = RaIdxs}, ok, []} =
+    {#rabbit_fifo{ra_indexes = RaIdxs}, ok, [_ReleaseEff]} =
         apply(meta(4), rabbit_fifo:make_return(Cid, [MsgId2]), State2),
     ?assertEqual(0, rabbit_fifo_index:size(RaIdxs)),
     ok.
@@ -453,7 +453,7 @@ discarded_message_without_dead_letter_handler_is_removed_test(_) ->
                     Effects2),
     ok.
 
-discarded_message_with_dead_letter_handler_emits_mod_call_effect_test(_) ->
+discarded_message_with_dead_letter_handler_emits_log_effect_test(_) ->
     Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
     State00 = init(#{name => test,
                      queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
@@ -466,8 +466,7 @@ discarded_message_with_dead_letter_handler_emits_mod_call_effect_test(_) ->
                 Effects1),
     {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
     % assert mod call effect with appended reason and message
-    ?ASSERT_EFF({mod_call, somemod, somefun, [somearg, [{rejected, first}]]},
-                Effects2),
+    ?ASSERT_EFF({log, _RaftIdxs, _}, Effects2),
     ok.
 
 tick_test(_) ->
