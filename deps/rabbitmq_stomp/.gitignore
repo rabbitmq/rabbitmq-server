@@ -22,7 +22,7 @@ rabbitmq_stomp.d
 .python-version
 *.pyc
 test/python_SUITE_data/deps/pika/pika/
-test/python_SUITE_data/deps/pika/pika-git/
+test/python_SUITE_data/deps/pika/pika-*/
 test/python_SUITE_data/deps/stomppy/stomppy/
 test/python_SUITE_data/deps/stomppy/stomppy-git/
 
