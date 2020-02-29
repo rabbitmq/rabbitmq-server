@@ -14,7 +14,7 @@ different platforms and frameworks:
 
 ## Python Example
 
-`rabbitmq_auth_backend_django` is a very minimalistic [Django](https://www.djangoproject.com/) 1.10+ application
+`rabbitmq_auth_backend_django` is a very minimalistic [Django](https://www.djangoproject.com/) application
 that rabbitmq-auth-backend-http can authenticate against. It's really
 not designed to be anything other than an example.
 
