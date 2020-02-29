@@ -25,7 +25,7 @@ SECRET_KEY = '_wqlwxs-s(na_@1-@3=6uc2=-ka3f)))%-v#lgx4een8^#u92c'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1', 'auth-backend']
+ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1', 'localhost', 'auth-backend']
 
 
 # Application definition
