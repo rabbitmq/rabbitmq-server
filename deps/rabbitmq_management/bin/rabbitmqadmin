@@ -165,8 +165,8 @@ DECLARABLE = {
 DELETABLE = {
     'exchange':   {'mandatory': ['name']},
     'queue':      {'mandatory': ['name']},
-    'binding':    {'mandatory': ['source', 'destination_type', 'destination',
-                                 'properties_key']},
+    'binding':    {'mandatory': ['source', 'destination_type', 'destination'], 
+                    'optional': {'properties_key': '~'}},
     'vhost':      {'mandatory': ['name']},
     'user':       {'mandatory': ['name']},
     'permission': {'mandatory': ['vhost', 'user']},
@@ -207,7 +207,7 @@ for k in DECLARABLE:
 
 for k in DELETABLE:
     DELETABLE[k]['uri'] = URIS[k]
-    DELETABLE[k]['optional'] = {}
+    DELETABLE[k]['optional'] = DELETABLE[k].get('optional', {})
 DELETABLE['binding']['uri'] = URIS['binding_del']
 
 
