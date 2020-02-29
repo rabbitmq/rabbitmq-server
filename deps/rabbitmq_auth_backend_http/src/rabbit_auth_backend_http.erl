@@ -119,27 +119,30 @@ http_req(Path, Query, Retry) ->
     end.
 
 
-do_http_req(PathName, Query) ->
-    URI = uri_parser:parse(PathName, [{port, 80}]),
+do_http_req(Path0, Query) ->
+    URI = uri_parser:parse(Path0, [{port, 80}]),
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
     {ok, Method} = application:get_env(rabbitmq_auth_backend_http, http_method),
     Request = case rabbit_data_coercion:to_atom(Method) of
-        get  -> {PathName ++ "?" ++ Query,
-                 [{"Host", HostHdr}]};
-        post -> {PathName,
-                 [{"Host", HostHdr}],
-                 "application/x-www-form-urlencoded",
-                 Query}
+        get  ->
+            Path = Path0 ++ "?" ++ Query,
+            rabbit_log:debug("auth_backend_http: GET ~s", [Path]),
+            {Path, [{"Host", HostHdr}]};
+        post ->
+            rabbit_log:debug("auth_backend_http: POST ~s", [Path0]),
+            {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
     HttpOpts = case application:get_env(rabbitmq_auth_backend_http,
                                         ssl_options) of
         {ok, Opts} when is_list(Opts) -> [{ssl, Opts}];
         _                             -> []
     end,
+
     case httpc:request(Method, Request, HttpOpts, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
+            rabbit_log:debug("auth_backend_http: response code is ~p, body: ~p", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
                 true  -> case parse_resp(Body) of
                              {error, _} = E -> E;
