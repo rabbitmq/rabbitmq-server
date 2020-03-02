@@ -1431,7 +1431,7 @@ delete_member_not_a_member(Config) ->
                           [<<"/">>, QQ, Server])).
 
 delete_member_during_node_down(Config) ->
-    [Server, DownServer, _] = rabbit_ct_broker_helpers:get_node_configs(
+    [Server, DownServer, Remove] = rabbit_ct_broker_helpers:get_node_configs(
                                     Config, nodename),
 
     stop_node(Config, DownServer),
@@ -1441,7 +1441,7 @@ delete_member_during_node_down(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(200),
     ?assertEqual(ok, rpc:call(Server, rabbit_quorum_queue, delete_member,
-                              [<<"/">>, QQ, Server])),
+                              [<<"/">>, QQ, Remove])),
 
     rabbit_ct_broker_helpers:start_node(Config, DownServer),
     ?assertEqual(ok, rpc:call(Server, rabbit_quorum_queue, repair_amqqueue_nodes,

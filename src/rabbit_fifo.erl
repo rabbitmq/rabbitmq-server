@@ -1103,7 +1103,7 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
     {Cons, SQ, Effects2} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                 SQ0, Effects1),
     State2 = State1#?MODULE{consumers = Cons,
-                           service_queue = SQ},
+                            service_queue = SQ},
     {State, ok, Effects} = checkout(Meta, State2, Effects2),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
@@ -1153,7 +1153,6 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
     {State2, Effects1} = complete(ConsumerId, Discarded, Con0,
                                   Effects0, State0),
     {State, ok, Effects} = checkout(Meta, State2, Effects1),
-    % settle metrics are incremented separately
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 dead_letter_effects(_Reason, _Discarded,
@@ -1199,8 +1198,7 @@ update_smallest_raft_index(IncomingRaftIdx,
             % we can forward release_cursor all the way until
             % the last received command, hooray
             State = State0#?MODULE{release_cursors = lqueue:new()},
-            {State, ok,
-             [{release_cursor, IncomingRaftIdx, State} | Effects]};
+            {State, ok, Effects ++ [{release_cursor, IncomingRaftIdx, State}]};
         _ ->
             Smallest = rabbit_fifo_index:smallest(Indexes),
             case find_next_cursor(Smallest, Cursors0) of
@@ -1211,7 +1209,7 @@ update_smallest_raft_index(IncomingRaftIdx,
                     %% we can emit a release cursor we've passed the smallest
                     %% release cursor available.
                     {State0#?MODULE{release_cursors = Cursors}, ok,
-                     [Cursor | Effects]}
+                     Effects ++ [Cursor]}
             end
     end.
 
@@ -1315,7 +1313,6 @@ return_all(#?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
                 end, {State, Effects0}, Checked).
 
 %% checkout new messages to consumers
-%% reverses the effects list
 checkout(#{index := Index}, State0, Effects0) ->
     {State1, _Result, Effects1} = checkout0(checkout_one(State0),
                                             Effects0, {#{}, #{}}),
