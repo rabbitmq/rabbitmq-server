@@ -605,7 +605,8 @@ in_memory_limit(_Config) ->
     Size = 2000,
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength, InMemoryBytes},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit,
+                       InMemoryLength, InMemoryBytes},
                       frequency([{10, {0, 0, false, 0, 0, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
@@ -665,6 +666,8 @@ in_memory_limit_prop(Conf0, Commands) ->
             false
     end.
 
+validate_idx_order([], _ReleaseCursorIdx) ->
+    true;
 validate_idx_order(Idxs, ReleaseCursorIdx) ->
     Min = lists:min(Idxs),
     case Min < ReleaseCursorIdx of
