@@ -507,7 +507,7 @@ single_active(_Config) ->
       end, [], Size).
 
 single_active_ordering(_Config) ->
-    Size = 4000,
+    Size = 2000,
     Fun = {-1, fun ({Prev, _}) -> {Prev + 1, Prev + 1} end},
     run_proper(
       fun () ->
