@@ -1,5 +1,6 @@
 # vim:sw=2:et:
 
+dist: xenial
 sudo: false
 language: erlang
 notifications:
@@ -10,15 +11,8 @@ notifications:
     on_failure: always
 addons:
   apt:
-    sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
-        key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
       - awscli
-      # Use Elixir from Erlang Solutions. The provided Elixir is
-      # installed with kiex but is old. We also can't use kiex to
-      # install a newer one because of GitHub API rate limiting.
-      - elixir=1.8.1-1
 cache:
   apt: true
 env:
@@ -30,6 +24,7 @@ otp_release:
   - "21.3"
 
 before_script:
+  - elixir --version
   # The checkout made by Travis is a "detached HEAD" and branches
   # information is missing. Our Erlang.mk's git_rmq fetch method relies
   # on it, so we need to restore it.
@@ -41,11 +36,6 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream v3.8.x:v3.8.x || :
     git fetch upstream master:master || :
-  # Make sure we use Elixir from Erlang Solutions and not kiex.
-  - |
-    echo YES | kiex implode
-    elixir --version
-    elixir --version | grep -q 'Elixir 1.8.1'
 
 script:
   - make xref
