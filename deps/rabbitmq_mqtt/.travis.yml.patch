@@ -1,9 +1,9 @@
---- .travis.yml.orig	2017-11-08 10:20:57.880076430 +0100
-+++ .travis.yml	2017-11-08 10:21:09.331099192 +0100
-@@ -16,6 +16,7 @@
-       # installed with kiex but is old. We also can't use kiex to
-       # install a newer one because of GitHub API rate limiting.
-       - elixir=1.6.0-1
+--- ../rabbit_common/.travis.yml	2019-09-13 13:48:46.258483000 +0200
++++ .travis.yml	2020-03-03 13:53:33.515196000 +0100
+@@ -13,6 +13,7 @@
+   apt:
+     packages:
+       - awscli
 +      - maven
  cache:
    apt: true
