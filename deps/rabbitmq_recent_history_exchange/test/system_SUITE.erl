@@ -232,6 +232,9 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount)
                                                  routing_key = <<"">>})
      || Q <- Queues],
 
+    %% Wait a few seconds for all messages to be queued.
+    timer:sleep(3000),
+
     Counts =
         [begin
             #'queue.declare_ok'{message_count = M} =
