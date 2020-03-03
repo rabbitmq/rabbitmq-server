@@ -52,7 +52,8 @@ all_tests() ->
      single_active_ordering,
      single_active_ordering_01,
      single_active_ordering_03,
-     in_memory_limit
+     in_memory_limit,
+     max_length
      % single_active_ordering_02
     ].
 
@@ -469,16 +470,18 @@ snapshots(_Config) ->
                                       oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined])
                                      }}]),
-                      ?FORALL(O, ?LET(Ops, log_gen(256), expand(Ops)),
-                              collect({log_size, length(O)},
-                                      snapshots_prop(
-                                        config(?FUNCTION_NAME,
-                                               Length,
-                                               Bytes,
-                                               SingleActiveConsumer,
-                                               DeliveryLimit,
-                                               InMemoryLength,
-                                               InMemoryBytes), O))))
+                      begin
+                          Config = config(?FUNCTION_NAME,
+                                          Length,
+                                          Bytes,
+                                          SingleActiveConsumer,
+                                          DeliveryLimit,
+                                          InMemoryLength,
+                                          InMemoryBytes),
+                          ?FORALL(O, ?LET(Ops, log_gen(256), expand(Ops, Config)),
+                                  collect({log_size, length(O)},
+                                          snapshots_prop(Config, O)))
+                      end)
       end, [], 2500).
 
 single_active(_Config) ->
@@ -493,17 +496,18 @@ single_active(_Config) ->
                                       oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined])
                                      }}]),
-                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops)),
-                              collect({log_size, length(O)},
-                                      single_active_prop(
-                                        config(?FUNCTION_NAME,
+                      begin
+                          Config  = config(?FUNCTION_NAME,
                                                Length,
                                                Bytes,
                                                true,
                                                DeliveryLimit,
                                                InMemoryLength,
-                                               InMemoryBytes), O,
-                                        false))))
+                                               InMemoryBytes),
+                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
+                              collect({log_size, length(O)},
+                                      single_active_prop(Config, O, false)))
+                      end)
       end, [], Size).
 
 single_active_ordering(_Config) ->
@@ -615,16 +619,45 @@ in_memory_limit(_Config) ->
                                       range(1, 10),
                                       range(1, 1000)
                                      }}]),
-                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops)),
-                              collect({log_size, length(O)},
-                                      in_memory_limit_prop(
-                                        config(?FUNCTION_NAME,
+                      begin
+                          Config = config(?FUNCTION_NAME,
                                                Length,
                                                Bytes,
                                                SingleActiveConsumer,
                                                DeliveryLimit,
                                                InMemoryLength,
-                                               InMemoryBytes), O))))
+                                               InMemoryBytes),
+                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
+                              collect({log_size, length(O)},
+                                      in_memory_limit_prop(Config, O)))
+                      end)
+      end, [], Size).
+
+max_length(_Config) ->
+    %% tests that max length is never transgressed
+    Size = 1000,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, SingleActiveConsumer, DeliveryLimit,
+                       InMemoryLength},
+                      {oneof([range(1, 100), undefined]),
+                       boolean(),
+                       range(1, 3),
+                       range(1, 10)
+                      },
+                      begin
+                          Config = config(?FUNCTION_NAME,
+                                          Length,
+                                          undefined,
+                                          SingleActiveConsumer,
+                                          DeliveryLimit,
+                                          InMemoryLength,
+                                          undefined),
+                          ?FORALL(O, ?LET(Ops, log_gen_config(Size),
+                                          expand(Ops, Config)),
+                                  collect({log_size, length(O)},
+                                          max_length_prop(Config, O)))
+                      end)
       end, [], Size).
 
 config(Name, Length, Bytes, SingleActive, DeliveryLimit,
@@ -666,6 +699,27 @@ in_memory_limit_prop(Conf0, Commands) ->
             false
     end.
 
+max_length_prop(Conf0, Commands) ->
+    Conf = Conf0#{release_cursor_interval => 100},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    Invariant = fun (#rabbit_fifo{cfg = #cfg{max_length = MaxLen}} = S) ->
+                        #{num_ready_messages := MsgReady} = rabbit_fifo:overview(S),
+                        % ct:pal("msg Ready ~w ~w", [MsgReady, MaxLen]),
+                        MsgReady =< MaxLen
+                end,
+    try run_log(test_init(Conf), Entries, Invariant) of
+        {_State, _Effects} ->
+            true;
+        _ ->
+            true
+    catch
+        Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+            ct:pal("Err: ~p~n", [Err]),
+            false
+    end.
+
 validate_idx_order([], _ReleaseCursorIdx) ->
     true;
 validate_idx_order(Idxs, ReleaseCursorIdx) ->
@@ -690,9 +744,9 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
                         map_size(Up) =< 1
                 end,
     try run_log(test_init(Conf), Entries, Invariant) of
-        {State, Effects} when ValidateOrder ->
-            ct:pal("Effects: ~p~n", [Effects]),
-            ct:pal("State: ~p~n", [State]),
+        {_State, Effects} when ValidateOrder ->
+            % ct:pal("Effects: ~p~n", [Effects]),
+            % ct:pal("State: ~p~n", [State]),
             %% validate message ordering
             lists:foldl(fun ({send_msg, Pid, {delivery, Tag, Msgs}, ra_event},
                              Acc) ->
@@ -774,6 +828,36 @@ log_gen(Size, _Body) ->
                           {1, purge}
                          ]))))).
 
+log_gen_config(Size) ->
+    Nodes = [node(),
+             fakenode@fake,
+             fakenode@fake2
+            ],
+    ?LET(EPids, vector(2, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         [{20, enqueue_gen(oneof(EPids))},
+                          {40, {input_event,
+                                frequency([{5, settle},
+                                           {5, return},
+                                           {2, discard},
+                                           {2, requeue}])}},
+                          {2, checkout_gen(oneof(CPids))},
+                          {1, checkout_cancel_gen(oneof(CPids))},
+                          {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, nodeup_gen(Nodes)},
+                          {1, purge},
+                          {1, ?LET({MaxInMem,
+                                    MaxLen},
+                                   {choose(1, 10),
+                                    choose(1, 10)},
+                                   {update_config,
+                                    #{max_in_memory_length => MaxInMem,
+                                      max_length => MaxLen}})
+                          }]))))).
+
 log_gen_ordered(Size) ->
     Nodes = [node(),
              fakenode@fake,
@@ -836,17 +920,19 @@ checkout_gen(Pid) ->
             effects = queue:new() :: queue:queue(),
             %% to transform the body
             enq_body_fun = {0, fun ra_lib:id/1},
+            config :: map(),
             log = [] :: list(),
             down = #{} :: #{pid() => noproc | noconnection}
            }).
 
-expand(Ops) ->
-    expand(Ops, {undefined, fun ra_lib:id/1}).
+expand(Ops, Config) ->
+    expand(Ops, Config, {undefined, fun ra_lib:id/1}).
 
-expand(Ops, EnqFun) ->
+expand(Ops, Config, EnqFun) ->
     %% execute each command against a rabbit_fifo state and capture all relevant
     %% effects
-    T = #t{enq_body_fun = EnqFun},
+    T = #t{enq_body_fun = EnqFun,
+           config = Config},
     #t{effects = Effs} = T1 = lists:foldl(fun handle_op/2, T, Ops),
     %% process the remaining effect
     #t{log = Log} = lists:foldl(fun do_apply/2,
@@ -952,7 +1038,10 @@ handle_op({input_event, Settlement}, #t{effects = Effs,
             T
     end;
 handle_op(purge, T) ->
-    do_apply(rabbit_fifo:make_purge(), T).
+    do_apply(rabbit_fifo:make_purge(), T);
+handle_op({update_config, Changes}, #t{config = Conf} = T) ->
+    Config = maps:merge(Conf, Changes),
+    do_apply(rabbit_fifo:make_update_config(Config), T).
 
 
 do_apply(Cmd, #t{effects = Effs,
@@ -1072,7 +1161,7 @@ run_log(InitState, Entries, InvariantFun) ->
 
 test_init(Conf) ->
     Default = #{queue_resource => blah,
-                release_cursor_interval => 0,
+                release_cursor_interval => 1,
                 metrics_handler => {?MODULE, metrics_handler, []}},
     rabbit_fifo:init(maps:merge(Default, Conf)).
 
