@@ -39,7 +39,7 @@ before_script:
 
 script:
   - make xref
-  - make tests
+  - make ct-fast
 
 after_failure:
   - |
