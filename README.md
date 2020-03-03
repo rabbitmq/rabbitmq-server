@@ -1,5 +1,7 @@
 # RabbitMQ Server
 
+[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-server.svg?branch=v3.8.x)](https://travis-ci.org/rabbitmq/rabbitmq-server)
+
 [RabbitMQ](https://rabbitmq.com) is a [feature rich](https://rabbitmq.com/documentation.html), multi-protocol messaging broker. It supports:
 
  * AMQP 0-9-1
