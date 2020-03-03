@@ -1,0 +1,11 @@
+--- ../rabbit_common/.travis.yml	2019-09-13 13:48:46.258483000 +0200
++++ .travis.yml	2020-03-03 17:29:30.358779000 +0100
+@@ -39,7 +39,7 @@
+ 
+ script:
+   - make xref
+-  - make tests
++  - make ct-fast
+ 
+ after_failure:
+   - |
