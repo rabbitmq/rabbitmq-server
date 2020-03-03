@@ -233,10 +233,14 @@ $(TEST_TLS_CERTS_DIR): node-tmpdir
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
 	@echo $(TEST_TLS_CERTS_DIR)
 
-ifeq ($(wildcard ebin/test),)
-DIST_TARGET = dist
+ifdef NOBUILD
+DIST_TARGET ?=
 else
-DIST_TARGET = test-dist
+ifeq ($(wildcard ebin/test),)
+DIST_TARGET ?= dist
+else
+DIST_TARGET ?= test-dist
+endif
 endif
 
 run-broker run-tls-broker: RABBITMQ_CONFIG_FILE ?= $(basename $(TEST_CONFIG_FILE))
