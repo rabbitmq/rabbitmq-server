@@ -66,6 +66,14 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(amqp10_shovels = Testcase, Config) ->
+    http_delete(Config,  "/parameters/shovel/%2f/my-dynamic-amqp10", ?NO_CONTENT),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(shovels = Testcase, Config) ->
+    http_delete(Config, "/vhosts/v", ?NO_CONTENT),
+    http_delete(Config, "/users/admin", ?NO_CONTENT),
+    http_delete(Config, "/users/mon", ?NO_CONTENT),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -110,30 +118,46 @@ amqp10_shovels(Config) ->
                                'dest-properties' => #{},
                                'dest-application-properties' => #{},
                                'dest-message-annotations' => #{}}}, ?CREATED),
-    Shovel = #{name => <<"my-dynamic-amqp10">>,
-               src_protocol => <<"amqp10">>,
-               dest_protocol => <<"amqp10">>,
-               type => <<"dynamic">>},
-    Static = #{name => <<"my-static">>,
-               src_protocol => <<"amqp091">>,
-               dest_protocol => <<"amqp091">>,
-               type => <<"static">>},
     % sleep to give the shovel time to emit a full report
     % that includes the protocols used.
-    timer:sleep(2000),
-    Assert = fun (Req, User, Res) ->
-                     assert_list(Res, http_get(Config, Req, User, User, ?OK))
-             end,
-    Assert("/shovels", "guest", [Static, Shovel]),
-    http_delete(Config,  "/parameters/shovel/%2f/my-dynamic-amqp10",
-                ?NO_CONTENT),
+    wait_until(fun () ->
+		       case lists:sort(fun(#{name := AName}, #{name := BName}) ->
+					       AName < BName
+				       end,
+				       http_get(Config, "/shovels", "guest", "guest", ?OK))
+		       of
+			   [#{name := <<"my-dynamic-amqp10">>,
+			      src_protocol := <<"amqp10">>,
+			      dest_protocol := <<"amqp10">>,
+			      type := <<"dynamic">>},
+			    #{name := <<"my-static">>,
+			      src_protocol := <<"amqp091">>,
+			      dest_protocol := <<"amqp091">>,
+			      type := <<"static">>}] ->
+			       true;
+			   _ ->
+			       false
+		       end
+	       end, 20),
     ok.
+
+
+-define(StaticPattern, #{name := <<"my-static">>,
+                         type := <<"static">>}).
+
+-define(Dynamic1Pattern, #{name  := <<"my-dynamic">>,
+                           vhost := <<"/">>,
+                           type  := <<"dynamic">>}).
+
+-define(Dynamic2Pattern, #{name  := <<"my-dynamic">>,
+                           vhost := <<"v">>,
+                           type  := <<"dynamic">>}).
 
 shovels(Config) ->
     http_put(Config, "/users/admin",
-      #{password => <<"admin">>, tags => <<"administrator">>}, ?CREATED),
+	     #{password => <<"admin">>, tags => <<"administrator">>}, ?CREATED),
     http_put(Config, "/users/mon",
-      #{password => <<"mon">>, tags => <<"monitoring">>}, ?CREATED),
+	     #{password => <<"mon">>, tags => <<"monitoring">>}, ?CREATED),
     http_put(Config, "/vhosts/v", none, ?CREATED),
     Perms = #{configure => <<".*">>,
               write     => <<".*">>,
@@ -150,30 +174,27 @@ shovels(Config) ->
                            'dest-uri'   => <<"amqp://">>,
                            'dest-queue' => <<"test2">>}}, ?CREATED)
      || V <- ["%2f", "v"]],
-    Static = #{name => <<"my-static">>,
-               type => <<"static">>},
-    Dynamic1 = #{name  => <<"my-dynamic">>,
-                 vhost => <<"/">>,
-                 type  => <<"dynamic">>},
-    Dynamic2 = #{name  => <<"my-dynamic">>,
-                 vhost => <<"v">>,
-                 type  => <<"dynamic">>},
-    Assert = fun (Req, User, Res) ->
-                     assert_list(Res, http_get(Config, Req, User, User, ?OK))
-             end,
-    Assert("/shovels",     "guest", [Static, Dynamic1, Dynamic2]),
-    Assert("/shovels/%2f", "guest", [Dynamic1]),
-    Assert("/shovels/v",   "guest", [Dynamic2]),
-    Assert("/shovels",     "admin", [Static, Dynamic2]),
-    Assert("/shovels/%2f", "admin", []),
-    Assert("/shovels/v",   "admin", [Dynamic2]),
-    Assert("/shovels",     "mon", [Dynamic2]),
-    Assert("/shovels/%2f", "mon", []),
-    Assert("/shovels/v",   "mon", [Dynamic2]),
 
-    http_delete(Config, "/vhosts/v", ?NO_CONTENT),
-    http_delete(Config, "/users/admin", ?NO_CONTENT),
-    http_delete(Config, "/users/mon", ?NO_CONTENT),
+    ?assertMatch([?StaticPattern, ?Dynamic1Pattern, ?Dynamic2Pattern],
+		 http_get(Config, "/shovels",     "guest", "guest", ?OK)),
+    ?assertMatch([?Dynamic1Pattern],
+		 http_get(Config, "/shovels/%2f", "guest", "guest", ?OK)),
+    ?assertMatch([?Dynamic2Pattern],
+		 http_get(Config, "/shovels/v",   "guest", "guest", ?OK)),
+
+    ?assertMatch([?StaticPattern, ?Dynamic2Pattern],
+		 http_get(Config, "/shovels",     "admin", "admin", ?OK)),
+    ?assertMatch([],
+		 http_get(Config, "/shovels/%2f", "admin", "admin", ?OK)),
+    ?assertMatch([?Dynamic2Pattern],
+		 http_get(Config, "/shovels/v",   "admin", "admin", ?OK)),
+
+    ?assertMatch([?Dynamic2Pattern],
+		 http_get(Config, "/shovels",     "mon",   "mon", ?OK)),
+    ?assertMatch([],
+		 http_get(Config, "/shovels/%2f", "mon",   "mon", ?OK)),
+    ?assertMatch([?Dynamic2Pattern],
+		 http_get(Config, "/shovels/v",   "mon",   "mon", ?OK)),
     ok.
 
 %% It's a bit arbitrary to be testing this here, but we want to be
@@ -311,3 +332,14 @@ assert_list(Exp, Act) ->
 assert_item(ExpI, ActI) ->
     ExpI = maps:with(maps:keys(ExpI), ActI),
     ok.
+
+wait_until(_Fun, 0) ->
+    ?assert(wait_failed);
+wait_until(Fun, N) ->
+    case Fun() of
+	true ->
+	    ok;
+	false ->
+	    timer:sleep(500),
+	    wait_until(Fun, N - 1)
+    end.
