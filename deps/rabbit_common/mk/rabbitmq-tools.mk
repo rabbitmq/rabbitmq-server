@@ -122,8 +122,10 @@ else
 travis-yml:
 	$(gen_verbose) ! test -f .travis.yml || \
 	(grep -E -- '- secure:' .travis.yml || :) > .travis.yml.creds
-	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .travis.yml.orig
-	$(verbose) awk ' \
+	$(verbose) ! test -f .travis.yml || \
+	cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .travis.yml.orig
+	$(verbose) ! test -f .travis.yml || \
+	awk ' \
 	/^  global:/ { \
 	  print; \
 	  system("test -f .travis.yml.creds && cat .travis.yml.creds"); \
@@ -138,9 +140,10 @@ travis-yml:
 		patch -p0 < .travis.yml.patch; \
 		rm -f .travis.yml.orig; \
 	fi
-	$(verbose) $(replace_aws_creds)
+	$(verbose)! test -f .travis.yml || ($(replace_aws_creds))
 ifeq ($(DO_COMMIT),yes)
-	$(verbose) git diff --quiet .travis.yml \
+	$(verbose) ! test -f .travis.yml || \
+	git diff --quiet .travis.yml \
 	|| git commit -m 'Travis CI: Update config from rabbitmq-common' .travis.yml
 endif
 endif
