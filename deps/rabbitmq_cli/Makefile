@@ -17,6 +17,12 @@ else
 MIX_TEST = mix test --max-cases=1
 endif
 
+# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
+# reviewed and merged.
+
+ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+ERLANG_MK_COMMIT = rabbitmq-tmp
+
 WITHOUT = plugins/cover \
 	  plugins/ct \
 	  plugins/dialyzer \
@@ -31,12 +37,6 @@ include erlang.mk
 # source archive. It sets some environment variables to allow
 # rabbitmq_cli to build offline, using the bundled sources only.
 -include rabbitmq-mix.mk
-
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
-
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
 
 ACTUAL_ESCRIPTS = escript/rabbitmqctl
 LINKED_ESCRIPTS = escript/rabbitmq-plugins \
