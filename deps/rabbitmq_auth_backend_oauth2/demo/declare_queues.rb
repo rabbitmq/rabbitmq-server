@@ -8,7 +8,10 @@ queues.each do |q|
     vhost = split[0]
     queue_name = split[1]
 
-    conn = Bunny.new(:vhost => vhost)
+    conn = Bunny.new(:host => ENV["BUNNY_HOST"] || "127.0.0.1",
+                     :user => ENV["BUNNY_USER"] || "guest",
+                     :pass => ENV["BUNNY_PASS"] || "guest",
+                     :vhost => vhost)
     conn.start
     ch = conn.create_channel
     ch.queue(queue_name)
