@@ -248,8 +248,7 @@
 
 -rabbit_boot_step({os_signal_handler,
                    [{description, "registers an OS signal handler"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_os_signal_handler]}},
+                    {mfa,         {rabbit_os_signal_handler, boot, []}},
                     {requires,    pre_flight}]}).
 
 -rabbit_boot_step({direct_client,
