@@ -1,8 +1,8 @@
 # vim:sw=2:et:
 
+os: linux
 dist: xenial
-sudo: false
-language: erlang
+language: elixir
 notifications:
   email:
     recipients:
@@ -20,22 +20,18 @@ env:
     - secure: t2tKVW6mWZYHwW/ps6sKVIUm3Lk/t+7B4wRLiQzMYEhbAr7AQr/qnvT1cyEm5GVNohLB6yx2U2Wr7TIMAjGgEhLKPWG0djAYjQEcak3U8/6fd/+9YfDb396/pOryNA7d3YcgcUzpH1qglxxrxWcE9tf4heb5+V16lyJ767qpbtDH6B76ywOJmYK8GTsmpaje6YxG0t3xsrIH8HwIHDom2bummJZui9R+ndCYLFccqyR/z0ui0pdjw5+V6SuggQUSh4R9PGez7YVyHVSKiYTXOTrcJ98/ZlBD4KNlNWeqTB2UbSf85ngWdV2thncQy9Mgof2dtMFQHEH/QMEwdKZwqf0Pc8fO0Gzrn7U73JgLp/v1sJxmCKhkm5HJNaQd/3XYCturAN9TfKBKQkiz28tnTJWKppisdrwcV3wl/ZI1Tm0y2xqG2TBvx4OotwwkaMGhGAwDhRrd7x4jXcVtfAyT458gXEtQUaGP0kZFoPSah35iBRiLxzNLMrMRTSHBBJILYxiyVsWL/UEh2aQwfluNc673AqFTm6MggKWX/TpjXqpcJ6mT+Q7p/Dd17RNAUWeSMtHvTDAqkbzDujM/7RRMuf3ZX4TVSvC+aq41UMFU+8K+u47X5UUEtPlyQNHDp2lliWyBj0fQkizYDCME8yuEEA+azcKY73G6jIbt6FWxMpw=
     - secure: UJx8ibllZKBn2N1ixoSXrZ3N6D08iajBjjPK3s5hqWgY+39rv9Q2FzzjlmUMc4q2ui0skL0JmPt/EyA/TEr9OEkSpHaUkYPCUMQS51fJmhbKoghQ4OjrtBhmyMTzm4a9BqPYl8jNNbKu9U1mARH3JzmeUUc2odfK1Gf1RLraKymSMx+fYHrVE1h4Puwy2Xm/se39LgVgv+RWTpofVN+IzY41uTeJ0aeTkwRs8XvFLSRBCW2ye8rz+4VhSZB9xHJF+ySJVUuWz99Q4VMVGjuMfevZgZGGDKTS7yDL2L1uhRrMgzwBse1iZXxOYyBXAw6ewydbg8wCvwlU6JAs8uaT5vGmvUc8OW/Dp58m8Uv4vzcrR1cYb7V7SIctV23juxso8KkDs0dsHIlpfT4PIosJdVmrgFfwibTPc698nyIbmXx8bY1K1cUP81+s4ZzQ6nTWcBRii1o4L+PAUtkc8G3Uca8UwAilMdf4+bEfGCF3SppT/Uq7s81i4sPWY7G6gdXlEtCViqMFsLGTx9vOmXJCIyIVGcXYMKexYDjOebSJ06tPcjox5y8ZIPQbraUt7L974gHbRn0OeqifoopUfHhgg8bPhXS5os6zljmwnCJebvTw0N/YGQUKetcVuBUANypkLekJE/1/TQ2cUpKeLDuCVkvPhpgP71lm0gqmXcp9rcY=
 
-otp_release:
-  - "21.3"
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=master
 
-before_script:
-  - elixir --version
-  # The checkout made by Travis is a "detached HEAD" and branches
-  # information is missing. Our Erlang.mk's git_rmq fetch method relies
-  # on it, so we need to restore it.
-  #
-  # We simply fetch master and, if it exists, v3.8.x branches. A branch
-  # is created, pointing to the detached HEAD.
-  - |
-    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
-    git fetch upstream v3.8.x:v3.8.x || :
-    git fetch upstream master:master || :
+elixir:
+  - '1.9'
+otp_release:
+  - '21.3'
+  - '22.2'
+
+install:
+  - mix local.hex --force
 
 script:
   - make xref
