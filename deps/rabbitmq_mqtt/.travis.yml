@@ -1,9 +1,8 @@
 # vim:sw=2:et:
 
-dist: bionic
-
-sudo: false
-language: erlang
+os: linux
+dist: xenial
+language: elixir
 notifications:
   email:
     recipients:
@@ -12,15 +11,8 @@ notifications:
     on_failure: always
 addons:
   apt:
-    sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu bionic contrib
-        key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
       - awscli
-      # Use Elixir from Erlang Solutions. The provided Elixir is
-      # installed with kiex but is old. We also can't use kiex to
-      # install a newer one because of GitHub API rate limiting.
-      - elixir=1.9.3-1
       - maven
 cache:
   apt: true
@@ -29,31 +21,31 @@ env:
     - secure: Jw9u8yRg1vhWLtMCSrUFTxVnBuXvy6wd+voso4GlwGjeRzyc4YzSHvCAElENULHiWDJetbJGU/D9oGBYkRnYR2nwjPu5bvW9rsZYYUKWHE3V20ddTHHX+7lU5WeTWDkFy9VlD2nUiUplCNX8zuTU9T59KaP2ifcOv1Gr47Wo02o=
     - secure: ZaLpWOIx0uR/yqQRKMx8pZ0+AhJx/GIczZmJhq1m0huGhJwqdCefK5iwUwzTXXN3MX+WBv8Jj1rCnmsKqtpoNFMM3Twyl518KBOGzrzg4asPefH+pj5QNvpcmL4PKe8KuLAV0zxmFzrj9OoV8P4MAMHq83MNfjan56cd9SLjbD0=
 
-otp_release:
-  - "21.3"
-  - "22.1"
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=v3.8.x
 
-before_script:
-  # The checkout made by Travis is a "detached HEAD" and branches
-  # information is missing. Our Erlang.mk's git_rmq fetch method relies
-  # on it, so we need to restore it.
-  #
-  # We simply fetch master and, if it exists, v3.8.x branches. A branch
-  # is created, pointing to the detached HEAD.
-  - |
-    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
-    git fetch upstream v3.8.x:v3.8.x || :
-    git fetch upstream master:master || :
-  # Make sure we use Elixir from Erlang Solutions and not kiex.
-  - |
-    echo YES | kiex implode
-    elixir --version
-    elixir --version | grep -q 'Elixir 1.9'
+elixir:
+  - '1.9'
+otp_release:
+  - '21.3'
+  - '22.2'
+
+install:
+  # This project being an Erlang one (we just set language to Elixir
+  # to ensure it is installed), we don't want Travis to run mix(1)
+  # automatically as it will break.
+  skip
 
 script:
+  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+  # the appropriate branch for dependencies.
+  - make check-rabbitmq-components.mk
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
   - make xref
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
   - make tests
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
 
 after_failure:
   - |
