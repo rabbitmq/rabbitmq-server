@@ -1161,7 +1161,7 @@ run_log(InitState, Entries, InvariantFun) ->
 
 test_init(Conf) ->
     Default = #{queue_resource => blah,
-                release_cursor_interval => 1,
+                release_cursor_interval => 0,
                 metrics_handler => {?MODULE, metrics_handler, []}},
     rabbit_fifo:init(maps:merge(Default, Conf)).
 
