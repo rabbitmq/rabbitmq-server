@@ -1,8 +1,8 @@
 # vim:sw=2:et:
 
+os: linux
 dist: xenial
-sudo: false
-language: erlang
+language: elixir
 notifications:
   email:
     recipients:
@@ -25,22 +25,18 @@ env:
     - secure: hsWxOPcSAXQU9CKQSh829aPLt7oFim8lYVPMSfR0GH0JsnxWgayk2w3tyAblOJqpXTKPqYb+TfyeTOc+QQM8pcEtvi5jtr+GAqovI3UkXpR08J5ImVZVf3sfD4s92uoRjw0u8ift/qZxpDLpdDCKJibe3hRMxlvo5LQ5kCkNGFs=
     - secure: D2xypqCxIxyhX2/PtXhiWa8kZF9itwhvDK3mxEI+67AM8zJBtrIlIcHifnFMM1RDjFzuBWq5t0BAbyuAGUw0EcjOnc3xW01N/ZG4DaHgXjurDSY0rCfkYLHltFjxJTbx2bH6nmgjdKYRb4W9hQJVcB7vtd1g7kVlzYkNevz4Sfk=
 
-otp_release:
-  - "21.3"
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=master
 
-before_script:
-  - elixir --version
-  # The checkout made by Travis is a "detached HEAD" and branches
-  # information is missing. Our Erlang.mk's git_rmq fetch method relies
-  # on it, so we need to restore it.
-  #
-  # We simply fetch master and, if it exists, v3.8.x branches. A branch
-  # is created, pointing to the detached HEAD.
-  - |
-    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
-    git fetch upstream v3.8.x:v3.8.x || :
-    git fetch upstream master:master || :
+elixir:
+  - '1.9'
+otp_release:
+  - '21.3'
+  - '22.2'
+
+install:
+  - mix local.hex --force
 
 script:
   - make xref
