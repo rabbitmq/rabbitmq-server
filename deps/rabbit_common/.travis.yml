@@ -22,7 +22,7 @@ env:
 
     # $base_rmq_ref is used by rabbitmq-components.mk to select the
     # appropriate branch for dependencies.
-    - base_rmq_ref=master
+    - base_rmq_ref=v3.7.x
 
 elixir:
   - '1.9'
