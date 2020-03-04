@@ -1,10 +1,11 @@
---- ../rabbit_common/.travis.yml	2019-09-13 13:48:46.258483000 +0200
-+++ .travis.yml	2020-03-03 13:52:44.964548000 +0100
-@@ -39,7 +39,6 @@
- 
- script:
+--- ../rabbit_common/.travis.yml	2020-03-04 13:38:36.985065000 +0100
++++ .travis.yml	2020-03-04 14:29:42.563905000 +0100
+@@ -43,8 +43,6 @@
+     current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
    - make xref
+     current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
 -  - make tests
+-    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
  
  after_failure:
    - |
