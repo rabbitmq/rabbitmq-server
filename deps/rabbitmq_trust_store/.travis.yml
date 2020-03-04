@@ -1,7 +1,8 @@
 # vim:sw=2:et:
 
-sudo: false
-language: erlang
+os: linux
+dist: xenial
+language: elixir
 notifications:
   email:
     recipients:
@@ -10,15 +11,8 @@ notifications:
     on_failure: always
 addons:
   apt:
-    sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
-        key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
       - awscli
-      # Use Elixir from Erlang Solutions. The provided Elixir is
-      # installed with kiex but is old. We also can't use kiex to
-      # install a newer one because of GitHub API rate limiting.
-      - elixir=1.8.1-1
 cache:
   apt: true
 env:
@@ -26,30 +20,31 @@ env:
     - secure: bl0nZFgpmbTpi6xP+e8upEyDXvvczug1lBO3Nvg+PHGnPernQ290Z6THZFQRtR8a9ZQKOAOFHukl21a4bKaZBPceBK2hajbd7gwaB13EfQNNbR0qF9bVQVHvS1ZevRJYnxvRORkZKTdaxB23/ccVS1KA8lEFu7dRzvC6lZgN0DmjcOtYyq7JhOUDNFSie0gTf+kdxGTiZq04V63S1bL1V7fL3/HPIv61r2+VE5nRS5R9J5fK5vOZVsXeZTFZA70oKrnJIW7t3qs4m4nexTqGloU8M0Oz/EUdNbvRb6uxcClb8wAEm5r4HlPcs9bILUO746FiePCYFnKWyU6KHxPNZx1U7rMzRdS7wln9CqutM+uu+CE9Fh74XzAfok766GW/vfH6Yf6izhp1suXiqRl5kRweKMNouUt5vImaxBmfSEgK+UBFWMXCwv/1Nd1jFoQTU/2WC0qZFJfiJYLCRitVT3ak70gA57EmGoaf7WsYGkJgDOuIUb5XzTu4N5/E/kflx0Jm0gy47I7a9t8tURhTsle2eH57ZdAEss8mDxfvyzeb5z7+OnAfo42RirdL5AuIAFiDeGTpzsyxOlsbWOtBUBjCuhI0I324fYWJ8p6CEsrUdnCge6Na5SzM2YE7Ujg/9HcNu+x20m76rfWLUrqEqhMZBJzphpeszueYH7N+4BI=
     - secure: osb2C+YAXlVO5ltbH/o4y28/4xT593kOSy7QrHfBeUSCZPPmVVh0cRtpMkekeuxMcJFxyJrInBIgYcIcpwPk6gipOu55Bj/beIwuhlTkVR89KhG8VYGPSF9umkQNRldtAgRfWYlpiMIBYU8hNX5NflANBbFmshXY/Bi8RMUJ0aSfWR64WVRoOsdsLwQyhJF9ny1M7WmwszQZ4fyN12xx8fb/36cv6nO8Bm/9/hT5xjJ1+xRb7QueuIoDYhsclPgHrxByozTeb094sfejpIfnzeiyyxBPGlOTg6MtkVD/pDANqS8XFppLqQMLQvCMTvfrVfQZoORWk2LZUuCBz480eFM7wJlsfpr/HoHCnWRhzsZA4CbQcWbYMQ2pXAmG+gOQvO+VKobnwr+tEmIGKe9vob4k1qvdnQhEwtOZVPblfmHrzlHxYERntYsDnF75kME4DGKD/39qd2DuvKuODg6SfZweHkUX9smpk76g1E16Q7hEoyQGhA+z7OycC3oH4LSaSKxIukLUdBemt1W5jgFVSLiVqxCt1xnKMjbPki//5xMJocFPT5iXpW9EOaZugpRAWGlJxRQtIDIKvMMHiZ9sodGY9xDse6Zdh6UbpKXE3+OZVTG+uSFhP3itY22kzoznRbxvwiF4RWo7XaP8S5+4iOupxVw5bcxcttFrEy2MCRY=
 
-otp_release:
-  - "21.3"
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=v3.8.x
 
-before_script:
-  # The checkout made by Travis is a "detached HEAD" and branches
-  # information is missing. Our Erlang.mk's git_rmq fetch method relies
-  # on it, so we need to restore it.
-  #
-  # We simply fetch master and, if it exists, v3.8.x branches. A branch
-  # is created, pointing to the detached HEAD.
-  - |
-    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
-    git fetch upstream v3.8.x:v3.8.x || :
-    git fetch upstream master:master || :
-  # Make sure we use Elixir from Erlang Solutions and not kiex.
-  - |
-    echo YES | kiex implode
-    elixir --version
-    elixir --version | grep -q 'Elixir 1.8.1'
+elixir:
+  - '1.9'
+otp_release:
+  - '21.3'
+  - '22.2'
+
+install:
+  # This project being an Erlang one (we just set language to Elixir
+  # to ensure it is installed), we don't want Travis to run mix(1)
+  # automatically as it will break.
+  skip
 
 script:
+  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+  # the appropriate branch for dependencies.
+  - make check-rabbitmq-components.mk
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
   - make xref
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
   - make tests
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
 
 after_failure:
   - |
