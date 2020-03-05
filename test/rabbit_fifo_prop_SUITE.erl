@@ -45,6 +45,7 @@ all_tests() ->
      scenario19,
      scenario20,
      scenario21,
+     scenario22,
      single_active,
      single_active_01,
      single_active_02,
@@ -372,6 +373,24 @@ scenario21(_Config) ->
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
                         release_cursor_interval => 1,
+                        dead_letter_handler => {?MODULE, banana, []}},
+                      Commands),
+    ok.
+
+scenario22(_Config) ->
+    % C1Pid = c:pid(0,883,1),
+    % C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [
+                make_enqueue(E,1,<<"1">>),
+                make_enqueue(E,2,<<"2">>),
+                make_enqueue(E,3,<<"3">>),
+                make_enqueue(E,4,<<"4">>),
+                make_enqueue(E,5,<<"5">>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 1,
+                        max_length => 3,
                         dead_letter_handler => {?MODULE, banana, []}},
                       Commands),
     ok.
@@ -1093,6 +1112,8 @@ run_proper(Fun, Args, NumTests) ->
 run_snapshot_test(Conf, Commands) ->
     %% create every incremental permutation of the commands lists
     %% and run the snapshot tests against that
+    ct:pal("running snapshot test with ~b commands using config ~p",
+           [length(Commands), Conf]),
     [begin
          % ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
          run_snapshot_test0(Conf, C)
