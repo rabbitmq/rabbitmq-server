@@ -68,6 +68,7 @@
 % represents a partially applied module call
 
 -define(RELEASE_CURSOR_EVERY, 64000).
+-define(RELEASE_CURSOR_EVERY_MAX, 3200000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
 -record(consumer,
