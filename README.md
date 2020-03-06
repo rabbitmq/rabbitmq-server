@@ -1,6 +1,7 @@
-# RabbitMQ Server
-
+[![Tests](https://github.com/rabbitmq/rabbitmq-server/workflows/Tests/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3ATests)
 [![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-server.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-server)
+
+# RabbitMQ Server
 
 [RabbitMQ](https://rabbitmq.com) is a [feature rich](https://rabbitmq.com/documentation.html), multi-protocol messaging broker. It supports:
 
