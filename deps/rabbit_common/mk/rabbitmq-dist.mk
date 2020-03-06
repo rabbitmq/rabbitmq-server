@@ -260,7 +260,7 @@ do-dist:: $(DIST_EZS)
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
 
-ifeq ($(filter rabbit,$(BUILD_DEPS) $(DEPS)),rabbit)
+ifeq ($(filter rabbit,$(BUILD_DEPS) $(DEPS) $(TEST_DEPS)),rabbit)
 dist:: install-cli
 test-build:: install-cli
 endif
