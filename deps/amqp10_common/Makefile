@@ -3,6 +3,8 @@ PROJECT_DESCRIPTION = Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-cl
 
 DIALYZER_OPTS += --src -r test
 
+BUILD_DEPS = rabbit_common
+
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
