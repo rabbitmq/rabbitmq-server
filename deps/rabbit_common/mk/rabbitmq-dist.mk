@@ -213,7 +213,7 @@ MAYBE_APPS_LIST = $(if $(shell test -f $(ERLANG_MK_TMP)/apps.log && echo OK), \
 		  $(ERLANG_MK_TMP)/apps.log)
 DIST_LOCK = $(DIST_DIR).lock
 
-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all install-cli
+dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(DIST_LOCK) \
@@ -257,12 +257,13 @@ do-dist:: $(DIST_EZS)
 		$(wildcard $(DIST_DIR)/*))'; \
 	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -rf $$unwanted)
 
-ifneq ($(PROJECT),rabbit_common)
-test-build:: install-cli
-endif
-
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
+
+ifeq ($(filter rabbit,$(BUILD_DEPS) $(DEPS)),rabbit)
+dist:: install-cli
+test-build:: install-cli
+endif
 
 install-cli: install-cli-scripts install-cli-escripts
 	@:
