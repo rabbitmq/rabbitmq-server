@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_wm_rebalance).
+-module(rabbit_mgmt_wm_rebalance_queues).
 
 -export([init/2, service_available/2, resource_exists/2,
          content_types_provided/2, content_types_accepted/2,
