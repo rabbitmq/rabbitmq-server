@@ -1000,6 +1000,18 @@ or:
           status 200 with body: <pre>{"enable_uaa":"boolean", "uaa_client_id":"string", "uaa_location":"string"}</pre>
         </td>
       </tr>
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/rebalance/queues</td>
+        <td>
+          Rebalances all queues in all vhosts. This operation  is asynchronous therefore please check
+          the RabbitMQ log file for messages regarding the success or failure of the operation.
+          <pre>curl -4u 'guest:guest' -XPOST localhost:15672/api/rebalance/queues/</pre>
+        </td>
+      </tr>
     </table>
 
 
