@@ -74,7 +74,8 @@ groups() ->
               queue_survive_adding_dead_vhost_mirror,
               rebalance_all,
               rebalance_exactly,
-              rebalance_nodes
+              rebalance_nodes,
+              rebalance_multiple_blocked
               % FIXME: Re-enable those tests when the know issues are
               % fixed.
               % failing_random_policies,
@@ -664,6 +665,28 @@ rebalance_nodes(Config) ->
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
 
+    ok.
+
+rebalance_multiple_blocked(Config) ->
+    [A, _, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Q3 = <<"q3">>,
+    Q4 = <<"q4">>,
+    Q5 = <<"q5">>,
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q1}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q2}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q3}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q4}),
+    amqp_channel:call(ACh, #'queue.declare'{queue = Q5}),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q3, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q4, A)))),
+    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q5, A)))),
+    true = rpc:cast(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
+    {error, rebalance_in_progress} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
     ok.
 
 %%----------------------------------------------------------------------------
