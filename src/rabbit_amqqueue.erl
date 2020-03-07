@@ -553,6 +553,7 @@ maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     MaxQueuesDesired = (NumToRebalance div NumRunning) + Rem,
     Result = iterative_rebalance(ByNode, MaxQueuesDesired),
     global:del_lock(Id),
+    rabbit_log:info("Finished queue rebalance operation"),
     Result;
 maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
     rabbit_log:warning("Queue rebalance operation is in progress, please wait."),
