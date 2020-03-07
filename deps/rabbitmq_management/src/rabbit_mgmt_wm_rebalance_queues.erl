@@ -52,8 +52,8 @@ resource_exists(Req, State) ->
 
 accept_content(Req, {_Mode, #context{user = #user{username = Username}}}=State) ->
     try
+        rabbit_log:info("User '~s' has initiated a queue rebalance", [Username]),
         spawn(fun() ->
-            rabbit_log:info("User '~s' has initiated a queue rebalance", [Username]),
             rabbit_amqqueue:rebalance(all, ".*", ".*")
         end),
         {true, Req, State}
