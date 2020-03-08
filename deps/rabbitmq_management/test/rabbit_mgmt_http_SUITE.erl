@@ -2920,9 +2920,7 @@ extensions_test(Config) ->
 cors_test(Config) ->
     %% With CORS disabled. No header should be received.
     R = req(Config, get, "/overview", [auth_header("guest", "guest")]),
-    io:format("CORS test R: ~p~n", [R]),
     {ok, {_, HdNoCORS, _}} = R,
-    io:format("CORS test HdNoCORS: ~p~n", [HdNoCORS]),
     false = lists:keymember("access-control-allow-origin", 1, HdNoCORS),
     %% The Vary header should include "Origin" regardless of CORS configuration.
     {_, "accept, accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
@@ -2969,7 +2967,6 @@ check_cors_all_endpoints(Config) ->
     Endpoints = get_all_http_endpoints(),
 
     [begin
-        ct:pal("Options for ~p~n", [EP]),
         {ok, {{_, 200, _}, _, _}} = req(Config, options, EP, [{"origin", "https://rabbitmq.com"}])
     end
      || EP <- Endpoints].
