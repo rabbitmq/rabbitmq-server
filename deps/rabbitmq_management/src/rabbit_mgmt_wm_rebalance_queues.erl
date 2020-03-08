@@ -45,7 +45,7 @@ content_types_accepted(Req, State) ->
    {[{'*', accept_content}], Req, State}.
 
 allowed_methods(Req, State) ->
-    {[<<"POST">>], Req, State}.
+    {[<<"POST">>, <<"OPTIONS">>], Req, State}.
 
 resource_exists(Req, State) ->
     {true, Req, State}.
