@@ -70,6 +70,9 @@
 -define(RELEASE_CURSOR_EVERY, 64000).
 -define(RELEASE_CURSOR_EVERY_MAX, 3200000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
+%% an average QQ without any message uses about 100KB so setting this limit
+%% to ~10 times that should be relatively safe.
+-define(GC_MEM_LIMIT_B, 2000000).
 
 -record(consumer,
         {meta = #{} :: consumer_meta(),
