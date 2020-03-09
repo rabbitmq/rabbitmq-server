@@ -8,7 +8,7 @@ TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-dep_jose = hex 1.8.4
+dep_jose = hex 1.10.1
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
