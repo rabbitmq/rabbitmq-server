@@ -28,7 +28,7 @@ env:
 elixir:
   - '1.9'
 otp_release:
-  - '20.3'
+  - '21.3'
   - '22.2'
 
 install:
