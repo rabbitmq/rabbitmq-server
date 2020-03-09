@@ -685,9 +685,20 @@ rebalance_multiple_blocked(Config) ->
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q3, A)))),
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q4, A)))),
     ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q5, A)))),
-    true = rpc:cast(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
-    {error, rebalance_in_progress} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
-    ok.
+    ?assert(rabbit_ct_broker_helpers:rpc(
+              Config, A,
+              ?MODULE, rebalance_multiple_blocked1, [Config])).
+
+rebalance_multiple_blocked1(_) ->
+    Parent = self(),
+    Fun = fun() ->
+                  Parent ! rabbit_amqqueue:rebalance(classic, ".*", ".*")
+          end,
+    spawn(Fun),
+    spawn(Fun),
+    Rets = [receive Ret1 -> Ret1 end,
+            receive Ret2 -> Ret2 end],
+    lists:member({error, rebalance_in_progress}, Rets).
 
 %%----------------------------------------------------------------------------
 
