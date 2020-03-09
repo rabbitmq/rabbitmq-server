@@ -109,7 +109,7 @@ RABBITMQ_SCHEMA_DIR="$(call node_schema_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR))" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
-RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+RABBITMQ_SERVER_START_ARGS="-ra wal_sync_method sync $(RABBITMQ_SERVER_START_ARGS)" \
 RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"
 endef
 
@@ -171,7 +171,8 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((1883 
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
+      {wal_sync_method, sync}
     ]}
 ].
 endef
