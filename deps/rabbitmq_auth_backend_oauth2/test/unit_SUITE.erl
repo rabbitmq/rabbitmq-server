@@ -20,6 +20,7 @@ all() ->
         test_command_pem,
         test_command_pem_no_kid,
         test_token_expiration,
+        test_incorrect_kid,
         test_post_process_token_payload,
         test_post_process_token_payload_keycloak,
         test_post_process_token_payload_complex_claims
@@ -383,6 +384,17 @@ test_token_expiration(_) ->
 
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}])).
+
+test_incorrect_kid(_) ->
+    AltKid   = <<"other-token-key">>,
+    Username = <<"username">>,
+    Jwk      = ?UTIL_MOD:fixture_jwk(),
+    Jwk1     = Jwk#{<<"kid">> := AltKid},
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk1),
+
+    ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~p", [{error,key_not_found}]},
+                 rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token})).
 
 test_command_json(_) ->
     Username = <<"username">>,
