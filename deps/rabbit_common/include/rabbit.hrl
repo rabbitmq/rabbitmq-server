@@ -234,8 +234,8 @@
 
 -define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2020 Pivotal Software, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See https://www.rabbitmq.com/").
--define(OTP_MINIMUM, "20.3").
--define(ERTS_MINIMUM, "9.3").
+-define(OTP_MINIMUM, "21.3").
+-define(ERTS_MINIMUM, "10.3").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
 %%  - 1 byte of frame type
