@@ -47,35 +47,17 @@ description() ->
 
 %%--------------------------------------------------------------------
 
-user_login_authentication(Username0, AuthProps0) ->
-    AuthProps = to_map(AuthProps0),
-    Token     = token_from_context(AuthProps),
-    case check_token(Token) of
-        %% avoid logging the token
-        {error, _} = E  -> E;
-        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-          {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
-        {refused, Err} ->
-          {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
-        {ok, DecodedToken} ->
-            Func = fun() ->
-                        Username = username_from(Username0, DecodedToken),
-                        Tags     = tags_from(DecodedToken),
-
-                        {ok, #auth_user{username = Username,
-                                        tags = Tags,
-                                        impl = DecodedToken}}
-                   end,
-            case with_decoded_token(DecodedToken, Func) of
-                {error, Err} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
-                Else ->
-                    Else
-            end
+user_login_authentication(Username, AuthProps) ->
+    case authenticate(Username, AuthProps) of
+	{refused, Msg, Args} = AuthResult ->
+	    rabbit_log:debug(Msg ++ "~n", Args),
+	    AuthResult;
+	_ = AuthResult ->
+	    AuthResult
     end.
 
 user_login_authorization(Username, AuthProps) ->
-    case user_login_authentication(Username, AuthProps) of
+    case authenticate(Username, AuthProps) of
         {ok, #auth_user{impl = Impl}} -> {ok, Impl};
         Else                          -> Else
     end.
@@ -124,6 +106,33 @@ update_state(AuthUser, NewToken) ->
   end.
 
 %%--------------------------------------------------------------------
+
+authenticate(Username0, AuthProps0) ->
+    AuthProps = to_map(AuthProps0),
+    Token     = token_from_context(AuthProps),
+    case check_token(Token) of
+        %% avoid logging the token
+        {error, _} = E  -> E;
+        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+          {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+        {refused, Err} ->
+          {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+        {ok, DecodedToken} ->
+            Func = fun() ->
+                        Username = username_from(Username0, DecodedToken),
+                        Tags     = tags_from(DecodedToken),
+
+                        {ok, #auth_user{username = Username,
+                                        tags = Tags,
+                                        impl = DecodedToken}}
+                   end,
+            case with_decoded_token(DecodedToken, Func) of
+                {error, Err} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+                Else ->
+                    Else
+            end
+    end.
 
 with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
