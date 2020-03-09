@@ -646,26 +646,51 @@ get_checked_out(Cid, From, To, #?MODULE{consumers = Consumers}) ->
             []
     end.
 
+-record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
+-record(aux, {name :: atom(),
+              utilisation :: term(),
+              gc = #aux_gc{} :: #aux_gc{}}).
+
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
     Now = erlang:monotonic_time(micro_seconds),
-    {Name, {inactive, Now, 1, 1.0}}.
+    #aux{name = Name,
+         utilisation = {inactive, Now, 1, 1.0}}.
 
-handle_aux(_, cast, Cmd, {Name, Use0}, Log, _) ->
-    Use = case Cmd of
+handle_aux(_RaState, cast, Cmd, #aux{name = Name,
+                                     utilisation = Use0} = State0,
+           Log, MacState) ->
+    State = case Cmd of
               _ when Cmd == active orelse Cmd == inactive ->
-                  update_use(Use0, Cmd);
+                  State0#aux{utilisation = update_use(Use0, Cmd)};
               tick ->
                   true = ets:insert(rabbit_fifo_usage,
                                     {Name, utilisation(Use0)}),
-                  Use0;
+                  eval_gc(Log, MacState, State0);
               eval ->
-                  Use0
+                  State0
           end,
-    {no_reply, {Name, Use}, Log}.
+    {no_reply, State, Log}.
+
+eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
+        #aux{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
+    {Idx, _} = ra_log:last_index_term(Log),
+    {memory, Mem} = erlang:process_info(self(), memory),
+    case messages_total(MacState) of
+        0 when Idx > LastGcIdx andalso
+               Mem > ?GC_MEM_LIMIT_B ->
+            garbage_collect(),
+            {memory, MemAfter} = erlang:process_info(self(), memory),
+            rabbit_log:info("~s: forcing full sweep GC "
+                            "Before ~b After ~b",
+                            [rabbit_misc:rs(QR), Mem, MemAfter]),
+            AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
+        _ ->
+            AuxState
+    end.
 
 %%% Queries
 
