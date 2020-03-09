@@ -86,10 +86,6 @@
 
 -module(rabbit_feature_flags).
 
-%% Transitional step until we can require Erlang/OTP 21 and
-%% use the now recommended try/catch syntax for obtaining the stack trace.
--compile(nowarn_deprecated_function).
-
 -export([list/0,
          list/1,
          list/2,
@@ -961,8 +957,7 @@ module_attributes_from_testsuite() ->
     try
         throw(force_exception)
     catch
-        throw:force_exception ->
-            Stacktrace = erlang:get_stacktrace(),
+        throw:force_exception:Stacktrace ->
             Modules = lists:filter(
                         fun({Mod, _, _, _}) ->
                                 ModS = atom_to_list(Mod),
@@ -1492,8 +1487,7 @@ run_migration_fun(FeatureName, FeatureProps, Arg) ->
                              MigrationFun,
                              [FeatureName, FeatureProps, Arg])
             catch
-                _:Reason ->
-                    Stacktrace = erlang:get_stacktrace(),
+                _:Reason:Stacktrace ->
                     rabbit_log:error("Feature flag `~s`: migration function "
                                      "crashed: ~p~n~p",
                                      [FeatureName, Reason, Stacktrace]),
