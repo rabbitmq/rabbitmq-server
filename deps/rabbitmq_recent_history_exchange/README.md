@@ -80,4 +80,4 @@ you disable this plugin, it will delete all the cached messages.
 
 ## License
 
-See LICENSE.md
+See LICENSE.
