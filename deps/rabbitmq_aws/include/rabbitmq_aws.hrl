@@ -1,7 +1,7 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @copyright 2016-2018, Pivotal Software, Inc.
+%% @copyright 2016-2020 VMware, Inc. or its affiliates.
 %% @headerfile
 %% @private
 %% @doc rabbitmq_aws client library constants and records
