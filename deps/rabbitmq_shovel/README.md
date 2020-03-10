@@ -20,4 +20,4 @@ See [RabbitMQ shovel plugin](https://www.rabbitmq.com/shovel.html) on rabbitmq.c
 
 Released under [the same license as RabbitMQ](https://www.rabbitmq.com/mpl.html).
 
-2007-2020 (c) Pivotal Software Inc.
+2007-2020 (c) 2007-2020 VMware, Inc. or its affiliates.
