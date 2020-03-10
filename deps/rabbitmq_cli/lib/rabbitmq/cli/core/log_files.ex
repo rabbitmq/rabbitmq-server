@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2019 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2019-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.LogFiles do
   @spec get_log_locations(atom, integer | :infinity) :: [String.t] | {:badrpc, term}
