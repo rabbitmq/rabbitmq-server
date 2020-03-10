@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #   The contents of this file are subject to the Mozilla Public License
 #   Version 1.1 (the "License"); you may not use this file except in
@@ -146,8 +146,8 @@ DECLARABLE = {
 DELETABLE = {
     'exchange':   {'mandatory': ['name']},
     'queue':      {'mandatory': ['name']},
-    'binding':    {'mandatory': ['source', 'destination_type', 'destination'], 
-                    'optional': {'properties_key': '~'}},
+    'binding':    {'mandatory': ['source', 'destination_type', 'destination'],
+                   'optional': {'properties_key': '~'}},
     'vhost':      {'mandatory': ['name']},
     'user':       {'mandatory': ['name']},
     'permission': {'mandatory': ['vhost', 'user']},
