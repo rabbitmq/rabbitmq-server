@@ -12,7 +12,7 @@
  * The Original Code is RabbitMQ HTTP authentication.
  * <p>
  * The Initial Developer of the Original Code is VMware, Inc.
- * Copyright (c) 2017-2019 Pivotal Software, Inc.  All rights reserved.
+ * Copyright (c) 2017-2020 VMware, Inc. or its affiliates.  All rights reserved.
  */
 
 package com.rabbitmq.examples;
