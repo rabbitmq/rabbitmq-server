@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 % rabbitmq/rabbitmq-peer-discovery-aws#25

@@ -24,4 +24,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2018.
+(c) 2007-2020 VMware, Inc. or its affiliates.
