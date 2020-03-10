@@ -90,6 +90,6 @@ backends if so configured.
 
 ## Copyright & License
 
-(c) Pivotal Software Inc., 2007-2020.
+(c) 2007-2020 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ.
