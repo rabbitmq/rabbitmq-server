@@ -62,6 +62,6 @@ You can build and install it like any other plugin (see
 
 ## License and Copyright
 
-(c) Pivotal Software Inc, 2007—2019
+(c) 2007-2020 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ.
