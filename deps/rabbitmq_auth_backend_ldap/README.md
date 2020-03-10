@@ -32,6 +32,6 @@ will build the plugin and put build artifacts under the `./plugins` directory.
 
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-20016
+(c) 2007-2020 VMware, Inc. or its affiliates.
 
 Released under the MPL, the same license as RabbitMQ.
