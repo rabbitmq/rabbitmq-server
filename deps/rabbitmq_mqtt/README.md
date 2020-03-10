@@ -32,7 +32,7 @@ against it. Note that there must be no other MQTT server running on ports `1883`
 
 ## Copyright and License
 
-(c) 2007 — 2016 Pivotal Software, Inc.
+(c) 2007-2020 VMware, Inc. or its affiliates.
 
 Released under the [Mozilla Public License](https://www.rabbitmq.com/mpl.html),
 the same as RabbitMQ.
