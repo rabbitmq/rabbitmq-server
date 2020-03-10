@@ -90,4 +90,4 @@ all              app              app-c_src        apps-ct          asciidoc    
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2020.
+(c) 2007-2020 VMware, Inc. or its affiliates.
