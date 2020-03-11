@@ -61,17 +61,15 @@ banner([Name], #{node := Node, vhost := VHost}) ->
                              << " on node ">>, atom_to_binary(Node, utf8)]).
 
 run([Name], #{node := Node, vhost := VHost}) ->
-    case rabbit_misc:rpc_call(Node, rabbit_shovel_status, lookup, [{VHost, Name}]) of
+    case rabbit_misc:rpc_call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name]) of
         {badrpc, _} = Error ->
             Error;
-        not_found ->
-            {error, <<"Shovel with the given name was not found in the target virtual host">>};
-        _Obj ->
-            ok = rabbit_misc:rpc_call(Node, rabbit_shovel_dyn_worker_sup_sup, stop_child,
-                                      [{VHost, Name}]),
-            {ok, _} = rabbit_misc:rpc_call(Node, rabbit_shovel_dyn_worker_sup_sup, start_link,
-                                           []),
-            ok
+        {error, not_found} ->
+            ErrMsg = rabbit_misc:format("Shovel with the given name was not found "
+                                        "on the target node '~s' and / or virtual host '~s'",
+                                        [Node, VHost]),
+            {error, rabbit_data_coercion:to_binary(ErrMsg)};
+        ok -> ok
     end.
 
 output(Output, _Opts) ->
