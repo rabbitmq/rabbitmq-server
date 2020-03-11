@@ -101,7 +101,7 @@ init([]) ->
 handle_call({fetch, _FetchFun, FunArgs} = Msg, From,
             #state{data = CachedData, args = Args} = State) when
      CachedData =/= none andalso Args =/= FunArgs ->
-    %% there is cached data that we nee to invalidate
+    %% there is cached data that needs to be invalidated
     handle_call(Msg, From, ?RESET_STATE(State));
 handle_call({fetch, FetchFun, FunArgs}, _From,
             #state{data = none,
