@@ -248,11 +248,21 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                     #amqqueue{name = #resource{virtual_host = VHost}} = Q,
                     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, MirrorNode) of
                         {ok, _} ->
-                            SPid = rabbit_amqqueue_sup_sup:start_queue_process(
+                            try 
+                                SPid = rabbit_amqqueue_sup_sup:start_queue_process(
                                        MirrorNode, Q, slave),
-                            log_info(QName, "Adding mirror on node ~p: ~p~n",
+                                log_info(QName, "Adding mirror on node ~p: ~p~n",
                                      [MirrorNode, SPid]),
-                            rabbit_mirror_queue_slave:go(SPid, SyncMode);
+                                rabbit_mirror_queue_slave:go(SPid, SyncMode)
+                            of 
+                                _ -> ok
+                            catch
+                                error:QError -> 
+                                    log_warning(QName,
+                                        "Unable to start queue mirror on node '~p'. "
+                                        "Target queue supervisor is not running: ~p~n",
+                                        [MirrorNode, QError])
+                            end;
                         {error, Error} ->
                             log_warning(QName,
                                         "Unable to start queue mirror on node '~p'. "
