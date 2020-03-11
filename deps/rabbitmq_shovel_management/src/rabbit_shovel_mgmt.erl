@@ -29,6 +29,7 @@
 
 dispatcher() -> [{"/shovels",        ?MODULE, []},
                  {"/shovels/:vhost", ?MODULE, []},
+                 {"/shovels/vhost/:vhost/:name", ?MODULE, []},
                  {"/shovels/vhost/:vhost/:name/restart", ?MODULE, []}].
 
 web_ui()     -> [{javascript, <<"shovel.js">>}].
@@ -45,17 +46,26 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case rabbit_mgmt_util:vhost(ReqData) of
-         not_found -> false;
-         VHost     -> case rabbit_mgmt_util:id(name, ReqData) of
-                          none -> true;
-                          %% Restarting a shovel
-                          Name -> case rabbit_shovel_status:lookup({VHost, Name}) of
-                                      not_found -> false;
-                                      _ -> true
-                                  end
-                      end
-     end, ReqData, Context}.
+    Reply = case rabbit_mgmt_util:vhost(ReqData) of
+                not_found ->
+                    false;
+                VHost ->
+                    case rabbit_mgmt_util:id(name, ReqData) of
+                        none -> true;
+                        Name ->
+                            %% Deleting or restarting a shovel
+                            case rabbit_shovel_status:lookup({VHost, Name}) of
+                                not_found ->
+                                    rabbit_log:error("Shovel with the name '~s' was not found "
+                                                     "on the target node '~s' and / or virtual host '~s'",
+                                                     [Name, node(), VHost]),
+                                    false;
+                                _ ->
+                                    true
+                            end
+                    end
+            end,
+    {Reply, ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(
@@ -64,20 +74,40 @@ to_json(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    Reply =
-        case rabbit_mgmt_util:id(name, ReqData) of
-            none ->
-                false;
-            Name ->
-                ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
-                {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
-                true
-        end,
+    Reply = case rabbit_mgmt_util:id(name, ReqData) of
+                none ->
+                    false;
+                Name ->
+                    %% We must distinguish between a delete and restart
+                    case is_restart(ReqData) of
+                        true ->
+                            case rabbit_shovel_util:restart_shovel(VHost, Name) of
+                                {error, ErrMsg} ->
+                                    rabbit_log:error("Error restarting shovel: ~s", [ErrMsg]),
+                                    false;
+                                ok -> true
+                            end;
+                        _ ->
+                            case rabbit_shovel_util:delete_shovel(VHost, Name, Username) of
+                                {error, ErrMsg} ->
+                                    rabbit_log:error("Error deleting shovel: ~s", [ErrMsg]),
+                                    false;
+                                ok -> true
+                            end
+                    end
+            end,
     {Reply, ReqData, Context}.
 
 %%--------------------------------------------------------------------
+
+is_restart(ReqData) ->
+    Path = cowboy_req:path(ReqData),
+    case string:find(Path, "/restart", trailing) of
+        nomatch -> false;
+        _ -> true
+    end.
 
 filter_vhost_req(List, ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
