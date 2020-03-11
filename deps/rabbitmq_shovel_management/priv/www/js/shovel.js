@@ -88,10 +88,13 @@ dispatcher_add(function(sammy) {
             }
         });
     sammy.del("#/shovel-restart-link", function(){
-        if(sync_delete(this, '/shovels/vhost/:vhost/:name/restart')){
-            update();
-        }
-    });
+            if (sync_delete(this, '/shovels/vhost/:vhost/:name/restart')) {
+                update();
+            } else {
+                show_popup('warn', 'Shovel not restarted because it is not running on this node.');
+                return false;
+            }
+        });
 });
 
 
