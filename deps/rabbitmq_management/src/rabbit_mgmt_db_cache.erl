@@ -98,12 +98,19 @@ init([]) ->
                 args = [],
                 multiplier = Mult}}.
 
+handle_call({fetch, _FetchFun, FunArgs} = Msg, From,
+            #state{data = CachedData, args = Args} = State) when
+     CachedData =/= none andalso Args =/= FunArgs ->
+    %% there is cached data that needs to be invalidated
+    handle_call(Msg, From, ?RESET_STATE(State));
 handle_call({fetch, FetchFun, FunArgs}, _From,
-            #state{data = CachedData, args = Args,
-                   multiplier = Mult, timer_ref = Ref} = State) when
-     CachedData =:= none orelse Args =/= FunArgs ->
+            #state{data = none,
+                   multiplier = Mult, timer_ref = Ref} = State) ->
+    %% force a gc here to clean up previously cleared data
+    garbage_collect(),
     case Ref of
-        R when is_reference(R) -> _ = erlang:cancel_timer(R);
+        R when is_reference(R) ->
+            _ = erlang:cancel_timer(R);
         _ -> ok
     end,
 
@@ -124,14 +131,14 @@ handle_call({fetch, _FetchFun, _}, _From, #state{data = Data} = State) ->
     Reply = {ok, Data},
     {reply, Reply, State};
 handle_call(purge_cache, _From, State) ->
-    {reply, ok, ?RESET_STATE(State)}.
+    {reply, ok, ?RESET_STATE(State), hibernate}.
 
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(purge_cache, State) ->
-    {noreply, ?RESET_STATE(State)};
+    {noreply, ?RESET_STATE(State), hibernate};
 handle_info(_Info, State) ->
     {noreply, State}.
 
