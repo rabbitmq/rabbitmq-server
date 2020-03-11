@@ -81,6 +81,11 @@ RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAM
 RABBITMQ_FEATURE_FLAGS_FILE ?= $(call node_feature_flags_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 
+# Enable colourful debug logging by default
+# To change this, set RABBITMQ_LOG to info, notice, warning etc.
+RABBITMQ_LOG ?= debug,+color
+export RABBITMQ_LOG
+
 # erlang.mk adds dependencies' ebin directory to ERL_LIBS. This is
 # a sane default, but we prefer to rely on the .ez archives in the
 # `plugins` directory so the plugin code is executed. The `plugins`
