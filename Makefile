@@ -350,10 +350,13 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
 
+$(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz:
+	$(verbose) $(MAKE) package-generic-unix
+
 # Docker is different because we need to build & publish
 OTP_VERSION := 22.2.8
 OTP_SHA256 := 71f73ddd59db521928a0f6c8d4354d6f4e9f4bfbd0b40d321cd5253a6c79b095
-docker-image: package-generic-unix
+docker-image: $(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz
 	$(verbose) (cd PACKAGES && tar xjvf rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz) \
 	&& docker build --pull \
 	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
