@@ -58,6 +58,6 @@ restart_shovel(VHost, Name) ->
             {error, not_found};
         _Obj ->
             ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
-            {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link([]),
+            {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
             ok
     end.
