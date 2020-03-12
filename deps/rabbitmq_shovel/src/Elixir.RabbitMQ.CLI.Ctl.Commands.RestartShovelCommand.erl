@@ -53,8 +53,8 @@ validate([_], _Opts) ->
 validate(_, _Opts) ->
     {validation_failure, too_many_args}.
 
-merge_defaults(A, O) ->
-    {A, O}.
+merge_defaults(A, Opts) ->
+    {A, maps:merge(#{vhost => <<"/">>}, Opts)}.
 
 banner([Name], #{node := Node, vhost := VHost}) ->
     erlang:iolist_to_binary([<<"Restarting dynamic Shovel ">>, Name, <<" in virtual host ">>, VHost,
