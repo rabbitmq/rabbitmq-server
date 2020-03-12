@@ -101,6 +101,21 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({definition_import_worker_pool,
+                   [{description, "dedicated worker pool for definition import"},
+                    {mfa,         {rabbit_definitions, boot, []}},
+                    {requires,    external_infrastructure},
+                    {enables,     load_core_definitions}]}).
+
+%% We want to A) make sure we apply definitions before the node begins serving
+%% traffic and B) in fact do it before empty_db_check (so the defaults will not
+%% get created if we don't need 'em).
+-rabbit_boot_step({load_core_definitions,
+                   [{description, "imports definitions"},
+                    {mfa,         {rabbit_definitions, maybe_load_definitions, []}},
+                    {requires,    [recovery, definition_import_worker_pool]},
+                    {enables,     empty_db_check}]}).
+
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
 
@@ -188,15 +203,6 @@
                     {requires,    [core_initialized]},
                     {enables,     routing_ready}]}).
 
-%% We want to A) make sure we apply definitions before the node begins serving
-%% traffic and B) in fact do it before empty_db_check (so the defaults will not
-%% get created if we don't need 'em).
--rabbit_boot_step({load_core_definitions,
-                   [{description, "imports definitions"},
-                    {mfa,         {rabbit_definitions, maybe_load_definitions, []}},
-                    {requires,    recovery},
-                    {enables,     empty_db_check}]}).
-
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
@@ -235,11 +241,6 @@
 -rabbit_boot_step({pre_flight,
                    [{description, "ready to communicate with peers and clients"},
                     {requires,    [core_initialized, recovery, routing_ready]}]}).
-
--rabbit_boot_step({definition_import_worker_pool,
-                   [{description, "dedicated worker pool for definition import"},
-                    {mfa,         {rabbit_definitions, boot, []}},
-                    {requires,    pre_flight}]}).
 
 -rabbit_boot_step({cluster_name,
                    [{description, "sets cluster name if configured"},
