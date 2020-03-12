@@ -1689,20 +1689,22 @@ recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
     ok = file_handle_cache:delete(TmpHdl),
     ok.
 
-scan_file_for_valid_messages(Dir, FileName) ->
+foldl_messages_in_message_file(Fun, Acc0, Dir, FileName) ->
     case open_file(Dir, FileName, ?READ_MODE) of
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
                                      Hdl, filelib:file_size(
                                             form_filename(Dir, FileName)),
-                                     fun scan_fun/2, []),
+                                     Fun, Acc0),
                            ok = file_handle_cache:close(Hdl),
                            Valid;
-        {error, enoent} -> {ok, [], 0};
+        {error, enoent} -> {ok, Acc0, 0};
         {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
     end.
 
-scan_fun({MsgId, TotalSize, Offset, _Msg}, Acc) ->
-    [{MsgId, TotalSize, Offset} | Acc].
+scan_file_for_valid_messages(Dir, FileName) ->
+    foldl_messages_in_message_file(fun({MsgId, TotalSize, Offset, _Msg}, Acc) ->
+                                           [{MsgId, TotalSize, Offset} | Acc]
+                                   end, [], Dir, FileName).
 
 %% Takes the list in *ascending* order (i.e. eldest message
 %% first). This is the opposite of what scan_file_for_valid_messages
@@ -1732,6 +1734,7 @@ build_index(true, _StartupFunState,
                            sum_file_size  = SumFileSize + FileSize,
                            current_file   = File }}
       end, {0, State}, FileSummaryEts);
+
 build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
             State = #msstate { dir = Dir }) ->
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
@@ -1780,43 +1783,46 @@ build_index(Gatherer, Left, [File|Files], State) ->
 
 build_index_worker(Gatherer, State = #msstate { dir = Dir },
                    Left, File, Files) ->
-    {ok, Messages, FileSize} =
-        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
-    {ValidMessages, ValidTotalSize} =
-        lists:foldl(
-          fun (Obj = {MsgId, TotalSize, Offset}, {VMAcc, VTSAcc}) ->
+    FileName = filenum_to_name(File),
+    rabbit_log:debug("Rebuilding message index from ~p~n",
+                     [form_filename(Dir, FileName)]),
+    {ok, {LastValidMessage, ValidTotalSize}, FileSize} =
+        foldl_messages_in_message_file(
+          fun({MsgId, TotalSize, Offset, _Msg}, {_LastMsg, AccTotalSize} = Acc) ->
                   case index_lookup(MsgId, State) of
                       #msg_location { file = undefined } = StoreEntry ->
                           ok = index_update(StoreEntry #msg_location {
                                               file = File, offset = Offset,
                                               total_size = TotalSize },
                                             State),
-                          {[Obj | VMAcc], VTSAcc + TotalSize};
+                          Message = {MsgId, TotalSize, Offset},
+                          {Message, AccTotalSize + TotalSize};
                       _ ->
-                          {VMAcc, VTSAcc}
+                          Acc
                   end
-          end, {[], 0}, Messages),
+          end,
+          {undefined, 0},
+          Dir, FileName),
     {Right, FileSize1} =
         case Files of
             %% if it's the last file, we'll truncate to remove any
             %% rubbish above the last valid message. This affects the
             %% file size.
-            []    -> {undefined, case ValidMessages of
-                                     [] -> 0;
-                                     _  -> {_MsgId, TotalSize, Offset} =
-                                               lists:last(ValidMessages),
+            []    -> {undefined, case LastValidMessage of
+                                     undefined -> 0;
+                                     _  -> {_MsgId, TotalSize, Offset} = LastValidMessage,
                                            Offset + TotalSize
                                  end};
             [F|_] -> {F, FileSize}
         end,
     ok = gatherer:in(Gatherer, #file_summary {
-                       file             = File,
-                       valid_total_size = ValidTotalSize,
-                       left             = Left,
-                       right            = Right,
-                       file_size        = FileSize1,
-                       locked           = false,
-                       readers          = 0 }),
+                                  file             = File,
+                                  valid_total_size = ValidTotalSize,
+                                  left             = Left,
+                                  right            = Right,
+                                  file_size        = FileSize1,
+                                  locked           = false,
+                                  readers          = 0 }),
     ok = gatherer:finish(Gatherer).
 
 %%----------------------------------------------------------------------------
