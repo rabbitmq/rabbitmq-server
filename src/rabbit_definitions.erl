@@ -304,7 +304,7 @@ sequential_for_all(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing ~p ~s...", [N, human_readable_category_name(Category)])
+                N -> rabbit_log:info("Importing sequentially ~p ~s...", [N, human_readable_category_name(Category)])
             end,
             [begin
                  %% keys are expected to be atoms
@@ -324,7 +324,7 @@ concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing ~p ~s...", [N, human_readable_category_name(Category)])
+                N -> rabbit_log:info("Importing concurrently ~p ~s...", [N, human_readable_category_name(Category)])
             end,
             WorkPoolFun = fun(M) ->
                                   Fun(atomize_keys(M), ActingUser)
