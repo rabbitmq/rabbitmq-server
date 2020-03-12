@@ -61,6 +61,8 @@
 
 -define(IMPORT_WORK_POOL, definition_import_pool).
 
+% TODO: this work pool does not seem to be started. We either want to fix it or, preferably, remove it.
+% Discuss: @gerhard @pjk25
 boot() ->
     PoolSize = application:get_env(rabbit, definition_import_work_pool_size, rabbit_runtime:guess_number_of_cpu_cores()),
     rabbit_sup:start_supervisor_child(definition_import_pool_sup, worker_pool_sup, [PoolSize, ?IMPORT_WORK_POOL]).
