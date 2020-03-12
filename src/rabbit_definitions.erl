@@ -348,7 +348,6 @@ do_concurrent_for_all(List, WorkPoolFun) ->
          %% keys are expected to be atoms
          ok = gatherer:fork(Gatherer),
          worker_pool:submit_async(
-           ?IMPORT_WORK_POOL,
            fun() ->
                    try
                        WorkPoolFun(M)
