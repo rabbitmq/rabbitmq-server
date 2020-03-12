@@ -25,12 +25,13 @@
 
 all() ->
     [
-     {group, non_parallel_tests}
+     {group, import_on_a_running_node},
+     {group, import_on_a_booting_node}
     ].
 
 groups() ->
     [
-     {non_parallel_tests, [], [
+     {import_on_a_running_node, [], [
                                %% Note: to make it easier to see which case failed,
                                %% these are intentionally not folded into a single case.
                                %% If generation becomes an alternative worth considering for these tests,
@@ -47,7 +48,10 @@ groups() ->
                                import_case10,
                                import_case11,
                                import_case12
-                              ]}
+                              ]},
+        {import_on_a_booting_node, [], [
+            import_on_boot_case1
+        ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -74,6 +78,20 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(import_on_boot_case1 = Testcase, Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "case5.json"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Testcase},
+        {rmq_nodes_count, 1}
+      ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {load_definitions, CasePath}
+      ]}),
+    rabbit_ct_helpers:run_steps(Config2,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -107,6 +125,19 @@ import_case5(Config) ->
 
 import_case11(Config) -> import_file_case(Config, "case11").
 import_case12(Config) -> import_invalid_file_case(Config, "failing_case12").
+
+import_on_boot_case1(Config) ->
+    %% see case5.json
+    VHost = <<"vhost2">>,
+    %% verify that vhost2 eventually starts
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
+        ok -> ok;
+        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+    end.
+
+%%
+%% Implementation
+%%
 
 import_file_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
