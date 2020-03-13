@@ -74,6 +74,8 @@
 %% to ~10 times that should be relatively safe.
 -define(GC_MEM_LIMIT_B, 2000000).
 
+-define(MB, 1048576).
+
 -record(consumer,
         {meta = #{} :: consumer_meta(),
          checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
