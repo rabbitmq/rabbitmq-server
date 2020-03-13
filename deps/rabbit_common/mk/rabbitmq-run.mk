@@ -192,7 +192,21 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((1883 
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
+      {wal_sync_method, sync}
+    ]},
+  {lager, [
+      {colors, [
+	%% https://misc.flogisoft.com/bash/tip_colors_and_formatting
+	{debug,     "\e[0;34m" },
+	{info,      "\e[1;37m" },
+	{notice,    "\e[1;36m" },
+	{warning,   "\e[1;33m" },
+	{error,     "\e[1;31m" },
+	{critical,  "\e[1;35m" },
+	{alert,     "\e[1;44m" },
+	{emergency, "\e[1;41m" }
+      ]}
     ]}
 ].
 endef
@@ -230,6 +244,19 @@ define test_rabbitmq_config_with_tls
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
       {wal_sync_method, sync}
+    ]},
+  {lager, [
+      {colors, [
+	%% https://misc.flogisoft.com/bash/tip_colors_and_formatting
+	{debug,     "\e[0;34m" },
+	{info,      "\e[1;37m" },
+	{notice,    "\e[1;36m" },
+	{warning,   "\e[1;33m" },
+	{error,     "\e[1;31m" },
+	{critical,  "\e[1;35m" },
+	{alert,     "\e[1;44m" },
+	{emergency, "\e[1;41m" }
+      ]}
     ]}
 ].
 endef
