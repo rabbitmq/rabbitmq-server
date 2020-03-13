@@ -57,6 +57,8 @@
     kill_node/2,
     kill_node_after/3,
 
+    cluster_members_online/2,
+
     is_feature_flag_supported/2,
     is_feature_flag_supported/3,
     enable_feature_flag/2,
@@ -1474,6 +1476,9 @@ kill_node(Config, Node) ->
 kill_node_after(Config, Node, Sleep) ->
     timer:sleep(Sleep),
     kill_node(Config, Node).
+
+cluster_members_online(Config, Node) ->
+    rpc(Config, Node, rabbit_nodes, all_running, []).
 
 await_os_pid_death(Pid) ->
     case rabbit_misc:is_os_process_alive(Pid) of
