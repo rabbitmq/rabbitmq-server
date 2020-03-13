@@ -203,7 +203,8 @@ define test_rabbitmq_config_with_tls
 [
   {rabbit, [
       {loopback_users, []},
-      {log, [{file, [{level, debug}]}]},
+      {log, [{file, [{level, debug}]},
+             {console, [{level, debug}]}]},
       {ssl_listeners, [5671]},
       {ssl_options, [
           {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
@@ -227,7 +228,8 @@ define test_rabbitmq_config_with_tls
         ]}
   ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
+      {wal_sync_method, sync}
     ]}
 ].
 endef
