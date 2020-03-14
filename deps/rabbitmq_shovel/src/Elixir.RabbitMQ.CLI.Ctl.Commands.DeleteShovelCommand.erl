@@ -66,14 +66,22 @@ validate([_], _Opts) ->
 merge_defaults(A, Opts) ->
     {A, maps:merge(#{vhost => <<"/">>}, Opts)}.
 
-banner([Name], #{vhost := Vhost}) ->
+banner([Name], #{vhost := VHost}) ->
     erlang:list_to_binary(io_lib:format("Deleting shovel ~s in vhost ~s",
-                                        [Name, Vhost])).
+                                        [Name, VHost])).
 
-run([Name], #{node := Node, vhost := Vhost}) ->
-    rabbit_misc:rpc_call(Node, rabbit_runtime_parameters, clear,
-                         [Vhost, <<"shovel">>, Name,
-                          'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user()]).
+run([Name], #{node := Node, vhost := VHost}) ->
+    ActingUser = 'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user(),
+    case rabbit_misc:rpc_call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, ActingUser]) of
+        {badrpc, _} = Error ->
+            Error;
+        {error, not_found} ->
+            ErrMsg = rabbit_misc:format("Shovel with the given name was not found "
+                                        "on the target node '~s' and / or virtual host '~s'",
+                                        [Node, VHost]),
+            {error, rabbit_data_coercion:to_binary(ErrMsg)};
+        ok -> ok
+    end.
 
 switches() ->
     [].

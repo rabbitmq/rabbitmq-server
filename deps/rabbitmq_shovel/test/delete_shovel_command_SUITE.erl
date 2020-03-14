@@ -73,7 +73,7 @@ end_per_testcase(Testcase, Config) ->
 delete_not_found(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A, vhost => <<"/">>},
-    {error_string, _} = ?CMD:run([<<"myshovel">>], Opts).
+    {error, _} = ?CMD:run([<<"myshovel">>], Opts).
 
 delete(Config) ->
     shovel_test_utils:set_param(
