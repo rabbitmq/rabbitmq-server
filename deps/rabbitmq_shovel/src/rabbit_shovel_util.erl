@@ -17,7 +17,9 @@
 -module(rabbit_shovel_util).
 
 -export([update_headers/5,
-         add_timestamp_header/1]).
+         add_timestamp_header/1,
+         delete_shovel/3,
+         restart_shovel/2]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -41,3 +43,21 @@ add_timestamp_header(Props = #'P_basic'{headers = Headers}) ->
                                            long,
                                            os:system_time(seconds)),
     Props#'P_basic'{headers = Headers2}.
+
+delete_shovel(VHost, Name, ActingUser) ->
+    case rabbit_shovel_status:lookup({VHost, Name}) of
+        not_found ->
+            {error, not_found};
+        _Obj ->
+            ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser)
+    end.
+
+restart_shovel(VHost, Name) ->
+    case rabbit_shovel_status:lookup({VHost, Name}) of
+        not_found ->
+            {error, not_found};
+        _Obj ->
+            ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
+            {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
+            ok
+    end.
