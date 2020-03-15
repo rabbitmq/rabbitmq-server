@@ -1057,7 +1057,7 @@ def write_payload_file(payload_file, json_list):
         data = base64.b64decode(payload)
     else:
         data = payload
-    f.write(data)
+    f.write(data.encode("utf-8"))
     f.close()
 
 
