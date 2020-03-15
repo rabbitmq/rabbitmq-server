@@ -690,7 +690,7 @@ class Management:
         if self.options.vhost:
             uri += "/%s" % quote_plus(self.options.vhost)
         definitions = self.get(uri)
-        f = open(path, 'w')
+        f = open(path, 'wb')
         f.write(definitions)
         f.close()
         self.verbose("Exported definitions for %s to \"%s\""
@@ -698,7 +698,7 @@ class Management:
 
     def invoke_import(self):
         path = self.get_arg()
-        f = open(path, 'r')
+        f = open(path, 'rb')
         definitions = f.read()
         f.close()
         uri = "/definitions"
@@ -1052,12 +1052,12 @@ def write_payload_file(payload_file, json_list):
     result = json.loads(json_list)[0]
     payload = result['payload']
     payload_encoding = result['payload_encoding']
-    f = open(payload_file, 'w')
+    f = open(payload_file, 'wb')
     if payload_encoding == 'base64':
         data = base64.b64decode(payload)
     else:
         data = payload
-    f.write(data)
+    f.write(data.encode("utf-8"))
     f.close()
 
 
