@@ -952,6 +952,30 @@ fun(Conf) ->
     end
 end}.
 
+%% Cluster formation: discovery failure retries
+
+{mapping, "cluster_formation.lock_retry_limit", "rabbit.cluster_formation.lock_retry_limit",
+    [
+     {datatype, integer},
+     {validators, ["non_zero_positive_integer"]}
+    ]}.
+{mapping, "cluster_formation.lock_retry_timeout", "rabbit.cluster_formation.lock_retry_timeout",
+    [
+     {datatype, integer},
+     {validators, ["non_zero_positive_integer"]}
+    ]}.
+
+{mapping, "cluster_formation.discovery_retry_limit", "rabbit.cluster_formation.discovery_retry_limit",
+    [
+     {datatype, integer},
+     {validators, ["non_zero_positive_integer"]}
+    ]}.
+{mapping, "cluster_formation.discovery_retry_interval", "rabbit.cluster_formation.discovery_retry_interval",
+    [
+     {datatype, integer},
+     {validators, ["non_zero_positive_integer"]}
+    ]}.
+
 %% Classic config-driven peer discovery backend.
 %%
 %% Make clustering happen *automatically* at startup - only applied
