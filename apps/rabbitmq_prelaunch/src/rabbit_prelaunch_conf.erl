@@ -26,29 +26,13 @@ setup(Context) ->
     AdvancedConfigFile = find_actual_advanced_config_file(Context),
     State = case find_actual_main_config_file(Context) of
                 {MainConfigFile, erlang} ->
-                    case AdditionalConfigFiles of
-                        [] ->
-                            ok;
-                        _ ->
-                            rabbit_log_prelaunch:notice(
-                              "The following additional configuration "
-                              "files are not loaded when the main "
-                              "configuration file uses the Erlang terms "
-                              "based format"),
-                            lists:foreach(
-                              fun(File) ->
-                                      rabbit_log_prelaunch:notice(
-                                        "  - ~ts", [File])
-                              end,
-                              AdditionalConfigFiles)
-                    end,
-                    Config = load_erlang_term_based_config_file(
-                               MainConfigFile),
+                    Config = load_cuttlefish_config_file(Context,
+                                                         AdditionalConfigFiles,
+                                                         MainConfigFile),
                     Apps = [App || {App, _} <- Config],
                     decrypt_config(Apps),
-                    #{config_type => erlang,
-                      config_files => [MainConfigFile],
-                      config_advanced_file => undefined};
+                    #{config_files => AdditionalConfigFiles,
+                      config_advanced_file => MainConfigFile};
                 {MainConfigFile, cuttlefish} ->
                     ConfigFiles = [MainConfigFile | AdditionalConfigFiles],
                     Config = load_cuttlefish_config_file(Context,
@@ -56,8 +40,7 @@ setup(Context) ->
                                                          AdvancedConfigFile),
                     Apps = [App || {App, _} <- Config],
                     decrypt_config(Apps),
-                    #{config_type => cuttlefish,
-                      config_files => ConfigFiles,
+                    #{config_files => ConfigFiles,
                       config_advanced_file => AdvancedConfigFile};
                 undefined when AdditionalConfigFiles =/= [] ->
                     ConfigFiles = AdditionalConfigFiles,
@@ -66,23 +49,21 @@ setup(Context) ->
                                                          AdvancedConfigFile),
                     Apps = [App || {App, _} <- Config],
                     decrypt_config(Apps),
-                    #{config_type => cuttlefish,
-                      config_files => ConfigFiles,
+                    #{config_files => ConfigFiles,
                       config_advanced_file => AdvancedConfigFile};
                 undefined when AdvancedConfigFile =/= undefined ->
                     rabbit_log_prelaunch:warning(
                       "Using RABBITMQ_ADVANCED_CONFIG_FILE: ~s",
                       [AdvancedConfigFile]),
-                    Config = load_erlang_term_based_config_file(
-                               AdvancedConfigFile),
+                    Config = load_cuttlefish_config_file(Context,
+                                                         AdditionalConfigFiles,
+                                                         AdvancedConfigFile),
                     Apps = [App || {App, _} <- Config],
                     decrypt_config(Apps),
-                    #{config_type => erlang,
-                      config_files => [AdvancedConfigFile],
+                    #{config_files => AdditionalConfigFiles,
                       config_advanced_file => AdvancedConfigFile};
                 undefined ->
-                    #{config_type => undefined,
-                      config_files => [],
+                    #{config_files => [],
                       config_advanced_file => undefined}
             end,
     ok = override_with_hard_coded_critical_config(),
@@ -184,26 +165,6 @@ determine_config_format(File) ->
                 {ok, _} -> erlang;
                 _       -> cuttlefish
             end
-    end.
-
-load_erlang_term_based_config_file(ConfigFile) ->
-    rabbit_log_prelaunch:debug(
-      "Loading configuration file \"~ts\" (Erlang terms based)", [ConfigFile]),
-    case file:consult(ConfigFile) of
-        {ok, [Config]} when is_list(Config) ->
-            apply_erlang_term_based_config(Config),
-            Config;
-        {ok, OtherTerms} ->
-            rabbit_log_prelaunch:error(
-              "Failed to load configuration file \"~ts\", "
-              "incorrect format: ~p",
-              [ConfigFile, OtherTerms]),
-            throw({error, failed_to_parse_configuration_file});
-        {error, Reason} ->
-            rabbit_log_prelaunch:error(
-              "Failed to load configuration file \"~ts\": ~ts",
-              [ConfigFile, file:format_error(Reason)]),
-            throw({error, failed_to_read_configuration_file})
     end.
 
 load_cuttlefish_config_file(Context,
