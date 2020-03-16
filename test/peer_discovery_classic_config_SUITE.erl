@@ -36,6 +36,7 @@ groups() ->
     [
       {non_parallel, [], [
                           successful_discovery
+                          , successful_discovery_with_a_subset_of_nodes_coming_online
                           , no_nodes_configured
                          ]}
     ].
@@ -63,7 +64,7 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery ->
+init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
 
     N = 3,
@@ -80,6 +81,34 @@ init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery ->
     NodeNamesWithHostname = [rabbit_nodes:make({Name, "localhost"}) || Name <- NodeNames],
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
+          {cluster_nodes, {NodeNamesWithHostname, disc}}
+      ]}),
+    rabbit_ct_helpers:run_steps(Config3,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
+init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery_with_a_subset_of_nodes_coming_online->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+
+    N = 2,
+    NodeNames = [
+      list_to_atom(rabbit_misc:format("~s-~b", [Testcase, I]))
+      || I <- lists:seq(1, N)
+    ],
+    Config2 = rabbit_ct_helpers:set_config(Config1, [
+        {rmq_nodename_suffix, Testcase},
+        %% note: this must not include the host part
+        {rmq_nodes_count, NodeNames},
+        {rmq_nodes_clustered, false}
+      ]),
+    NodeNamesWithHostname = [rabbit_nodes:make({Name, "localhost"}) || Name <- [nonexistent | NodeNames]],
+    %% reduce retry time since we know one node on the list does
+    %% not exist and not just unreachable
+    Config3 = rabbit_ct_helpers:merge_app_env(Config2,
+      {rabbit, [
+          {cluster_formation, [
+              {discovery_retry_limit, 10},
+              {discovery_retry_interval, 200}
+          ]},
           {cluster_nodes, {NodeNamesWithHostname, disc}}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
@@ -118,9 +147,12 @@ end_per_testcase(Testcase, Config) ->
 %%
 
 successful_discovery(Config) ->
-    %% note: this will include a "management" node for this suite
-    ?assert(length(cluster_members_online(Config, 0)) > 2),
-    ?assert(length(cluster_members_online(Config, 1)) > 2).
+    ?assertEqual(3, length(cluster_members_online(Config, 0))),
+    ?assertEqual(3, length(cluster_members_online(Config, 1))).
+
+successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
+    ?assertEqual(2, length(cluster_members_online(Config, 0))),
+    ?assertEqual(2, length(cluster_members_online(Config, 1))).
 
 no_nodes_configured(Config) ->
     ct:pal("Cluster members online: ~p", [cluster_members_online(Config, 0)]),
