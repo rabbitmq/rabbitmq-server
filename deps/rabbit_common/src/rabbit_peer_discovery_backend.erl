@@ -2,6 +2,7 @@
 %% from rabbitmq-autocluster by Gavin Roy.
 %%
 %% Copyright (c) 2014-2015 AWeber Communications
+%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without modification,
