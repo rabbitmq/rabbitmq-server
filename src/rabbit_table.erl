@@ -112,6 +112,7 @@ wait(TableNames, Timeout, Retries) ->
              end,
     case {Retries, Result} of
         {_, ok} ->
+            rabbit_log:info("Successfully synced tables from a peer"),
             ok;
         {1, {error, _} = Error} ->
             throw(Error);
