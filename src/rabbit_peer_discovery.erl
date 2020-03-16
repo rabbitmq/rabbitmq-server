@@ -23,8 +23,9 @@
 -export([maybe_init/0, discover_cluster_nodes/0, backend/0, node_type/0,
          normalize/1, format_discovered_nodes/1, log_configured_backend/0,
          register/0, unregister/0, maybe_register/0, maybe_unregister/0,
-         maybe_inject_randomized_delay/0, lock/0, unlock/1]).
--export([append_node_prefix/1, node_prefix/0, retry_timeout/0,
+         maybe_inject_randomized_delay/0, lock/0, unlock/1,
+         discovery_retries/0]).
+-export([append_node_prefix/1, node_prefix/0, locking_retry_timeout/0,
          lock_acquisition_failure_mode/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
@@ -61,9 +62,9 @@ node_type() ->
       ?DEFAULT_NODE_TYPE
   end.
 
--spec retry_timeout() -> {Retries :: integer(), Timeout :: integer()}.
+-spec locking_retry_timeout() -> {Retries :: integer(), Timeout :: integer()}.
 
-retry_timeout() ->
+locking_retry_timeout() ->
     case application:get_env(rabbit, cluster_formation) of
         {ok, Proplist} ->
             Retries = proplists:get_value(lock_retry_limit, Proplist, 10),
@@ -145,6 +146,18 @@ maybe_unregister() ->
       rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
       ok
   end.
+
+-spec discovery_retries() -> {Retries :: integer(), Interval :: integer()}.
+
+discovery_retries() ->
+    case application:get_env(rabbit, cluster_formation) of
+        {ok, Proplist} ->
+            Retries  = proplists:get_value(discovery_retry_limit,    Proplist, 10),
+            Interval = proplists:get_value(discovery_retry_interval, Proplist, 500),
+            {Retries, Interval};
+        undefined ->
+            {10, 500}
+    end.
 
 
 -spec maybe_inject_randomized_delay() -> ok.
