@@ -75,7 +75,8 @@ init() ->
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
--spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}}.
+-spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
+                      {error, Reason :: string()}.
 
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
