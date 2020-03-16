@@ -57,6 +57,9 @@
     kill_node/2,
     kill_node_after/3,
 
+    reset_node/2,
+    force_reset_node/2,
+
     cluster_members_online/2,
 
     is_feature_flag_supported/2,
@@ -1486,6 +1489,14 @@ await_os_pid_death(Pid) ->
                  await_os_pid_death(Pid);
         false -> ok
     end.
+
+reset_node(Config, Node) ->
+    Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
+    rabbit_control_helper:command(reset, Name).
+
+force_reset_node(Config, Node) ->
+    Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
+    rabbit_control_helper:command(force_reset, Name).
 
 is_feature_flag_supported(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
