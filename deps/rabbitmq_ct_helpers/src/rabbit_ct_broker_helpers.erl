@@ -183,7 +183,8 @@
     tcp_port_stomp,
     tcp_port_stomp_tls,
     tcp_port_web_stomp,
-    tcp_port_web_stomp_tls
+    tcp_port_web_stomp_tls,
+    tcp_port_stream
   ]).
 
 %% -------------------------------------------------------------------
@@ -507,6 +508,10 @@ update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_stomp = Key | Rest]) ->
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_stomp_tls = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_stomp, [{ssl_listeners, [?config(Key, NodeConfig)]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_stream = Key | Rest]) ->
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
+        {rabbitmq_stream, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist | Rest]) ->
     %% The Erlang distribution port doesn't appear in the configuration file.
