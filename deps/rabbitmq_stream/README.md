@@ -1,2 +1,2 @@
-# rabbitmq-stream
-RabbitMQ Stream Plugin
+# RabbitMQ Stream Plugin
+
