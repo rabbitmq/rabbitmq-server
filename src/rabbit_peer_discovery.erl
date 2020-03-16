@@ -156,7 +156,7 @@ discovery_retries() ->
             Interval = proplists:get_value(discovery_retry_interval, Proplist, 500),
             {Retries, Interval};
         undefined ->
-            {50, 100}
+            {10, 500}
     end.
 
 
