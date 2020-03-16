@@ -52,7 +52,10 @@ names(Hostname) ->
         {'DOWN', MRef, process, Pid, Reason} -> {error, Reason}
     end.
 
-make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));
+make({Prefix, Suffix}) -> rabbit_data_coercion:to_atom(
+                            lists:append([rabbit_data_coercion:to_list(Prefix),
+                                          "@",
+                                          rabbit_data_coercion:to_list(Suffix)]));
 make(NodeStr)          -> make(parts(NodeStr)).
 
 parts(Node) when is_atom(Node) ->
