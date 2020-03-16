@@ -26,7 +26,8 @@
 %% API
 %%
 
--spec list_nodes() -> {ok, {Nodes :: [node()], rabbit_types:node_type()}}.
+-spec list_nodes() -> {ok, {Nodes :: [node()], rabbit_types:node_type()}} |
+                      {error, Reason :: string()}.
 
 list_nodes() ->
     case application:get_env(rabbit, cluster_nodes, {[], disc}) of
