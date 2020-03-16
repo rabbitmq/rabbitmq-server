@@ -181,15 +181,15 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((61613
     ]},
   {lager, [
       {colors, [
-	%% https://misc.flogisoft.com/bash/tip_colors_and_formatting
-	{debug,     "\\\e[0;34m" },
-	{info,      "\\\e[1;37m" },
-	{notice,    "\\\e[1;36m" },
-	{warning,   "\\\e[1;33m" },
-	{error,     "\\\e[1;31m" },
-	{critical,  "\\\e[1;35m" },
-	{alert,     "\\\e[1;44m" },
-	{emergency, "\\\e[1;41m" }
+          %% https://misc.flogisoft.com/bash/tip_colors_and_formatting
+          {debug,     "\\\e[0;34m" },
+          {info,      "\\\e[1;37m" },
+          {notice,    "\\\e[1;36m" },
+          {warning,   "\\\e[1;33m" },
+          {error,     "\\\e[1;31m" },
+          {critical,  "\\\e[1;35m" },
+          {alert,     "\\\e[1;44m" },
+          {emergency, "\\\e[1;41m" }
       ]}
     ]}
 ].
@@ -231,15 +231,15 @@ define test_rabbitmq_config_with_tls
     ]},
   {lager, [
       {colors, [
-	%% https://misc.flogisoft.com/bash/tip_colors_and_formatting
-	{debug,     "\\\e[0;34m" },
-	{info,      "\\\e[1;37m" },
-	{notice,    "\\\e[1;36m" },
-	{warning,   "\\\e[1;33m" },
-	{error,     "\\\e[1;31m" },
-	{critical,  "\\\e[1;35m" },
-	{alert,     "\\\e[1;44m" },
-	{emergency, "\\\e[1;41m" }
+          %% https://misc.flogisoft.com/bash/tip_colors_and_formatting
+          {debug,     "\\\e[0;34m" },
+          {info,      "\\\e[1;37m" },
+          {notice,    "\\\e[1;36m" },
+          {warning,   "\\\e[1;33m" },
+          {error,     "\\\e[1;31m" },
+          {critical,  "\\\e[1;35m" },
+          {alert,     "\\\e[1;44m" },
+          {emergency, "\\\e[1;41m" }
       ]}
     ]}
 ].
