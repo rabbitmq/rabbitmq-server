@@ -1,10 +1,12 @@
 -module(rabbit_config).
 
 -export([
-         schema_dir/0,
          config_files/0,
          get_advanced_config/0
         ]).
+
+-export([schema_dir/0]).
+-deprecated([{schema_dir, 0, eventually}]).
 
 -export_type([config_location/0]).
 
@@ -17,14 +19,7 @@ get_confs() ->
     end.
 
 schema_dir() ->
-    case init:get_argument(conf_schema_dir) of
-        {ok, SchemaDir} -> SchemaDir;
-        _ ->
-            case code:priv_dir(rabbit) of
-                {error, bad_name} -> filename:join([".", "priv", "schema"]);
-                PrivDir           -> filename:join([PrivDir, "schema"])
-            end
-    end.
+    undefined.
 
 get_advanced_config() ->
     case get_prelaunch_config_state() of
