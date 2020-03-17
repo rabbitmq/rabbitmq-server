@@ -354,8 +354,8 @@ $(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz:
 	$(verbose) $(MAKE) package-generic-unix
 
 # Docker is different because we need to build & publish
-OTP_VERSION := 22.2.8
-OTP_SHA256 := 71f73ddd59db521928a0f6c8d4354d6f4e9f4bfbd0b40d321cd5253a6c79b095
+OTP_VERSION := 22.3
+OTP_SHA256 := 886e6dbe1e4823c7e8d9c9c1ba8315075a1a9f7717f5a1eaf3b98345ca6c798e
 docker-image: $(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz
 	$(verbose) (cd PACKAGES && tar xJvf rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz) \
 	&& docker build --pull \
