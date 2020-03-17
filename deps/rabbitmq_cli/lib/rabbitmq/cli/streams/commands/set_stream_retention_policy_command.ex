@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.SetStreamRetentionPolicyCommand do
+defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour

@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.SetStreamRetentionPolicyCommandTest do
+defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
