@@ -171,25 +171,23 @@ endif
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-COMMA = ,
-
 define test_rabbitmq_config
 %% vim:ft=erlang:
 
 [
   {rabbit, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}$(comma),)
       {loopback_users, []},
       {log, [{file, [{level, debug}]}]}
     ]},
   {rabbitmq_management, [
-$(if $(RABBITMQ_NODE_PORT),      {listener$(COMMA) [{port$(COMMA) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
+$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
     ]},
   {rabbitmq_mqtt, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {rabbitmq_stomp, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
