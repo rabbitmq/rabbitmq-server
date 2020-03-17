@@ -353,10 +353,12 @@ query_repo_git_rmq = https://github.com/rabbitmq/$(call rmq_cmp_repo_name,$(1))
 .PHONY: ct-logs-archive clean-ct-logs-archive
 
 ifneq ($(wildcard logs/*),)
+TAR := tar
 ifeq ($(PLATFORM),freebsd)
 TAR := gtar
-else
-TAR := tar
+endif
+ifeq ($(PLATFORM),darwin)
+TAR := gtar
 endif
 
 CT_LOGS_ARCHIVE ?= $(PROJECT)-ct-logs-$(subst _,-,$(subst -,,$(subst .,,$(patsubst ct_run.ct_$(PROJECT)@$(shell hostname -s).%,%,$(notdir $(lastword $(wildcard logs/ct_run.*))))))).tar.xz
