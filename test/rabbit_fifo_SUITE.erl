@@ -1353,12 +1353,15 @@ aux_test(_) ->
     MacState = init(#{name => aux_test,
                       queue_resource =>
                       rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
-    Log = undefined,
-    {no_reply, Aux, undefined} = handle_aux(leader, cast, active, Aux0,
+    ok = meck:new(ra_log, []),
+    Log = mock_log,
+    meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
+    {no_reply, Aux, mock_log} = handle_aux(leader, cast, active, Aux0,
                                             Log, MacState),
-    {no_reply, _Aux, undefined} = handle_aux(leader, cast, tick, Aux,
+    {no_reply, _Aux, mock_log} = handle_aux(leader, cast, tick, Aux,
                                              Log, MacState),
     [X] = ets:lookup(rabbit_fifo_usage, aux_test),
+    meck:unload(),
     ?assert(X > 0.0),
     ok.
 
