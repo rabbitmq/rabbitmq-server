@@ -363,10 +363,11 @@ stop-node:
 
 NODES ?= 2
 
-start-brokers start-cluster:
+start-brokers start-cluster: $(DIST_TARGET)
 	@for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$$(hostname -s)"; \
 		$(MAKE) start-background-broker \
+		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
 		  RABBITMQ_SERVER_START_ARGS=" \
