@@ -340,8 +340,48 @@ commits-since-release-title:
 endif # ($(wildcard .git),)
 
 # --------------------------------------------------------------------
-# erlang.mk query-deps* formatting
+# erlang.mk query-deps* formatting.
 # --------------------------------------------------------------------
 
 # We need to provide a repo mapping for deps resolved via git_rmq fetch method
 query_repo_git_rmq = https://github.com/rabbitmq/$(call rmq_cmp_repo_name,$(1))
+
+# --------------------------------------------------------------------
+# Common test logs compression.
+# --------------------------------------------------------------------
+
+.PHONY: compress-ct-logs clean-compressed-ct-logs
+
+ifneq ($(wildcard logs/*),)
+ifeq ($(PLATFORM),freebsd)
+TAR := gtar
+else
+TAR := tar
+endif
+
+CT_LOGS_ARCHIVE ?= $(PROJECT)-ct-logs-$(subst _,-,$(subst -,,$(subst .,,$(patsubst ct_run.ct_$(PROJECT)@$(shell hostname -s).%,%,$(notdir $(lastword $(wildcard logs/ct_run.*))))))).tar.xz
+
+ifeq ($(patsubst %.tar.xz,%,$(CT_LOGS_ARCHIVE)),$(CT_LOGS_ARCHIVE))
+$(error CT_LOGS_ARCHIVE file must use '.tar.xz' as its filename extension)
+endif
+
+compress-ct-logs: $(CT_LOGS_ARCHIVE)
+	@:
+
+$(CT_LOGS_ARCHIVE):
+	$(gen_verbose) \
+	for file in logs/*; do \
+	  ! test -L "$$file" || rm "$$file"; \
+	done
+	$(verbose) \
+	$(TAR) -c --transform "s/^logs/$(patsubst %.tar.xz,%,$(notdir $(CT_LOGS_ARCHIVE)))/" -f - logs | \
+        xz > "$@"
+else
+compress-ct-logs:
+	@:
+endif
+
+clean-compressed-ct-logs::
+	$(gen_verbose) rm -f $(PROJECT)-ct-logs-*.tar.xz
+
+clean:: clean-compressed-ct-logs
