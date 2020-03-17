@@ -10,7 +10,7 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% The Initial Developer of the Original Code is Pivotal Software, Inc.
 %% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
