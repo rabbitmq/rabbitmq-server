@@ -275,7 +275,7 @@ DIST_TARGET ?= test-dist
 endif
 endif
 
-run-broker run-tls-broker: RABBITMQ_CONFIG_FILE ?= $(basename $(TEST_CONFIG_FILE))
+run-broker run-tls-broker: RABBITMQ_CONFIG_FILE := $(basename $(TEST_CONFIG_FILE))
 run-broker:     config := $(test_rabbitmq_config)
 run-tls-broker: config := $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
