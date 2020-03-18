@@ -350,7 +350,7 @@ query_repo_git_rmq = https://github.com/rabbitmq/$(call rmq_cmp_repo_name,$(1))
 # Common test logs compression.
 # --------------------------------------------------------------------
 
-.PHONY: compress-ct-logs clean-compressed-ct-logs
+.PHONY: ct-logs-archive clean-ct-logs-archive
 
 ifneq ($(wildcard logs/*),)
 ifeq ($(PLATFORM),freebsd)
@@ -365,7 +365,7 @@ ifeq ($(patsubst %.tar.xz,%,$(CT_LOGS_ARCHIVE)),$(CT_LOGS_ARCHIVE))
 $(error CT_LOGS_ARCHIVE file must use '.tar.xz' as its filename extension)
 endif
 
-compress-ct-logs: $(CT_LOGS_ARCHIVE)
+ct-logs-archive: $(CT_LOGS_ARCHIVE)
 	@:
 
 $(CT_LOGS_ARCHIVE):
@@ -374,14 +374,17 @@ $(CT_LOGS_ARCHIVE):
 	  ! test -L "$$file" || rm "$$file"; \
 	done
 	$(verbose) \
-	$(TAR) -c --transform "s/^logs/$(patsubst %.tar.xz,%,$(notdir $(CT_LOGS_ARCHIVE)))/" -f - logs | \
+	$(TAR) -c \
+	  --exclude "*/mnesia" \
+	  --transform "s/^logs/$(patsubst %.tar.xz,%,$(notdir $(CT_LOGS_ARCHIVE)))/" \
+	  -f - logs | \
         xz > "$@"
 else
-compress-ct-logs:
+ct-logs-archive:
 	@:
 endif
 
-clean-compressed-ct-logs::
+clean-ct-logs-archive::
 	$(gen_verbose) rm -f $(PROJECT)-ct-logs-*.tar.xz
 
-clean:: clean-compressed-ct-logs
+clean:: clean-ct-logs-archive
