@@ -67,8 +67,8 @@ init([]) ->
                             "(effective interval: ~p milliseconds)",
                             [Interval]),
             {ok, TRef} = timer:apply_interval(Interval * 500,
-                                              rabbit_peer_discovery_etcd,
-                                              update_node_key, []),
+                                              erlang,
+                                              length, [[]]),
             {ok, #state{timer_ref = TRef}}
     end.
 

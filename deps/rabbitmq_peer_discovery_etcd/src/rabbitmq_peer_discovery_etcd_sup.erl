@@ -27,18 +27,31 @@
 %%
 
 init([]) ->
-    Flags = #{strategy => one_for_one, intensity => 1, period => 1},
+    Flags = #{strategy => one_for_one, intensity => 10, period => 1},
     Fun0 = fun() -> {ok, {Flags, []}} end,
     Fun1 = fun() -> {ok, {Flags, []}} end,
     Fun2 = fun(_) ->
-                   Specs = [#{id       => rabbitmq_peer_discovery_etcd_health_check_helper,
-                              start    => {rabbitmq_peer_discovery_etcd_health_check_helper, start_link, []},
-                              restart  => permanent,
-                              shutdown => ?SUPERVISOR_WAIT,
-                              type     => worker,
-                              modules  => [rabbitmq_peer_discovery_etcd_health_check_helper]
-                             }],
-                   {ok, {Flags, Specs}}
+            HealthCheckHelper = #{id => rabbitmq_peer_discovery_etcd_health_check_helper,
+                start => {rabbitmq_peer_discovery_etcd_health_check_helper, start_link, []},
+                restart => permanent,
+                shutdown => ?SUPERVISOR_WAIT,
+                type => worker,
+                modules => [rabbitmq_peer_discovery_etcd_health_check_helper]
+            },
+            Formation = application:get_env(rabbit, cluster_formation, []),
+            Opts = maps:from_list(proplists:get_value(peer_discovery_etcd, Formation, [])),
+            EtcdClientFSM = #{id => rabbitmq_peer_discovery_etcd_v3_client,
+                start => {rabbitmq_peer_discovery_etcd_v3_client, start_link, [Opts]},
+                restart => permanent,
+                shutdown => ?SUPERVISOR_WAIT,
+                type => worker,
+                modules => [rabbitmq_peer_discovery_etcd_v3_client]
+            },
+            Specs = [
+                EtcdClientFSM
+                , HealthCheckHelper
+            ],
+            {ok, {Flags, Specs}}
            end,
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 

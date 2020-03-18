@@ -1,4 +1,24 @@
-%% etcd host
+%% Endpoints
+
+{mapping, "cluster_formation.etcd.endpoints", "rabbit.cluster_formation.peer_discovery_etcd.endpoints", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "cluster_formation.etcd.endpoints.$index", "rabbit.cluster_formation.peer_discovery_etcd.endpoints", [
+    {datatype, [string, ip]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.endpoints",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.endpoints", Conf, undefined) of
+        none      -> [];
+        _ ->
+            Endpoints = cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.endpoints", Conf),
+            [V || {_, V} <- Endpoints]
+    end
+end}.
+
+%% Legacy: etcd host
 
 {mapping, "cluster_formation.etcd.host", "rabbit.cluster_formation.peer_discovery_etcd.etcd_host", [
     {datatype, string}
@@ -12,7 +32,7 @@ fun(Conf) ->
     end
 end}.
 
-%% etcd port
+%% Legacy: etcd port
 
 {mapping, "cluster_formation.etcd.port", "rabbit.cluster_formation.peer_discovery_etcd.etcd_port", [
     {datatype, integer},
@@ -27,7 +47,7 @@ fun(Conf) ->
     end
 end}.
 
-%% etcd scheme
+%% Legacy: etcd scheme
 
 {mapping, "cluster_formation.etcd.scheme", "rabbit.cluster_formation.peer_discovery_etcd.etcd_scheme", [
     {datatype, string}
