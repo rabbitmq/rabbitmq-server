@@ -25,6 +25,7 @@
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0, lock/1, unlock/1]).
 
+-define(ETCD_CLIENT, rabbitmq_peer_discovery_etcd_v3_client).
 
 %%
 %% API
@@ -35,8 +36,12 @@ init() ->
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
     application:load(rabbitmq_peer_discovery_common),
-    ?HTTPC_MODULE:maybe_configure_proxy(),
-    ?HTTPC_MODULE:maybe_configure_inet6().
+    application:load(rabbitmq_peer_discovery_etcd),
+    application:ensure_all_started(eetcd),
+    %% start this supervisor and an etcd v3 client before the plugin is started because
+    %% we depend on it
+    rabbitmq_peer_discovery_etcd_sup:start_link(),
+    rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)]).
 
 
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
@@ -66,27 +71,18 @@ supports_registration() ->
 -spec register() -> ok | {error, string()}.
 
 register() ->
-%%    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-%%    case set_etcd_node_key(M) of
-%%      {ok, _} ->
-%%          rabbit_log:info("Registered node with etcd"),
-%%          ok;
-%%      {error, Error}   ->
-%%          rabbit_log:error("Failed to register node with etcd: ~s", [Error]),
-%%          {error, Error}
-%%    end
-    rabbit_log:info("Registered node with etcd").
+%%    Result = ?ETCD_CLIENT:register(),
+%%    rabbit_log:info("Registered node with etcd"),
+%%    Result
+    ok.
 
 
 -spec unregister() -> ok | {error, string()}.
 unregister() ->
-%%    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+%%    Result = ?ETCD_CLIENT:unregister(),
 %%    rabbit_log:info("Unregistering node with etcd"),
-%%    case etcd_delete(node_path(M), [{recursive, true}], M) of
-%%        {ok, _} -> ok;
-%%        Error   -> Error
-%%    end.
-    rabbit_log:info("Unregistering node with etcd").
+%%    Result
+    ok.
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
 

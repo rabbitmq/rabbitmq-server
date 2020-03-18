@@ -56,4 +56,8 @@ init([]) ->
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    case supervisor:start_link({local, ?MODULE}, ?MODULE, []) of
+        {ok, Pid}                       -> {ok, Pid};
+        {error, {already_started, Pid}} -> {ok, Pid};
+        {error, _} = Err                -> Err
+    end.

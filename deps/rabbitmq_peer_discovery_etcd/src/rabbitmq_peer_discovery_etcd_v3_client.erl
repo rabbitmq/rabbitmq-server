@@ -22,6 +22,7 @@
 
 -export([start_link/1]).
 -export([init/1, callback_mode/0, terminate/3]).
+-export([register/1, register/0, unregister/1, unregister/0]).
 -export([recover/3, connected/3]).
 
 -import(rabbit_data_coercion, [to_binary/1]).
@@ -48,6 +49,7 @@
 %% 60s by default matches the default heartbeat timeout.
 %% We add 1s for state machine bookkeeping and
 -define(DEFAULT_NODE_KEY_LEASE_TTL, 61000).
+-define(CALL_TIMEOUT, 15000).
 
 start_link(Conf) ->
   gen_statem:start_link({local, ?MODULE}, ?MODULE, Conf, []).
@@ -70,6 +72,17 @@ terminate(Reason, State, _Data) ->
     rabbit_log:debug("etcd v3 API client will terminate in state ~p, reason: ~p",
                      [State, Reason]).
 
+register() ->
+    register(?MODULE).
+
+register(ServerRef) ->
+    gen_statem:call(ServerRef, register, ?CALL_TIMEOUT).
+
+unregister() ->
+    ?MODULE:unregister(?MODULE).
+
+unregister(ServerRef) ->
+    gen_statem:call(ServerRef, unregister, ?CALL_TIMEOUT).
 
 
 %%
@@ -129,12 +142,20 @@ connected({call, From}, register, Data = #statem_data{connection_name = Conn}) -
     Ctx = registration_context(Conn, Data),
     Key = node_key(Data),
     eetcd_kv:put(Ctx, Key, registration_value(Data)),
-    rabbit_log:debug("", [Key]),
+    rabbit_log:debug("etcd peer discovery: put key ~p, done with registration", [Key]),
     gen_statem:reply(From, ok),
     keep_state_and_data;
-connected({call, From}, unregister, #statem_data{connection_name = _Conn}) ->
+connected({call, From}, unregister, Data = #statem_data{connection_name = Conn, node_key_lease_id = LeaseID}) ->
+    Ctx = unregistration_context(Conn, Data),
+    Key = node_key(Data),
+    eetcd_kv:delete(Ctx, Key),
+    rabbit_log:debug("etcd peer discovery: deleted key ~p, done with unregistration", [Key]),
+    eetcd_lease:revoke(Ctx, LeaseID),
+    rabbit_log:debug("etcd peer discovery: revoked a lease ~p for node key ~s", [LeaseID, Key]),
     gen_statem:reply(From, ok),
-    keep_state_and_data.
+    {keep_state, Data#statem_data{
+        node_key_lease_id = undefined
+    }}.
 
 
 %%
@@ -152,6 +173,9 @@ acquire_node_key_lease_grant(Data = #statem_data{connection_name = Name, node_ke
 registration_context(ConnName, #statem_data{node_key_lease_id = LeaseID}) ->
     Ctx1 = eetcd_kv:new(ConnName),
     eetcd_kv:with_lease(Ctx1, LeaseID).
+
+unregistration_context(ConnName, _Data) ->
+    eetcd_kv:new(ConnName).
 
 node_key(#statem_data{key_prefix = Prefix}) ->
     Key = rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes/~p",
