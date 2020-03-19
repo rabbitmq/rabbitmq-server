@@ -61,9 +61,9 @@ init(Args) ->
     Actions = [{next_event, internal, start}],
     {ok, recover, #statem_data{
         endpoints = Endpoints,
-        key_prefix = maps:get(etcd_prefix, Settings, undefined),
-
-        node_key_ttl = maps:get(etcd_node_ttl, Settings, ?DEFAULT_NODE_KEY_LEASE_TTL)
+        key_prefix = maps:get(etcd_prefix, Settings, <<"rabbitmq">>),
+        node_key_ttl = maps:get(etcd_node_ttl, Settings, ?DEFAULT_NODE_KEY_LEASE_TTL),
+        cluster_name = maps:get(cluster_name, Settings, <<"default">>)
     }, Actions}.
 
 callback_mode() -> [state_functions, state_enter].
@@ -177,9 +177,9 @@ registration_context(ConnName, #statem_data{node_key_lease_id = LeaseID}) ->
 unregistration_context(ConnName, _Data) ->
     eetcd_kv:new(ConnName).
 
-node_key(#statem_data{key_prefix = Prefix}) ->
-    Key = rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes/~p",
-                             [Prefix, rabbit_nodes:persistent_cluster_id(), node()]),
+node_key(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
+    Key = rabbit_misc:format("/~s/discovery/clusters/~s/nodes/~p",
+                             [Prefix, ClusterName, node()]),
     to_binary(Key).
 
 %% This value is not used and merely
