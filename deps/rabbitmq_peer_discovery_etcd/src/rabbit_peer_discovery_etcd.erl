@@ -40,7 +40,7 @@ init() ->
     application:ensure_all_started(eetcd),
     %% start this supervisor and an etcd v3 client before the plugin is started because
     %% we depend on it
-    rabbitmq_peer_discovery_etcd_sup:start_link(),
+    rabbit_sup:start_restartable_child(rabbitmq_peer_discovery_etcd_sup),
     rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)]).
 
 
@@ -71,18 +71,16 @@ supports_registration() ->
 -spec register() -> ok | {error, string()}.
 
 register() ->
-%%    Result = ?ETCD_CLIENT:register(),
-%%    rabbit_log:info("Registered node with etcd"),
-%%    Result
-    ok.
+    Result = ?ETCD_CLIENT:register(),
+    rabbit_log:info("Registered node with etcd"),
+    Result.
 
 
 -spec unregister() -> ok | {error, string()}.
 unregister() ->
-%%    Result = ?ETCD_CLIENT:unregister(),
-%%    rabbit_log:info("Unregistering node with etcd"),
-%%    Result
-    ok.
+    Result = ?ETCD_CLIENT:unregister(),
+    rabbit_log:info("Unregistering node with etcd"),
+    Result.
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
 
