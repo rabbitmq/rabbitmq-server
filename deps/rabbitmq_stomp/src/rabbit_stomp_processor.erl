@@ -408,7 +408,7 @@ ack_action(Command, Frame,
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
-                            Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", true),
+                            Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", application:get_env(rabbitmq_stomp, default_nack_requeue, true)),
                             Method = MethodFun(DeliveryTag, Sub, Requeue),
                             case transactional(Frame) of
                                 {yes, Transaction} ->
