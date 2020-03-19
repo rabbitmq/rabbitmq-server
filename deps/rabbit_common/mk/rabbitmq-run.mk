@@ -171,25 +171,23 @@ endif
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-COMMA = ,
-
 define test_rabbitmq_config
 %% vim:ft=erlang:
 
 [
   {rabbit, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}$(comma),)
       {loopback_users, []},
       {log, [{file, [{level, debug}]}]}
     ]},
   {rabbitmq_management, [
-$(if $(RABBITMQ_NODE_PORT),      {listener$(COMMA) [{port$(COMMA) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
+$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
     ]},
   {rabbitmq_mqtt, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {rabbitmq_stomp, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(COMMA) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
@@ -283,7 +281,7 @@ $(TEST_TLS_CERTS_DIR): node-tmpdir
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
 	@echo $(TEST_TLS_CERTS_DIR)
 
-run-broker run-tls-broker: RABBITMQ_CONFIG_FILE ?= $(basename $(TEST_CONFIG_FILE))
+run-broker run-tls-broker: RABBITMQ_CONFIG_FILE := $(basename $(TEST_CONFIG_FILE))
 run-broker:     config := $(test_rabbitmq_config)
 run-tls-broker: config := $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
@@ -372,15 +370,18 @@ stop-node:
 
 NODES ?= 2
 
-start-brokers start-cluster:
+start-brokers start-cluster: $(DIST_TARGET)
 	@for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$$(hostname -s)"; \
 		$(MAKE) start-background-broker \
+		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
 		  RABBITMQ_SERVER_START_ARGS=" \
 		  -rabbit loopback_users [] \
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
+		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
+		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
