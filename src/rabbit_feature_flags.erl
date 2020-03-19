@@ -1255,8 +1255,8 @@ load_registry_mod(Mod, Bin) ->
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
-    _ = code:soft_purge(Mod),
-    _ = code:delete(Mod),
+    ok = purge_old_registry(Mod),
+    true = code:delete(Mod),
     Ret = code:load_binary(Mod, FakeFilename, Bin),
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
@@ -1269,6 +1269,18 @@ load_registry_mod(Mod, Bin) ->
               "Feature flags: failed to load registry module: ~p",
               [Reason]),
             throw({feature_flag_registry_reload_failure, Reason})
+    end.
+
+purge_old_registry(Mod) ->
+    case code:is_loaded(Mod) of
+        {file, _} -> do_purge_old_registry(Mod);
+        false     -> ok
+    end.
+
+do_purge_old_registry(Mod) ->
+    case code:soft_purge(Mod) of
+        true  -> ok;
+        false -> do_purge_old_registry(Mod)
     end.
 
 %% -------------------------------------------------------------------
