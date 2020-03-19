@@ -32,19 +32,27 @@
 %%
 
 init() ->
-    rabbit_log:debug("Peer discovery etcd: initialising..."),
-    %% we cannot start this plugin yet since it depends on the rabbit app,
+    %% We cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
     application:load(rabbitmq_peer_discovery_common),
     application:load(rabbitmq_peer_discovery_etcd),
-    application:ensure_all_started(eetcd),
-    %% Start this supervisor and an etcd v3 client before the plugin is started because
-    %% we depend on it. The plugin is not yet started, so we cannot use its supervision tree.
-    %% We opt to use rabbit_sup instead as the least hacky of all options. Fortunately peer discovery
-    %% plugins are not typically dropped at runtime, so this unusual supervision decision won't be
-    %% noticeable by most users or operators. MK.
-    rabbit_sup:start_restartable_child(rabbitmq_peer_discovery_etcd_sup),
-    rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)]).
+
+    %% Here we start the client very early on, before plugins have initialized.
+    %% We need to do it conditionally, however.
+    NoOp = fun() -> ok end,
+    Run  = fun(_) ->
+            rabbit_log:debug("Peer discovery etcd: initialising..."),
+            application:ensure_all_started(eetcd),
+            Formation = application:get_env(rabbit, cluster_formation, []),
+            Opts = maps:from_list(proplists:get_value(peer_discovery_etcd, Formation, [])),
+            {ok, Pid} = rabbitmq_peer_discovery_etcd_v3_client:start_link(Opts),
+            %% unlink so that this supervisor's lifecycle does not affect RabbitMQ core
+            unlink(Pid),
+            rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)])
+           end,
+    rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, NoOp, NoOp, Run),
+
+    ok.
 
 
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
@@ -81,9 +89,10 @@ register() ->
 
 -spec unregister() -> ok | {error, string()}.
 unregister() ->
-    Result = ?ETCD_CLIENT:unregister(),
-    rabbit_log:info("Unregistering node with etcd"),
-    Result.
+    %% This backend unregisters on plugin (etcd v3 client) deactivation
+    %% because by the time unregistration happens, the plugin and thus the client
+    %% it provides are already gone. MK.
+    ok.
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
 

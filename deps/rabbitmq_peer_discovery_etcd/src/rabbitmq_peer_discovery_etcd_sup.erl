@@ -31,16 +31,21 @@ init([]) ->
     Fun0 = fun() -> {ok, {Flags, []}} end,
     Fun1 = fun() -> {ok, {Flags, []}} end,
     Fun2 = fun(_) ->
-            HealthCheckHelper = #{id => rabbitmq_peer_discovery_etcd_health_check_helper,
+            HealthCheckHelper = #{
+                id => rabbitmq_peer_discovery_etcd_health_check_helper,
                 start => {rabbitmq_peer_discovery_etcd_health_check_helper, start_link, []},
                 restart => permanent,
                 shutdown => ?SUPERVISOR_WAIT,
                 type => worker,
                 modules => [rabbitmq_peer_discovery_etcd_health_check_helper]
             },
+
+            %% we stop the previously started client and "re-attach" it. MK.
+            rabbitmq_peer_discovery_etcd_v3_client:stop(),
             Formation = application:get_env(rabbit, cluster_formation, []),
             Opts = maps:from_list(proplists:get_value(peer_discovery_etcd, Formation, [])),
-            EtcdClientFSM = #{id => rabbitmq_peer_discovery_etcd_v3_client,
+            EtcdClientFSM = #{
+                id => rabbitmq_peer_discovery_etcd_v3_client,
                 start => {rabbitmq_peer_discovery_etcd_v3_client, start_link, [Opts]},
                 restart => permanent,
                 shutdown => ?SUPERVISOR_WAIT,

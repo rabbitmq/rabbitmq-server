@@ -20,10 +20,10 @@
 
 -behaviour(gen_statem).
 
--export([start_link/1]).
+-export([start_link/1, start/1, stop/0]).
 -export([init/1, callback_mode/0, terminate/3]).
 -export([register/1, register/0, unregister/1, unregister/0]).
--export([recover/3, connected/3]).
+-export([recover/3, connected/3, disconnected/3]).
 
 -import(rabbit_data_coercion, [to_binary/1]).
 
@@ -51,8 +51,14 @@
 -define(DEFAULT_NODE_KEY_LEASE_TTL, 61000).
 -define(CALL_TIMEOUT, 15000).
 
+start(Conf) ->
+    gen_statem:start({local, ?MODULE}, ?MODULE, Conf, []).
+
 start_link(Conf) ->
-  gen_statem:start_link({local, ?MODULE}, ?MODULE, Conf, []).
+    gen_statem:start_link({local, ?MODULE}, ?MODULE, Conf, []).
+
+stop() ->
+    gen_statem:stop(?MODULE).
 
 init(Args) ->
     ok = application:ensure_started(eetcd),
@@ -68,9 +74,13 @@ init(Args) ->
 
 callback_mode() -> [state_functions, state_enter].
 
-terminate(Reason, State, _Data) ->
+terminate(Reason, State, Data) ->
     rabbit_log:debug("etcd v3 API client will terminate in state ~p, reason: ~p",
-                     [State, Reason]).
+                     [State, Reason]),
+    disconnect(?ETCD_CONN_NAME, Data),
+    rabbit_log:debug("etcd v3 API client has disconnected"),
+    rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~p", [length(eetcd_conn_sup:info())]),
+    ok.
 
 register() ->
     register(?MODULE).
@@ -145,17 +155,16 @@ connected({call, From}, register, Data = #statem_data{connection_name = Conn}) -
     rabbit_log:debug("etcd peer discovery: put key ~p, done with registration", [Key]),
     gen_statem:reply(From, ok),
     keep_state_and_data;
-connected({call, From}, unregister, Data = #statem_data{connection_name = Conn, node_key_lease_id = LeaseID}) ->
-    Ctx = unregistration_context(Conn, Data),
-    Key = node_key(Data),
-    eetcd_kv:delete(Ctx, Key),
-    rabbit_log:debug("etcd peer discovery: deleted key ~p, done with unregistration", [Key]),
-    eetcd_lease:revoke(Ctx, LeaseID),
-    rabbit_log:debug("etcd peer discovery: revoked a lease ~p for node key ~s", [LeaseID, Key]),
+connected({call, From}, unregister, Data = #statem_data{connection_name = Conn}) ->
+    unregister(Conn, Data),
     gen_statem:reply(From, ok),
     {keep_state, Data#statem_data{
         node_key_lease_id = undefined
     }}.
+
+disconnected(enter, _PrevState, _Data) ->
+    rabbit_log:info("etcd peer discovery: successfully disconnected from etcd"),
+    keep_state_and_data.
 
 
 %%
@@ -219,6 +228,20 @@ do_connect(Name, Endpoints, Transport, TransportOpts) ->
                     {error, Errors}
             end
     end.
+
+disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
+    maybe_demonitor(Ref),
+    do_disconnect(ConnName).
+
+unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID}) ->
+    Ctx = unregistration_context(Conn, Data),
+    Key = node_key(Data),
+    eetcd_kv:delete(Ctx, Key),
+    rabbit_log:debug("etcd peer discovery: deleted key ~s, done with unregistration", [Key]),
+    eetcd_lease:revoke(Ctx, LeaseID),
+    rabbit_log:debug("etcd peer discovery: revoked a lease ~p for node key ~s", [LeaseID, Key]),
+    ok.
+
 
 maybe_demonitor(undefined) ->
     true;
