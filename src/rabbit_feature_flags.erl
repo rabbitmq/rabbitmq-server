@@ -129,7 +129,8 @@
          do_sync_feature_flags_with_node/1]).
 
 -ifdef(TEST).
--export([initialize_registry/3,
+-export([inject_test_feature_flags/1,
+         initialize_registry/3,
          query_supported_feature_flags/0,
          mark_as_enabled_remotely/2,
          mark_as_enabled_remotely/4]).
@@ -953,37 +954,22 @@ do_initialize_registry(AllFeatureFlags,
 %% @private
 
 -ifdef(TEST).
+-define(PT_TESTSUITE_ATTRS, {?MODULE, testsuite_feature_flags_attrs}).
+
+inject_test_feature_flags(AttributesFromTestsuite) ->
+    rabbit_log:debug(
+      "Feature flags: injecting feature flags from testsuite: ~p",
+      [AttributesFromTestsuite]),
+    ok = persistent_term:put(?PT_TESTSUITE_ATTRS, AttributesFromTestsuite),
+    initialize_registry().
+
 module_attributes_from_testsuite() ->
-    try
-        throw(force_exception)
-    catch
-        throw:force_exception:Stacktrace ->
-            Modules = lists:filter(
-                        fun({Mod, _, _, _}) ->
-                                ModS = atom_to_list(Mod),
-                                re:run(ModS, "_SUITE$", [{capture, none}])
-                                =:=
-                                match
-                        end, Stacktrace),
-            case Modules of
-                [{Module, _, _, _} | _] ->
-                    ModInfo = Module:module_info(attributes),
-                    Attrs = lists:append(
-                              [Attr || {Name, Attr} <- ModInfo,
-                                       Name =:= rabbit_feature_flag]),
-                    case Attrs of
-                        [] -> [];
-                        _  -> [{Module, Module, Attrs}]
-                    end;
-                _ ->
-                    []
-            end
-    end.
+    persistent_term:get(?PT_TESTSUITE_ATTRS, []).
 
 query_supported_feature_flags() ->
     rabbit_log:debug(
-      "Feature flags: query feature flags in loaded applications + test "
-      "module"),
+      "Feature flags: query feature flags in loaded applications "
+      "+ testsuite"),
     AttributesPerApp = rabbit_misc:all_module_attributes(rabbit_feature_flag),
     AttributesFromTestsuite = module_attributes_from_testsuite(),
     AllAttributes = AttributesPerApp ++ AttributesFromTestsuite,

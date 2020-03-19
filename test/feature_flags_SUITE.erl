@@ -964,15 +964,17 @@ log_feature_flags_of_all_nodes(Config) ->
                                              lines => false}]).
 
 declare_arbitrary_feature_flag(Config) ->
-    NewFeatureFlags = #{ff_from_testsuite =>
-                        #{desc => "My feature flag",
-                          provided_by => ?MODULE,
-                          stability => stable}},
+    FeatureFlags = [{ff_from_testsuite,
+                     #{desc => "My feature flag",
+                       stability => stable}}],
+    AppAttrs = [{?MODULE, % Application
+                 ?MODULE, % Module,
+                 FeatureFlags}],
     rabbit_ct_broker_helpers:rpc_all(
       Config,
       rabbit_feature_flags,
-      initialize_registry,
-      [NewFeatureFlags]),
+      inject_test_feature_flags,
+      [AppAttrs]),
     ok.
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
