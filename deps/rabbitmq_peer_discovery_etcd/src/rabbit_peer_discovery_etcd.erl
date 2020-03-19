@@ -38,8 +38,11 @@ init() ->
     application:load(rabbitmq_peer_discovery_common),
     application:load(rabbitmq_peer_discovery_etcd),
     application:ensure_all_started(eetcd),
-    %% start this supervisor and an etcd v3 client before the plugin is started because
-    %% we depend on it
+    %% Start this supervisor and an etcd v3 client before the plugin is started because
+    %% we depend on it. The plugin is not yet started, so we cannot use its supervision tree.
+    %% We opt to use rabbit_sup instead as the least hacky of all options. Fortunately peer discovery
+    %% plugins are not typically dropped at runtime, so this unusual supervision decision won't be
+    %% noticeable by most users or operators. MK.
     rabbit_sup:start_restartable_child(rabbitmq_peer_discovery_etcd_sup),
     rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)]).
 
