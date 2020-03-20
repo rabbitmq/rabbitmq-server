@@ -1801,7 +1801,7 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
 enqueue_build_index_workers(Gatherer, Left, [], State) ->
     exit(normal);
 enqueue_build_index_workers(Gatherer, Left, [File|Files], State) ->
-    ok = worker_pool:submit(
+    ok = worker_pool:dispatch_sync(
            fun () ->
                    link(Gatherer),
                    ok = build_index_worker(Gatherer, State,
