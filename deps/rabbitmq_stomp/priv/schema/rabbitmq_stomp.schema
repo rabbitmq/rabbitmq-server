@@ -219,3 +219,12 @@ end}.
 
 {mapping, "stomp.hide_server_info", "rabbitmq_stomp.hide_server_info",
     [{datatype, {enum, [true, false]}}]}.
+
+%% Whether or not to always requeue the message on nack
+%% If not set then coordinated by the usage of the frame "requeue" header
+%% Useful when you are not fully controlling the STOMP consumer implementation
+%%
+%% {default_nack_requeue, false}
+
+{mapping, "stomp.default_nack_requeue", "rabbitmq_stomp.default_nack_requeue",
+    [{datatype, {enum, [true, false]}}]}.

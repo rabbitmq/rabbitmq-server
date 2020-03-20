@@ -37,7 +37,7 @@
                 adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf, auth_mechanism, auth_login,
-                default_topic_exchange}).
+                default_topic_exchange, default_nack_requeue}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
@@ -163,7 +163,8 @@ initial_state(Configuration,
        reply_queues        = #{},
        frame_transformer   = undefined,
        trailing_lf         = application:get_env(rabbitmq_stomp, trailing_lf, true),
-       default_topic_exchange = application:get_env(rabbitmq_stomp, default_topic_exchange, <<"amq.topic">>)}.
+       default_topic_exchange = application:get_env(rabbitmq_stomp, default_topic_exchange, <<"amq.topic">>),
+       default_nack_requeue = application:get_env(rabbitmq_stomp, default_nack_requeue, true)}.
 
 
 command({"STOMP", Frame}, State) ->
@@ -399,8 +400,9 @@ handle_frame(Command, _Frame, State) ->
 
 ack_action(Command, Frame,
            State = #proc_state{subscriptions = Subs,
-                          channel       = Channel,
-                          version       = Version}, MethodFun) ->
+                          channel              = Channel,
+                          version              = Version,
+                          default_nack_requeue = DefaultNackRequeue}, MethodFun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
     case rabbit_stomp_frame:header(Frame, AckHeader) of
         {ok, AckValue} ->
@@ -408,7 +410,7 @@ ack_action(Command, Frame,
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
-                            Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", true),
+                            Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", DefaultNackRequeue),
                             Method = MethodFun(DeliveryTag, Sub, Requeue),
                             case transactional(Frame) of
                                 {yes, Transaction} ->
