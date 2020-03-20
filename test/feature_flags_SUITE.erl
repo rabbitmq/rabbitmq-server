@@ -47,18 +47,6 @@
          activating_plugin_with_new_ff_enabled/1
         ]).
 
--rabbit_feature_flag(
-   {ff_a,
-    #{desc          => "Feature flag A",
-      stability     => stable
-     }}).
-
--rabbit_feature_flag(
-   {ff_b,
-    #{desc          => "Feature flag B",
-      stability     => stable
-     }}).
-
 suite() ->
     [{timetrap, {minutes, 15}}].
 
@@ -272,6 +260,14 @@ end_per_testcase(Testcase, Config) ->
 registry(_Config) ->
     %% At first, the registry must be uninitialized.
     ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+
+    FeatureFlags = #{ff_a =>
+                     #{desc      => "Feature flag A",
+                       stability => stable},
+                     ff_b =>
+                     #{desc      => "Feature flag B",
+                       stability => stable}},
+    rabbit_feature_flags:inject_test_feature_flags(feature_flags_to_app_attrs(FeatureFlags)),
 
     %% After initialization, it must know about the feature flags
     %% declared in this testsuite. They must be disabled however.
@@ -985,18 +981,20 @@ log_feature_flags_of_all_nodes(Config) ->
       Config, rabbit_feature_flags, info, [#{color => false,
                                              lines => false}]).
 
+feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
+    [{?MODULE, % Application
+      ?MODULE, % Module
+      maps:to_list(FeatureFlags)}].
+
 declare_arbitrary_feature_flag(Config) ->
-    FeatureFlags = [{ff_from_testsuite,
+    FeatureFlags = #{ff_from_testsuite =>
                      #{desc => "My feature flag",
-                       stability => stable}}],
-    AppAttrs = [{?MODULE, % Application
-                 ?MODULE, % Module,
-                 FeatureFlags}],
+                       stability => stable}},
     rabbit_ct_broker_helpers:rpc_all(
       Config,
       rabbit_feature_flags,
       inject_test_feature_flags,
-      [AppAttrs]),
+      [feature_flags_to_app_attrs(FeatureFlags)]),
     ok.
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
