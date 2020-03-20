@@ -150,11 +150,11 @@ end}.
     {datatype, integer}
 ]}.
 
-%% Additional SSL options
+%% Additional TLS options
 
-%% Extract a name from the client's certificate when using SSL.
+%% Extract a name from the client's certificate when using TLS.
 %%
-%% {ssl_cert_login, true},
+%% Defaults to true.
 
 {mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login",
     [{datatype, {enum, [true, false]}}]}.
@@ -194,28 +194,28 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("stomp.default_topic_exchange", Conf, "amq.topic"))
 end}.
 
-%% If a default user is configured, or you have configured use SSL client
-%% certificate based authentication, you can choose to allow clients to
+%% If a default user is configured, or if x.509
+%% certificate-based client authentication is used, use this setting to allow clients to
 %% omit the CONNECT frame entirely. If set to true, the client is
 %% automatically connected as the default user or user supplied in the
-%% SSL certificate whenever the first frame sent on a session is not a
+%% x.509/TLS certificate whenever the first frame sent on a session is not a
 %% CONNECT frame.
 %%
-%% {implicit_connect, true}
+%% Defaults to true.
 
 {mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect",
     [{datatype, {enum, [true, false]}}]}.
 
 %% Whether or not to enable proxy protocol support.
 %%
-%% {proxy_protocol, false}
+%% Defaults to false.
 
 {mapping, "stomp.proxy_protocol", "rabbitmq_stomp.proxy_protocol",
     [{datatype, {enum, [true, false]}}]}.
 
 %% Whether or not to hide server info
 %%
-%% {hide_server_info, false}
+%% Defaults to false.
 
 {mapping, "stomp.hide_server_info", "rabbitmq_stomp.hide_server_info",
     [{datatype, {enum, [true, false]}}]}.
@@ -224,7 +224,7 @@ end}.
 %% If not set then coordinated by the usage of the frame "requeue" header
 %% Useful when you are not fully controlling the STOMP consumer implementation
 %%
-%% {default_nack_requeue, false}
+%% Defaults to true.
 
 {mapping, "stomp.default_nack_requeue", "rabbitmq_stomp.default_nack_requeue",
     [{datatype, {enum, [true, false]}}]}.
