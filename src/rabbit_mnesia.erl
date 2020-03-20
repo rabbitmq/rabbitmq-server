@@ -144,7 +144,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
         (Name, BadNames) when is_atom(Name) -> BadNames;
         (Name, BadNames)                    -> [Name | BadNames]
     end,
-    {DiscoveredNodes, NodeType} =
+    {DiscoveredNodes0, NodeType} =
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {error, Reason} ->
                 RetriesLeft1 = RetriesLeft - 1,
@@ -163,6 +163,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
+    DiscoveredNodes = lists:usort(DiscoveredNodes0),
     rabbit_log:info("All discovered existing cluster peers: ~s~n",
                     [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
     Peers = nodes_excl_me(DiscoveredNodes),
