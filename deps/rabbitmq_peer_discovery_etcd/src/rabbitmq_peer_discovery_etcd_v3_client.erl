@@ -22,7 +22,7 @@
 
 -export([start_link/1, start/1, stop/0]).
 -export([init/1, callback_mode/0, terminate/3]).
--export([register/1, register/0, unregister/1, unregister/0]).
+-export([register/1, register/0, unregister/1, unregister/0, list_nodes/0, list_nodes/1]).
 -export([recover/3, connected/3, disconnected/3]).
 
 -import(rabbit_data_coercion, [to_binary/1]).
@@ -94,6 +94,11 @@ unregister() ->
 unregister(ServerRef) ->
     gen_statem:call(ServerRef, unregister, ?CALL_TIMEOUT).
 
+list_nodes() ->
+    list_nodes(?MODULE).
+
+list_nodes(ServerRef) ->
+    gen_statem:call(ServerRef, list_keys, ?CALL_TIMEOUT).
 
 %%
 %% States
@@ -160,7 +165,33 @@ connected({call, From}, unregister, Data = #statem_data{connection_name = Conn})
     gen_statem:reply(From, ok),
     {keep_state, Data#statem_data{
         node_key_lease_id = undefined
-    }}.
+    }};
+connected({call, From}, list_keys, #statem_data{connection_name = Conn}) ->
+    C1 = eetcd_kv:new(Conn),
+    %% This is not a typo. Key range from "rabbitmq" to "rabbitmr" (rabbitmq + 1) is what
+    %% we are looking for. eetcd's prefix feature has no upper bound and would happily
+    %% return keys that are not related to this plugin.
+    C2 = eetcd_kv:with_range_end(eetcd_kv:with_key(C1, <<"/rabbitmq">>), <<"/rabbitmr">>),
+    {ok, #{kvs := Result}} = eetcd_kv:get(C2),
+    rabbit_log:debug("etcd peer discovery returned keys: ~p", [Result]),
+    Values = [maps:get(value, M) || M <- Result],
+    case Values of
+        Xs when is_list(Xs) ->
+            rabbit_log:debug("etcd peer discovery: listing node keys returned ~b results", [length(Xs)]),
+            ParsedNodes = lists:map(fun extract_node/1, Xs),
+            {Successes, Failures} = lists:partition(fun filter_node/1, ParsedNodes),
+            JoinedString = lists:join(",", [rabbit_data_coercion:to_list(Node) || Node <- lists:usort(Successes)]),
+            rabbit_log:error("etcd peer discovery: successfully extracted nodes: ~s", [JoinedString]),
+            lists:foreach(fun(Val) ->
+                rabbit_log:error("etcd peer discovery: failed to extract node name from etcd value ~p", [Val])
+            end, Failures),
+            gen_statem:reply(From, lists:usort(Successes)),
+    keep_state_and_data;
+        Other ->
+            rabbit_log:debug("etcd peer discovery: listing node keys returned ~p", [Other]),
+            gen_statem:reply(From, []),
+    keep_state_and_data
+    end.
 
 disconnected(enter, _PrevState, _Data) ->
     rabbit_log:info("etcd peer discovery: successfully disconnected from etcd"),
@@ -187,7 +218,7 @@ unregistration_context(ConnName, _Data) ->
     eetcd_kv:new(ConnName).
 
 node_key(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
-    Key = rabbit_misc:format("/~s/discovery/clusters/~s/nodes/~p",
+    Key = rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes/~p",
                              [Prefix, ClusterName, node()]),
     to_binary(Key).
 
@@ -199,6 +230,23 @@ registration_value(#statem_data{node_key_lease_id = LeaseID, node_key_ttl = TTL}
         <<"lease_id">> => LeaseID,
         <<"ttl">>      => TTL
     })).
+
+-spec extract_node(binary()) -> atom() | {error, any()}.
+
+extract_node(Payload) ->
+    case rabbit_json:decode(Payload) of
+        {error, Error} -> {error, Error};
+        Map ->
+            case maps:get(<<"node">>, Map, undefined) of
+                undefined -> undefined;
+                Node      -> rabbit_data_coercion:to_atom(Node)
+            end
+    end.
+
+filter_node(undefined)  -> false;
+filter_node({error, _}) -> false;
+filter_node(_Other)     -> true.
+
 
 error_is_already_started({_Endpoint, already_started}) ->
     true;

@@ -68,7 +68,9 @@ list_nodes() ->
                    {ok, {[], disc}}
            end,
     Fun2 = fun(_Proplist) ->
-                   {ok, {[], disc}}
+                   %% error logging will be done by the client
+                   Nodes = rabbitmq_peer_discovery_etcd_v3_client:list_nodes(),
+                   {ok, {Nodes, disc}}
            end,
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
