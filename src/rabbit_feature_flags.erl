@@ -129,7 +129,8 @@
          do_sync_feature_flags_with_node/1]).
 
 -ifdef(TEST).
--export([initialize_registry/3,
+-export([inject_test_feature_flags/1,
+         initialize_registry/3,
          query_supported_feature_flags/0,
          mark_as_enabled_remotely/2,
          mark_as_enabled_remotely/4]).
@@ -967,37 +968,22 @@ do_initialize_registry(AllFeatureFlags,
 %% @private
 
 -ifdef(TEST).
+-define(PT_TESTSUITE_ATTRS, {?MODULE, testsuite_feature_flags_attrs}).
+
+inject_test_feature_flags(AttributesFromTestsuite) ->
+    rabbit_log_feature_flags:debug(
+      "Feature flags: injecting feature flags from testsuite: ~p",
+      [AttributesFromTestsuite]),
+    ok = persistent_term:put(?PT_TESTSUITE_ATTRS, AttributesFromTestsuite),
+    initialize_registry().
+
 module_attributes_from_testsuite() ->
-    try
-        throw(force_exception)
-    catch
-        throw:force_exception:Stacktrace ->
-            Modules = lists:filter(
-                        fun({Mod, _, _, _}) ->
-                                ModS = atom_to_list(Mod),
-                                re:run(ModS, "_SUITE$", [{capture, none}])
-                                =:=
-                                match
-                        end, Stacktrace),
-            case Modules of
-                [{Module, _, _, _} | _] ->
-                    ModInfo = Module:module_info(attributes),
-                    Attrs = lists:append(
-                              [Attr || {Name, Attr} <- ModInfo,
-                                       Name =:= rabbit_feature_flag]),
-                    case Attrs of
-                        [] -> [];
-                        _  -> [{Module, Module, Attrs}]
-                    end;
-                _ ->
-                    []
-            end
-    end.
+    persistent_term:get(?PT_TESTSUITE_ATTRS, []).
 
 query_supported_feature_flags() ->
     rabbit_log_feature_flags:debug(
-      "Feature flags: query feature flags in loaded applications + test "
-      "module"),
+      "Feature flags: query feature flags in loaded applications "
+      "+ testsuite"),
     T0 = erlang:timestamp(),
     AttributesPerApp = rabbit_misc:rabbitmq_related_module_attributes(
                          rabbit_feature_flag),
@@ -1269,8 +1255,8 @@ load_registry_mod(Mod, Bin) ->
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
-    _ = code:soft_purge(Mod),
-    _ = code:delete(Mod),
+    ok = purge_old_registry(Mod),
+    true = code:delete(Mod),
     Ret = code:load_binary(Mod, FakeFilename, Bin),
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
@@ -1283,6 +1269,18 @@ load_registry_mod(Mod, Bin) ->
               "Feature flags: failed to load registry module: ~p",
               [Reason]),
             throw({feature_flag_registry_reload_failure, Reason})
+    end.
+
+purge_old_registry(Mod) ->
+    case code:is_loaded(Mod) of
+        {file, _} -> do_purge_old_registry(Mod);
+        false     -> ok
+    end.
+
+do_purge_old_registry(Mod) ->
+    case code:soft_purge(Mod) of
+        true  -> ok;
+        false -> do_purge_old_registry(Mod)
     end.
 
 %% -------------------------------------------------------------------
