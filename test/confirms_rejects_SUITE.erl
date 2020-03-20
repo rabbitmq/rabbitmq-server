@@ -18,8 +18,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
         {overflow_reject_publish_dlx, [parallel], OverflowTests},
-        {overflow_reject_publish, [parallel], OverflowTests},
-        mixed_dead_alive_queues_reject
+        {overflow_reject_publish, [parallel], OverflowTests}
       ]}
     ].
 
@@ -63,8 +62,7 @@ init_per_testcase(policy_resets_to_default = Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(
         rabbit_ct_helpers:set_config(Config, [{conn, Conn}]), Testcase);
 init_per_testcase(Testcase, Config)
-        when Testcase == confirms_rejects_conflict;
-             Testcase == mixed_dead_alive_queues_reject ->
+        when Testcase == confirms_rejects_conflict ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
 
@@ -89,12 +87,6 @@ end_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
     XOverflow = ?config(overflow, Config),
     QueueName = <<"confirms_rejects_conflict", "_", XOverflow/binary>>,
     amqp_channel:call(Ch, #'queue.delete'{queue = QueueName}),
-    end_per_testcase0(Testcase, Config);
-end_per_testcase(mixed_dead_alive_queues_reject = Testcase, Config) ->
-    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_dead">>}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_alive">>}),
-    amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"mixed_dead_alive_queues_reject">>}),
     end_per_testcase0(Testcase, Config).
 
 end_per_testcase0(Testcase, Config) ->
@@ -109,56 +101,6 @@ end_per_testcase0(Testcase, Config) ->
     clean_acks_mailbox(),
 
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
-mixed_dead_alive_queues_reject(Config) ->
-    Conn = ?config(conn, Config),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    QueueNameDead = <<"mixed_dead_alive_queues_reject_dead">>,
-    QueueNameAlive = <<"mixed_dead_alive_queues_reject_alive">>,
-    ExchangeName = <<"mixed_dead_alive_queues_reject">>,
-
-    amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-
-    amqp_channel:call(Ch, #'queue.declare'{queue = QueueNameDead,
-                                           durable = true}),
-    amqp_channel:call(Ch, #'queue.declare'{queue = QueueNameAlive,
-                                           durable = true}),
-
-    amqp_channel:call(Ch, #'exchange.declare'{exchange = ExchangeName,
-                                              durable = true}),
-
-    amqp_channel:call(Ch, #'queue.bind'{exchange = ExchangeName,
-                                        queue = QueueNameAlive,
-                                        routing_key = <<"route">>}),
-
-    amqp_channel:call(Ch, #'queue.bind'{exchange = ExchangeName,
-                                        queue = QueueNameDead,
-                                        routing_key = <<"route">>}),
-
-    amqp_channel:call(Ch, #'basic.publish'{exchange = ExchangeName,
-                                           routing_key = <<"route">>},
-                      #amqp_msg{payload = <<"HI">>}),
-
-    receive
-        {'basic.ack',_,_} -> ok;
-        {'basic.nack',_,_,_} -> error(expecting_ack_got_nack)
-    after 50000 ->
-        error({timeout_waiting_for_initial_ack, process_info(self(), messages)})
-    end,
-
-    kill_the_queue(QueueNameDead, Config),
-
-    amqp_channel:call(Ch, #'basic.publish'{exchange = ExchangeName,
-                                           routing_key = <<"route">>},
-                      #amqp_msg{payload = <<"HI">>}),
-
-    receive
-        {'basic.nack',_,_,_} -> ok;
-        {'basic.ack',_,_} -> error(expecting_nack_got_ack)
-    after 50000 ->
-        error({timeout_waiting_for_nack, process_info(self(), messages)})
-    end.
 
 confirms_rejects_conflict(Config) ->
     Conn = ?config(conn, Config),
