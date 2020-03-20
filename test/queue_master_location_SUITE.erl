@@ -58,8 +58,7 @@ groups() ->
           declare_config,
           calculate_min_master,
           calculate_min_master_with_bindings,
-          calculate_random,
-          calculate_client_local
+          calculate_random
         ]}
     ].
 
@@ -247,14 +246,6 @@ calculate_random(Config) ->
     Args = [{<<"x-queue-master-locator">>, longstr, <<"random">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_random(Config, Q),
-    ok.
-
-calculate_client_local(Config) ->
-    setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
-    Args = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}],
-    declare(Config, QueueName, false, false, Args, none),
-    verify_client_local(Config, Q),
     ok.
 
 %%
