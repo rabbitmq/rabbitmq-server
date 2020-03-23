@@ -689,7 +689,8 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
-      {"TEST_TMPDIR=~s", [PrivDir]}
+      {"TEST_TMPDIR=~s", [PrivDir]},
+      "NOBUILD=1"
       | ExtraArgs],
     case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
         {ok, _} -> query_node(Config, NodeConfig);
