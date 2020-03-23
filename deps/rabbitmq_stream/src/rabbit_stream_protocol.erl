@@ -44,6 +44,7 @@
 -define(COMMAND_PUBLISH_ERROR, 6).
 -define(COMMAND_METADATA_UPDATE, 7).
 -define(COMMAND_METADATA, 8).
+-define(COMMAND_SASL_HANDSHAKE, 9).
 -define(COMMAND_CREATE_TARGET, 998).
 -define(COMMAND_DELETE_TARGET, 999).
 
@@ -55,6 +56,7 @@
 -define(RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST, 3).
 -define(RESPONSE_CODE_TARGET_ALREADY_EXISTS, 4).
 -define(RESPONSE_CODE_TARGET_DELETED, 5).
+-define(RESPONSE_SASL_MECHANISM_NOT_SUPPORTED, 6).
 
 -define(RESPONSE_FRAME_SIZE, 10). % 2 (key) + 2 (version) + 4 (correlation ID) + 2 (response code)
 
@@ -73,6 +75,7 @@ init(Ref, Transport, _Opts = #{initial_credits := InitialCredits,
         consumers = #{}, target_subscriptions = #{},
         blocked = false, credits = Credits},
     Transport:setopts(Socket, [{active, once}]),
+
     listen_loop(Transport, State, #configuration{
         initial_credits = application:get_env(rabbitmq_stream, initial_credits, InitialCredits),
         credits_required_for_unblocking = application:get_env(rabbitmq_stream, credits_required_for_unblocking, CreditsRequiredBeforeUnblocking)
@@ -404,9 +407,29 @@ handle_frame(Transport, #connection{socket = S} = State,
     FrameSize = byte_size(Frame),
     Transport:send(S, <<FrameSize:32, Frame/binary>>),
     {State, Rest};
+handle_frame(Transport, #connection{socket = S} = State,
+    <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, CorrelationId:32>>, Rest) ->
+
+    Mechanisms = auth_mechanisms(S),
+    MechanismsFragment = lists:foldl(fun(M, Acc) ->
+        Size = byte_size(M),
+        <<Acc/binary, Size:16, M:Size/binary>>
+                                     end, <<>>, Mechanisms),
+    MechanismsCount = length(Mechanisms),
+    Frame = <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16,
+        MechanismsCount:32, MechanismsFragment/binary>>,
+    FrameSize = byte_size(Frame),
+
+    Transport:send(S, [<<FrameSize:32>>, <<Frame/binary>>]),
+    {State, Rest};
 handle_frame(_Transport, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, ignoring.~n", [Frame, Rest]),
     {State, Rest}.
+
+auth_mechanisms(Sock) ->
+    {ok, Configured} = application:get_env(rabbit, auth_mechanisms),
+    [rabbit_data_coercion:to_binary(Name) || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
+        Module:should_offer(Sock), lists:member(Name, Configured)].
 
 extract_target_list(<<>>, Targets) ->
     Targets;
