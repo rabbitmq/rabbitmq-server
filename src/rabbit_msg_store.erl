@@ -1798,7 +1798,7 @@ build_index_worker(Gatherer, State = #msstate { dir = Dir },
                                   readers          = 0 }),
     ok = gatherer:finish(Gatherer).
 
-enqueue_build_index_workers(Gatherer, Left, [], State) ->
+enqueue_build_index_workers(_Gatherer, _Left, [], _State) ->
     exit(normal);
 enqueue_build_index_workers(Gatherer, Left, [File|Files], State) ->
     ok = worker_pool:dispatch_sync(
@@ -1834,7 +1834,7 @@ reduce_index(Gatherer, LastFile,
     end.
 
 rebuild_index(Gatherer, Files, State) ->
-    lists:foreach(fun (File) ->
+    lists:foreach(fun (_File) ->
                           ok = gatherer:fork(Gatherer)
                   end, Files),
     Pid = spawn(
