@@ -80,7 +80,7 @@ dispatch_async_blocks_until_task_begins(Config) ->
                  after 250 ->
                          none
                  end,
-    ?assert(is_pid(SomeWorker), "Dispatched tasks should be running"),
+    ?assert(is_process_alive(SomeWorker), "Dispatched tasks should be running"),
     Pid = spawn(
             fun() ->
                     ok = worker_pool:dispatch_sync(PoolName,
