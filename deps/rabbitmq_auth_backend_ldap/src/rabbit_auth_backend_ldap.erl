@@ -619,7 +619,7 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
             Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
             %% Defer the timeout by re-setting it.
             set_connection_timeout(Key, Timeout),
-            {ok, Conn};
+            {ok, {eldap_pooled, Conn}};
         error      ->
             {Timeout, EldapOpts} = case lists:keytake(idle_timeout, 1, Opts) of
                 false                             -> {infinity, Opts};
