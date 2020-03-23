@@ -1837,11 +1837,12 @@ rebuild_index(Gatherer, Files, State) ->
     lists:foreach(fun (File) ->
                           ok = gatherer:fork(Gatherer)
                   end, Files),
-    spawn(
-      fun () ->
-              enqueue_build_index_workers(Gatherer, undefined, Files,
-                                          State)
-      end),
+    Pid = spawn(
+            fun () ->
+                    enqueue_build_index_workers(Gatherer, undefined,
+                                                Files, State)
+            end),
+    erlang:monitor(process, Pid),
     reduce_index(Gatherer, lists:last(Files), State).
 
 %%----------------------------------------------------------------------------
