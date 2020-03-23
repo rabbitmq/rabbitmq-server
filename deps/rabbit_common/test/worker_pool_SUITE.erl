@@ -1,69 +1,195 @@
 %% The contents of this file are subject to the Mozilla Public License
 %% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License at
-%% https://www.mozilla.org/MPL/
+%% compliance with the License. You may obtain a copy of the License
+%% at https://www.mozilla.org/MPL/
 %%
 %% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%% License for the specific language governing rights and limitations
-%% under the License.
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(worker_pool_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
+-define(POOL_SIZE, 1).
+-define(POOL_NAME, test_pool).
+
 all() ->
     [
-     {group, tests}
+    run_code_synchronously,
+    run_code_asynchronously,
+    set_timeout,
+    cancel_timeout,
+    cancel_timeout_by_setting,
+    dispatch_async_blocks_until_task_begins
     ].
 
-groups() ->
-    [{tests, [], [dispatch_async_blocks_until_task_begins]}].
+init_per_testcase(_, Config) ->
+    {ok, Pool} = worker_pool_sup:start_link(?POOL_SIZE, ?POOL_NAME),
+    rabbit_ct_helpers:set_config(Config, [{pool_sup, Pool}]).
 
-%% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
-%% -------------------------------------------------------------------
+end_per_testcase(_, Config) ->
+    Pool = ?config(pool_sup, Config),
+    unlink(Pool),
+    exit(Pool, kill).
 
-init_per_group(_, Config) ->
-    Config.
+run_code_synchronously(_) ->
+    Self = self(),
+    Test = make_ref(),
+    Sleep = 200,
+    {Time, Result} = timer:tc(fun() ->
+        worker_pool:submit(?POOL_NAME,
+            fun() ->
+                timer:sleep(Sleep),
+                Self ! {hi, Test},
+                self()
+            end,
+            reuse)
+    end),
+    % Worker run synchronously
+    true = Time > Sleep,
+    % Worker have sent message
+    receive {hi, Test} -> ok
+    after 0 -> error(no_message_from_worker)
+    end,
+    % Worker is a separate process
+    true = (Self /= Result).
 
-end_per_group(_, Config) ->
-    Config.
+run_code_asynchronously(_) ->
+    Self = self(),
+    Test = make_ref(),
+    Sleep = 200,
+    {Time, Result} = timer:tc(fun() ->
+        worker_pool:submit_async(?POOL_NAME,
+            fun() ->
+                timer:sleep(Sleep),
+                Self ! {hi, Test},
+                self()
+            end)
+    end),
+    % Worker run synchronously
+    true = Time < Sleep,
+    % Worker have sent message
+    receive {hi, Test} -> ok
+    after Sleep + 100 -> error(no_message_from_worker)
+    end,
+    % Worker is a separate process
+    true = (Self /= Result).
 
-init_per_testcase(Testcase, Config) ->
-    {ok, Server} = worker_pool_sup:start_link(2, Testcase),
-    [{worker_pool_sup, Server}, {worker_pool_name, Testcase} | Config].
+set_timeout(_) ->
+    Self = self(),
+    Test = make_ref(),
+    Worker = worker_pool:submit(?POOL_NAME,
+        fun() ->
+            Worker = self(),
+            timer:sleep(100),
+            worker_pool_worker:set_timeout(
+                my_timeout, 1000,
+                fun() ->
+                    Self ! {hello, self(), Test}
+                end),
+            Worker
+        end,
+        reuse),
 
-end_per_testcase(_Testcase, Config) ->
-    Server = ?config(worker_pool_sup, Config),
-    unlink(Server),
-    Ref = monitor(process, Server),
-    exit(Server, shutdown),
-    receive
-        {'DOWN', Ref, process, Server, _Reason} ->
-            ok
-    after 1000 ->
-            error(exit_timeout)
+    % Timeout will occur after 1000 ms only
+    receive {hello, Worker, Test} -> exit(timeout_should_wait)
+    after 0 -> ok
+    end,
+
+    timer:sleep(1000),
+
+    receive {hello, Worker, Test} -> ok
+    after 1000 -> exit(timeout_is_late)
     end.
 
-%% -------------------------------------------------------------------
-%% Testcases.
-%% -------------------------------------------------------------------
 
-dispatch_async_blocks_until_task_begins(Config) ->
-    Server = ?config(worker_pool_sup, Config),
-    PoolName = ?config(worker_pool_name, Config),
+cancel_timeout(_) ->
+    Self = self(),
+    Test = make_ref(),
+    Worker = worker_pool:submit(?POOL_NAME,
+        fun() ->
+            Worker = self(),
+            timer:sleep(100),
+            worker_pool_worker:set_timeout(
+                my_timeout, 1000,
+                fun() ->
+                    Self ! {hello, self(), Test}
+                end),
+            Worker
+        end,
+        reuse),
 
+    % Timeout will occur after 1000 ms only
+    receive {hello, Worker, Test} -> exit(timeout_should_wait)
+    after 0 -> ok
+    end,
+
+    worker_pool_worker:next_job_from(Worker, Self),
+    Worker = worker_pool_worker:submit(Worker,
+        fun() ->
+            worker_pool_worker:clear_timeout(my_timeout),
+            Worker
+        end,
+        reuse),
+
+    timer:sleep(1000),
+    receive {hello, Worker, Test} -> exit(timeout_is_not_cancelled)
+    after 0 -> ok
+    end.
+
+cancel_timeout_by_setting(_) ->
+    Self = self(),
+    Test = make_ref(),
+    Worker = worker_pool:submit(?POOL_NAME,
+        fun() ->
+            Worker = self(),
+            timer:sleep(100),
+            worker_pool_worker:set_timeout(
+                my_timeout, 1000,
+                fun() ->
+                    Self ! {hello, self(), Test}
+                end),
+            Worker
+        end,
+        reuse),
+
+    % Timeout will occur after 1000 ms only
+    receive {hello, Worker, Test} -> exit(timeout_should_wait)
+    after 0 -> ok
+    end,
+
+    worker_pool_worker:next_job_from(Worker, Self),
+    Worker = worker_pool_worker:submit(Worker,
+        fun() ->
+            worker_pool_worker:set_timeout(my_timeout, 1000,
+                fun() ->
+                    Self ! {hello_reset, self(), Test}
+                end),
+            Worker
+        end,
+        reuse),
+
+    timer:sleep(1000),
+    receive {hello, Worker, Test} -> exit(timeout_is_not_cancelled)
+    after 0 -> ok
+    end,
+
+    receive {hello_reset, Worker, Test} -> ok
+    after 1000 -> exit(timeout_is_late)
+    end.
+
+dispatch_async_blocks_until_task_begins(_) ->
     Self = self(),
 
     Waiter = fun() ->
@@ -73,8 +199,7 @@ dispatch_async_blocks_until_task_begins(Config) ->
                      end
              end,
 
-    ok = worker_pool:dispatch_sync(PoolName, Waiter),
-    ok = worker_pool:dispatch_sync(PoolName, Waiter),
+    ok = worker_pool:dispatch_sync(?POOL_NAME, Waiter),
     SomeWorker = receive
                      {register, WPid} -> WPid
                  after 250 ->
@@ -83,7 +208,7 @@ dispatch_async_blocks_until_task_begins(Config) ->
     ?assert(is_process_alive(SomeWorker), "Dispatched tasks should be running"),
     Pid = spawn(
             fun() ->
-                    ok = worker_pool:dispatch_sync(PoolName,
+                    ok = worker_pool:dispatch_sync(?POOL_NAME,
                                                    Waiter),
                     Self ! done_waiting,
                     exit(normal)
