@@ -531,45 +531,50 @@ with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
     {error, ldap_connect_error};
 with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
     case get_or_create_conn(Creds == anon, Servers, Opts) of
-        {ok, LDAP} ->
-            case Creds of
-                anon ->
-                    ?L1("anonymous bind", []),
-                    case call_ldap_fun(Fun, LDAP) of
-                        {error, ldap_closed} ->
-                            purge_connection(Creds, Servers, Opts),
-                            with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                        Other -> Other
-                    end;
-                {UserDN, Password} ->
-                    case eldap:simple_bind(LDAP, UserDN, Password) of
-                        ok ->
-                            ?L1("bind succeeded: ~s",
-                                [scrub_dn(UserDN, env(log))]),
-                            case call_ldap_fun(Fun, LDAP, UserDN) of
-                                {error, ldap_closed} ->
-                                    with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                {error, {gen_tcp_error, _}} ->
-                                    with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                Other -> Other
-                            end;
-                        {error, invalidCredentials} ->
-                            ?L1("bind returned \"invalid credentials\": ~s",
-                                [scrub_dn(UserDN, env(log))]),
-                            {refused, UserDN, []};
-                        {error, ldap_closed} ->
-                            purge_connection(Creds, Servers, Opts),
-                            with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                        {error, {gen_tcp_error, _}} ->
-                            purge_connection(Creds, Servers, Opts),
-                            with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                        {error, E} ->
-                            ?L1("bind error: ~p ~p",
-                                [scrub_dn(UserDN, env(log)), E]),
-                            %% Do not report internal bind error to a client
-                            {error, ldap_bind_error}
-                    end
-            end;
+        {ok, {ConnType, LDAP}} ->
+            Result = case Creds of
+                         anon ->
+                             ?L1("anonymous bind", []),
+                             case call_ldap_fun(Fun, LDAP) of
+                                 {error, ldap_closed} ->
+                                     purge_connection(Creds, Servers, Opts),
+                                     with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                 Other -> Other
+                             end;
+                         {UserDN, Password} ->
+                             case eldap:simple_bind(LDAP, UserDN, Password) of
+                                 ok ->
+                                     ?L1("bind succeeded: ~s",
+                                         [scrub_dn(UserDN, env(log))]),
+                                     case call_ldap_fun(Fun, LDAP, UserDN) of
+                                         {error, ldap_closed} ->
+                                             with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                         {error, {gen_tcp_error, _}} ->
+                                             with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                         Other -> Other
+                                     end;
+                                 {error, invalidCredentials} ->
+                                     ?L1("bind returned \"invalid credentials\": ~s",
+                                         [scrub_dn(UserDN, env(log))]),
+                                     {refused, UserDN, []};
+                                 {error, ldap_closed} ->
+                                     purge_connection(Creds, Servers, Opts),
+                                     with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                 {error, {gen_tcp_error, _}} ->
+                                     purge_connection(Creds, Servers, Opts),
+                                     with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                 {error, E} ->
+                                     ?L1("bind error: ~p ~p",
+                                         [scrub_dn(UserDN, env(log)), E]),
+                                     %% Do not report internal bind error to a client
+                                     {error, ldap_bind_error}
+                             end
+                     end,
+            ok = case ConnType of
+                     eldap_transient -> eldap:close(LDAP);
+                     _ -> ok
+                 end,
+            Result;
         Error ->
             ?L1("connect error: ~p", [Error]),
             case Error of
@@ -614,18 +619,21 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
             Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
             %% Defer the timeout by re-setting it.
             set_connection_timeout(Key, Timeout),
-            {ok, Conn};
+            {ok, {eldap_pooled, Conn}};
         error      ->
             {Timeout, EldapOpts} = case lists:keytake(idle_timeout, 1, Opts) of
                 false                             -> {infinity, Opts};
                 {value, {idle_timeout, T}, EOpts} -> {T, EOpts}
             end,
-            case eldap_open(Servers, EldapOpts) of
-                {ok, Conn} ->
+            case {eldap_open(Servers, EldapOpts), Timeout} of
+                {{ok, Conn}, 0} ->
+                    {ok, {eldap_transient, Conn}};
+                {{ok, Conn}, Timeout} ->
                     put(ldap_conns, maps:put(Key, Conn, Conns)),
                     set_connection_timeout(Key, Timeout),
-                    {ok, Conn};
-                Error -> Error
+                    {ok, {eldap_pooled, Conn}};
+                {Error, _} ->
+                    Error
             end
     end.
 
