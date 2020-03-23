@@ -905,7 +905,19 @@ build_my_plugin(Config) ->
         [] ->
             DepsDir = ?config(erlang_mk_depsdir, Config),
             Args = ["test-dist",
-                    {"DEPS_DIR=~s", [DepsDir]}],
+                    {"DEPS_DIR=~s", [DepsDir]},
+                    %% We clear ALL_DEPS_DIRS to make sure they are
+                    %% not recompiled when the plugin is built. `rabbit`
+                    %% was previously compiled with -DTEST and if it is
+                    %% recompiled because of this plugin, it will be
+                    %% recompiled without -DTEST: the testsuite depends
+                    %% on test code so we can't allow that.
+                    %%
+                    %% Note that we do not clear the DEPS variable:
+                    %% we need it to be correct because it is used to
+                    %% generate `my_plugin.app` (and a RabbitMQ plugin
+                    %% must depend on `rabbit`).
+                    "ALL_DEPS_DIRS="],
             case rabbit_ct_helpers:make(Config1, PluginSrcDir, Args) of
                 {ok, _} ->
                     {_, OtherPlugins1} = list_my_plugin_plugins(PluginSrcDir),
