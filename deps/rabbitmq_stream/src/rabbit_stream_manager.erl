@@ -70,7 +70,7 @@ init([Conf]) ->
                          Reference = binary_to_list(Name),
 
                          OsirisConf = #{leader_node => Leader,
-                             reference => Reference, name => Reference,
+                             reference => Reference, name => Reference, epoch => 1,
                              replica_nodes => Replicas},
 
                          {ok, #{leader_pid := LeaderPid}} = osiris:start_cluster(OsirisConf),
@@ -118,7 +118,7 @@ handle_call({create, Reference}, _From, State) ->
             Replicas = replicas_for_current_node(),
             error_logger:info_msg("Creating ~p cluster on ~p with replica(s) ~p~n", [Key, LeaderNode, Replicas]),
             OsirisConf = #{leader_node => node(),
-                reference => Reference, name => Reference,
+                reference => Reference, name => Reference, epoch => 1,
                 replica_nodes => Replicas},
             {ok, #{leader_pid := LeaderPid}} = Res = osiris:start_cluster(OsirisConf),
             ClusterRecord = #?MODULE{name = Key, leader_pid = LeaderPid, leader = LeaderNode, replicas = Replicas},
