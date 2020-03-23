@@ -22,7 +22,7 @@
 -export([init/3]).
 
 -record(connection, {
-    listen_socket, socket, clusters, data, consumers, max_offsets,
+    listen_socket, socket, clusters, data, consumers,
     target_subscriptions, credits,
     blocked
 }).
@@ -70,7 +70,7 @@ init(Ref, Transport, _Opts = #{initial_credits := InitialCredits,
     init_credit(Credits, InitialCredits),
     State = #connection{socket = Socket, data = none,
         clusters = #{},
-        consumers = #{}, max_offsets = #{}, target_subscriptions = #{},
+        consumers = #{}, target_subscriptions = #{},
         blocked = false, credits = Credits},
     Transport:setopts(Socket, [{active, once}]),
     listen_loop(Transport, State, #configuration{
@@ -94,7 +94,7 @@ has_credits(CreditReference) ->
 has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
-listen_loop(Transport, #connection{socket = S, consumers = Consumers, max_offsets = MaxOffsets,
+listen_loop(Transport, #connection{socket = S, consumers = Consumers,
     target_subscriptions = TargetSubscriptions, credits = Credits, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
@@ -159,13 +159,10 @@ listen_loop(Transport, #connection{socket = S, consumers = Consumers, max_offset
             State1 = case maps:get(TargetName, TargetSubscriptions, undefined) of
                          undefined ->
                              error_logger:info_msg("osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)", [TargetName]),
-                             unregister_offset_listener(State, TargetName),
-                             State#connection{max_offsets = maps:remove(TargetName, MaxOffsets)};
+                             State;
                          [] ->
                              error_logger:info_msg("osiris offset event for ~p, but no registered consumers!", [TargetName]),
-                             unregister_offset_listener(State, TargetName),
-                             State#connection{target_subscriptions = maps:remove(TargetName, TargetSubscriptions),
-                                 max_offsets = maps:remove(TargetName, MaxOffsets)};
+                             State#connection{target_subscriptions = maps:remove(TargetName, TargetSubscriptions)};
                          CorrelationIds when is_list(CorrelationIds) ->
                              Consumers1 = lists:foldl(fun(CorrelationId, ConsumersAcc) ->
                                  #{CorrelationId := Consumer} = ConsumersAcc,
@@ -176,8 +173,7 @@ listen_loop(Transport, #connection{socket = S, consumers = Consumers, max_offset
                                                  _ ->
                                                      {{segment, Segment1}, {credit, Credit1}} = send_chunks(
                                                          Transport,
-                                                         Consumer,
-                                                         Offset
+                                                         Consumer
                                                      ),
                                                      Consumer#consumer{segment = Segment1, credit = Credit1}
                                              end,
@@ -185,41 +181,19 @@ listen_loop(Transport, #connection{socket = S, consumers = Consumers, max_offset
                                                       end,
                                  Consumers,
                                  CorrelationIds),
-                             State#connection{consumers = Consumers1, max_offsets = MaxOffsets#{TargetName => Offset}}
+                             State#connection{consumers = Consumers1}
                      end,
             listen_loop(Transport, State1, Configuration);
         {Closed, S} ->
-            %% unregister from osiris clusters
-            maps:fold(fun(Target, _SubIds, _Acc) ->
-                unregister_offset_listener(State, Target)
-                      end, 0, TargetSubscriptions),
             rabbit_stream_manager:unregister(),
             error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            %% unregister from osiris clusters
-            maps:fold(fun(Target, _SubIds, _Acc) ->
-                unregister_offset_listener(State, Target)
-                      end, 0, TargetSubscriptions),
             rabbit_stream_manager:unregister(),
             error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
             error_logger:warning_msg("Unknown message ~p~n", [M]),
             listen_loop(Transport, State, Configuration)
-    end.
-
-unregister_offset_listener(State, Target) ->
-    TargetKey = case Target of
-                    B when is_binary(B) ->
-                        B;
-                    L when is_list(L) ->
-                        list_to_binary(L)
-                end,
-    case lookup_cluster(TargetKey, State) of
-        cluster_not_found ->
-            ok;
-        {ClusterLeader, _} ->
-            osiris_writer:unregister_offset_listener(ClusterLeader)
     end.
 
 handle_inbound_data(_Transport, State, <<>>) ->
@@ -265,8 +239,7 @@ handle_frame(Transport, #connection{socket = S, credits = Credits} = State,
             sub_credits(Credits, MessageCount),
             {State1, Rest}
     end;
-handle_frame(Transport, #connection{socket = Socket, consumers = Consumers, target_subscriptions = TargetSubscriptions,
-    max_offsets = MaxOffsets} = State,
+handle_frame(Transport, #connection{socket = Socket, consumers = Consumers, target_subscriptions = TargetSubscriptions} = State,
     <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, TargetSize:16, Target:TargetSize/binary, Offset:64/unsigned, Credit:16>>, Rest) ->
     case lookup_cluster(Target, State) of
         cluster_not_found ->
@@ -280,7 +253,8 @@ handle_frame(Transport, #connection{socket = Socket, consumers = Consumers, targ
                     response(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
                     {State1, Rest};
                 false ->
-                    Segment = osiris_writer:init_reader(ClusterLeader, Offset),
+                    %% FIXME handle different type of offset (first, last, next, {abs, ...})
+                    {ok, Segment} = osiris:init_reader(ClusterLeader, Offset),
                     ConsumerState = #consumer{
                         leader = ClusterLeader, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
                         segment = Segment,
@@ -291,21 +265,12 @@ handle_frame(Transport, #connection{socket = Socket, consumers = Consumers, targ
 
                     response_ok(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId),
 
-                    Consumers1 =
-                        case MaxOffsets of
-                            #{TargetKey := MaxOffset} ->
-                                %% already received messages from this target in this connection, pushing what we can now
-                                {{segment, Segment1}, {credit, Credit1}} = send_chunks(
-                                    Transport,
-                                    ConsumerState,
-                                    MaxOffset
-                                ),
-                                Consumers#{SubscriptionId => ConsumerState#consumer{segment = Segment1, credit = Credit1}};
-                            _ ->
-                                osiris_writer:register_offset_listener(ClusterLeader),
-                                %% first registration for this target, messages will be sent when receiving offset message
-                                Consumers#{SubscriptionId => ConsumerState}
-                        end,
+                    {{segment, Segment1}, {credit, Credit1}} = send_chunks(
+                        Transport,
+                        ConsumerState
+                    ),
+                    Consumers1 = Consumers#{SubscriptionId => ConsumerState#consumer{segment = Segment1, credit = Credit1}},
+
                     TargetSubscriptions1 =
                         case TargetSubscriptions of
                             #{TargetKey := SubscriptionIds} ->
@@ -316,8 +281,7 @@ handle_frame(Transport, #connection{socket = Socket, consumers = Consumers, targ
                     {State1#connection{consumers = Consumers1, target_subscriptions = TargetSubscriptions1}, Rest}
             end
     end;
-handle_frame(Transport, #connection{consumers = Consumers, target_subscriptions = TargetSubscriptions,
-    max_offsets = MaxOffsets, clusters = Clusters} = State,
+handle_frame(Transport, #connection{consumers = Consumers, target_subscriptions = TargetSubscriptions, clusters = Clusters} = State,
     <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32>>, Rest) ->
     case subscription_exists(TargetSubscriptions, SubscriptionId) of
         false ->
@@ -328,37 +292,33 @@ handle_frame(Transport, #connection{consumers = Consumers, target_subscriptions 
             Target = Consumer#consumer.target,
             #{Target := SubscriptionsForThisTarget} = TargetSubscriptions,
             SubscriptionsForThisTarget1 = lists:delete(SubscriptionId, SubscriptionsForThisTarget),
-            {TargetSubscriptions1, MaxOffsets1, Clusters1} =
+            {TargetSubscriptions1, Clusters1} =
                 case length(SubscriptionsForThisTarget1) of
                     0 ->
                         %% no more subscriptions for this target
-                        unregister_offset_listener(State, Target),
-                        {maps:remove(Target, TargetSubscriptions), maps:remove(Target, MaxOffsets),
+                        {maps:remove(Target, TargetSubscriptions),
                             maps:remove(list_to_binary(Target), Clusters)
                         };
                     _ ->
-                        {TargetSubscriptions#{Target => SubscriptionsForThisTarget1}, MaxOffsets, Clusters}
+                        {TargetSubscriptions#{Target => SubscriptionsForThisTarget1}, Clusters}
                 end,
             Consumers1 = maps:remove(SubscriptionId, Consumers),
             response_ok(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId),
             {State#connection{consumers = Consumers1,
                 target_subscriptions = TargetSubscriptions1,
-                max_offsets = MaxOffsets1,
                 clusters = Clusters1
             }, Rest}
     end;
-handle_frame(Transport, #connection{consumers = Consumers, max_offsets = MaxOffsets} = State,
+handle_frame(Transport, #connection{consumers = Consumers} = State,
     <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16>>, Rest) ->
 
     case Consumers of
         #{SubscriptionId := Consumer} ->
-            #consumer{target = Target, credit = AvailableCredit} = Consumer,
-            #{Target := MaxOffset} = MaxOffsets,
+            #consumer{credit = AvailableCredit} = Consumer,
 
             {{segment, Segment1}, {credit, Credit1}} = send_chunks(
                 Transport,
                 Consumer,
-                MaxOffset,
                 AvailableCredit + Credit
             ),
 
@@ -454,17 +414,15 @@ extract_target_list(<<Length:16, Target:Length/binary, Rest/binary>>, Targets) -
     extract_target_list(Rest, [Target | Targets]).
 
 clean_state_after_target_deletion(Target, #connection{clusters = Clusters, target_subscriptions = TargetSubscriptions,
-    consumers = Consumers, max_offsets = MaxOffsets} = State) ->
+    consumers = Consumers} = State) ->
     TargetAsList = binary_to_list(Target),
     case maps:is_key(TargetAsList, TargetSubscriptions) of
         true ->
-            unregister_offset_listener(State, Target),
             #{TargetAsList := SubscriptionIds} = TargetSubscriptions,
             {cleaned, State#connection{
                 clusters = maps:remove(Target, Clusters),
                 target_subscriptions = maps:remove(TargetAsList, TargetSubscriptions),
-                consumers = maps:without(SubscriptionIds, Consumers),
-                max_offsets = maps:remove(TargetAsList, MaxOffsets)
+                consumers = maps:without(SubscriptionIds, Consumers)
             }};
         false ->
             {not_cleaned, State}
@@ -503,28 +461,36 @@ send_file_callback(Transport, #consumer{socket = S, subscription_id = Subscripti
         Transport:send(S, FrameBeginning)
     end.
 
-send_chunks(Transport, #consumer{credit = Credit} = State, MaxOffset) ->
-    send_chunks(Transport, State, MaxOffset, Credit).
+send_chunks(Transport, #consumer{credit = Credit} = State) ->
+    send_chunks(Transport, State, Credit).
 
-send_chunks(_Transport, #consumer{segment = Segment}, _MaxOffset, 0) ->
+send_chunks(_Transport, #consumer{segment = Segment}, 0) ->
     {{segment, Segment}, {credit, 0}};
-send_chunks(Transport, #consumer{segment = Segment} = State, MaxOffset, Credit) ->
-    send_chunks(Transport, State, Segment, MaxOffset, Credit).
+send_chunks(Transport, #consumer{segment = Segment} = State, Credit) ->
+    send_chunks(Transport, State, Segment, Credit, true).
 
-send_chunks(_Transport, _State, Segment, _MaxOffset, 0 = _Credit) ->
+send_chunks(_Transport, _State, Segment, 0 = _Credit, _Retry) ->
     {{segment, Segment}, {credit, 0}};
-send_chunks(Transport, #consumer{socket = S} = State, Segment, MaxOffset, Credit) ->
-    case osiris_segment:send_file(S, Segment, MaxOffset, send_file_callback(Transport, State)) of
+send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry) ->
+    case osiris_log:send_file(S, Segment, send_file_callback(Transport, State)) of
         {ok, Segment1} ->
             send_chunks(
                 Transport,
                 State,
                 Segment1,
-                MaxOffset,
-                Credit - 1
+                Credit - 1,
+                true
             );
         {end_of_stream, Segment1} ->
-            {{segment, Segment1}, {credit, Credit}}
+            case Retry of
+                true ->
+                    timer:sleep(1),
+                    send_chunks(Transport, State, Segment1, Credit, false);
+                false ->
+                    #consumer{leader = Leader} = State,
+                    osiris:register_offset_listener(Leader, osiris_log:next_offset(Segment1)),
+                    {{segment, Segment1}, {credit, Credit}}
+            end
     end.
 
 
