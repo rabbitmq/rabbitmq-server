@@ -376,10 +376,12 @@ maybe_backend_configured(BackendConfigKey,
         undefined ->
             ClusterFormationUndefinedFun();
         {ok, ClusterFormation} ->
+            rabbit_log:debug("Peer discovery: translated cluster formation configuration: ~p", [ClusterFormation]),
             case proplists:get_value(BackendConfigKey, ClusterFormation) of
                 undefined ->
                     BackendUndefinedFun();
                 Proplist  ->
+                    rabbit_log:debug("Peer discovery: cluster formation backend configuration: ~p", [Proplist]),
                     ConfiguredFun(Proplist)
             end
     end.
