@@ -243,7 +243,20 @@ defmodule TestHelper do
   #
 
   def await_rabbitmq_startup() do
-    :ok = :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :await_startup, [])
+    await_rabbitmq_startup_with_retries(100)
+  end
+
+  def await_rabbitmq_startup_with_retries(0) do
+    throw({:error, "Failed to call rabbit.await_startup/0 with retries: node #{get_rabbit_hostname()} was down"})
+  end
+  def await_rabbitmq_startup_with_retries(retries_left) do
+    case :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :await_startup, []) do
+      :ok ->
+          :ok
+      {:badrpc, :nodedown} ->
+          :timer.sleep(50)
+          await_rabbitmq_startup_with_retries(retries_left - 1)
+    end
   end
 
   def is_rabbitmq_app_running() do
