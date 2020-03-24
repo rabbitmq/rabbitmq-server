@@ -151,10 +151,21 @@ grep_in_log_file(Config, Node, String) ->
     [Log | _] = rabbit_ct_broker_helpers:rpc(
                   Config, Node, rabbit, log_locations, []),
     ct:pal(?LOW_IMPORTANCE, "Grepping \"~s\" in ~s", [String, Log]),
+    %% We try to grep several times, in case the log file was not
+    %% fsync'd yet (and thus we don't see the content yet).
+    do_grep_in_log_file(String, Log, 30).
+
+do_grep_in_log_file(String, Log, Retries) ->
     {ok, Content} = file:read_file(Log),
-    ?assertMatch(
-       match,
-       re:run(Content, ["\\b", String, "\\b"], [{capture, none}])).
+    case re:run(Content, ["\\b", String, "\\b"], [{capture, none}]) of
+        match ->
+            ok;
+        nomatch when Retries > 1 ->
+            timer:sleep(1000),
+            do_grep_in_log_file(String, Log, Retries - 1);
+        nomatch ->
+            throw({failed_to_grep, String, Log, Content})
+    end.
 
 grep_in_stdout(Config, Node, String) ->
     [Log | _] = rabbit_ct_broker_helpers:rpc(
