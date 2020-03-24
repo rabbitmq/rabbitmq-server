@@ -626,8 +626,11 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
                 {value, {idle_timeout, T}, EOpts} -> {T, EOpts}
             end,
             case {eldap_open(Servers, EldapOpts), Timeout} of
+                %% If the timeout was set to 0, treat it as a one-off connection.
+                %% See rabbitmq/rabbitmq-auth-backend-ldap#120 for background.
                 {{ok, Conn}, 0} ->
                     {ok, {eldap_transient, Conn}};
+                %% Non-zero timeout, put it in the pool
                 {{ok, Conn}, Timeout} ->
                     put(ldap_conns, maps:put(Key, Conn, Conns)),
                     set_connection_timeout(Key, Timeout),
