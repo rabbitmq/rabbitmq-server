@@ -94,16 +94,18 @@ maybe_init() ->
     code:ensure_loaded(Backend),
     case erlang:function_exported(Backend, init, 0) of
         true  ->
-            rabbit_log:debug("Peer discovery backend supports initialisation."),
+            rabbit_log:debug("Peer discovery backend supports initialisation"),
             case Backend:init() of
                 ok ->
-                    rabbit_log:debug("Peer discovery backend initialisation succeeded."),
+                    rabbit_log:debug("Peer discovery backend initialisation succeeded"),
                     ok;
                 {error, Error} ->
                     rabbit_log:warning("Peer discovery backend initialisation failed: ~p.", [Error]),
                     ok
             end;
-        false -> ok
+        false ->
+            rabbit_log:debug("Peer discovery backend does not support initialisation"),
+            ok
     end.
 
 
