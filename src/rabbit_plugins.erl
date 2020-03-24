@@ -20,10 +20,9 @@
 
 -export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3, running_plugins/0]).
 -export([ensure/1]).
--export([extract_schemas/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
--export([plugins_dir/0, plugins_expand_dir/0, enabled_plugins_file/0]).
+-export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
@@ -49,7 +48,6 @@ ensure1(FileJustChanged0) ->
         FileJustChanged ->
             Enabled = read_enabled(OurFile),
             Wanted = prepare_plugins(Enabled),
-            rabbit_config:prepare_and_use_config(),
             Current = active(),
             Start = Wanted -- Current,
             Stop = Current -- Wanted,
@@ -131,50 +129,6 @@ setup() ->
     end,
     Enabled = enabled_plugins(),
     prepare_plugins(Enabled).
-
-extract_schemas(SchemaDir) ->
-    application:load(rabbit),
-    {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
-    Enabled = read_enabled(EnabledFile),
-
-    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
-
-    AllPlugins = list(PluginsDistDir),
-    Wanted = dependencies(false, Enabled, AllPlugins),
-    WantedPlugins = lookup_plugins(Wanted, AllPlugins),
-    [ extract_schema(Plugin, SchemaDir) || Plugin <- WantedPlugins ],
-    application:unload(rabbit),
-    ok.
-
-extract_schema(#plugin{type = ez, location = Location}, SchemaDir) ->
-    {ok, Files} = zip:extract(Location,
-                              [memory, {file_filter,
-                                        fun(#zip_file{name = Name}) ->
-                                            string:str(Name, "priv/schema") > 0
-                                        end}]),
-    lists:foreach(
-        fun({FileName, Content}) ->
-            ok = file:write_file(filename:join([SchemaDir,
-                                                filename:basename(FileName)]),
-                                 Content)
-        end,
-        Files),
-    ok;
-extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
-    PluginSchema = filename:join([Location,
-                                  "priv",
-                                  "schema"]),
-    case rabbit_file:is_dir(PluginSchema) of
-        false -> ok;
-        true  ->
-            PluginSchemaFiles =
-                [ filename:join(PluginSchema, FileName)
-                  || FileName <- rabbit_file:wildcard(".*\\.schema",
-                                                      PluginSchema) ],
-            [ file:copy(SchemaFile, SchemaDir)
-              || SchemaFile <- PluginSchemaFiles ]
-    end.
-
 
 %% @doc Lists the plugins which are currently running.
 

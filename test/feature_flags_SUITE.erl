@@ -47,18 +47,6 @@
          activating_plugin_with_new_ff_enabled/1
         ]).
 
--rabbit_feature_flag(
-   {ff_a,
-    #{desc          => "Feature flag A",
-      stability     => stable
-     }}).
-
--rabbit_feature_flag(
-   {ff_b,
-    #{desc          => "Feature flag B",
-      stability     => stable
-     }}).
-
 suite() ->
     [{timetrap, {minutes, 15}}].
 
@@ -136,14 +124,18 @@ init_per_group(clustering, Config) ->
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, false},
                  {start_rmq_with_plugins_disabled, true}]),
-    build_my_plugin(Config1);
+    rabbit_ct_helpers:run_setup_steps(Config1, [
+        fun build_my_plugin/1
+      ]);
 init_per_group(activating_plugin, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, true},
                  {start_rmq_with_plugins_disabled, true}]),
-    build_my_plugin(Config1);
+    rabbit_ct_helpers:run_setup_steps(Config1, [
+        fun build_my_plugin/1
+      ]);
 init_per_group(_, Config) ->
     Config.
 
@@ -268,6 +260,14 @@ end_per_testcase(Testcase, Config) ->
 registry(_Config) ->
     %% At first, the registry must be uninitialized.
     ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+
+    FeatureFlags = #{ff_a =>
+                     #{desc      => "Feature flag A",
+                       stability => stable},
+                     ff_b =>
+                     #{desc      => "Feature flag B",
+                       stability => stable}},
+    rabbit_feature_flags:inject_test_feature_flags(feature_flags_to_app_attrs(FeatureFlags)),
 
     %% After initialization, it must know about the feature flags
     %% declared in this testsuite. They must be disabled however.
@@ -910,13 +910,31 @@ build_my_plugin(Config) ->
                 {ok, _} ->
                     {_, OtherPlugins1} = list_my_plugin_plugins(PluginSrcDir),
                     remove_other_plugins(PluginSrcDir, OtherPlugins1),
-                    Config1;
+                    update_cli_path(Config1, PluginSrcDir);
                 {error, _} ->
                     {skip, "Failed to compile the `my_plugin` test plugin"}
             end;
         _ ->
             remove_other_plugins(PluginSrcDir, OtherPlugins),
-            Config1
+            update_cli_path(Config1, PluginSrcDir)
+    end.
+
+update_cli_path(Config, PluginSrcDir) ->
+    SbinDir = filename:join(PluginSrcDir, "sbin"),
+    Rabbitmqctl = filename:join(SbinDir, "rabbitmqctl"),
+    RabbitmqPlugins = filename:join(SbinDir, "rabbitmq-plugins"),
+    RabbitmqQueues = filename:join(SbinDir, "rabbitmq-queues"),
+    case filelib:is_regular(Rabbitmqctl) of
+        true ->
+            ct:pal(?LOW_IMPORTANCE,
+                   "Switching to CLI in e.g. ~s", [Rabbitmqctl]),
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{rabbitmqctl_cmd, Rabbitmqctl},
+               {rabbitmq_plugins_cmd, RabbitmqPlugins},
+               {rabbitmq_queues_cmd, RabbitmqQueues}]);
+        false ->
+            Config
     end.
 
 list_my_plugin_plugins(PluginSrcDir) ->
@@ -963,16 +981,20 @@ log_feature_flags_of_all_nodes(Config) ->
       Config, rabbit_feature_flags, info, [#{color => false,
                                              lines => false}]).
 
+feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
+    [{?MODULE, % Application
+      ?MODULE, % Module
+      maps:to_list(FeatureFlags)}].
+
 declare_arbitrary_feature_flag(Config) ->
-    NewFeatureFlags = #{ff_from_testsuite =>
-                        #{desc => "My feature flag",
-                          provided_by => ?MODULE,
-                          stability => stable}},
+    FeatureFlags = #{ff_from_testsuite =>
+                     #{desc => "My feature flag",
+                       stability => stable}},
     rabbit_ct_broker_helpers:rpc_all(
       Config,
       rabbit_feature_flags,
-      initialize_registry,
-      [NewFeatureFlags]),
+      inject_test_feature_flags,
+      [feature_flags_to_app_attrs(FeatureFlags)]),
     ok.
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].

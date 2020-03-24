@@ -210,6 +210,11 @@ join_and_part_cluster(Config) ->
 join_cluster_bad_operations(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
 
+    UsePrelaunch = rabbit_ct_broker_helpers:rpc(
+                     Config, Hare,
+                     erlang, function_exported,
+                     [rabbit_prelaunch, get_context, 0]),
+
     %% Nonexistent node
     ok = stop_app(Rabbit),
     assert_failure(fun () -> join_cluster(Rabbit, non@existent) end),
@@ -243,8 +248,13 @@ join_cluster_bad_operations(Config) ->
     ok = stop_app(Hare),
     assert_failure(fun () -> start_app(Hare) end),
     ok = start_app(Rabbit),
-    %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    case UsePrelaunch of
+        true ->
+            ok = start_app(Hare);
+        false ->
+            %% The Erlang VM has stopped after previous rabbit app failure
+            ok = rabbit_ct_broker_helpers:start_node(Config, Hare)
+    end,
     ok.
 
 %% This tests that the nodes in the cluster are notified immediately of a node

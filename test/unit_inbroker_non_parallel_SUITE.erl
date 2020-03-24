@@ -462,20 +462,31 @@ log_file_initialised_during_startup1(_Config) ->
 
 
 log_file_fails_to_initialise_during_startup(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, log_file_fails_to_initialise_during_startup1, [Config]).
+    NonWritableDir = case os:type() of
+                         {win32, _} -> "C:/Windows";
+                         _          -> "/"
+                     end,
+    case file:open(filename:join(NonWritableDir, "test.log"), [write]) of
+        {error, eacces} ->
+            passed = rabbit_ct_broker_helpers:rpc(
+                       Config, 0,
+                       ?MODULE, log_file_fails_to_initialise_during_startup1,
+                       [Config, NonWritableDir]);
+        {ok, Fd} ->
+            %% If the supposedly non-writable directory is writable
+            %% (e.g. we are running the testsuite on Windows as
+            %% Administrator), we skip this test.
+            file:close(Fd),
+            {skip, "Supposedly non-writable directory is writable"}
+    end.
 
-log_file_fails_to_initialise_during_startup1(_Config) ->
+log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     [LogFile|_] = rabbit:log_locations(),
 
     %% start application with logging to directory with no
     %% write permissions
     ok = rabbit:stop(),
 
-    NonWritableDir = case os:type() of
-			     {win32, _} -> "C:/Windows";
-			     _          -> "/var/empty"
-		     end,
     Run1 = fun() ->
       NoPermission1 = filename:join(NonWritableDir, "test.log"),
       delete_file(NoPermission1),
@@ -492,12 +503,14 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_no_write_permission_dir_test})
     catch
-        _:could_not_initialise_logger -> ok
+        throw:{error, {rabbit, {{cannot_log_to_file, _, _}, _}}} -> ok
     end,
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
-    NoPermission2 = filename:join(NonWritableDir, "non-existent/test.log"),
+    NoPermission2 = filename:join([NonWritableDir,
+                                   "non-existent",
+                                   "test.log"]),
 
     Run2 = fun() ->
       delete_file(NoPermission2),
@@ -517,7 +530,7 @@ log_file_fails_to_initialise_during_startup1(_Config) ->
         ok -> exit({got_success_but_expected_failure,
                     log_rotation_parent_dirs_test})
     catch
-        _:could_not_initialise_logger -> ok
+        throw:{error, {rabbit, {{cannot_log_to_file, _, _}, _}}} -> ok
     end,
 
     %% clean up

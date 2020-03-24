@@ -20,17 +20,18 @@ maybe_hipe_compile() ->
     end.
 
 log_hipe_result({ok, disabled}) ->
-    ok;
+    rabbit_log_prelaunch:info(
+      "HiPE disabled: no modules were natively recompiled.~n", []);
 log_hipe_result({ok, already_compiled}) ->
-    rabbit_log:info(
+    rabbit_log_prelaunch:info(
       "HiPE in use: modules already natively compiled.~n", []);
 log_hipe_result({ok, Count, Duration}) ->
-    rabbit_log:info(
+    rabbit_log_prelaunch:info(
       "HiPE in use: compiled ~B modules in ~Bs.~n", [Count, Duration]);
 log_hipe_result(false) ->
     io:format(
       "~nNot HiPE compiling: HiPE not found in this Erlang installation.~n"),
-    rabbit_log:warning(
+    rabbit_log_prelaunch:warning(
       "Not HiPE compiling: HiPE not found in this Erlang installation.~n").
 
 hipe_compile() ->

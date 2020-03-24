@@ -43,4 +43,4 @@
                 ]}
     ]},
 
-  {applications, [kernel, stdlib, rabbit]}]}.
+  {applications, [kernel, stdlib]}]}.
