@@ -39,9 +39,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   end
 
   def run([pidfile_path], %{node: node_name}) do
+    ret = OsPid.read_pid_from_file(pidfile_path, true)
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
 
-    case OsPid.read_pid_from_file(pidfile_path, true) do
+    case ret do
       {:error, details} ->
         {:error, "could not read pid from file #{pidfile_path}. Error: #{details}"}
 

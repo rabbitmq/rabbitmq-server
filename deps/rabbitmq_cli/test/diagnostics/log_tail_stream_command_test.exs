@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 
 defmodule LogTailStreamCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Diagnostics.Commands.LogTailStreamCommand

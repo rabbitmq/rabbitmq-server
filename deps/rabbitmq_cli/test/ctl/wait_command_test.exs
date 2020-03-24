@@ -50,12 +50,6 @@ defmodule WaitCommandTest do
     assert @command.validate(["pid_file", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  test "validate_execution_environment: failure to load rabbit application is reported as an error", context do
-    options = Map.merge(Map.delete(context[:opts], :rabbitmq_home), %{pid: 123})
-    {:validation_failure, {:unable_to_load_rabbit, _}} =
-      @command.validate_execution_environment([], options)
-  end
-
   test "run: times out waiting for non-existent pid file", context do
     {:error, {:timeout, _}} = @command.run(["pid_file"], context[:opts]) |> Enum.to_list |> List.last
   end

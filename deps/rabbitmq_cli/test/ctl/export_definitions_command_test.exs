@@ -15,7 +15,7 @@
 
 
 defmodule ExportDefinitionsCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand

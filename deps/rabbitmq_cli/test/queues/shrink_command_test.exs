@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Queues.Commands.ShrinkCommand

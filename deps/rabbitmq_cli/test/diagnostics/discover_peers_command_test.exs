@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 
 defmodule DiscoverPeersCommandTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand
@@ -35,7 +35,7 @@ defmodule DiscoverPeersCommandTest do
     assert @command.validate(["a"], context[:opts]) ==
       {:validation_failure, :too_many_args}
   end
-  
+
   @tag test_timeout: 15000
   test "run: returns a list of nodes when the backend isn't configured", context do
     assert match?({:ok, {[], _}}, @command.run([], context[:opts]))
