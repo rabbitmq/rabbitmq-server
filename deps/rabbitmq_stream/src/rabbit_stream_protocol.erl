@@ -85,7 +85,7 @@ init(Ref, Transport, _Opts = #{initial_credits := InitialCredits,
         authentication_state = none, user = none},
     Transport:setopts(Socket, [{active, once}]),
 
-    listen_loop(Transport, State, #configuration{
+    listen_loop_pre_auth(Transport, State, #configuration{
         initial_credits = application:get_env(rabbitmq_stream, initial_credits, InitialCredits),
         credits_required_for_unblocking = application:get_env(rabbitmq_stream, credits_required_for_unblocking, CreditsRequiredBeforeUnblocking)
     }).
@@ -106,13 +106,35 @@ has_credits(CreditReference) ->
 has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
-listen_loop(Transport, #stream_connection{socket = S, consumers = Consumers,
+listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State, Configuration) ->
+    {OK, Closed, Error} = Transport:messages(),
+    receive
+        {OK, S, Data} ->
+            State1 = handle_inbound_data_pre_auth(Transport, State, Data),
+            Transport:setopts(S, [{active, once}]),
+            case State1 of
+                #stream_connection{user = none} ->
+                    listen_loop_pre_auth(Transport, State1, Configuration);
+                _ ->
+                    listen_loop_post_auth(Transport, State1, Configuration)
+            end;
+        {Closed, S} ->
+            error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
+            ok;
+        {Error, S, Reason} ->
+            error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
+        M ->
+            error_logger:warning_msg("Unknown message ~p~n", [M]),
+            listen_loop_pre_auth(Transport, State, Configuration)
+    end.
+
+listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Consumers,
     target_subscriptions = TargetSubscriptions, credits = Credits, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
     receive
         {OK, S, Data} ->
-            State1 = handle_inbound_data(Transport, State, Data),
+            State1 = handle_inbound_data_post_auth(Transport, State, Data),
             State2 = case Blocked of
                          true ->
                              case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
@@ -131,7 +153,7 @@ listen_loop(Transport, #stream_connection{socket = S, consumers = Consumers,
                                      State1#stream_connection{blocked = true}
                              end
                      end,
-            listen_loop(Transport, State2, Configuration);
+            listen_loop_post_auth(Transport, State2, Configuration);
         {stream_manager, cluster_deleted, ClusterReference} ->
             Target = list_to_binary(ClusterReference),
             State1 = case clean_state_after_target_deletion(Target, State) of
@@ -144,7 +166,7 @@ listen_loop(Transport, #stream_connection{socket = S, consumers = Consumers,
                          {not_cleaned, SameState} ->
                              SameState
                      end,
-            listen_loop(Transport, State1, Configuration);
+            listen_loop_post_auth(Transport, State1, Configuration);
         {osiris_written, _Name, CorrelationIdList} ->
             CorrelationIdBinaries = [<<CorrelationId:64>> || CorrelationId <- CorrelationIdList],
             CorrelationIdCount = length(CorrelationIdList),
@@ -163,10 +185,10 @@ listen_loop(Transport, #stream_connection{socket = S, consumers = Consumers,
                          false ->
                              State
                      end,
-            listen_loop(Transport, State1, Configuration);
+            listen_loop_post_auth(Transport, State1, Configuration);
         {osiris_offset, TargetName, -1} ->
             error_logger:info_msg("received osiris offset event for ~p with offset ~p~n", [TargetName, -1]),
-            listen_loop(Transport, State, Configuration);
+            listen_loop_post_auth(Transport, State, Configuration);
         {osiris_offset, TargetName, Offset} when Offset > -1 ->
             State1 = case maps:get(TargetName, TargetSubscriptions, undefined) of
                          undefined ->
@@ -195,7 +217,7 @@ listen_loop(Transport, #stream_connection{socket = S, consumers = Consumers,
                                  CorrelationIds),
                              State#stream_connection{consumers = Consumers1}
                      end,
-            listen_loop(Transport, State1, Configuration);
+            listen_loop_post_auth(Transport, State1, Configuration);
         {Closed, S} ->
             rabbit_stream_manager:unregister(),
             error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
@@ -205,21 +227,27 @@ listen_loop(Transport, #stream_connection{socket = S, consumers = Consumers,
             error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
             error_logger:warning_msg("Unknown message ~p~n", [M]),
-            listen_loop(Transport, State, Configuration)
+            listen_loop_post_auth(Transport, State, Configuration)
     end.
 
-handle_inbound_data(_Transport, State, <<>>) ->
+handle_inbound_data_pre_auth(Transport, State, Rest) ->
+    handle_inbound_data(Transport, State, Rest, fun handle_frame_pre_auth/4).
+
+handle_inbound_data_post_auth(Transport, State, Rest) ->
+    handle_inbound_data(Transport, State, Rest, fun handle_frame_post_auth/4).
+
+handle_inbound_data(_Transport, State, <<>>, _HandleFrameFun) ->
     State;
-handle_inbound_data(Transport, #stream_connection{data = none} = State, <<Size:32, Frame:Size/binary, Rest/bits>>) ->
-    {State1, Rest1} = handle_frame(Transport, State, Frame, Rest),
-    handle_inbound_data(Transport, State1, Rest1);
-handle_inbound_data(_Transport, #stream_connection{data = none} = State, Data) ->
+handle_inbound_data(Transport, #stream_connection{data = none} = State, <<Size:32, Frame:Size/binary, Rest/bits>>, HandleFrameFun) ->
+    {State1, Rest1} = HandleFrameFun(Transport, State, Frame, Rest),
+    handle_inbound_data(Transport, State1, Rest1, HandleFrameFun);
+handle_inbound_data(_Transport, #stream_connection{data = none} = State, Data, _HandleFrameFun) ->
     State#stream_connection{data = Data};
-handle_inbound_data(Transport, #stream_connection{data = Leftover} = State, Data) ->
+handle_inbound_data(Transport, #stream_connection{data = Leftover} = State, Data, HandleFrameFun) ->
     State1 = State#stream_connection{data = none},
     %% FIXME avoid concatenation to avoid a new binary allocation
     %% see osiris_replica:parse_chunk/3
-    handle_inbound_data(Transport, State1, <<Leftover/binary, Data/binary>>).
+    handle_inbound_data(Transport, State1, <<Leftover/binary, Data/binary>>, HandleFrameFun).
 
 write_messages(_ClusterLeader, <<>>) ->
     ok;
@@ -235,188 +263,7 @@ generate_publishing_error_details(Acc, <<PublishingId:64, MessageSize:32, _Messa
         <<Acc/binary, PublishingId:64, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST:16>>,
         Rest).
 
-handle_frame(Transport, #stream_connection{socket = S, credits = Credits} = State,
-    <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
-        TargetSize:16, Target:TargetSize/binary,
-        MessageCount:32, Messages/binary>>, Rest) ->
-    case lookup_cluster(Target, State) of
-        cluster_not_found ->
-            FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
-            Details = generate_publishing_error_details(<<>>, Messages),
-            Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
-                MessageCount:32, Details/binary>>]),
-            {State, Rest};
-        {ClusterLeader, State1} ->
-            write_messages(ClusterLeader, Messages),
-            sub_credits(Credits, MessageCount),
-            {State1, Rest}
-    end;
-handle_frame(Transport, #stream_connection{socket = Socket, consumers = Consumers, target_subscriptions = TargetSubscriptions} = State,
-    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, TargetSize:16, Target:TargetSize/binary, Offset:64/unsigned, Credit:16>>, Rest) ->
-    case lookup_cluster(Target, State) of
-        cluster_not_found ->
-            response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST),
-            {State, Rest};
-        {ClusterLeader, State1} ->
-            % offset message uses a list for the target, so storing this in the state for easier retrieval
-            TargetKey = binary_to_list(Target),
-            case subscription_exists(TargetSubscriptions, SubscriptionId) of
-                true ->
-                    response(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
-                    {State1, Rest};
-                false ->
-                    %% FIXME handle different type of offset (first, last, next, {abs, ...})
-                    {ok, Segment} = osiris:init_reader(ClusterLeader, Offset),
-                    ConsumerState = #consumer{
-                        leader = ClusterLeader, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
-                        segment = Segment,
-                        credit = Credit,
-                        target = TargetKey
-                    },
-                    error_logger:info_msg("registering consumer ~p in ~p~n", [ConsumerState, self()]),
-
-                    response_ok(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId),
-
-                    {{segment, Segment1}, {credit, Credit1}} = send_chunks(
-                        Transport,
-                        ConsumerState
-                    ),
-                    Consumers1 = Consumers#{SubscriptionId => ConsumerState#consumer{segment = Segment1, credit = Credit1}},
-
-                    TargetSubscriptions1 =
-                        case TargetSubscriptions of
-                            #{TargetKey := SubscriptionIds} ->
-                                TargetSubscriptions#{TargetKey => [SubscriptionId] ++ SubscriptionIds};
-                            _ ->
-                                TargetSubscriptions#{TargetKey => [SubscriptionId]}
-                        end,
-                    {State1#stream_connection{consumers = Consumers1, target_subscriptions = TargetSubscriptions1}, Rest}
-            end
-    end;
-handle_frame(Transport, #stream_connection{consumers = Consumers, target_subscriptions = TargetSubscriptions, clusters = Clusters} = State,
-    <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32>>, Rest) ->
-    case subscription_exists(TargetSubscriptions, SubscriptionId) of
-        false ->
-            response(Transport, State, ?COMMAND_UNSUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
-            {State, Rest};
-        true ->
-            #{SubscriptionId := Consumer} = Consumers,
-            Target = Consumer#consumer.target,
-            #{Target := SubscriptionsForThisTarget} = TargetSubscriptions,
-            SubscriptionsForThisTarget1 = lists:delete(SubscriptionId, SubscriptionsForThisTarget),
-            {TargetSubscriptions1, Clusters1} =
-                case length(SubscriptionsForThisTarget1) of
-                    0 ->
-                        %% no more subscriptions for this target
-                        {maps:remove(Target, TargetSubscriptions),
-                            maps:remove(list_to_binary(Target), Clusters)
-                        };
-                    _ ->
-                        {TargetSubscriptions#{Target => SubscriptionsForThisTarget1}, Clusters}
-                end,
-            Consumers1 = maps:remove(SubscriptionId, Consumers),
-            response_ok(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId),
-            {State#stream_connection{consumers = Consumers1,
-                target_subscriptions = TargetSubscriptions1,
-                clusters = Clusters1
-            }, Rest}
-    end;
-handle_frame(Transport, #stream_connection{consumers = Consumers} = State,
-    <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16>>, Rest) ->
-
-    case Consumers of
-        #{SubscriptionId := Consumer} ->
-            #consumer{credit = AvailableCredit} = Consumer,
-
-            {{segment, Segment1}, {credit, Credit1}} = send_chunks(
-                Transport,
-                Consumer,
-                AvailableCredit + Credit
-            ),
-
-            Consumer1 = Consumer#consumer{segment = Segment1, credit = Credit1},
-            {State#stream_connection{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
-        _ ->
-            %% FIXME find a way to tell the client it's crediting an unknown subscription
-            error_logger:warning_msg("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
-            {State, Rest}
-    end;
-handle_frame(Transport, State,
-    <<?COMMAND_CREATE_TARGET:16, ?VERSION_0:16, CorrelationId:32, TargetSize:16, Target:TargetSize/binary>>, Rest) ->
-    case rabbit_stream_manager:create(binary_to_list(Target)) of
-        {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
-            error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
-            response_ok(Transport, State, ?COMMAND_CREATE_TARGET, CorrelationId),
-            {State, Rest};
-        {error, reference_already_exists} ->
-            response(Transport, State, ?COMMAND_CREATE_TARGET, CorrelationId, ?RESPONSE_CODE_TARGET_ALREADY_EXISTS),
-            {State, Rest}
-    end;
-handle_frame(Transport, #stream_connection{socket = S} = State,
-    <<?COMMAND_DELETE_TARGET:16, ?VERSION_0:16, CorrelationId:32, TargetSize:16, Target:TargetSize/binary>>, Rest) ->
-    case rabbit_stream_manager:delete(binary_to_list(Target)) of
-        {ok, deleted} ->
-            response_ok(Transport, State, ?COMMAND_DELETE_TARGET, CorrelationId),
-            State1 = case clean_state_after_target_deletion(Target, State) of
-                         {cleaned, NewState} ->
-                             TargetSize = byte_size(Target),
-                             FrameSize = 2 + 2 + 2 + 2 + TargetSize,
-                             Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                 ?RESPONSE_CODE_TARGET_DELETED:16, TargetSize:16, Target/binary>>]),
-                             NewState;
-                         {not_cleaned, SameState} ->
-                             SameState
-                     end,
-            {State1, Rest};
-        {error, reference_not_found} ->
-            response(Transport, State, ?COMMAND_DELETE_TARGET, CorrelationId, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST),
-            {State, Rest}
-    end;
-handle_frame(Transport, #stream_connection{socket = S} = State,
-    <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, TargetCount:32, BinaryTargets/binary>>, Rest) ->
-    %% FIXME: rely only on rabbit_networking to discover the listeners
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    {NodesInfo, _} = lists:foldl(fun(Node, {Acc, Index}) ->
-        {ok, Host} = rpc:call(Node, inet, gethostname, []),
-        Port = rpc:call(Node, rabbit_stream, port, []),
-        {Acc#{Node => {{index, Index}, {host, list_to_binary(Host)}, {port, Port}}}, Index + 1}
-                                 end, {#{}, 0}, Nodes),
-
-    BrokersCount = length(Nodes),
-    BrokersBin = maps:fold(fun(_K, {{index, Index}, {host, Host}, {port, Port}}, Acc) ->
-        HostLength = byte_size(Host),
-        <<Acc/binary, Index:16, HostLength:16, Host:HostLength/binary, Port:32>>
-                           end, <<BrokersCount:32>>, NodesInfo),
-
-    Targets = extract_target_list(BinaryTargets, []),
-
-    MetadataBin = lists:foldl(fun(Target, Acc) ->
-        TargetLength = byte_size(Target),
-        case lookup_cluster(Target, State) of
-            cluster_not_found ->
-                <<Acc/binary, TargetLength:16, Target:TargetLength/binary, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST:16,
-                    -1:16, 0:32>>;
-            {Cluster, _} ->
-                LeaderNode = node(Cluster),
-                #{LeaderNode := NodeInfo} = NodesInfo,
-                {{index, LeaderIndex}, {host, _}, {port, _}} = NodeInfo,
-                Replicas = maps:without([LeaderNode], NodesInfo),
-                ReplicasBinary = lists:foldl(fun(NI, Bin) ->
-                    {{index, ReplicaIndex}, {host, _}, {port, _}} = NI,
-                    <<Bin/binary, ReplicaIndex:16>>
-                                             end, <<>>, maps:values(Replicas)),
-                ReplicasCount = maps:size(Replicas),
-
-                <<Acc/binary, TargetLength:16, Target:TargetLength/binary, ?RESPONSE_CODE_OK:16,
-                    LeaderIndex:16, ReplicasCount:32, ReplicasBinary/binary>>
-        end
-
-                              end, <<TargetCount:32>>, Targets),
-    Frame = <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, BrokersBin/binary, MetadataBin/binary>>,
-    FrameSize = byte_size(Frame),
-    Transport:send(S, <<FrameSize:32, Frame/binary>>),
-    {State, Rest};
-handle_frame(Transport, #stream_connection{socket = S} = State,
+handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
     <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, CorrelationId:32>>, Rest) ->
 
     Mechanisms = auth_mechanisms(S),
@@ -431,19 +278,18 @@ handle_frame(Transport, #stream_connection{socket = S} = State,
 
     Transport:send(S, [<<FrameSize:32>>, <<Frame/binary>>]),
     {State, Rest};
-handle_frame(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State,
+handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State,
     <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32,
         MechanismLength:16, Mechanism:MechanismLength/binary,
         SaslFragment/binary>>, Rest) ->
 
     SaslBin = case SaslFragment of
-                  <<-1:32>> ->
+                  <<-1:32/signed>> ->
                       <<>>;
                   <<SaslBinaryLength:32, SaslBinary:SaslBinaryLength/binary>> ->
                       SaslBinary
               end,
 
-    %% FIXME handle null value (length = -1) for sasl binary (change the pattern matching)
     {State1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
                           {ok, AuthMechanism} ->
                               AuthState = case AuthState0 of
@@ -488,7 +334,192 @@ handle_frame(Transport, #stream_connection{socket = S, authentication_state = Au
                       end,
 
     {State1, Rest1};
-handle_frame(_Transport, State, Frame, Rest) ->
+handle_frame_pre_auth(_Transport, State, Frame, Rest) ->
+    error_logger:warning_msg("unknown frame ~p ~p, ignoring.~n", [Frame, Rest]),
+    {State, Rest}.
+
+handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits} = State,
+    <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
+        TargetSize:16, Target:TargetSize/binary,
+        MessageCount:32, Messages/binary>>, Rest) ->
+    case lookup_cluster(Target, State) of
+        cluster_not_found ->
+            FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
+            Details = generate_publishing_error_details(<<>>, Messages),
+            Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
+                MessageCount:32, Details/binary>>]),
+            {State, Rest};
+        {ClusterLeader, State1} ->
+            write_messages(ClusterLeader, Messages),
+            sub_credits(Credits, MessageCount),
+            {State1, Rest}
+    end;
+handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers = Consumers, target_subscriptions = TargetSubscriptions} = State,
+    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, TargetSize:16, Target:TargetSize/binary, Offset:64/unsigned, Credit:16>>, Rest) ->
+    case lookup_cluster(Target, State) of
+        cluster_not_found ->
+            response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST),
+            {State, Rest};
+        {ClusterLeader, State1} ->
+            % offset message uses a list for the target, so storing this in the state for easier retrieval
+            TargetKey = binary_to_list(Target),
+            case subscription_exists(TargetSubscriptions, SubscriptionId) of
+                true ->
+                    response(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
+                    {State1, Rest};
+                false ->
+                    %% FIXME handle different type of offset (first, last, next, {abs, ...})
+                    {ok, Segment} = osiris:init_reader(ClusterLeader, Offset),
+                    ConsumerState = #consumer{
+                        leader = ClusterLeader, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
+                        segment = Segment,
+                        credit = Credit,
+                        target = TargetKey
+                    },
+                    error_logger:info_msg("registering consumer ~p in ~p~n", [ConsumerState, self()]),
+
+                    response_ok(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId),
+
+                    {{segment, Segment1}, {credit, Credit1}} = send_chunks(
+                        Transport,
+                        ConsumerState
+                    ),
+                    Consumers1 = Consumers#{SubscriptionId => ConsumerState#consumer{segment = Segment1, credit = Credit1}},
+
+                    TargetSubscriptions1 =
+                        case TargetSubscriptions of
+                            #{TargetKey := SubscriptionIds} ->
+                                TargetSubscriptions#{TargetKey => [SubscriptionId] ++ SubscriptionIds};
+                            _ ->
+                                TargetSubscriptions#{TargetKey => [SubscriptionId]}
+                        end,
+                    {State1#stream_connection{consumers = Consumers1, target_subscriptions = TargetSubscriptions1}, Rest}
+            end
+    end;
+handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers, target_subscriptions = TargetSubscriptions, clusters = Clusters} = State,
+    <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32>>, Rest) ->
+    case subscription_exists(TargetSubscriptions, SubscriptionId) of
+        false ->
+            response(Transport, State, ?COMMAND_UNSUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
+            {State, Rest};
+        true ->
+            #{SubscriptionId := Consumer} = Consumers,
+            Target = Consumer#consumer.target,
+            #{Target := SubscriptionsForThisTarget} = TargetSubscriptions,
+            SubscriptionsForThisTarget1 = lists:delete(SubscriptionId, SubscriptionsForThisTarget),
+            {TargetSubscriptions1, Clusters1} =
+                case length(SubscriptionsForThisTarget1) of
+                    0 ->
+                        %% no more subscriptions for this target
+                        {maps:remove(Target, TargetSubscriptions),
+                            maps:remove(list_to_binary(Target), Clusters)
+                        };
+                    _ ->
+                        {TargetSubscriptions#{Target => SubscriptionsForThisTarget1}, Clusters}
+                end,
+            Consumers1 = maps:remove(SubscriptionId, Consumers),
+            response_ok(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId),
+            {State#stream_connection{consumers = Consumers1,
+                target_subscriptions = TargetSubscriptions1,
+                clusters = Clusters1
+            }, Rest}
+    end;
+handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = State,
+    <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16>>, Rest) ->
+
+    case Consumers of
+        #{SubscriptionId := Consumer} ->
+            #consumer{credit = AvailableCredit} = Consumer,
+
+            {{segment, Segment1}, {credit, Credit1}} = send_chunks(
+                Transport,
+                Consumer,
+                AvailableCredit + Credit
+            ),
+
+            Consumer1 = Consumer#consumer{segment = Segment1, credit = Credit1},
+            {State#stream_connection{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
+        _ ->
+            %% FIXME find a way to tell the client it's crediting an unknown subscription
+            error_logger:warning_msg("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
+            {State, Rest}
+    end;
+handle_frame_post_auth(Transport, State,
+    <<?COMMAND_CREATE_TARGET:16, ?VERSION_0:16, CorrelationId:32, TargetSize:16, Target:TargetSize/binary>>, Rest) ->
+    case rabbit_stream_manager:create(binary_to_list(Target)) of
+        {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
+            error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
+            response_ok(Transport, State, ?COMMAND_CREATE_TARGET, CorrelationId),
+            {State, Rest};
+        {error, reference_already_exists} ->
+            response(Transport, State, ?COMMAND_CREATE_TARGET, CorrelationId, ?RESPONSE_CODE_TARGET_ALREADY_EXISTS),
+            {State, Rest}
+    end;
+handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
+    <<?COMMAND_DELETE_TARGET:16, ?VERSION_0:16, CorrelationId:32, TargetSize:16, Target:TargetSize/binary>>, Rest) ->
+    case rabbit_stream_manager:delete(binary_to_list(Target)) of
+        {ok, deleted} ->
+            response_ok(Transport, State, ?COMMAND_DELETE_TARGET, CorrelationId),
+            State1 = case clean_state_after_target_deletion(Target, State) of
+                         {cleaned, NewState} ->
+                             TargetSize = byte_size(Target),
+                             FrameSize = 2 + 2 + 2 + 2 + TargetSize,
+                             Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
+                                 ?RESPONSE_CODE_TARGET_DELETED:16, TargetSize:16, Target/binary>>]),
+                             NewState;
+                         {not_cleaned, SameState} ->
+                             SameState
+                     end,
+            {State1, Rest};
+        {error, reference_not_found} ->
+            response(Transport, State, ?COMMAND_DELETE_TARGET, CorrelationId, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST),
+            {State, Rest}
+    end;
+handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
+    <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, TargetCount:32, BinaryTargets/binary>>, Rest) ->
+    %% FIXME: rely only on rabbit_networking to discover the listeners
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    {NodesInfo, _} = lists:foldl(fun(Node, {Acc, Index}) ->
+        {ok, Host} = rpc:call(Node, inet, gethostname, []),
+        Port = rpc:call(Node, rabbit_stream, port, []),
+        {Acc#{Node => {{index, Index}, {host, list_to_binary(Host)}, {port, Port}}}, Index + 1}
+                                 end, {#{}, 0}, Nodes),
+
+    BrokersCount = length(Nodes),
+    BrokersBin = maps:fold(fun(_K, {{index, Index}, {host, Host}, {port, Port}}, Acc) ->
+        HostLength = byte_size(Host),
+        <<Acc/binary, Index:16, HostLength:16, Host:HostLength/binary, Port:32>>
+                           end, <<BrokersCount:32>>, NodesInfo),
+
+    Targets = extract_target_list(BinaryTargets, []),
+
+    MetadataBin = lists:foldl(fun(Target, Acc) ->
+        TargetLength = byte_size(Target),
+        case lookup_cluster(Target, State) of
+            cluster_not_found ->
+                <<Acc/binary, TargetLength:16, Target:TargetLength/binary, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST:16,
+                    -1:16, 0:32>>;
+            {Cluster, _} ->
+                LeaderNode = node(Cluster),
+                #{LeaderNode := NodeInfo} = NodesInfo,
+                {{index, LeaderIndex}, {host, _}, {port, _}} = NodeInfo,
+                Replicas = maps:without([LeaderNode], NodesInfo),
+                ReplicasBinary = lists:foldl(fun(NI, Bin) ->
+                    {{index, ReplicaIndex}, {host, _}, {port, _}} = NI,
+                    <<Bin/binary, ReplicaIndex:16>>
+                                             end, <<>>, maps:values(Replicas)),
+                ReplicasCount = maps:size(Replicas),
+
+                <<Acc/binary, TargetLength:16, Target:TargetLength/binary, ?RESPONSE_CODE_OK:16,
+                    LeaderIndex:16, ReplicasCount:32, ReplicasBinary/binary>>
+        end
+
+                              end, <<TargetCount:32>>, Targets),
+    Frame = <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, BrokersBin/binary, MetadataBin/binary>>,
+    FrameSize = byte_size(Frame),
+    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+    {State, Rest};
+handle_frame_post_auth(_Transport, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, ignoring.~n", [Frame, Rest]),
     {State, Rest}.
 
