@@ -30,8 +30,6 @@ defmodule TraceOnCommandTest do
 
     on_exit([], fn ->
       delete_vhost(@test_vhost)
-
-
     end)
 
     :ok

@@ -27,7 +27,6 @@ defmodule ListVhostsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     add_vhost @vhost1
     add_vhost @vhost2
     trace_off @root
@@ -35,8 +34,6 @@ defmodule ListVhostsCommandTest do
     on_exit([], fn ->
       delete_vhost @vhost1
       delete_vhost @vhost2
-
-
     end)
 
     name_result = [

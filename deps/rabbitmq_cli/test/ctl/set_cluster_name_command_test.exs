@@ -23,7 +23,6 @@ defmodule SetClusterNameCommandTest do
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
 
-
     :ok
   end
 

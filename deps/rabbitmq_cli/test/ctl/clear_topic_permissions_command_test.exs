@@ -30,8 +30,6 @@ defmodule ClearTopicPermissionsTest do
       clear_topic_permissions(@user, @specific_vhost)
       delete_user(@user)
       delete_vhost(@specific_vhost)
-
-
     end)
 
     :ok

@@ -23,7 +23,6 @@ defmodule AwaitOnlineNodesCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     {:ok, opts: %{node: get_rabbit_hostname(), timeout: 300_000}}
   end
 

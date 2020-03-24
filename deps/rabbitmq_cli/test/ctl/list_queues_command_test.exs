@@ -11,7 +11,6 @@ defmodule ListQueuesCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     reset_vm_memory_high_watermark()
     delete_all_queues()
     close_all_connections(get_rabbit_hostname())
@@ -19,8 +18,6 @@ defmodule ListQueuesCommandTest do
     on_exit([], fn ->
       delete_all_queues()
       close_all_connections(get_rabbit_hostname())
-
-
     end)
 
     :ok

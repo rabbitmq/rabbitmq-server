@@ -29,8 +29,6 @@ defmodule SetDiskFreeLimitCommandTest do
 
     on_exit([], fn ->
       set_disk_free_limit(@default_limit)
-
-
     end)
 
   end

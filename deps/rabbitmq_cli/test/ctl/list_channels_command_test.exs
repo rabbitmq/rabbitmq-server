@@ -23,13 +23,10 @@ defmodule ListChannelsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     close_all_connections(get_rabbit_hostname())
 
     on_exit([], fn ->
       close_all_connections(get_rabbit_hostname())
-
-
     end)
 
     :ok
