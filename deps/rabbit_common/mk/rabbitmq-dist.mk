@@ -1,7 +1,15 @@
-.PHONY: dist test-dist do-dist clean-dist
+.PHONY: dist test-dist do-dist cli-scripts cli-escripts clean-dist
 
 DIST_DIR = plugins
+CLI_SCRIPTS_DIR = sbin
+CLI_ESCRIPTS_DIR = escript
 MIX = echo y | mix
+
+ifeq ($(USE_RABBIT_BOOT_SCRIPT),)
+DIST_AS_EZS ?= true
+else
+DIST_AS_EZS ?=
+endif
 
 dist_verbose_0 = @echo " DIST  " $@;
 dist_verbose_2 = set -x;
@@ -48,7 +56,11 @@ endef
 define do_ez_target_erlangmk
 dist_$(1)_ez_dir = $$(if $(2),$(DIST_DIR)/$(1)-$(2), \
 	$$(if $$(VERSION),$(DIST_DIR)/$(1)-$$(VERSION),$(DIST_DIR)/$(1)))
+ifeq ($(DIST_AS_EZS),)
+dist_$(1)_ez = $$(dist_$(1)_ez_dir)
+else
 dist_$(1)_ez = $$(dist_$(1)_ez_dir).ez
+endif
 
 $$(dist_$(1)_ez): APP     = $(1)
 $$(dist_$(1)_ez): VSN     = $(2)
@@ -56,7 +68,7 @@ $$(dist_$(1)_ez): SRC_DIR = $(3)
 $$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
 $$(dist_$(1)_ez): $$(if $$(wildcard $(3)/ebin $(3)/include $(3)/priv),\
-	$$(filter-out %/dep_built,$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*)),)
+	$$(filter-out %/dep_built %/ebin/test,$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*)),)
 
 # If the application's Makefile defines a `list-dist-deps` target, we
 # use it to populate the dependencies list. This is useful when the
@@ -138,7 +150,7 @@ $(error DIST_PLUGINS_LIST ($(DIST_PLUGINS_LIST)) is missing)
 endif
 
 $(eval $(foreach path, \
-  $(filter-out %/rabbit %/looking_glass %/lz4, \
+  $(filter-out %/looking_glass %/lz4, \
   $(sort $(shell cat $(DIST_PLUGINS_LIST))) $(CURDIR)), \
   $(call ez_target,$(if $(filter $(path),$(CURDIR)),$(PROJECT),$(notdir $(path))),$(path))))
 endif
@@ -163,6 +175,7 @@ $(ERLANGMK_DIST_EZS):
 	$(verbose) rm -rf $(EZ_DIR) $(EZ)
 	$(verbose) mkdir -p $(EZ_DIR)
 	$(dist_verbose) $(RSYNC) -a $(RSYNC_V) \
+		--exclude '/ebin/test' \
 		--include '/ebin/***' \
 		--include '/include/***' \
 		--include '/priv/***' \
@@ -174,12 +187,14 @@ $(ERLANGMK_DIST_EZS):
 		&& grep -q '^prepare-dist::' $(SRC_DIR)/Makefile) || \
 		$(MAKE) --no-print-directory -C $(SRC_DIR) prepare-dist \
 		APP=$(APP) VSN=$(VSN) EZ_DIR=$(EZ_DIR)
+ifneq ($(DIST_AS_EZS),)
 	$(verbose) (cd $(DIST_DIR) && \
 		find "$(basename $(notdir $@))" | LC_COLLATE=C sort \
 		> "$(basename $(notdir $@)).manifest" && \
 		$(ZIP) $(ZIP_V) --names-stdin "$(notdir $@)" \
 		< "$(basename $(notdir $@)).manifest")
 	$(verbose) rm -rf $(EZ_DIR) $(EZ_DIR).manifest
+endif
 
 $(MIX_DIST_EZS): $(mix_task_archive_deps)
 	$(verbose) cd $(SRC_DIR) && \
@@ -196,23 +211,138 @@ $(mix_task_archive_deps):
 
 MAYBE_APPS_LIST = $(if $(shell test -f $(ERLANG_MK_TMP)/apps.log && echo OK), \
 		  $(ERLANG_MK_TMP)/apps.log)
+DIST_LOCK = $(DIST_DIR).lock
 
 dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
-	$(gen_verbose) $(MAKE) do-dist \
-		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) $(MAYBE_APPS_LIST)"
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	else \
+		$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"; \
+	fi
 
+test-dist:: export TEST_DIR=NON-EXISTENT
 test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
-	$(gen_verbose) $(MAKE) do-dist \
-		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) $(MAYBE_APPS_LIST)"
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(DIST_LOCK) \
+		sh -c '$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"'; \
+	else \
+		$(MAKE) do-dist \
+		DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+		$(MAYBE_APPS_LIST)"; \
+	fi
 
 DIST_EZS = $(ERLANGMK_DIST_EZS) $(MIX_DIST_EZS)
 
 do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS) $(EXTRA_DIST_EZS), \
-		$(wildcard $(DIST_DIR)/*.ez))'; \
-	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -f $$unwanted)
+		$(wildcard $(DIST_DIR)/*))'; \
+	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -rf $$unwanted)
+
+CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
+CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
+
+ifneq ($(filter-out rabbit_common amqp10_common,$(PROJECT)),)
+dist:: install-cli
+test-build:: install-cli
+endif
+
+install-cli: install-cli-scripts install-cli-escripts
+	@:
+
+ifeq ($(PROJECT),rabbit)
+install-cli-scripts:
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(CLI_SCRIPTS_LOCK) \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in scripts/*; do \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(CLI_SCRIPTS_LOCK) \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in scripts/*; do \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
+	else \
+		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in scripts/*; do \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done; \
+	fi
+else
+install-cli-scripts:
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(CLI_SCRIPTS_LOCK) \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(CLI_SCRIPTS_LOCK) \
+		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done'; \
+	else \
+		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
+			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
+		done; \
+	fi
+endif
+
+install-cli-escripts:
+	$(gen_verbose) \
+	if command -v flock >/dev/null; then \
+		flock $(CLI_ESCRIPTS_LOCK) \
+		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
+		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+			DESTDIR='; \
+	elif command -v lockf >/dev/null; then \
+		lockf $(CLI_ESCRIPTS_LOCK) \
+		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
+		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+			DESTDIR='; \
+	else \
+		mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
+		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+			DESTDIR= ; \
+	fi
 
 clean-dist::
-	$(gen_verbose) rm -rf $(DIST_DIR)
+	$(gen_verbose) rm -rf \
+		"$(DIST_DIR)" \
+		"$(CLI_SCRIPTS_DIR)" \
+		"$(CLI_ESCRIPTS_DIR)"
 
 clean:: clean-dist

@@ -19,12 +19,7 @@ TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test-instances
 endif
 
 # Location of the scripts controlling the broker.
-ifeq ($(PROJECT),rabbit)
-RABBITMQ_BROKER_DIR ?= $(CURDIR)
-else
-RABBITMQ_BROKER_DIR ?= $(DEPS_DIR)/rabbit
-endif
-RABBITMQ_SCRIPTS_DIR ?= $(RABBITMQ_BROKER_DIR)/scripts
+RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/sbin
 
 ifeq ($(PLATFORM),msys2)
 RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
@@ -65,9 +60,7 @@ node_log_base = $(call node_tmpdir,$(1))/log
 node_mnesia_base = $(call node_tmpdir,$(1))/mnesia
 node_mnesia_dir = $(call node_mnesia_base,$(1))/$(1)
 node_quorum_dir = $(call node_mnesia_dir,$(1))/quorum
-node_schema_dir = $(call node_tmpdir,$(1))/schema
 node_plugins_expand_dir = $(call node_tmpdir,$(1))/plugins
-node_generated_config_dir = $(call node_tmpdir,$(1))/config
 node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
@@ -82,9 +75,7 @@ RABBITMQ_LOG_BASE ?= $(call node_log_base,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_MNESIA_BASE ?= $(call node_mnesia_base,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_MNESIA_DIR ?= $(call node_mnesia_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_QUORUM_DIR ?= $(call node_quorum_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
-RABBITMQ_SCHEMA_DIR ?= $(call node_schema_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
-RABBITMQ_GENERATED_CONFIG_DIR ?= $(call node_generated_config_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_FEATURE_FLAGS_FILE ?= $(call node_feature_flags_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 
@@ -117,12 +108,11 @@ RABBITMQ_LOG_BASE="$(call node_log_base,$(2))" \
 RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
 RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
 RABBITMQ_QUORUM_DIR="$(call node_quorum_dir,$(2))" \
-RABBITMQ_SCHEMA_DIR="$(call node_schema_dir,$(2))" \
-RABBITMQ_GENERATED_CONFIG_DIR="$(call node_generated_config_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR))" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
-RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
+RABBITMQ_SERVER_START_ARGS="-ra wal_sync_method sync $(RABBITMQ_SERVER_START_ARGS)" \
+RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"
 endef
 
 BASIC_SCRIPT_ENV_SETTINGS = \
@@ -139,32 +129,20 @@ virgin-test-tmpdir:
 node-tmpdir:
 	$(verbose) mkdir -p $(RABBITMQ_LOG_BASE) \
 		$(RABBITMQ_MNESIA_BASE) \
-		$(RABBITMQ_SCHEMA_DIR) \
-		$(RABBITMQ_PLUGINS_EXPAND_DIR) \
-		$(RABBITMQ_GENERATED_CONFIG_DIR)
+		$(RABBITMQ_PLUGINS_EXPAND_DIR)
 
 virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
 	$(verbose) mkdir -p $(RABBITMQ_LOG_BASE) \
 		$(RABBITMQ_MNESIA_BASE) \
-		$(RABBITMQ_SCHEMA_DIR) \
-		$(RABBITMQ_PLUGINS_EXPAND_DIR) \
-		$(RABBITMQ_GENERATED_CONFIG_DIR)
+		$(RABBITMQ_PLUGINS_EXPAND_DIR)
 
 .PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
-ifeq ($(wildcard ebin/test),)
-$(RABBITMQ_ENABLED_PLUGINS_FILE): dist
-endif
-
 ifdef LEAVE_PLUGINS_DISABLED
-$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
-	$(gen_verbose) : >$@
+RABBITMQ_ENABLED_PLUGINS ?=
 else
-$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
-	$(verbose) rm -f $@
-	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
-	  $(RABBITMQ_PLUGINS) enable --all --offline
+RABBITMQ_ENABLED_PLUGINS ?= ALL
 endif
 
 # --------------------------------------------------------------------
@@ -178,7 +156,8 @@ define test_rabbitmq_config
   {rabbit, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}$(comma),)
       {loopback_users, []},
-      {log, [{file, [{level, debug}]}]}
+      {log, [{file, [{level, debug}]},
+             {console, [{level, debug}]}]}
     ]},
   {rabbitmq_management, [
 $(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
@@ -281,19 +260,28 @@ $(TEST_TLS_CERTS_DIR): node-tmpdir
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
 	@echo $(TEST_TLS_CERTS_DIR)
 
+ifdef NOBUILD
+DIST_TARGET ?=
+else
+ifeq ($(wildcard ebin/test),)
+DIST_TARGET ?= dist
+else
+DIST_TARGET ?= test-dist
+endif
+endif
+
 run-broker run-tls-broker: RABBITMQ_CONFIG_FILE := $(basename $(TEST_CONFIG_FILE))
 run-broker:     config := $(test_rabbitmq_config)
 run-tls-broker: config := $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
 
-run-broker run-tls-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE) \
-    $(TEST_CONFIG_FILE)
+run-broker run-tls-broker: node-tmpdir $(DIST_TARGET) $(TEST_CONFIG_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  RABBITMQ_CONFIG_FILE=$(RABBITMQ_CONFIG_FILE) \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-broker: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -301,13 +289,13 @@ run-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 # Run a bare Erlang node.
 # --------------------------------------------------------------------
 
-run-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-node: virgin-node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) -detached
@@ -323,7 +311,7 @@ endif
 
 RMQCTL_WAIT_TIMEOUT ?= 60
 
-start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+start-background-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
@@ -331,7 +319,7 @@ start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) kernel
 
-start-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+start-background-broker: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) \
 	  $(REDIRECT_STDIO) &

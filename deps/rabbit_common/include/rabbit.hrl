@@ -152,7 +152,7 @@
                  version,          %% string()
                  description,      %% string()
                  type,             %% 'ez' or 'dir'
-                 dependencies,     %% [{atom(), string()}]
+                 dependencies,     %% [atom()]
                  location,         %% string()
                  %% List of supported broker version ranges,
                  %% e.g. ["3.5.7", "3.6.1"]
@@ -195,8 +195,6 @@
 
 -define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2020 Pivotal Software, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL 1.1. Website: https://rabbitmq.com").
--define(OTP_MINIMUM, "21.3").
--define(ERTS_MINIMUM, "10.3").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
 %%  - 1 byte of frame type
