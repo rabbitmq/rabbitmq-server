@@ -434,7 +434,14 @@ handle_frame(Transport, #stream_connection{socket = S} = State,
 handle_frame(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State,
     <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32,
         MechanismLength:16, Mechanism:MechanismLength/binary,
-        SaslBinLength:32, SaslBin:SaslBinLength/binary>>, Rest) ->
+        SaslFragment/binary>>, Rest) ->
+
+    SaslBin = case SaslFragment of
+                  <<-1:32>> ->
+                      <<>>;
+                  <<SaslBinaryLength:32, SaslBinary:SaslBinaryLength/binary>> ->
+                      SaslBinary
+              end,
 
     %% FIXME handle null value (length = -1) for sasl binary (change the pattern matching)
     {State1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
