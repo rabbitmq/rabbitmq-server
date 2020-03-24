@@ -52,6 +52,7 @@
 -export([start_link/1,
          submit/1, submit/2, submit/3,
          submit_async/1, submit_async/2,
+         dispatch_sync/1, dispatch_sync/2,
          ready/2,
          idle/2,
          default_pool/0]).
@@ -68,6 +69,7 @@
 -spec submit(fun (() -> A) | mfargs(), 'reuse' | 'single') -> A.
 -spec submit(atom(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A.
 -spec submit_async(fun (() -> any()) | mfargs()) -> 'ok'.
+-spec dispatch_sync(fun(() -> any()) | mfargs()) -> 'ok'.
 -spec ready(atom(), pid()) -> 'ok'.
 -spec idle(atom(), pid()) -> 'ok'.
 -spec default_pool() -> atom().
@@ -102,6 +104,13 @@ submit(Server, Fun, ProcessModel) ->
 submit_async(Fun) -> submit_async(?DEFAULT_POOL, Fun).
 
 submit_async(Server, Fun) -> gen_server2:cast(Server, {run_async, Fun}).
+
+dispatch_sync(Fun) ->
+    dispatch_sync(?DEFAULT_POOL, Fun).
+
+dispatch_sync(Server, Fun) ->
+    Pid = gen_server2:call(Server, {next_free, self()}, infinity),
+    worker_pool_worker:submit_async(Pid, Fun).
 
 ready(Server, WPid) -> gen_server2:cast(Server, {ready, WPid}).
 

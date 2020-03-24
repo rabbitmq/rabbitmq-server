@@ -60,7 +60,7 @@ submit(Pid, Fun, ProcessModel) ->
     gen_server2:call(Pid, {submit, Fun, self(), ProcessModel}, infinity).
 
 submit_async(Pid, Fun) ->
-    gen_server2:cast(Pid, {submit_async, Fun}).
+    gen_server2:cast(Pid, {submit_async, Fun, self()}).
 
 set_maximum_since_use(Pid, Age) ->
     gen_server2:cast(Pid, {set_maximum_since_use, Age}).
@@ -118,7 +118,13 @@ handle_cast({next_job_from, CPid}, {job, CPid, From, Fun, ProcessModel}) ->
     ok = worker_pool:idle(get(worker_pool_name), self()),
     {noreply, undefined, hibernate};
 
-handle_cast({submit_async, Fun}, undefined) ->
+handle_cast({submit_async, Fun, _CPid}, undefined) ->
+    run(Fun),
+    ok = worker_pool:idle(get(worker_pool_name), self()),
+    {noreply, undefined, hibernate};
+
+handle_cast({submit_async, Fun, CPid}, {from, CPid, MRef}) ->
+    erlang:demonitor(MRef),
     run(Fun),
     ok = worker_pool:idle(get(worker_pool_name), self()),
     {noreply, undefined, hibernate};
