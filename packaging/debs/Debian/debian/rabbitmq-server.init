@@ -23,7 +23,7 @@ CONTROL=/usr/sbin/rabbitmqctl
 DESC="message broker"
 USER=rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
-RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+RABBITMQ_LOG_BASE=/var/log/rabbitmq
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0
@@ -32,9 +32,6 @@ RETVAL=0
 set -e
 
 [ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
-
-RABBITMQ_SCRIPTS_DIR=$(dirname "$RABBITMQ_ENV")
-. "$RABBITMQ_ENV"
 
 . /lib/lsb/init-functions
 . /lib/init/vars.sh

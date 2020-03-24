@@ -16,8 +16,7 @@
 ##
 
 SCRIPT="$(basename "$0")"
-RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
-RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
+RABBITMQ_LOG_BASE=/var/log/rabbitmq
 
 main() {
   ensure_we_are_in_a_readable_dir
@@ -72,13 +71,6 @@ calling_rabbitmq_plugins() {
 }
 
 exec_rabbitmq_server() {
-  RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
-  # RABBITMQ_SCRIPTS_DIR is used in rabbitmq-env
-  # shellcheck disable=SC2034
-  RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
-  # shellcheck source=/dev/null
-  . "$RABBITMQ_ENV"
-
   exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
 }
 
