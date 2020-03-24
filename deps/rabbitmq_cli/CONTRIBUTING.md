@@ -81,9 +81,19 @@ ask the core team for their opinion on the [RabbitMQ users mailing list][rmq-use
 Assuming you have:
 
 * Installed [Elixir](http://elixir-lang.org/install.html)
-* Have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g.  `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a server release repository clone
+* Have a local running RabbitMQ node with the `rabbitmq-federation` and `rabbitmq_stomp` plugins enabled, e.g.
 
-...you can simply run `make tests` within this project's root directory.
+```
+make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'
+```
+
+from a server release repository clone, use
+
+```
+make tests
+```
+
+to run all tests.
 
 ### Running a Single Test Case
 
