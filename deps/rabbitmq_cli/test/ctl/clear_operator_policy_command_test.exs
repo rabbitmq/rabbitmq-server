@@ -27,13 +27,10 @@ defmodule ClearOperatorPolicyCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     add_vhost @vhost
 
     on_exit([], fn ->
       delete_vhost @vhost
-
-
     end)
 
     :ok

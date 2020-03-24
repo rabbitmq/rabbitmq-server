@@ -31,8 +31,6 @@ defmodule CloseConnectionCommandTest do
 
     on_exit([], fn ->
       close_all_connections(get_rabbit_hostname())
-
-
     end)
 
     :ok

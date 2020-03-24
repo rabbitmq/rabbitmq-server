@@ -30,8 +30,6 @@ defmodule SetUserTagsCommandTest do
 
     on_exit([], fn ->
       delete_user(@user)
-
-
     end)
 
     :ok

@@ -23,14 +23,11 @@ defmodule ListUserTopicPermissionsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     set_topic_permissions("guest", "/", "amq.topic", "^a", "^b")
     set_topic_permissions("guest", "/", "topic1", "^a", "^b")
 
     on_exit([], fn ->
       clear_topic_permissions("guest", "/")
-
-
     end)
 
     :ok

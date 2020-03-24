@@ -27,7 +27,6 @@ defmodule ListUsersCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     std_result = [
       [{:user,@guest},{:tags,[:administrator]}],
       [{:user,@user},{:tags,[]}]

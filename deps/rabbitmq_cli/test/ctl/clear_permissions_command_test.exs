@@ -30,8 +30,6 @@ defmodule ClearPermissionsTest do
     on_exit([], fn ->
       delete_user(@user)
       delete_vhost(@specific_vhost)
-
-
     end)
 
     :ok

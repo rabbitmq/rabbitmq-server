@@ -24,7 +24,6 @@ defmodule CancelSyncQueueCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     start_rabbitmq_app()
 
     on_exit([], fn ->
