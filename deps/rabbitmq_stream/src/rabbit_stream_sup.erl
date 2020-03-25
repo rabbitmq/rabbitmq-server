@@ -22,6 +22,8 @@
 
 -define(INITIAL_CREDITS, 50000).
 -define(CREDITS_REQUIRED_FOR_UNBLOCKING, 12500).
+-define(FRAME_MAX, 131072).
+-define(HEARTBEAT, 600).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -35,7 +37,9 @@ init([]) ->
 
     ServerConfiguration = #{
         initial_credits => application:get_env(rabbitmq_stream, initial_credits, ?INITIAL_CREDITS),
-        credits_required_for_unblocking => application:get_env(rabbitmq_stream, credits_required_for_unblocking, ?CREDITS_REQUIRED_FOR_UNBLOCKING)
+        credits_required_for_unblocking => application:get_env(rabbitmq_stream, credits_required_for_unblocking, ?CREDITS_REQUIRED_FOR_UNBLOCKING),
+        frame_max => application:get_env(rabbit_stream, frame_max, ?FRAME_MAX),
+        heartbeat => application:get_env(rabbit_stream, heartbeat, ?HEARTBEAT)
     },
 
     StreamManager = #{id => rabbit_stream_manager,

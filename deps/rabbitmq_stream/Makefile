@@ -8,9 +8,11 @@ define PROJECT_ENV
 	{num_tcp_acceptors, 10},
 	{num_ssl_acceptors, 10},
 	{tcp_listen_options, [{backlog,   128},
-						  {nodelay,   true}]},
+                          {nodelay,   true}]},
 	{initial_credits, 50000},
-	{credits_required_for_unblocking, 12500}
+	{credits_required_for_unblocking, 12500},
+	{frame_max, 131072},
+	{heartbeat, 600}
 ]
 endef
 

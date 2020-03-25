@@ -28,7 +28,8 @@
     listen_socket, socket, clusters, data, consumers,
     target_subscriptions, credits,
     blocked,
-    authentication_state, user
+    authentication_state, user,
+    connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure
 }).
 
 -record(consumer, {
@@ -36,7 +37,8 @@
 }).
 
 -record(configuration, {
-    initial_credits, credits_required_for_unblocking
+    initial_credits, credits_required_for_unblocking,
+    frame_max, heartbeat
 }).
 
 
@@ -47,8 +49,10 @@ start_link(Ref, _Socket, Transport, Opts) ->
     Pid = spawn_link(?MODULE, init, [Ref, Transport, Opts]),
     {ok, Pid}.
 
-init(Ref, Transport, _Opts = #{initial_credits := InitialCredits,
-    credits_required_for_unblocking := CreditsRequiredBeforeUnblocking} = _ServerConfiguration) ->
+init(Ref, Transport, #{initial_credits := InitialCredits,
+                       credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
+                       frame_max := FrameMax,
+                       heartbeat := Heartbeat}) ->
     {ok, Socket} = ranch:handshake(Ref),
     rabbit_stream_manager:register(),
     Credits = atomics:new(1, [{signed, true}]),
@@ -57,12 +61,15 @@ init(Ref, Transport, _Opts = #{initial_credits := InitialCredits,
         clusters = #{},
         consumers = #{}, target_subscriptions = #{},
         blocked = false, credits = Credits,
-        authentication_state = none, user = none},
+        authentication_state = none, user = none,
+        connection_step = tcp_connected},
     Transport:setopts(Socket, [{active, once}]),
 
     listen_loop_pre_auth(Transport, State, #configuration{
-        initial_credits = application:get_env(rabbitmq_stream, initial_credits, InitialCredits),
-        credits_required_for_unblocking = application:get_env(rabbitmq_stream, credits_required_for_unblocking, CreditsRequiredBeforeUnblocking)
+        initial_credits = InitialCredits,
+        credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
+        frame_max = FrameMax,
+        heartbeat = Heartbeat
     }).
 
 init_credit(CreditReference, Credits) ->
@@ -81,17 +88,29 @@ has_credits(CreditReference) ->
 has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
-listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State, Configuration) ->
+listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State,
+        #configuration{frame_max = FrameMax, heartbeat = Heartbeat} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
+    %% FIXME introduce timeout to complete the connection opening (after should be enough)
     receive
         {OK, S, Data} ->
+            #stream_connection{connection_step = ConnectionStep0} = State,
             State1 = handle_inbound_data_pre_auth(Transport, State, Data),
             Transport:setopts(S, [{active, once}]),
-            case State1 of
-                #stream_connection{user = none} ->
-                    listen_loop_pre_auth(Transport, State1, Configuration);
+            #stream_connection{connection_step = ConnectionStep} = State1,
+            error_logger:info_msg("Transitioned from ~p to ~p~n", [ConnectionStep0, ConnectionStep]),
+            case ConnectionStep of
+                authenticated ->
+                    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:64, Heartbeat:16>>,
+                    frame(Transport, State1, TuneFrame),
+                    listen_loop_pre_auth(Transport, State1#stream_connection{connection_step = tuning}, Configuration);
+                opened ->
+                    listen_loop_post_auth(Transport, State1, Configuration);
+                failure ->
+                    %% FIXME close connection
+                    ok;
                 _ ->
-                    listen_loop_post_auth(Transport, State1, Configuration)
+                    listen_loop_pre_auth(Transport, State1, Configuration)
             end;
         {Closed, S} ->
             error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
@@ -99,6 +118,7 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State, Configur
         {Error, S, Reason} ->
             error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
+            %% FIXME close connection
             error_logger:warning_msg("Unknown message ~p~n", [M]),
             listen_loop_pre_auth(Transport, State, Configuration)
     end.
@@ -202,6 +222,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
             error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
             error_logger:warning_msg("Unknown message ~p~n", [M]),
+            %% FIXME send close
             listen_loop_post_auth(Transport, State, Configuration)
     end.
 
@@ -276,27 +297,24 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                               {S1, FrameFragment} = case AuthMechanism:handle_response(SaslBin, AuthState) of
                                                         {refused, _Username, Msg, Args} ->
                                                             error_logger:warning_msg(Msg, Args),
-                                                            %% TODO close connection?
-                                                            {State, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
+                                                            {State#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
                                                         {protocol_error, Msg, Args} ->
                                                             error_logger:warning_msg(Msg, Args),
-                                                            %% TODO close connection?
-                                                            {State, <<?RESPONSE_SASL_ERROR:16>>};
+                                                            {State#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
                                                         {challenge, Challenge, AuthState1} ->
                                                             ChallengeSize = byte_size(Challenge),
-                                                            {State#stream_connection{authentication_state = AuthState1},
+                                                            {State#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
                                                                 <<?RESPONSE_SASL_CHALLENGE:16, ChallengeSize:32, Challenge/binary>>
                                                             };
                                                         {ok, User = #user{username = Username}} ->
                                                             case rabbit_access_control:check_user_loopback(Username, S) of
                                                                 ok ->
-                                                                    {State#stream_connection{authentication_state = done, user = User},
+                                                                    {State#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
                                                                         <<?RESPONSE_CODE_OK:16>>
                                                                     };
                                                                 not_allowed ->
                                                                     error_logger:warning_msg("User '~s' can only connect via localhost~n", [Username]),
-                                                                    %% TODO close connection?
-                                                                    {State, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
+                                                                    {State#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
                                                             end
                                                     end,
                               Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, FrameFragment/binary>>,
@@ -305,13 +323,27 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                           {error, _} ->
                               Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_SASL_MECHANISM_NOT_SUPPORTED:16>>,
                               frame(Transport, State, Frame),
-                              {State, Rest}
+                              {State#stream_connection{connection_step = failure}, Rest}
                       end,
 
     {State1, Rest1};
+handle_frame_pre_auth(_Transport, State, <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:64, Heartbeat:16>>, Rest) ->
+    error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
+
+    %% FIXME take frame max size and heartbeat into account
+
+    {State#stream_connection{connection_step = tuned}, Rest};
+handle_frame_pre_auth(Transport, State, <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
+        VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
+    error_logger:info_msg("Open vhost ~p~n", [VirtualHost]),
+
+    Frame = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
+    frame(Transport, State, Frame),
+
+    {State#stream_connection{connection_step = opened}, Rest};
 handle_frame_pre_auth(_Transport, State, Frame, Rest) ->
-    error_logger:warning_msg("unknown frame ~p ~p, ignoring.~n", [Frame, Rest]),
-    {State, Rest}.
+    error_logger:warning_msg("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
+    {State#stream_connection{connection_step = failure}, Rest}.
 
 handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits} = State,
     <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
