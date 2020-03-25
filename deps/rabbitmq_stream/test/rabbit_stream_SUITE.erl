@@ -17,6 +17,7 @@
 -module(rabbit_stream_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include("rabbit_stream.hrl").
 
 -compile(export_all).
 
@@ -73,6 +74,7 @@ get_stream_port(Config) ->
 test_server(Port) ->
     {ok, S} = gen_tcp:connect("localhost", Port, [{active, false},
         {mode, binary}]),
+    test_authenticate(S),
     Target = <<"target1">>,
     test_create_target(S, Target),
     Body = <<"hello">>,
@@ -83,6 +85,32 @@ test_server(Port) ->
     test_delete_target(S, Target),
     test_metadata_update_target_deleted(S, Target),
     ok.
+
+test_authenticate(S) ->
+    SaslHandshakeFrame = <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32>>,
+    SaslHandshakeFrameSize = byte_size(SaslHandshakeFrame),
+    gen_tcp:send(S, <<SaslHandshakeFrameSize:32, SaslHandshakeFrame/binary>>),
+    Plain = <<"PLAIN">>,
+    AmqPlain = <<"AMQPLAIN">>,
+    {ok,<<31:32,?COMMAND_SASL_HANDSHAKE:16,?VERSION_0:16,1:32,?RESPONSE_CODE_OK:16,
+        2:32,5:16,Plain:5/binary,8:16, AmqPlain:8/binary>>} = gen_tcp:recv(S, 0, 5000),
+
+    Username = <<"guest">>,
+    Password = <<"guest">>,
+    Null = 0,
+    PlainSasl = <<Null:8, Username/binary, Null:8, Password/binary>>,
+    PlainSaslSize = byte_size(PlainSasl),
+
+    SaslAuthenticateFrame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, 2:32,
+        5:16, Plain/binary, PlainSaslSize:32, PlainSasl/binary>>,
+
+    SaslAuthenticateFrameSize = byte_size(SaslAuthenticateFrame),
+
+    gen_tcp:send(S, <<SaslAuthenticateFrameSize:32, SaslAuthenticateFrame/binary>>),
+
+    {ok,<<10:32,?COMMAND_SASL_AUTHENTICATE:16,?VERSION_0:16,2:32,?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
+
+
 
 test_create_target(S, Target) ->
     TargetSize = byte_size(Target),
