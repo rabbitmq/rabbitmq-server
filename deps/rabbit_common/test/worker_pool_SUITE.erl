@@ -36,7 +36,7 @@ all() ->
 
 init_per_testcase(_, Config) ->
     {ok, Pool} = worker_pool_sup:start_link(?POOL_SIZE, ?POOL_NAME),
-    rabbit_ct_helpers:set_config(Config, [{pool_sup, Pool}]).
+    [{pool_sup, Pool} | Config].
 
 end_per_testcase(_, Config) ->
     Pool = ?config(pool_sup, Config),
