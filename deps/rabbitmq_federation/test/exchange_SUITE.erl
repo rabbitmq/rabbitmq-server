@@ -364,7 +364,7 @@ user_id(Config) ->
     set_policy_upstream(Config, Rabbit, <<"^test$">>,
       rabbit_ct_broker_helpers:node_uri(Config, 1),
       [{<<"trust-user-id">>, true}]),
-    wait_for_federation(120, Config, Rabbit, <<"/">>),
+    wait_for_federation(360, Config, Rabbit, <<"/">>),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(<<"hare-user">>)),
 
@@ -896,7 +896,7 @@ dynamic_plugin_cleanup_stop_start(Config) ->
 
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
-              wait_for_federation(120, Config, 0, <<"/">>),
+              wait_for_federation(360, Config, 0, <<"/">>),
 
               ?assert(has_internal_federated_exchange(Config, 0, <<"/">>)),
               ?assert(has_internal_federated_queue(Config, 0, <<"/">>)),
@@ -923,7 +923,7 @@ dynamic_policy_cleanup(Config) ->
 
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
-              wait_for_federation(120, Config, 0, <<"/">>),
+              wait_for_federation(360, Config, 0, <<"/">>),
 
               ?assert(has_internal_federated_exchange(Config, 0, <<"/">>)),
               ?assert(has_internal_federated_queue(Config, 0, <<"/">>)),
