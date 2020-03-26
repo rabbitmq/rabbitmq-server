@@ -29,7 +29,7 @@
     target_subscriptions, credits,
     blocked,
     authentication_state, user, virtual_host,
-    connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure
+    connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing
 }).
 
 -record(consumer, {
@@ -107,8 +107,7 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State,
                 opened ->
                     listen_loop_post_auth(Transport, State1, Configuration);
                 failure ->
-                    %% FIXME close connection
-                    ok;
+                    close(Transport, S);
                 _ ->
                     listen_loop_pre_auth(Transport, State1, Configuration)
             end;
@@ -118,10 +117,13 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State,
         {Error, S, Reason} ->
             error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
-            %% FIXME close connection
             error_logger:warning_msg("Unknown message ~p~n", [M]),
-            listen_loop_pre_auth(Transport, State, Configuration)
+            close(Transport, S)
     end.
+
+close(Transport, S) ->
+    Transport:shutdown(S, write),
+    Transport:close(S).
 
 listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Consumers,
     target_subscriptions = TargetSubscriptions, credits = Credits, blocked = Blocked} = State,
@@ -129,26 +131,31 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
     {OK, Closed, Error} = Transport:messages(),
     receive
         {OK, S, Data} ->
-            State1 = handle_inbound_data_post_auth(Transport, State, Data),
-            State2 = case Blocked of
-                         true ->
-                             case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
+            #stream_connection{connection_step = Step} = State1 = handle_inbound_data_post_auth(Transport, State, Data),
+            case Step of
+                closing ->
+                    close(Transport, S);
+                _ ->
+                    State2 = case Blocked of
                                  true ->
-                                     Transport:setopts(S, [{active, once}]),
-                                     State1#stream_connection{blocked = false};
+                                     case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
+                                         true ->
+                                             Transport:setopts(S, [{active, once}]),
+                                             State1#stream_connection{blocked = false};
+                                         false ->
+                                             State1
+                                     end;
                                  false ->
-                                     State1
-                             end;
-                         false ->
-                             case has_credits(Credits) of
-                                 true ->
-                                     Transport:setopts(S, [{active, once}]),
-                                     State1;
-                                 false ->
-                                     State1#stream_connection{blocked = true}
-                             end
-                     end,
-            listen_loop_post_auth(Transport, State2, Configuration);
+                                     case has_credits(Credits) of
+                                         true ->
+                                             Transport:setopts(S, [{active, once}]),
+                                             State1;
+                                         false ->
+                                             State1#stream_connection{blocked = true}
+                                     end
+                             end,
+                    listen_loop_post_auth(Transport, State2, Configuration)
+            end;
         {stream_manager, cluster_deleted, ClusterReference} ->
             Target = list_to_binary(ClusterReference),
             State1 = case clean_state_after_target_deletion(Target, State) of
@@ -542,6 +549,13 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
     FrameSize = byte_size(Frame),
     Transport:send(S, <<FrameSize:32, Frame/binary>>),
     {State, Rest};
+handle_frame_post_auth(Transport, State,
+    <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32,
+        ClosingCode:16, ClosingReasonLength:16, ClosingReason:ClosingReasonLength/binary>>, _Rest) ->
+    error_logger:info_msg("Received close command ~p ~p~n", [ClosingCode, ClosingReason]),
+    Frame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
+    frame(Transport, State, Frame),
+    {State#stream_connection{connection_step = closing}, <<>>}; %% we ignore any subsequent frames
 handle_frame_post_auth(_Transport, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, ignoring.~n", [Frame, Rest]),
     {State, Rest}.
