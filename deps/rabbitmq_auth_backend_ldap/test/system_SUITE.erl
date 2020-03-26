@@ -28,7 +28,6 @@
 -define(JIMMY_NAME, "Jimmy").
 
 -define(VHOST, "test").
--define(DEFAULT_LDAP_PORT, "3890").
 
 -define(ALICE, #amqp_params_network{username     = <<?ALICE_NAME>>,
                                     password     = <<"password">>,
@@ -137,17 +136,16 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config.
+    rabbit_ct_helpers:run_setup_steps(Config, [fun init_slapd/1]).
 
 end_per_suite(Config) ->
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_slapd/1]).
 
 init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE},
-        {rmq_extra_tcp_ports, [tcp_port_amqp_tls_extra]}
+        {rmq_nodename_suffix, Group}
       ]),
-    {LdapPort, _} = string:to_integer(os:getenv("LDAP_PORT", ?DEFAULT_LDAP_PORT)),
+    LdapPort = ?config(ldap_port, Config),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
                                               base_conf_ldap(LdapPort,
@@ -158,15 +156,46 @@ init_per_group(Group, Config) ->
     rabbit_ldap_seed:seed(Logon),
     Config4 = rabbit_ct_helpers:set_config(Config3, {ldap_port, LdapPort}),
 
-    rabbit_ct_helpers:run_setup_steps(Config4,
+    rabbit_ct_helpers:run_steps(Config4,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
     rabbit_ldap_seed:delete({"localhost", ?config(ldap_port, Config)}),
-    rabbit_ct_helpers:run_teardown_steps(Config,
+    rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
+
+init_slapd(Config) ->
+    DataDir = ?config(data_dir, Config),
+    PrivDir = ?config(priv_dir, Config),
+    TcpPort = 25389,
+    SlapdDir = filename:join([PrivDir, "openldap"]),
+    InitSlapd = filename:join([DataDir, "init-slapd.sh"]),
+    Cmd = [InitSlapd, SlapdDir, {"~b", [TcpPort]}],
+    case rabbit_ct_helpers:exec(Cmd) of
+        {ok, Stdout} ->
+            {match, [SlapdPid]} = re:run(
+                                    Stdout,
+                                    "^SLAPD_PID=([0-9]+)$",
+                                    [{capture, all_but_first, list},
+                                     multiline]),
+            ct:pal(?LOW_IMPORTANCE,
+                   "slapd(8) PID: ~s~nslapd(8) listening on: ~b",
+                   [SlapdPid, TcpPort]),
+            rabbit_ct_helpers:set_config(Config,
+                                         [{slapd_pid, SlapdPid},
+                                          {ldap_port, TcpPort}]);
+        _ ->
+            _ = rabbit_ct_helpers:exec(["pkill", "-INT", "slapd"]),
+            {skip, "Failed to initialize slapd(8)"}
+    end.
+
+stop_slapd(Config) ->
+    SlapdPid = ?config(slapd_pid, Config),
+    Cmd = ["kill", "-INT", SlapdPid],
+    _ = rabbit_ct_helpers:exec(Cmd),
+    Config.
 
 idle_timeout(with_idle_timeout) -> 2000;
 idle_timeout(non_parallel_tests) -> infinity.
