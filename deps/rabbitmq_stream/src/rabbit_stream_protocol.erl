@@ -28,7 +28,7 @@
     listen_socket, socket, clusters, data, consumers,
     target_subscriptions, credits,
     blocked,
-    authentication_state, user,
+    authentication_state, user, virtual_host,
     connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure
 }).
 
@@ -50,9 +50,9 @@ start_link(Ref, _Socket, Transport, Opts) ->
     {ok, Pid}.
 
 init(Ref, Transport, #{initial_credits := InitialCredits,
-                       credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
-                       frame_max := FrameMax,
-                       heartbeat := Heartbeat}) ->
+    credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
+    frame_max := FrameMax,
+    heartbeat := Heartbeat}) ->
     {ok, Socket} = ranch:handshake(Ref),
     rabbit_stream_manager:register(),
     Credits = atomics:new(1, [{signed, true}]),
@@ -89,9 +89,9 @@ has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
 listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State,
-        #configuration{frame_max = FrameMax, heartbeat = Heartbeat} = Configuration) ->
+    #configuration{frame_max = FrameMax, heartbeat = Heartbeat} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
-    %% FIXME introduce timeout to complete the connection opening (after should be enough)
+    %% FIXME introduce timeout to complete the connection opening (after block should be enough)
     receive
         {OK, S, Data} ->
             #stream_connection{connection_step = ConnectionStep0} = State,
@@ -333,14 +333,30 @@ handle_frame_pre_auth(_Transport, State, <<?COMMAND_TUNE:16, ?VERSION_0:16, Fram
     %% FIXME take frame max size and heartbeat into account
 
     {State#stream_connection{connection_step = tuned}, Rest};
-handle_frame_pre_auth(Transport, State, <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
-        VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
-    error_logger:info_msg("Open vhost ~p~n", [VirtualHost]),
+handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = State, <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
+    VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
 
-    Frame = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
+    %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
+
+    {State1, Frame} = try
+                          case rabbit_access_control:check_vhost_access(User, VirtualHost, {socket, S}, #{}) of
+                              ok ->
+                                  F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
+                                  %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
+                                  {State#stream_connection{connection_step = opened, virtual_host = VirtualHost}, F};
+                              _ ->
+                                  F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
+                                  {State#stream_connection{connection_step = failure}, F}
+                          end
+                      catch
+                          exit:_ ->
+                              Fr = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
+                              {State#stream_connection{connection_step = failure}, Fr}
+                      end,
+
     frame(Transport, State, Frame),
 
-    {State#stream_connection{connection_step = opened}, Rest};
+    {State1, Rest};
 handle_frame_pre_auth(_Transport, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
     {State#stream_connection{connection_step = failure}, Rest}.
