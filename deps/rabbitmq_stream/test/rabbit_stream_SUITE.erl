@@ -92,8 +92,8 @@ test_authenticate(S) ->
     gen_tcp:send(S, <<SaslHandshakeFrameSize:32, SaslHandshakeFrame/binary>>),
     Plain = <<"PLAIN">>,
     AmqPlain = <<"AMQPLAIN">>,
-    {ok,<<31:32,?COMMAND_SASL_HANDSHAKE:16,?VERSION_0:16,1:32,?RESPONSE_CODE_OK:16,
-        2:32,5:16,Plain:5/binary,8:16, AmqPlain:8/binary>>} = gen_tcp:recv(S, 0, 5000),
+    {ok, <<31:32, ?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16,
+        2:32, 5:16, Plain:5/binary, 8:16, AmqPlain:8/binary>>} = gen_tcp:recv(S, 0, 5000),
 
     Username = <<"guest">>,
     Password = <<"guest">>,
@@ -108,8 +108,26 @@ test_authenticate(S) ->
 
     gen_tcp:send(S, <<SaslAuthenticateFrameSize:32, SaslAuthenticateFrame/binary>>),
 
-    {ok,<<10:32,?COMMAND_SASL_AUTHENTICATE:16,?VERSION_0:16,2:32,?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
+    {ok, <<10:32, ?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, 2:32, ?RESPONSE_CODE_OK:16, RestTune/binary>>} = gen_tcp:recv(S, 0, 5000),
 
+    TuneExpected = <<14:32, ?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:64, ?DEFAULT_HEARTBEAT:16>>,
+    case RestTune of
+        <<>> ->
+            {ok, TuneExpected} = gen_tcp:recv(S, 0, 5000);
+        TuneReceived ->
+            TuneExpected = TuneReceived
+    end,
+
+    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:64, ?DEFAULT_HEARTBEAT:16>>,
+    TuneFrameSize = byte_size(TuneFrame),
+    gen_tcp:send(S, <<TuneFrameSize:32, TuneFrame/binary>>),
+
+    VirtualHost = <<"/">>,
+    VirtualHostLength = byte_size(VirtualHost),
+    OpenFrame = <<?COMMAND_OPEN:16, ?VERSION_0:16, 3:32, VirtualHostLength:16, VirtualHost/binary>>,
+    OpenFrameSize = byte_size(OpenFrame),
+    gen_tcp:send(S, <<OpenFrameSize:32, OpenFrame/binary>>),
+    {ok,<<10:32,?COMMAND_OPEN:16,?VERSION_0:16,3:32,?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
 
 
 test_create_target(S, Target) ->

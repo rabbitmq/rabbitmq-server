@@ -20,10 +20,7 @@
 -export([start_link/0]).
 -export([init/1]).
 
--define(INITIAL_CREDITS, 50000).
--define(CREDITS_REQUIRED_FOR_UNBLOCKING, 12500).
--define(FRAME_MAX, 131072).
--define(HEARTBEAT, 600).
+-include("rabbit_stream.hrl").
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -36,10 +33,10 @@ init([]) ->
     OsirisConf = #{nodes => Nodes},
 
     ServerConfiguration = #{
-        initial_credits => application:get_env(rabbitmq_stream, initial_credits, ?INITIAL_CREDITS),
-        credits_required_for_unblocking => application:get_env(rabbitmq_stream, credits_required_for_unblocking, ?CREDITS_REQUIRED_FOR_UNBLOCKING),
-        frame_max => application:get_env(rabbit_stream, frame_max, ?FRAME_MAX),
-        heartbeat => application:get_env(rabbit_stream, heartbeat, ?HEARTBEAT)
+        initial_credits => application:get_env(rabbitmq_stream, initial_credits, ?DEFAULT_INITIAL_CREDITS),
+        credits_required_for_unblocking => application:get_env(rabbitmq_stream, credits_required_for_unblocking, ?DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING),
+        frame_max => application:get_env(rabbit_stream, frame_max, ?DEFAULT_FRAME_MAX),
+        heartbeat => application:get_env(rabbit_stream, heartbeat, ?DEFAULT_HEARTBEAT)
     },
 
     StreamManager = #{id => rabbit_stream_manager,
