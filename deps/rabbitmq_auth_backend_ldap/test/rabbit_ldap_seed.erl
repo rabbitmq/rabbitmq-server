@@ -117,7 +117,7 @@ bobs2_group() ->
 
 admins_group() ->
     {B, _} = bobs2_group(),
-    {W, _} = wheel_group(), 
+    {W, _} = wheel_group(),
     {"cn=admins,ou=groups,dc=rabbitmq,dc=com",
      [{"objectClass", ["groupOfNames"]},
       {"cn", ["admins"]},

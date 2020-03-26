@@ -13,6 +13,8 @@ addons:
   apt:
     packages:
       - awscli
+      - slapd
+      - ldap-utils
 cache:
   apt: true
 env:
@@ -42,6 +44,8 @@ script:
   - make check-rabbitmq-components.mk
     current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
   - make xref
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make tests
     current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
 
 after_failure:
