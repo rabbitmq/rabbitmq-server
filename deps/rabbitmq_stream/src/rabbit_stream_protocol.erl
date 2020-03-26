@@ -29,7 +29,7 @@
     target_subscriptions, credits,
     blocked,
     authentication_state, user, virtual_host,
-    connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing
+    connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
 }).
 
 -record(consumer, {
@@ -135,6 +135,8 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
             case Step of
                 closing ->
                     close(Transport, S);
+                close_sent ->
+                    listen_loop_post_close(Transport, State1, Configuration);
                 _ ->
                     State2 = case Blocked of
                                  true ->
@@ -233,11 +235,37 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
             listen_loop_post_auth(Transport, State, Configuration)
     end.
 
+listen_loop_post_close(Transport, #stream_connection{socket = S} = State, Configuration) ->
+    {OK, Closed, Error} = Transport:messages(),
+    %% FIXME introduce timeout to complete the connection closing (after block should be enough)
+    receive
+        {OK, S, Data} ->
+            #stream_connection{connection_step = Step} = State1 = handle_inbound_data_post_close(Transport, State, Data),
+            case Step of
+                closing_done ->
+                    error_logger:info_msg("Received close confirmation from client"),
+                    close(Transport, S);
+                _ ->
+                    Transport:setopts(S, [{active, once}]),
+                    listen_loop_post_close(Transport, State1, Configuration)
+            end;
+        {Closed, S} ->
+            error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
+            ok;
+        {Error, S, Reason} ->
+            error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
+        M ->
+            error_logger:warning_msg("Ignored message on closing ~p~n", [M])
+    end.
+
 handle_inbound_data_pre_auth(Transport, State, Rest) ->
     handle_inbound_data(Transport, State, Rest, fun handle_frame_pre_auth/4).
 
 handle_inbound_data_post_auth(Transport, State, Rest) ->
     handle_inbound_data(Transport, State, Rest, fun handle_frame_post_auth/4).
+
+handle_inbound_data_post_close(Transport, State, Rest) ->
+    handle_inbound_data(Transport, State, Rest, fun handle_frame_post_close/4).
 
 handle_inbound_data(_Transport, State, <<>>, _HandleFrameFun) ->
     State;
@@ -556,10 +584,21 @@ handle_frame_post_auth(Transport, State,
     Frame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
     frame(Transport, State, Frame),
     {State#stream_connection{connection_step = closing}, <<>>}; %% we ignore any subsequent frames
-handle_frame_post_auth(_Transport, State, Frame, Rest) ->
-    error_logger:warning_msg("unknown frame ~p ~p, ignoring.~n", [Frame, Rest]),
-    {State, Rest}.
+handle_frame_post_auth(Transport, State, Frame, Rest) ->
+    error_logger:warning_msg("unknown frame ~p ~p, sending close command.~n", [Frame, Rest]),
+    CloseReason = <<"unknown frame">>,
+    CloseReasonLength = byte_size(CloseReason),
+    CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_UNKNOWN_FRAME:16,
+        CloseReasonLength:16, CloseReason:CloseReasonLength/binary>>,
+    frame(Transport, State, CloseFrame),
+    {State#stream_connection{connection_step = close_sent}, Rest}.
 
+handle_frame_post_close(_Transport, State,
+    <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
+    {State#stream_connection{connection_step = closing_done}, Rest};
+handle_frame_post_close(_Transport, State, Frame, Rest) ->
+    error_logger:warning_msg("ignored frame on close ~p ~p.~n", [Frame, Rest]),
+    {State, Rest}.
 
 auth_mechanisms(Sock) ->
     {ok, Configured} = application:get_env(rabbit, auth_mechanisms),
