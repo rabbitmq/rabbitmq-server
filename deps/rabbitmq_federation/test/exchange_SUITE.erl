@@ -430,7 +430,7 @@ binding_recovery(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
                                                durable = true}),
     bind_queue(Ch, Q, <<"fed.downstream">>, <<"key">>),
-    timer:sleep(100), %% To get the suffix written
+    timer:sleep(1000), %% To get the suffix written
 
     %% i.e. don't clean up
     rabbit_ct_client_helpers:close_channels_and_connection(Config, Rabbit),
@@ -446,7 +446,7 @@ binding_recovery(Config) ->
     rabbit_ct_broker_helpers:set_parameter(Config,
       Rabbit, <<"federation-upstream-set">>, <<"upstream">>,
       [[{<<"upstream">>, <<"rabbit">>}, {<<"exchange">>, <<"upstream">>}]]),
-    wait_for_federation(120, Config, Rabbit, <<"/">>),
+    wait_for_federation(360, Config, Rabbit, <<"/">>),
 
     publish_expect(Ch3, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
     true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream")),
@@ -939,8 +939,8 @@ dynamic_policy_cleanup(Config) ->
               assert_connections(Config, 0, [X1], [])
       end, [x(X1)]).
 
-wait_for_federation(0, _, _, _) ->
-    ok;
+wait_for_federation(0, _, Node, VHost) ->
+    throw({timeout_while_waiting_for_federation, Node, VHost});
 wait_for_federation(N, Config, Node, VHost) ->
     case has_internal_federated_exchange(Config, Node, VHost) andalso
         has_internal_federated_queue(Config, Node, VHost) of
