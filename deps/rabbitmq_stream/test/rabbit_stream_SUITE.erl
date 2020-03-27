@@ -112,7 +112,7 @@ test_authenticate(S) ->
 
     {ok, <<10:32, ?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, 2:32, ?RESPONSE_CODE_OK:16, RestTune/binary>>} = gen_tcp:recv(S, 0, 5000),
 
-    TuneExpected = <<14:32, ?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:64, ?DEFAULT_HEARTBEAT:16>>,
+    TuneExpected = <<12:32, ?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:32, ?DEFAULT_HEARTBEAT:32>>,
     case RestTune of
         <<>> ->
             {ok, TuneExpected} = gen_tcp:recv(S, 0, 5000);
@@ -120,7 +120,7 @@ test_authenticate(S) ->
             TuneExpected = TuneReceived
     end,
 
-    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:64, ?DEFAULT_HEARTBEAT:16>>,
+    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:32, ?DEFAULT_HEARTBEAT:32>>,
     TuneFrameSize = byte_size(TuneFrame),
     gen_tcp:send(S, <<TuneFrameSize:32, TuneFrame/binary>>),
 
