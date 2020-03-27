@@ -358,14 +358,58 @@ user_id(Config) ->
                 end
         end,
 
-    wait_for_federation(360, Config, Hare, <<"/">>),
+    wait_for_federation(
+      30,
+      fun() ->
+              VHost = <<"/">>,
+              X1s = rabbit_ct_broker_helpers:rpc(
+                      Config, Rabbit, rabbit_exchange, list, [VHost]),
+              L1 =
+              [X || X <- X1s,
+               X#exchange.name =:= #resource{virtual_host = VHost,
+                                             kind = exchange,
+                                             name = <<"test">>},
+               X#exchange.scratches =:= [{federation,
+                                          [{{<<"upstream-2">>,
+                                             <<"test">>},
+                                            <<"B">>}]}]],
+              X2s = rabbit_ct_broker_helpers:rpc(
+                      Config, Hare, rabbit_exchange, list, [VHost]),
+              L2 =
+              [X || X <- X2s,
+                    X#exchange.type =:= 'x-federation-upstream'],
+              [] =/= L1 andalso [] =/= L2 andalso
+              has_internal_federated_queue(Config, Hare, VHost)
+      end),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(undefined)),
 
     set_policy_upstream(Config, Rabbit, <<"^test$">>,
       rabbit_ct_broker_helpers:node_uri(Config, 1),
       [{<<"trust-user-id">>, true}]),
-    wait_for_federation(360, Config, Hare, <<"/">>),
+    wait_for_federation(
+      30,
+      fun() ->
+              VHost = <<"/">>,
+              X1s = rabbit_ct_broker_helpers:rpc(
+                      Config, Rabbit, rabbit_exchange, list, [VHost]),
+              L1 =
+              [X || X <- X1s,
+               X#exchange.name =:= #resource{virtual_host = VHost,
+                                             kind = exchange,
+                                             name = <<"test">>},
+               X#exchange.scratches =:= [{federation,
+                                          [{{<<"upstream-2">>,
+                                             <<"test">>},
+                                            <<"A">>}]}]],
+              X2s = rabbit_ct_broker_helpers:rpc(
+                      Config, Hare, rabbit_exchange, list, [VHost]),
+              L2 =
+              [X || X <- X2s,
+                    X#exchange.type =:= 'x-federation-upstream'],
+              [] =/= L1 andalso [] =/= L2 andalso
+              has_internal_federated_queue(Config, Hare, VHost)
+      end),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(<<"hare-user">>)),
 
@@ -917,7 +961,28 @@ dynamic_plugin_cleanup_stop_start(Config) ->
 
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
-              wait_for_federation(360, Config, 0, <<"/">>),
+              wait_for_federation(
+                30,
+                fun() ->
+                        VHost = <<"/">>,
+                        Xs = rabbit_ct_broker_helpers:rpc(
+                               Config, 0, rabbit_exchange, list, [VHost]),
+                        L1 =
+                        [X || X <- Xs,
+                              X#exchange.type =:= 'x-federation-upstream'],
+                        L2 =
+                        [X || X <- Xs,
+                              X#exchange.name =:= #resource{
+                                                     virtual_host = VHost,
+                                                     kind = exchange,
+                                                     name = X1},
+                              X#exchange.scratches =:= [{federation,
+                                                         [{{<<"localhost">>,
+                                                            X1},
+                                                           <<"B">>}]}]],
+                        [] =/= L1 andalso [] =/= L2 andalso
+                        has_internal_federated_queue(Config, 0, VHost)
+                end),
 
               ?assert(has_internal_federated_exchange(Config, 0, <<"/">>)),
               ?assert(has_internal_federated_queue(Config, 0, <<"/">>)),
@@ -944,7 +1009,28 @@ dynamic_policy_cleanup(Config) ->
 
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
-              wait_for_federation(360, Config, 0, <<"/">>),
+              wait_for_federation(
+                30,
+                fun() ->
+                        VHost = <<"/">>,
+                        Xs = rabbit_ct_broker_helpers:rpc(
+                               Config, 0, rabbit_exchange, list, [VHost]),
+                        L1 =
+                        [X || X <- Xs,
+                              X#exchange.type =:= 'x-federation-upstream'],
+                        L2 =
+                        [X || X <- Xs,
+                              X#exchange.name =:= #resource{
+                                                     virtual_host = VHost,
+                                                     kind = exchange,
+                                                     name = X1},
+                              X#exchange.scratches =:= [{federation,
+                                                         [{{<<"localhost">>,
+                                                            X1},
+                                                           <<"B">>}]}]],
+                        [] =/= L1 andalso [] =/= L2 andalso
+                        has_internal_federated_queue(Config, 0, VHost)
+                end),
 
               ?assert(has_internal_federated_exchange(Config, 0, <<"/">>)),
               ?assert(has_internal_federated_queue(Config, 0, <<"/">>)),
@@ -959,14 +1045,6 @@ dynamic_policy_cleanup(Config) ->
               clear_policy(Config, 0, <<"dyn">>),
               assert_connections(Config, 0, [X1], [])
       end, [x(X1)]).
-
-wait_for_federation(Retries, Config, Node, VHost) ->
-    wait_for_federation(
-      Retries,
-      fun() ->
-              has_internal_federated_exchange(Config, Node, VHost) andalso
-              has_internal_federated_queue(Config, Node, VHost)
-      end).
 
 wait_for_federation(Retries, Fun) ->
     case Fun() of
