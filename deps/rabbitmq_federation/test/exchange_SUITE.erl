@@ -358,13 +358,14 @@ user_id(Config) ->
                 end
         end,
 
+    wait_for_federation(360, Config, Hare, <<"/">>),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(undefined)),
 
     set_policy_upstream(Config, Rabbit, <<"^test$">>,
       rabbit_ct_broker_helpers:node_uri(Config, 1),
       [{<<"trust-user-id">>, true}]),
-    wait_for_federation(360, Config, Rabbit, <<"/">>),
+    wait_for_federation(360, Config, Hare, <<"/">>),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(<<"hare-user">>)),
 
