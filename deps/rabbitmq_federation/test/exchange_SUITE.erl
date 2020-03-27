@@ -938,6 +938,39 @@ dynamic_plugin_stop_start(Config) ->
                 rabbit_registry, lookup_module,
                 [exchange, 'x-federation-upstream']),
 
+              wait_for_federation(
+                30,
+                fun() ->
+                        VHost = <<"/">>,
+                        Xs = rabbit_ct_broker_helpers:rpc(
+                               Config, 0, rabbit_exchange, list, [VHost]),
+                        L1 =
+                        [X || X <- Xs,
+                              X#exchange.type =:= 'x-federation-upstream'],
+                        L2 =
+                        [X || X <- Xs,
+                              X#exchange.name =:= #resource{
+                                                     virtual_host = VHost,
+                                                     kind = exchange,
+                                                     name = X1},
+                              X#exchange.scratches =:= [{federation,
+                                                         [{{<<"localhost">>,
+                                                            X1},
+                                                           <<"A">>}]}]],
+                        L3 =
+                        [X || X <- Xs,
+                              X#exchange.name =:= #resource{
+                                                     virtual_host = VHost,
+                                                     kind = exchange,
+                                                     name = X2},
+                              X#exchange.scratches =:= [{federation,
+                                                         [{{<<"localhost">>,
+                                                            X2},
+                                                           <<"B">>}]}]],
+                        length(L1) =:= 2 andalso [] =/= L2 andalso [] =/= L3 andalso
+                        has_internal_federated_queue(Config, 0, VHost)
+                end),
+
               %% Test both exchanges work. They are just federated to
               %% themselves so should duplicate messages.
               [begin
