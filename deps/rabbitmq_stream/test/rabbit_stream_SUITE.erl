@@ -84,6 +84,8 @@ test_server(Port) ->
     test_deliver(S, SubscriptionId, Body),
     test_delete_target(S, Target),
     test_metadata_update_target_deleted(S, Target),
+    test_close(S),
+    closed = wait_for_socket_close(S, 10),
     ok.
 
 test_authenticate(S) ->
@@ -127,7 +129,7 @@ test_authenticate(S) ->
     OpenFrame = <<?COMMAND_OPEN:16, ?VERSION_0:16, 3:32, VirtualHostLength:16, VirtualHost/binary>>,
     OpenFrameSize = byte_size(OpenFrame),
     gen_tcp:send(S, <<OpenFrameSize:32, OpenFrame/binary>>),
-    {ok,<<10:32,?COMMAND_OPEN:16,?VERSION_0:16,3:32,?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
+    {ok, <<10:32, ?COMMAND_OPEN:16, ?VERSION_0:16, 3:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
 
 
 test_create_target(S, Target) ->
@@ -170,6 +172,24 @@ test_deliver(S, SubscriptionId, Body) ->
 test_metadata_update_target_deleted(S, Target) ->
     TargetSize = byte_size(Target),
     {ok, <<15:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16, ?RESPONSE_CODE_TARGET_DELETED:16, TargetSize:16, Target/binary>>} = gen_tcp:recv(S, 0, 5000).
+
+test_close(S) ->
+    CloseReason = <<"OK">>,
+    CloseReasonSize = byte_size(CloseReason),
+    CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16, CloseReasonSize:16, CloseReason/binary>>,
+    CloseFrameSize = byte_size(CloseFrame),
+    gen_tcp:send(S, <<CloseFrameSize:32, CloseFrame/binary>>),
+    {ok, <<10:32, ?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
+
+wait_for_socket_close(_S, 0) ->
+    not_closed;
+wait_for_socket_close(S, Attempt) ->
+    case gen_tcp:recv(S, 0, 1000) of
+        {error, timeout} ->
+            wait_for_socket_close(S, Attempt - 1);
+        {error, closed} ->
+            closed
+    end.
 
 read_frame(S, Buffer) ->
     inet:setopts(S, [{active, once}]),
