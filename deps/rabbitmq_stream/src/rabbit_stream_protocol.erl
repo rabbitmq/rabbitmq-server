@@ -101,7 +101,7 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State,
             error_logger:info_msg("Transitioned from ~p to ~p~n", [ConnectionStep0, ConnectionStep]),
             case ConnectionStep of
                 authenticated ->
-                    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:64, Heartbeat:16>>,
+                    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>,
                     frame(Transport, State1, TuneFrame),
                     listen_loop_pre_auth(Transport, State1#stream_connection{connection_step = tuning}, Configuration);
                 opened ->
@@ -362,7 +362,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                       end,
 
     {State1, Rest1};
-handle_frame_pre_auth(_Transport, State, <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:64, Heartbeat:16>>, Rest) ->
+handle_frame_pre_auth(_Transport, State, <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
 
     %% FIXME take frame max size and heartbeat into account
