@@ -21,6 +21,7 @@
          links, monitors, monitored_by, heap_size]).
 
 -export([maybe_stuck/0, maybe_stuck/1, top_memory_use/0, top_memory_use/1,
+         top_erlang_mailbox/0, top_erlang_mailbox/1,
          top_binary_refs/0, top_binary_refs/1]).
 
 maybe_stuck() -> maybe_stuck(5000).
@@ -81,6 +82,15 @@ top_memory_use(Count) ->
     Pids = processes(),
     io:format("~s Memory use: top ~p of ~p processes.~n", [get_time(), Count, length(Pids)]),
     Procs = [{info(Pid, memory, 0), info(Pid)} || Pid <- Pids],
+    Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
+    io:format("~s ~p~n", [get_time(), Sorted]).
+
+top_erlang_mailbox() -> top_erlang_mailbox(5).
+
+top_erlang_mailbox(Count) ->
+    Pids = processes(),
+    io:format("~s Erlang mailbox length: top ~p of ~p processes.~n", [get_time(), Count, length(Pids)]),
+    Procs = [{info(Pid, message_queue_len, 0), info(Pid)} || Pid <- Pids],
     Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
     io:format("~s ~p~n", [get_time(), Sorted]).
 
