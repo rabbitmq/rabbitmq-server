@@ -359,7 +359,7 @@ user_id(Config) ->
         end,
 
     wait_for_federation(
-      30,
+      90,
       fun() ->
               VHost = <<"/">>,
               X1s = rabbit_ct_broker_helpers:rpc(
@@ -388,7 +388,7 @@ user_id(Config) ->
       rabbit_ct_broker_helpers:node_uri(Config, 1),
       [{<<"trust-user-id">>, true}]),
     wait_for_federation(
-      30,
+      90,
       fun() ->
               VHost = <<"/">>,
               X1s = rabbit_ct_broker_helpers:rpc(
@@ -492,7 +492,7 @@ binding_recovery(Config) ->
       Rabbit, <<"federation-upstream-set">>, <<"upstream">>,
       [[{<<"upstream">>, <<"rabbit">>}, {<<"exchange">>, <<"upstream">>}]]),
     wait_for_federation(
-      30,
+      90,
       fun() ->
               VHost = <<"/">>,
               Xs = rabbit_ct_broker_helpers:rpc(
@@ -939,7 +939,7 @@ dynamic_plugin_stop_start(Config) ->
                 [exchange, 'x-federation-upstream']),
 
               wait_for_federation(
-                30,
+                90,
                 fun() ->
                         VHost = <<"/">>,
                         Xs = rabbit_ct_broker_helpers:rpc(
@@ -995,7 +995,7 @@ dynamic_plugin_cleanup_stop_start(Config) ->
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
               wait_for_federation(
-                30,
+                90,
                 fun() ->
                         VHost = <<"/">>,
                         Xs = rabbit_ct_broker_helpers:rpc(
@@ -1043,7 +1043,7 @@ dynamic_policy_cleanup(Config) ->
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
               wait_for_federation(
-                30,
+                90,
                 fun() ->
                         VHost = <<"/">>,
                         Xs = rabbit_ct_broker_helpers:rpc(
