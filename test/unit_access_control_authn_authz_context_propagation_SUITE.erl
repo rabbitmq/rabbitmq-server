@@ -14,7 +14,7 @@
 %% Copyright (c) 2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(authn_authz_context_propagation_SUITE).
+-module(unit_access_control_authn_authz_context_propagation_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
