@@ -47,9 +47,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           configurable_server_properties,
-          credit_flow_settings,
           dynamic_mirroring,
-          gen_server2_with_state,
           mcall,
           max_message_size,
 
@@ -464,17 +462,6 @@ test_spawn_remote() ->
     after ?TIMEOUT  -> throw(failed_to_receive_result)
     end.
 
-%% ---------------------------------------------------------------------------
-%% Unordered tests (originally from rabbit_tests.erl).
-%% ---------------------------------------------------------------------------
-gen_server2_with_state(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, gen_server2_with_state1, [Config]).
-
-gen_server2_with_state1(_Config) ->
-    fhc_state = gen_server2:with_state(file_handle_cache,
-                                       fun (S) -> element(1, S) end),
-    passed.
 
 mcall(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
