@@ -50,9 +50,6 @@ groups() ->
           merge_operator_policy_definitions,
           priority_queue,
           rabbit_direct_extract_extra_auth_props,
-          {resource_monitor, [parallel], [
-              parse_information_unit
-            ]},
           {supervisor2, [], [
               check_shutdown_stop,
               check_shutdown_ignored
@@ -61,9 +58,6 @@ groups() ->
           unfold
         ]},
       {sequential_tests, [], [
-          pg_local,
-          pg_local_with_unexpected_deaths1,
-          pg_local_with_unexpected_deaths2,
           decrypt_start_app,
           decrypt_start_app_file,
           decrypt_start_app_undefined,
