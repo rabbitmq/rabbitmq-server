@@ -177,6 +177,8 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
             CorrelationIdBinaries = [<<CorrelationId:64>> || CorrelationId <- CorrelationIdList],
             CorrelationIdCount = length(CorrelationIdList),
             FrameSize = 2 + 2 + 4 + CorrelationIdCount * 8,
+            %% FIXME enforce max frame size
+            %% in practice, this should be necessary on for very large chunks and for very small frame size limits
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>, <<CorrelationIdCount:32>>, CorrelationIdBinaries]),
             add_credits(Credits, CorrelationIdCount),
             State1 = case Blocked of
