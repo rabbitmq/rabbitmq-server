@@ -22,9 +22,9 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [expect/3, expect/4,
+        [wait_for_federation/2, expect/3, expect/4,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_policy/5, clear_policy/3,
-         set_policy_pattern/5, set_policy_upstream/5, set_policy_upstreams/4, q/1, with_ch/3,
+         set_policy_pattern/5, set_policy_upstream/5, q/1, with_ch/3,
          declare_queue/2, delete_queue/2]).
 
 all() ->
@@ -248,6 +248,25 @@ dynamic_plugin_stop_start(Config) ->
               declare_queue(Ch, q(Q2)),
               ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0,
                 "rabbitmq_federation"),
+              wait_for_federation(
+                90,
+                fun() ->
+                        Status = rabbit_ct_broker_helpers:rpc(
+                                   Config, 0,
+                                   rabbit_federation_status, status, []),
+                        L =
+                        [Entry
+                         || Entry <- Status,
+                            proplists:get_value(queue, Entry) =:= Q1 orelse
+                            proplists:get_value(queue, Entry) =:= Q2,
+                            proplists:get_value(status, Entry) =:= running
+                        ],
+                        length(L) =:= 2
+                end),
+              %% We wait a bit more because the condition above is not
+              %% enough. Unfortunately, I don't know what to look for...
+              %% -- JSP
+              timer:sleep(30000),
               expect_federation(Ch, U, Q1),
               expect_federation(Ch, U, Q2),
 
