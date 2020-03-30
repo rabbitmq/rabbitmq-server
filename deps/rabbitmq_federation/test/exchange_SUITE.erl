@@ -61,9 +61,6 @@ groups() ->
             ]}
         ]},
       {with_disambiguate, [], [
-          {cluster_size_1, [], [
-              binding_recovery
-            ]},
           {cluster_size_2, [], [
               user_id,
               cycle_detection,
@@ -454,71 +451,6 @@ no_loop(Config) ->
               expect_empty(Ch, Q2)
       end, [x(<<"one">>),
             x(<<"two">>)]).
-
-binding_recovery(Config) ->
-    [Rabbit] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Q = <<"durable-Q">>,
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-
-    rabbit_federation_test_util:set_upstream(Config,
-      Rabbit, <<"rabbit">>,
-      rabbit_ct_broker_helpers:node_uri(Config, Rabbit)),
-    rabbit_federation_test_util:set_upstream_set(Config,
-      Rabbit, <<"upstream">>,
-      [{<<"rabbit">>, [{<<"exchange">>, <<"upstream">>}]},
-       {<<"rabbit">>, [{<<"exchange">>, <<"upstream2">>}]}]),
-    rabbit_federation_test_util:set_policy(Config,
-      Rabbit, <<"fed">>, <<"^fed\\.">>, <<"upstream">>),
-
-    declare_all(Ch, [x(<<"upstream2">>) | upstream_downstream()]),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
-                                               durable = true}),
-    bind_queue(Ch, Q, <<"fed.downstream">>, <<"key">>),
-    timer:sleep(1000), %% To get the suffix written
-
-    %% i.e. don't clean up
-    rabbit_ct_client_helpers:close_channels_and_connection(Config, Rabbit),
-    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
-
-    true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream")),
-    true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream2")),
-
-    %% again don't clean up
-    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
-    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-
-    rabbit_ct_broker_helpers:set_parameter(Config,
-      Rabbit, <<"federation-upstream-set">>, <<"upstream">>,
-      [[{<<"upstream">>, <<"rabbit">>}, {<<"exchange">>, <<"upstream">>}]]),
-    wait_for_federation(
-      90,
-      fun() ->
-              VHost = <<"/">>,
-              Xs = rabbit_ct_broker_helpers:rpc(
-                     Config, Rabbit, rabbit_exchange, list, [VHost]),
-              L1 =
-              [X || X <- Xs,
-                    X#exchange.type =:= 'x-federation-upstream'],
-              L2 =
-              [X || X <- Xs,
-               X#exchange.name =:= #resource{virtual_host = VHost,
-                                             kind = exchange,
-                                             name = <<"fed.downstream">>},
-               X#exchange.scratches =:= [{federation,
-                                          [{{<<"rabbit">>,
-                                             <<"upstream">>},
-                                            <<"A">>}]}]],
-              [] =/= L1 andalso [] =/= L2 andalso
-              has_internal_federated_queue(Config, Rabbit, VHost)
-      end),
-
-    publish_expect(Ch3, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-    true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream")),
-    none = suffix(Config, Rabbit, <<"rabbit">>, "upstream2"),
-    delete_all(Ch3, [x(<<"upstream2">>) | upstream_downstream()]),
-    delete_queue(Ch3, Q),
-    ok.
 
 suffix(Config, Node, Name, XName) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
