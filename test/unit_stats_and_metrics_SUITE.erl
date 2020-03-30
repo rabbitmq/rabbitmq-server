@@ -40,7 +40,7 @@ groups() ->
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Testsuite setup/teardown
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -53,7 +53,7 @@ end_per_suite(Config) ->
 init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
-        {rmq_nodes_count, 2}
+        {rmq_nodes_count, 1}
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++

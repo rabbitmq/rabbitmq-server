@@ -48,7 +48,6 @@ groups() ->
           pmerge,
           plmerge,
           merge_operator_policy_definitions,
-          priority_queue,
           rabbit_direct_extract_extra_auth_props,
           {supervisor2, [], [
               check_shutdown_stop,

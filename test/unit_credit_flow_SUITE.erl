@@ -14,7 +14,7 @@
 %% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(unit_vm_memory_monitor_SUITE).
+-module(unit_credit_flow_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -29,11 +29,9 @@ all() ->
 groups() ->
     [
       {sequential_tests, [], [
-          parse_line_linux,
-          set_vm_memory_high_watermark_command
+          credit_flow_settings
         ]}
     ].
-
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown
@@ -67,38 +65,35 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 
-%% -------------------------------------------------------------------
-%% Test cases
-%% -------------------------------------------------------------------
+%% ---------------------------------------------------------------------------
+%% Test Cases
+%% ---------------------------------------------------------------------------
 
-
-parse_line_linux(_Config) ->
-    lists:foreach(fun ({S, {K, V}}) ->
-                          {K, V} = vm_memory_monitor:parse_line_linux(S)
-                  end,
-                  [{"MemTotal:      0 kB",        {'MemTotal', 0}},
-                   {"MemTotal:      502968 kB  ", {'MemTotal', 515039232}},
-                   {"MemFree:         178232 kB", {'MemFree',  182509568}},
-                   {"MemTotal:         50296888", {'MemTotal', 50296888}},
-                   {"MemTotal         502968 kB", {'MemTotal', 515039232}},
-                   {"MemTotal     50296866   ",   {'MemTotal', 50296866}}]),
-    ok.
-
-set_vm_memory_high_watermark_command(Config) ->
+credit_flow_settings(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, set_vm_memory_high_watermark_command1, [Config]).
+      ?MODULE, credit_flow_settings1, [Config]).
 
-set_vm_memory_high_watermark_command1(_Config) ->
-    MemLimitRatio = 1.0,
-    MemTotal = vm_memory_monitor:get_total_memory(),
+credit_flow_settings1(_Config) ->
+    passed = test_proc(400, 200, {400, 200}),
+    passed = test_proc(600, 300),
+    passed.
 
-    vm_memory_monitor:set_vm_memory_high_watermark(MemLimitRatio),
-    MemLimit = vm_memory_monitor:get_memory_limit(),
-    case MemLimit of
-        MemTotal -> ok;
-        _        -> MemTotalToMemLimitRatio = MemLimit * 100.0 / MemTotal / 100,
-                    ct:fail(
-                        "Expected memory high watermark to be ~p (~s), but it was ~p (~.1f)",
-                        [MemTotal, MemLimitRatio, MemLimit, MemTotalToMemLimitRatio]
-                    )
+test_proc(InitialCredit, MoreCreditAfter) ->
+    test_proc(InitialCredit, MoreCreditAfter, {InitialCredit, MoreCreditAfter}).
+test_proc(InitialCredit, MoreCreditAfter, Settings) ->
+    Pid = spawn(?MODULE, dummy, [Settings]),
+    Pid ! {credit, self()},
+    {InitialCredit, MoreCreditAfter} =
+        receive
+            {credit, Val} -> Val
+        end,
+    passed.
+
+dummy(Settings) ->
+    credit_flow:send(self()),
+    receive
+        {credit, From} ->
+            From ! {credit, Settings};
+        _      ->
+            dummy(Settings)
     end.
