@@ -14,14 +14,12 @@
 %% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(unit_disk_monitor_SUITE).
+-module(unit_gen_server2_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
-
--define(TIMEOUT, 30000).
 
 all() ->
     [
@@ -31,7 +29,7 @@ all() ->
 groups() ->
     [
       {sequential_tests, [], [
-          set_disk_free_limit_command
+          gen_server2_with_state
         ]}
     ].
 
@@ -71,29 +69,11 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-set_disk_free_limit_command(Config) ->
+gen_server2_with_state(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, set_disk_free_limit_command1, [Config]).
+      ?MODULE, gen_server2_with_state1, [Config]).
 
-set_disk_free_limit_command1(_Config) ->
-    %% Use an integer
-    rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1}),
-    disk_free_limit_to_total_memory_ratio_is(1),
-
-    %% Use a float
-    rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1.5}),
-    disk_free_limit_to_total_memory_ratio_is(1.5),
-
-    %% use an absolute value
-    rabbit_disk_monitor:set_disk_free_limit("70MiB"),
-    ?assertEqual(73400320, rabbit_disk_monitor:get_disk_free_limit()),
-
-    rabbit_disk_monitor:set_disk_free_limit("50MB"),
-    ?assertEqual(50 * 1000 * 1000, rabbit_disk_monitor:get_disk_free_limit()),
+gen_server2_with_state1(_Config) ->
+    fhc_state = gen_server2:with_state(file_handle_cache,
+                                       fun (S) -> element(1, S) end),
     passed.
-
-disk_free_limit_to_total_memory_ratio_is(MemRatio) ->
-    ExpectedLimit = MemRatio * vm_memory_monitor:get_total_memory(),
-    % Total memory is unstable, so checking order
-    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() < 1.2,
-    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() > 0.98.
