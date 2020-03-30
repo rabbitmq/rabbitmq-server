@@ -18,22 +18,18 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -compile(export_all).
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, sequential_tests}
     ].
 
 groups() ->
     [
-      {parallel_tests, [parallel], [
-          {vm_memory_monitor, [parallel], [
-              parse_line_linux
-            ]}
+      {sequential_tests, [], [
+          parse_line_linux
         ]}
     ].
 
