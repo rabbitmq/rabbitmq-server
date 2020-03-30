@@ -64,7 +64,8 @@ groups() ->
               slave_recovers_after_vhost_down_and_up,
               master_migrates_on_vhost_down,
               slave_recovers_after_vhost_down_and_master_migrated,
-              queue_survive_adding_dead_vhost_mirror
+              queue_survive_adding_dead_vhost_mirror,
+              dynamic_mirroring
             ]},
           {cluster_size_3, [], [
               change_policy,
@@ -76,10 +77,6 @@ groups() ->
               rebalance_exactly,
               rebalance_nodes,
               rebalance_multiple_blocked
-              % FIXME: Re-enable those tests when the know issues are
-              % fixed.
-              % failing_random_policies,
-              % random_policy
             ]}
         ]}
     ].
@@ -128,8 +125,67 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test Cases
 %% -------------------------------------------------------------------
+
+dynamic_mirroring(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, dynamic_mirroring1, [Config]).
+
+dynamic_mirroring1(_Config) ->
+    %% Just unit tests of the node selection logic, see multi node
+    %% tests for the rest...
+    Test = fun ({NewM, NewSs, ExtraSs}, Policy, Params,
+                {MNode, SNodes, SSNodes}, All) ->
+                   {ok, M} = rabbit_mirror_queue_misc:module(Policy),
+                   {NewM, NewSs0} = M:suggested_queue_nodes(
+                                      Params, MNode, SNodes, SSNodes, All),
+                   NewSs1 = lists:sort(NewSs0),
+                   case dm_list_match(NewSs, NewSs1, ExtraSs) of
+                       ok    -> ok;
+                       error -> exit({no_match, NewSs, NewSs1, ExtraSs})
+                   end
+           end,
+
+    Test({a,[b,c],0},<<"all">>,'_',{a,[],   []},   [a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[b,c],[b,c]},[a,b,c]),
+    Test({a,[b,c],0},<<"all">>,'_',{a,[d],  [d]},  [a,b,c]),
+
+    N = fun (Atoms) -> [list_to_binary(atom_to_list(A)) || A <- Atoms] end,
+
+    %% Add a node
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[b],[b]},[a,b,c,d]),
+    Test({b,[a,c],0},<<"nodes">>,N([a,b,c]),{b,[a],[a]},[a,b,c,d]),
+    %% Add two nodes and drop one
+    Test({a,[b,c],0},<<"nodes">>,N([a,b,c]),{a,[d],[d]},[a,b,c,d]),
+    %% Don't try to include nodes that are not running
+    Test({a,[b],  0},<<"nodes">>,N([a,b,f]),{a,[b],[b]},[a,b,c,d]),
+    %% If we can't find any of the nodes listed then just keep the master
+    Test({a,[],   0},<<"nodes">>,N([f,g,h]),{a,[b],[b]},[a,b,c,d]),
+    %% And once that's happened, still keep the master even when not listed,
+    %% if nothing is synced
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[], []}, [a,b,c,d]),
+    Test({a,[b,c],0},<<"nodes">>,N([b,c]),  {a,[b],[]}, [a,b,c,d]),
+    %% But if something is synced we can lose the master - but make
+    %% sure we pick the new master from the nodes which are synced!
+    Test({b,[c],  0},<<"nodes">>,N([b,c]),  {a,[b],[b]},[a,b,c,d]),
+    Test({b,[c],  0},<<"nodes">>,N([c,b]),  {a,[b],[b]},[a,b,c,d]),
+
+    Test({a,[],   1},<<"exactly">>,2,{a,[],   []},   [a,b,c,d]),
+    Test({a,[],   2},<<"exactly">>,3,{a,[],   []},   [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  1},<<"exactly">>,3,{a,[c],  [c]},  [a,b,c,d]),
+    Test({a,[c],  0},<<"exactly">>,2,{a,[c,d],[c,d]},[a,b,c,d]),
+    Test({a,[c,d],0},<<"exactly">>,3,{a,[c,d],[c,d]},[a,b,c,d]),
+
+    passed.
+
+%% Does the first list match the second where the second is required
+%% to have exactly Extra superfluous items?
+dm_list_match([],     [],      0)     -> ok;
+dm_list_match(_,      [],     _Extra) -> error;
+dm_list_match([H|T1], [H |T2], Extra) -> dm_list_match(T1, T2, Extra);
+dm_list_match(L1,     [_H|T2], Extra) -> dm_list_match(L1, T2, Extra - 1).
 
 change_policy(Config) ->
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
