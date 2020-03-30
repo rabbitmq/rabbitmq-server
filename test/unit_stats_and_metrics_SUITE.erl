@@ -14,7 +14,7 @@
 %% Copyright (c) 2011-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(unit_inbroker_non_parallel_SUITE).
+-module(unit_stats_and_metrics_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
@@ -35,11 +35,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
           channel_statistics,
-          head_message_timestamp_statistics,
-          exchange_count,
-          queue_count,
-          connection_count,
-          connection_lookup
+          head_message_timestamp_statistics
         ]}
     ].
 
@@ -277,55 +273,3 @@ test_spawn() ->
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
     end,
     {Writer, Ch}.
-
-%% ---------------------------------------------------------------------------
-%% Count functions for management only API purposes
-%% ---------------------------------------------------------------------------
-exchange_count(Config) ->
-    %% Default exchanges == 7
-    ?assertEqual(7, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, count, [])).
-
-queue_count(Config) ->
-    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-queue">> }),
-
-    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, [])),
-
-    amqp_channel:call(Ch, #'queue.delete'{ queue = <<"my-queue">> }),
-    rabbit_ct_client_helpers:close_channel(Ch),
-    rabbit_ct_client_helpers:close_connection(Conn),
-    ok.
-
-connection_count(Config) ->
-    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
-
-    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, [])),
-
-    rabbit_ct_client_helpers:close_connection(Conn),
-    ok.
-
-connection_lookup(Config) ->
-    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
-
-    [Connection] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []),
-    ?assertMatch(Connection, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
-                                                          lookup,
-                                                          [Connection#tracked_connection.name])),
-
-    rabbit_ct_client_helpers:close_connection(Conn),
-    ok.
-
-%% ---------------------------------------------------------------------------
-%% rabbitmqctl helpers.
-%% ---------------------------------------------------------------------------
-
-default_options() -> [{"-p", "/"}, {"-q", "false"}].
-
-expand_options(As, Bs) ->
-    lists:foldl(fun({K, _}=A, R) ->
-                        case proplists:is_defined(K, R) of
-                            true -> R;
-                            false -> [A | R]
-                        end
-                end, Bs, As).
