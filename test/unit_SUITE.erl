@@ -58,10 +58,7 @@ groups() ->
               check_shutdown_ignored
             ]},
           table_codec,
-          unfold,
-          {vm_memory_monitor, [parallel], [
-              parse_line_linux
-            ]}
+          unfold
         ]},
       {sequential_tests, [], [
           pg_local,
@@ -608,43 +605,6 @@ test_simple_n_element_queue(N) ->
     {true, false, N, ToListRes, Items} = test_priority_queue(Q),
     passed.
 
-%% ---------------------------------------------------------------------------
-%% resource_monitor.
-%% ---------------------------------------------------------------------------
-
-parse_information_unit(_Config) ->
-    lists:foreach(fun ({S, V}) ->
-                          V = rabbit_resource_monitor_misc:parse_information_unit(S)
-                  end,
-                  [
-                   {"1000", {ok, 1000}},
-
-                   {"10kB", {ok, 10000}},
-                   {"10MB", {ok, 10000000}},
-                   {"10GB", {ok, 10000000000}},
-
-                   {"10kiB", {ok, 10240}},
-                   {"10MiB", {ok, 10485760}},
-                   {"10GiB", {ok, 10737418240}},
-
-                   {"10k", {ok, 10240}},
-                   {"10M", {ok, 10485760}},
-                   {"10G", {ok, 10737418240}},
-
-                   {"10KB", {ok, 10000}},
-                   {"10K",  {ok, 10240}},
-                   {"10m",  {ok, 10485760}},
-                   {"10Mb", {ok, 10000000}},
-
-                   {"0MB",  {ok, 0}},
-
-                   {"10 k", {error, parse_error}},
-                   {"MB", {error, parse_error}},
-                   {"", {error, parse_error}},
-                   {"0.5GB", {error, parse_error}},
-                   {"10TB", {error, parse_error}}
-                  ]),
-    passed.
 
 %% ---------------------------------------------------------------------------
 %% supervisor2.
