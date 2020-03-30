@@ -34,12 +34,6 @@ groups() ->
         ]}
     ].
 
-init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
-                                   TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined;
-                                   TC =:= decrypt_start_app_wrong_passphrase ->
-    application:set_env(rabbit, feature_flags_file, "", [{persistent, true}]),
-    Config;
 init_per_testcase(_Testcase, Config) ->
     Config.
 
