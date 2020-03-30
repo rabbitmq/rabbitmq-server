@@ -34,9 +34,8 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          app_management, %% Restart RabbitMQ.
-          channel_statistics, %% Expect specific statistics.
-          head_message_timestamp_statistics, %% Expect specific statistics.
+          channel_statistics,
+          head_message_timestamp_statistics,
           exchange_count,
           queue_count,
           connection_count,
@@ -62,20 +61,7 @@ init_per_group(Group, Config) ->
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps() ++ [
-        fun setup_file_handle_cache/1
-      ]).
-
-setup_file_handle_cache(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, setup_file_handle_cache1, []),
-    Config.
-
-setup_file_handle_cache1() ->
-    %% FIXME: Why are we doing this?
-    application:set_env(rabbit, file_handles_high_watermark, 10),
-    ok = file_handle_cache:set_limit(10),
-    ok.
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
@@ -88,49 +74,6 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-%% -------------------------------------------------------------------
-%% Application management.
-%% -------------------------------------------------------------------
-
-app_management(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, app_management1, [Config]).
-
-app_management1(_Config) ->
-    wait_for_application(rabbit),
-    %% Starting, stopping and diagnostics.  Note that we don't try
-    %% 'report' when the rabbit app is stopped and that we enable
-    %% tracing for the duration of this function.
-    ok = rabbit_trace:start(<<"/">>),
-    ok = rabbit:stop(),
-    ok = rabbit:stop(),
-    ok = no_exceptions(rabbit, status, []),
-    ok = no_exceptions(rabbit, environment, []),
-    ok = rabbit:start(),
-    ok = rabbit:start(),
-    ok = no_exceptions(rabbit, status, []),
-    ok = no_exceptions(rabbit, environment, []),
-    ok = rabbit_trace:stop(<<"/">>),
-    passed.
-
-no_exceptions(Mod, Fun, Args) ->
-    try erlang:apply(Mod, Fun, Args) of _ -> ok
-    catch Type:Ex -> {Type, Ex}
-    end.
-
-wait_for_application(Application) ->
-    wait_for_application(Application, 5000).
-
-wait_for_application(_, Time) when Time =< 0 ->
-    {error, timeout};
-wait_for_application(Application, Time) ->
-    Interval = 100,
-    case lists:keyfind(Application, 1, application:which_applications()) of
-        false ->
-            timer:sleep(Interval),
-            wait_for_application(Application, Time - Interval);
-        _ -> ok
-    end.
 
 %% -------------------------------------------------------------------
 %% Statistics.
