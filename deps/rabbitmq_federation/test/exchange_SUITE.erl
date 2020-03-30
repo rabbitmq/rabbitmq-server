@@ -25,7 +25,7 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [expect/3, expect_empty/2,
+        [wait_for_federation/2, expect/3, expect_empty/2,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_upstream_set/4,
          set_policy/5, set_policy_pattern/5, clear_policy/3,
          set_policy_upstream/5, set_policy_upstreams/4]).
@@ -1078,17 +1078,6 @@ dynamic_policy_cleanup(Config) ->
               clear_policy(Config, 0, <<"dyn">>),
               assert_connections(Config, 0, [X1], [])
       end, [x(X1)]).
-
-wait_for_federation(Retries, Fun) ->
-    case Fun() of
-        true ->
-            ok;
-        false when Retries > 0 ->
-            timer:sleep(1000),
-            wait_for_federation(Retries - 1, Fun);
-        false ->
-            throw({timeout_while_waiting_for_federation, Fun})
-    end.
 
 has_internal_federated_exchange(Config, Node, VHost) ->
     lists:any(fun(X) ->
