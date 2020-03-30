@@ -29,7 +29,8 @@
     target_subscriptions, credits,
     blocked,
     authentication_state, user, virtual_host,
-    connection_step % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
+    connection_step, % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
+    frame_max
 }).
 
 -record(consumer, {
@@ -62,7 +63,8 @@ init(Ref, Transport, #{initial_credits := InitialCredits,
         consumers = #{}, target_subscriptions = #{},
         blocked = false, credits = Credits,
         authentication_state = none, user = none,
-        connection_step = tcp_connected},
+        connection_step = tcp_connected,
+        frame_max = FrameMax},
     Transport:setopts(Socket, [{active, once}]),
 
     listen_loop_pre_auth(Transport, State, #configuration{
@@ -269,6 +271,14 @@ handle_inbound_data_post_close(Transport, State, Rest) ->
 
 handle_inbound_data(_Transport, State, <<>>, _HandleFrameFun) ->
     State;
+handle_inbound_data(Transport, #stream_connection{data = none, frame_max = FrameMax} = State, <<Size:32, _Frame:Size/binary, _Rest/bits>>, _HandleFrameFun)
+    when FrameMax /= 0 andalso Size > FrameMax - 4 ->
+    CloseReason = <<"frame too large">>,
+    CloseReasonLength = byte_size(CloseReason),
+    CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_FRAME_TOO_LARGE:16,
+        CloseReasonLength:16, CloseReason:CloseReasonLength/binary>>,
+    frame(Transport, State, CloseFrame),
+    State#stream_connection{connection_step = close_sent};
 handle_inbound_data(Transport, #stream_connection{data = none} = State, <<Size:32, Frame:Size/binary, Rest/bits>>, HandleFrameFun) ->
     {State1, Rest1} = HandleFrameFun(Transport, State, Frame, Rest),
     handle_inbound_data(Transport, State1, Rest1, HandleFrameFun);
@@ -365,9 +375,9 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
 handle_frame_pre_auth(_Transport, State, <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
 
-    %% FIXME take frame max size and heartbeat into account
+    %% FIXME take heartbeat into account
 
-    {State#stream_connection{connection_step = tuned}, Rest};
+    {State#stream_connection{connection_step = tuned, frame_max = FrameMax}, Rest};
 handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = State, <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
     VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
 
