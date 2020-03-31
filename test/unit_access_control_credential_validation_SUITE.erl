@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(credential_validation_SUITE).
+-module(unit_access_control_credential_validation_SUITE).
 
 -compile(export_all).
 -include_lib("proper/include/proper.hrl").
