@@ -1,5 +1,7 @@
 ## RabbitMQ Federation
 
+[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-federation.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-federation)
+
 RabbitMQ federation offers a group of features for loosely
 coupled and WAN-friendly distributed RabbitMQ setups. Note that
 this is not an alternative to queue mirroring.
@@ -11,7 +13,7 @@ This plugin ships with RabbitMQ, there is no need to
 install it separately.
 
 
-## Documentation        
+## Documentation
 
 See [RabbitMQ federation plugin](https://www.rabbitmq.com/federation.html) on rabbitmq.com.
 

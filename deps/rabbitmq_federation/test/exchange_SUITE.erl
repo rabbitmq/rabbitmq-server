@@ -25,7 +25,7 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [expect/3, expect_empty/2,
+        [wait_for_federation/2, expect/3, expect_empty/2,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_upstream_set/4,
          set_policy/5, set_policy_pattern/5, clear_policy/3,
          set_policy_upstream/5, set_policy_upstreams/4]).
@@ -61,9 +61,6 @@ groups() ->
             ]}
         ]},
       {with_disambiguate, [], [
-          {cluster_size_1, [], [
-              binding_recovery
-            ]},
           {cluster_size_2, [], [
               user_id,
               cycle_detection,
@@ -359,7 +356,7 @@ user_id(Config) ->
         end,
 
     wait_for_federation(
-      30,
+      90,
       fun() ->
               VHost = <<"/">>,
               X1s = rabbit_ct_broker_helpers:rpc(
@@ -388,7 +385,7 @@ user_id(Config) ->
       rabbit_ct_broker_helpers:node_uri(Config, 1),
       [{<<"trust-user-id">>, true}]),
     wait_for_federation(
-      30,
+      90,
       fun() ->
               VHost = <<"/">>,
               X1s = rabbit_ct_broker_helpers:rpc(
@@ -454,71 +451,6 @@ no_loop(Config) ->
               expect_empty(Ch, Q2)
       end, [x(<<"one">>),
             x(<<"two">>)]).
-
-binding_recovery(Config) ->
-    [Rabbit] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Q = <<"durable-Q">>,
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-
-    rabbit_federation_test_util:set_upstream(Config,
-      Rabbit, <<"rabbit">>,
-      rabbit_ct_broker_helpers:node_uri(Config, Rabbit)),
-    rabbit_federation_test_util:set_upstream_set(Config,
-      Rabbit, <<"upstream">>,
-      [{<<"rabbit">>, [{<<"exchange">>, <<"upstream">>}]},
-       {<<"rabbit">>, [{<<"exchange">>, <<"upstream2">>}]}]),
-    rabbit_federation_test_util:set_policy(Config,
-      Rabbit, <<"fed">>, <<"^fed\\.">>, <<"upstream">>),
-
-    declare_all(Ch, [x(<<"upstream2">>) | upstream_downstream()]),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
-                                               durable = true}),
-    bind_queue(Ch, Q, <<"fed.downstream">>, <<"key">>),
-    timer:sleep(1000), %% To get the suffix written
-
-    %% i.e. don't clean up
-    rabbit_ct_client_helpers:close_channels_and_connection(Config, Rabbit),
-    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
-
-    true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream")),
-    true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream2")),
-
-    %% again don't clean up
-    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
-    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-
-    rabbit_ct_broker_helpers:set_parameter(Config,
-      Rabbit, <<"federation-upstream-set">>, <<"upstream">>,
-      [[{<<"upstream">>, <<"rabbit">>}, {<<"exchange">>, <<"upstream">>}]]),
-    wait_for_federation(
-      30,
-      fun() ->
-              VHost = <<"/">>,
-              Xs = rabbit_ct_broker_helpers:rpc(
-                     Config, Rabbit, rabbit_exchange, list, [VHost]),
-              L1 =
-              [X || X <- Xs,
-                    X#exchange.type =:= 'x-federation-upstream'],
-              L2 =
-              [X || X <- Xs,
-               X#exchange.name =:= #resource{virtual_host = VHost,
-                                             kind = exchange,
-                                             name = <<"fed.downstream">>},
-               X#exchange.scratches =:= [{federation,
-                                          [{{<<"rabbit">>,
-                                             <<"upstream">>},
-                                            <<"A">>}]}]],
-              [] =/= L1 andalso [] =/= L2 andalso
-              has_internal_federated_queue(Config, Rabbit, VHost)
-      end),
-
-    publish_expect(Ch3, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
-    true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream")),
-    none = suffix(Config, Rabbit, <<"rabbit">>, "upstream2"),
-    delete_all(Ch3, [x(<<"upstream2">>) | upstream_downstream()]),
-    delete_queue(Ch3, Q),
-    ok.
 
 suffix(Config, Node, Name, XName) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
@@ -938,6 +870,39 @@ dynamic_plugin_stop_start(Config) ->
                 rabbit_registry, lookup_module,
                 [exchange, 'x-federation-upstream']),
 
+              wait_for_federation(
+                90,
+                fun() ->
+                        VHost = <<"/">>,
+                        Xs = rabbit_ct_broker_helpers:rpc(
+                               Config, 0, rabbit_exchange, list, [VHost]),
+                        L1 =
+                        [X || X <- Xs,
+                              X#exchange.type =:= 'x-federation-upstream'],
+                        L2 =
+                        [X || X <- Xs,
+                              X#exchange.name =:= #resource{
+                                                     virtual_host = VHost,
+                                                     kind = exchange,
+                                                     name = X1},
+                              X#exchange.scratches =:= [{federation,
+                                                         [{{<<"localhost">>,
+                                                            X1},
+                                                           <<"A">>}]}]],
+                        L3 =
+                        [X || X <- Xs,
+                              X#exchange.name =:= #resource{
+                                                     virtual_host = VHost,
+                                                     kind = exchange,
+                                                     name = X2},
+                              X#exchange.scratches =:= [{federation,
+                                                         [{{<<"localhost">>,
+                                                            X2},
+                                                           <<"B">>}]}]],
+                        length(L1) =:= 2 andalso [] =/= L2 andalso [] =/= L3 andalso
+                        has_internal_federated_queue(Config, 0, VHost)
+                end),
+
               %% Test both exchanges work. They are just federated to
               %% themselves so should duplicate messages.
               [begin
@@ -962,7 +927,7 @@ dynamic_plugin_cleanup_stop_start(Config) ->
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
               wait_for_federation(
-                30,
+                90,
                 fun() ->
                         VHost = <<"/">>,
                         Xs = rabbit_ct_broker_helpers:rpc(
@@ -1010,7 +975,7 @@ dynamic_policy_cleanup(Config) ->
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
               wait_for_federation(
-                30,
+                90,
                 fun() ->
                         VHost = <<"/">>,
                         Xs = rabbit_ct_broker_helpers:rpc(
@@ -1045,17 +1010,6 @@ dynamic_policy_cleanup(Config) ->
               clear_policy(Config, 0, <<"dyn">>),
               assert_connections(Config, 0, [X1], [])
       end, [x(X1)]).
-
-wait_for_federation(Retries, Fun) ->
-    case Fun() of
-        true ->
-            ok;
-        false when Retries > 0 ->
-            timer:sleep(1000),
-            wait_for_federation(Retries - 1, Fun);
-        false ->
-            throw({timeout_while_waiting_for_federation, Fun})
-    end.
 
 has_internal_federated_exchange(Config, Node, VHost) ->
     lists:any(fun(X) ->
