@@ -14,7 +14,7 @@
 %% Copyright (c) 2016-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(plugin_versioning_SUITE).
+-module(unit_plugin_versioning_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
