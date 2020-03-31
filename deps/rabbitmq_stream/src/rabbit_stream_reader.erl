@@ -5,12 +5,14 @@
 
 -record(stream_connection, {
     name,
+    helper_sup,
     listen_socket, socket, clusters, data, consumers,
     target_subscriptions, credits,
     blocked,
     authentication_state, user, virtual_host,
     connection_step, % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
-    frame_max
+    frame_max,
+    heartbeater
 }).
 
 -record(consumer, {
@@ -33,7 +35,7 @@ start_link(KeepaliveSup, Transport, Ref, Opts) ->
 
     {ok, Pid}.
 
-init([_KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
+init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
     credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
     frame_max := FrameMax,
     heartbeat := Heartbeat}]) ->
@@ -48,6 +50,7 @@ init([_KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
             init_credit(Credits, InitialCredits),
             State = #stream_connection{
                 name = ConnStr,
+                helper_sup = KeepaliveSup,
                 socket = RealSocket, data = none,
                 clusters = #{},
                 consumers = #{}, target_subscriptions = #{},
@@ -122,7 +125,7 @@ close(Transport, S) ->
     Transport:close(S).
 
 listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Consumers,
-    target_subscriptions = TargetSubscriptions, credits = Credits, blocked = Blocked} = State,
+    target_subscriptions = TargetSubscriptions, credits = Credits, blocked = Blocked, heartbeater = Heartbeater} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
     receive
@@ -139,6 +142,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                                      case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
                                          true ->
                                              Transport:setopts(S, [{active, once}]),
+                                             ok = rabbit_heartbeat:resume_monitor(Heartbeater),
                                              State1#stream_connection{blocked = false};
                                          false ->
                                              State1
@@ -149,6 +153,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                                              Transport:setopts(S, [{active, once}]),
                                              State1;
                                          false ->
+                                             ok = rabbit_heartbeat:pause_monitor(Heartbeater),
                                              State1#stream_connection{blocked = true}
                                      end
                              end,
@@ -172,7 +177,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
             CorrelationIdCount = length(CorrelationIdList),
             FrameSize = 2 + 2 + 4 + CorrelationIdCount * 8,
             %% FIXME enforce max frame size
-            %% in practice, this should be necessary on for very large chunks and for very small frame size limits
+            %% in practice, this should be necessary only for very large chunks and for very small frame size limits
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>, <<CorrelationIdCount:32>>, CorrelationIdBinaries]),
             add_credits(Credits, CorrelationIdCount),
             State1 = case Blocked of
@@ -180,6 +185,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                              case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
                                  true ->
                                      Transport:setopts(S, [{active, once}]),
+                                     ok = rabbit_heartbeat:resume_monitor(Heartbeater),
                                      State#stream_connection{blocked = false};
                                  false ->
                                      State
@@ -220,6 +226,14 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                              State#stream_connection{consumers = Consumers1}
                      end,
             listen_loop_post_auth(Transport, State1, Configuration);
+        {heartbeat_send_error, Reason} ->
+            error_logger:info_msg("Heartbeat send error ~p, closing connection~n", [Reason]),
+            rabbit_stream_manager:unregister(),
+            close(Transport, S);
+        heartbeat_timeout ->
+            error_logger:info_msg("Heartbeat timeout, closing connection~n"),
+            rabbit_stream_manager:unregister(),
+            close(Transport, S);
         {Closed, S} ->
             rabbit_stream_manager:unregister(),
             error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
@@ -368,12 +382,32 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                       end,
 
     {State1, Rest1};
-handle_frame_pre_auth(_Transport, State, <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
+handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = State,
+    <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
 
-    %% FIXME take heartbeat into account
 
-    {State#stream_connection{connection_step = tuned, frame_max = FrameMax}, Rest};
+    Frame = <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>,
+    Parent = self(),
+    SendFun =
+        fun() ->
+            case catch frame(Transport, State, Frame) of
+                ok ->
+                    ok;
+                {error, Reason} ->
+                    Parent ! {heartbeat_send_error, Reason};
+                Unexpected ->
+                    Parent ! {heartbeat_send_error, Unexpected}
+            end,
+            ok
+        end,
+    ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
+    Heartbeater = rabbit_heartbeat:start(
+        SupPid, Sock, ConnectionName,
+        Heartbeat, SendFun, Heartbeat, ReceiveFun),
+
+
+    {State#stream_connection{connection_step = tuned, frame_max = FrameMax, heartbeater = Heartbeater}, Rest};
 handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = State, <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
     VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
 
