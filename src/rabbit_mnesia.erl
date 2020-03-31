@@ -103,14 +103,16 @@ init_with_lock() ->
 init_with_lock(0, _, RunPeerDiscovery) ->
     case rabbit_peer_discovery:lock_acquisition_failure_mode() of
         ignore ->
-            rabbit_log:warning("Cannot acquire a lock during clustering", []),
+            rabbit_log:warning("Could not acquire a peer discovery lock, out of retries", []),
             RunPeerDiscovery(),
             rabbit_peer_discovery:maybe_register();
         fail ->
             exit(cannot_acquire_startup_lock)
     end;
 init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
-    case rabbit_peer_discovery:lock() of
+    LockResult = rabbit_peer_discovery:lock(),
+    rabbit_log:debug("rabbit_peer_discovery:lock returned ~p", [LockResult]),
+    case LockResult of
         not_supported ->
             rabbit_log:info("Peer discovery backend does not support locking, falling back to randomized delay"),
             %% See rabbitmq/rabbitmq-server#1202 for details.
@@ -121,6 +123,13 @@ init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
             timer:sleep(Timeout),
             init_with_lock(Retries - 1, Timeout, RunPeerDiscovery);
         {ok, Data} ->
+            try
+                RunPeerDiscovery(),
+                rabbit_peer_discovery:maybe_register()
+            after
+                rabbit_peer_discovery:unlock(Data)
+            end;
+        Data when is_binary(Data) or is_list(Data) ->
             try
                 RunPeerDiscovery(),
                 rabbit_peer_discovery:maybe_register()
