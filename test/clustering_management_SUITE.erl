@@ -632,35 +632,26 @@ erlang_config(Config) ->
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {["Mike's computer"], disc}]),
-    %% Rabbit app stops abnormally, node goes down
+    %% Rabbit app stops abnormally
     assert_failure(fun () -> start_app(Hare) end),
     assert_not_clustered(Rabbit),
 
     %% If we use an invalid node type, the node fails to start.
-    %% The Erlang VM has stopped after previous rabbit app failure
-    rabbit_ct_broker_helpers:start_node(Config, Hare),
-    ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {[Rabbit], blue}]),
-    %% Rabbit app stops abnormally, node goes down
+    %% Rabbit app stops abnormally
     assert_failure(fun () -> start_app(Hare) end),
     assert_not_clustered(Rabbit),
 
     %% If we use an invalid cluster_nodes conf, the node fails to start.
-    %% The Erlang VM has stopped after previous rabbit app failure
-    rabbit_ct_broker_helpers:start_node(Config, Hare),
-    ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, true]),
-    %% Rabbit app stops abnormally, node goes down
+    %% Rabbit app stops abnormally
     assert_failure(fun () -> start_app(Hare) end),
     assert_not_clustered(Rabbit),
 
-    %% The Erlang VM has stopped after previous rabbit app failure
-    rabbit_ct_broker_helpers:start_node(Config, Hare),
-    ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, "Yes, please"]),
