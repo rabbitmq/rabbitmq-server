@@ -8,6 +8,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-define(RA_EVENT_TIMEOUT, 1000).
+
 all() ->
     [
      {group, tests}
@@ -92,7 +94,7 @@ basics(Config) ->
 
     {ok, FState2} = rabbit_fifo_client:enqueue(one, FState1),
     % process ra events
-    FState3 = process_ra_event(FState2, 250),
+    FState3 = process_ra_event(FState2, ?RA_EVENT_TIMEOUT),
 
     FState5 = receive
                   {ra_event, From, Evt} ->
@@ -109,7 +111,7 @@ basics(Config) ->
               end,
 
     % process settle applied notification
-    FState5b = process_ra_event(FState5, 250),
+    FState5b = process_ra_event(FState5, ?RA_EVENT_TIMEOUT),
     _ = ra:stop_server(ServerId),
     _ = ra:restart_server(ServerId),
 
@@ -122,7 +124,7 @@ basics(Config) ->
 
     {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
     % process applied event
-    FState6b = process_ra_event(FState6, 250),
+    FState6b = process_ra_event(FState6, ?RA_EVENT_TIMEOUT),
 
     receive
         {ra_event, Frm, E} ->
@@ -352,7 +354,7 @@ handles_reject_notification(Config) ->
     timer:sleep(500),
 
     % the applied notification
-    _F2 = process_ra_event(F1, 250),
+    _F2 = process_ra_event(F1, ?RA_EVENT_TIMEOUT),
     ra:stop_server(ServerId1),
     ra:stop_server(ServerId2),
     ok.
