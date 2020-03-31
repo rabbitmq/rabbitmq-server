@@ -147,14 +147,20 @@ end_per_testcase(Testcase, Config) ->
 %%
 
 successful_discovery(Config) ->
-    ?assertEqual(3, length(cluster_members_online(Config, 0))),
-    ?assertEqual(3, length(cluster_members_online(Config, 1))).
+    Condition = fun() ->
+                    3 =:= length(cluster_members_online(Config, 0)) andalso
+                    3 =:= length(cluster_members_online(Config, 1))
+                end,
+    rabbit_ct_helpers:await_condition(Condition, 10000).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
-    ?assertEqual(2, length(cluster_members_online(Config, 0))),
-    ?assertEqual(2, length(cluster_members_online(Config, 1))).
+    Condition = fun() ->
+                    2 =:= length(cluster_members_online(Config, 0)) andalso
+                    2 =:= length(cluster_members_online(Config, 1))
+                end,
+    rabbit_ct_helpers:await_condition(Condition, 10000).
 
 no_nodes_configured(Config) ->
-    ct:pal("Cluster members online: ~p", [cluster_members_online(Config, 0)]),
-    ?assert(length(cluster_members_online(Config, 0)) < 2).
+    Condition = fun() -> length(cluster_members_online(Config, 0)) < 2 end,
+    rabbit_ct_helpers:await_condition(Condition, 7000).
 
