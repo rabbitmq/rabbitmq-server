@@ -34,7 +34,7 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          log_management, %% Check log files.
+          log_management,
           log_file_initialised_during_startup,
           log_file_fails_to_initialise_during_startup,
           externally_rotated_logs_are_automatically_reopened
@@ -244,6 +244,12 @@ log_file_fails_to_initialise_during_startup(Config) ->
                      end,
     case file:open(filename:join(NonWritableDir, "test.log"), [write]) of
         {error, eacces} ->
+            passed = rabbit_ct_broker_helpers:rpc(
+                       Config, 0,
+                       ?MODULE, log_file_fails_to_initialise_during_startup1,
+                       [Config, NonWritableDir]);
+        %% macOS, "read only volume"
+        {error, erofs} ->
             passed = rabbit_ct_broker_helpers:rpc(
                        Config, 0,
                        ?MODULE, log_file_fails_to_initialise_during_startup1,
