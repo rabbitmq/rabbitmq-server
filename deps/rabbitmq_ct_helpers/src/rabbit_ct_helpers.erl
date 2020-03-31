@@ -48,7 +48,10 @@
     get_app_env/4,
     nodename_to_hostname/1,
     convert_to_unicode_binary/1,
-    cover_work_factor/2
+    cover_work_factor/2,
+
+    await_condition/2,
+    await_condition_with_retries/2
   ]).
 
 -define(SSL_CERT_PASSWORD, "test").
@@ -933,6 +936,25 @@ convert_to_unicode_binary(Arg) when is_list(Arg) ->
     unicode:characters_to_binary(Arg);
 convert_to_unicode_binary(Arg) when is_binary(Arg) ->
     Arg.
+
+%% -------------------------------------------------------------------
+%% Assertions that retry
+%% -------------------------------------------------------------------
+
+await_condition(ConditionFun, Timeout) ->
+    Retries = ceil(Timeout / 50),
+    await_condition_with_retries(ConditionFun, Retries).
+
+await_condition_with_retries(_ConditionFun, 0) ->
+    ct:fail("Condition did not materialize in the expected period of time");
+await_condition_with_retries(ConditionFun, RetriesLeft) ->
+    case ConditionFun() of
+        false ->
+            timer:sleep(50),
+            await_condition_with_retries(ConditionFun, RetriesLeft - 1);
+        true ->
+            ok
+    end.
 
 %% -------------------------------------------------------------------
 %% Cover-related functions.
