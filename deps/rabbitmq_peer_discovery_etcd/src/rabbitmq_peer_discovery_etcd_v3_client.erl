@@ -209,7 +209,7 @@ connected({call, From}, unregister, Data = #statem_data{connection_name = Conn})
         node_key_lease_id = undefined
     }};
 connected({call, From}, list_keys, #statem_data{connection_name = Conn, cluster_name = ClusterName, key_prefix = KP}) ->
-    Prefix = rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [KP, ClusterName]),
+    Prefix = node_key_base(KP, ClusterName),
     C1 = eetcd_kv:new(Conn),
     C2 = eetcd_kv:with_prefix(eetcd_kv:with_key(C1, Prefix)),
     rabbit_log:debug("etcd peer discovery: will use prefix ~s to query for node keys", [Prefix]),
@@ -267,10 +267,11 @@ unlock_context(ConnName, #statem_data{lock_ttl_in_seconds = Timeout}) ->
     %% sense than picking an arbitrary number. MK.
     eetcd_lock:with_timeout(eetcd_lock:new(ConnName), Timeout).
 
+node_key_base(Prefix, ClusterName) ->
+    rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [Prefix, ClusterName]).
+
 node_key(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
-    Key = rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes/~p",
-                             [Prefix, ClusterName, node()]),
-    to_binary(Key).
+    to_binary(rabbit_misc:format("~s/~s", [node_key_base(Prefix, ClusterName), node()])).
 
 lock_key_base(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
     Key = rabbit_misc:format("/rabbitmq/locks/~s/clusters/~s/registration",
