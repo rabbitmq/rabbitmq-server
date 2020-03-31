@@ -150,6 +150,17 @@ setup_down_federation(Config) ->
       <<"fed">>, <<"^fed\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
     Config.
 
+wait_for_federation(Retries, Fun) ->
+    case Fun() of
+        true ->
+            ok;
+        false when Retries > 0 ->
+            timer:sleep(1000),
+            wait_for_federation(Retries - 1, Fun);
+        false ->
+            throw({timeout_while_waiting_for_federation, Fun})
+    end.
+
 expect(Ch, Q, Fun) when is_function(Fun) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
