@@ -10,7 +10,7 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 VERBOSE_TEST ?= true
-MAX_CASES ?= $(shell nproc)
+MAX_CASES ?= 1
 
 MIX_TEST = mix test --max-cases=$(MAX_CASES)
 
