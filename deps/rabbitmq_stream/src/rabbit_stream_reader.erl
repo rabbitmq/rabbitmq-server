@@ -1,30 +1,10 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License
-%% at https://www.mozilla.org/MPL/
-%%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and
-%% limitations under the License.
-%%
-%% The Original Code is RabbitMQ.
-%%
-%% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
-%%
-
--module(rabbit_stream_protocol).
-
--behaviour(ranch_protocol).
-
--export([start_link/4]).
--export([init/3]).
+-module(rabbit_stream_reader).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_stream.hrl").
 
 -record(stream_connection, {
+    name,
     listen_socket, socket, clusters, data, consumers,
     target_subscriptions, credits,
     blocked,
@@ -42,37 +22,51 @@
     frame_max, heartbeat
 }).
 
-
-
 -define(RESPONSE_FRAME_SIZE, 10). % 2 (key) + 2 (version) + 4 (correlation ID) + 2 (response code)
 
-start_link(Ref, _Socket, Transport, Opts) ->
-    Pid = spawn_link(?MODULE, init, [Ref, Transport, Opts]),
+%% API
+-export([start_link/4, init/1]).
+
+start_link(KeepaliveSup, Transport, Ref, Opts) ->
+    Pid = proc_lib:spawn_link(?MODULE, init,
+        [[KeepaliveSup, Transport, Ref, Opts]]),
+
     {ok, Pid}.
 
-init(Ref, Transport, #{initial_credits := InitialCredits,
+init([_KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
     credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
     frame_max := FrameMax,
-    heartbeat := Heartbeat}) ->
-    {ok, Socket} = ranch:handshake(Ref),
-    rabbit_stream_manager:register(),
-    Credits = atomics:new(1, [{signed, true}]),
-    init_credit(Credits, InitialCredits),
-    State = #stream_connection{socket = Socket, data = none,
-        clusters = #{},
-        consumers = #{}, target_subscriptions = #{},
-        blocked = false, credits = Credits,
-        authentication_state = none, user = none,
-        connection_step = tcp_connected,
-        frame_max = FrameMax},
-    Transport:setopts(Socket, [{active, once}]),
+    heartbeat := Heartbeat}]) ->
+    process_flag(trap_exit, true),
+    {ok, Sock} = rabbit_networking:handshake(Ref,
+        application:get_env(rabbitmq_mqtt, proxy_protocol, false)),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    case rabbit_net:connection_string(Sock, inbound) of
+        {ok, ConnStr} ->
+            rabbit_stream_manager:register(),
+            Credits = atomics:new(1, [{signed, true}]),
+            init_credit(Credits, InitialCredits),
+            State = #stream_connection{
+                name = ConnStr,
+                socket = RealSocket, data = none,
+                clusters = #{},
+                consumers = #{}, target_subscriptions = #{},
+                blocked = false, credits = Credits,
+                authentication_state = none, user = none,
+                connection_step = tcp_connected,
+                frame_max = FrameMax},
+            Transport:setopts(RealSocket, [{active, once}]),
 
-    listen_loop_pre_auth(Transport, State, #configuration{
-        initial_credits = InitialCredits,
-        credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
-        frame_max = FrameMax,
-        heartbeat = Heartbeat
-    }).
+            listen_loop_pre_auth(Transport, State, #configuration{
+                initial_credits = InitialCredits,
+                credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
+                frame_max = FrameMax,
+                heartbeat = Heartbeat
+            });
+        {Error, Reason} ->
+            rabbit_net:fast_close(RealSocket),
+            error_logger:warning_msg("Closing connection because of ~p ~p~n", [Error, Reason])
+    end.
 
 init_credit(CreditReference, Credits) ->
     atomics:put(CreditReference, 1, Credits).
@@ -721,6 +715,4 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry) ->
                     {{segment, Segment1}, {credit, Credit}}
             end
     end.
-
-
 

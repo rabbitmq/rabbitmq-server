@@ -94,8 +94,18 @@ test_authenticate(S) ->
     gen_tcp:send(S, <<SaslHandshakeFrameSize:32, SaslHandshakeFrame/binary>>),
     Plain = <<"PLAIN">>,
     AmqPlain = <<"AMQPLAIN">>,
-    {ok, <<31:32, ?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16,
-        2:32, 5:16, Plain:5/binary, 8:16, AmqPlain:8/binary>>} = gen_tcp:recv(S, 0, 5000),
+    {ok, SaslAvailable} = gen_tcp:recv(S, 0, 5000),
+    %% mechanisms order is not deterministic, so checking both orders
+    ok = case SaslAvailable of
+             <<31:32, ?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16, 2:32,
+                 5:16, Plain:5/binary, 8:16, AmqPlain:8/binary>> ->
+                 ok;
+             <<31:32, ?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16, 2:32,
+                 8:16, AmqPlain:8/binary, 5:16, Plain:5/binary>> ->
+                 ok;
+             _ ->
+                 failed
+         end,
 
     Username = <<"guest">>,
     Password = <<"guest">>,
