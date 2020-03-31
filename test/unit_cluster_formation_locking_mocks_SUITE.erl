@@ -13,7 +13,7 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 %%
--module(cluster_formation_locking_SUITE).
+-module(unit_cluster_formation_locking_mocks_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
