@@ -56,6 +56,6 @@ listener_specs(Fun, Args, Listeners) ->
 tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
         rabbit_stream_listener_sup, Address, SocketOpts,
-        ranch_tcp, rabbit_stream_protocol, Configuration,
+        ranch_tcp, rabbit_stream_connection_sup, Configuration,
         stream, NumAcceptors, "Stream TCP listener").
 
