@@ -48,7 +48,7 @@
 -define(ETCD_CONN_NAME, ?MODULE).
 %% 60s by default matches the default heartbeat timeout.
 %% We add 1s for state machine bookkeeping and
--define(DEFAULT_NODE_KEY_LEASE_TTL, 61000).
+-define(DEFAULT_NODE_KEY_LEASE_TTL, 61).
 -define(CALL_TIMEOUT, 15000).
 
 start(Conf) ->
