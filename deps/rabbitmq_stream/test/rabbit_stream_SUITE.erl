@@ -130,7 +130,7 @@ test_authenticate(S) ->
             TuneExpected = TuneReceived
     end,
 
-    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:32, ?DEFAULT_HEARTBEAT:32>>,
+    TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:32, 0:32>>,
     TuneFrameSize = byte_size(TuneFrame),
     gen_tcp:send(S, <<TuneFrameSize:32, TuneFrame/binary>>),
 
