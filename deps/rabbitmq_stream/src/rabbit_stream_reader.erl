@@ -432,6 +432,9 @@ handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = S
     frame(Transport, State, Frame),
 
     {State1, Rest};
+handle_frame_pre_auth(_Transport, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
+    error_logger:info_msg("Received heartbeat frame pre auth~n"),
+    {State, Rest};
 handle_frame_pre_auth(_Transport, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
     {State#stream_connection{connection_step = failure}, Rest}.
@@ -624,6 +627,9 @@ handle_frame_post_auth(Transport, State,
     Frame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
     frame(Transport, State, Frame),
     {State#stream_connection{connection_step = closing}, <<>>}; %% we ignore any subsequent frames
+handle_frame_post_auth(_Transport, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
+    error_logger:info_msg("Received heartbeat frame post auth~n"),
+    {State, Rest};
 handle_frame_post_auth(Transport, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, sending close command.~n", [Frame, Rest]),
     CloseReason = <<"unknown frame">>,
@@ -636,6 +642,9 @@ handle_frame_post_auth(Transport, State, Frame, Rest) ->
 handle_frame_post_close(_Transport, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
     {State#stream_connection{connection_step = closing_done}, Rest};
+handle_frame_post_close(_Transport, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
+    error_logger:info_msg("Received heartbeat frame post close~n"),
+    {State, Rest};
 handle_frame_post_close(_Transport, State, Frame, Rest) ->
     error_logger:warning_msg("ignored frame on close ~p ~p.~n", [Frame, Rest]),
     {State, Rest}.
