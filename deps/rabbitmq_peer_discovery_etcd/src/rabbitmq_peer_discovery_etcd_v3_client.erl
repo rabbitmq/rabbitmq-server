@@ -53,6 +53,16 @@
 %% 60s by default matches the default heartbeat timeout.
 %% We add 1s for state machine bookkeeping and
 -define(DEFAULT_NODE_KEY_LEASE_TTL, 61).
+%% don't allow node lease key TTL to be lower than this
+%% as overly low values can cause annoying timeouts in etcd client operations
+-define(MINIMUM_NODE_KEY_LEASE_TTL, 15).
+%% default randomized delay range is 5s to 60s, so this value
+%% produces a comparable delay
+-define(DEFAULT_LOCK_WAIT_TTL, 70).
+%% don't allow lock lease TTL to be lower than this
+%% as overly low values can cause annoying timeouts in etcd client operations
+-define(MINIMUM_LOCK_WAIT_TTL, 30).
+
 -define(CALL_TIMEOUT, 15000).
 
 start(Conf) ->
@@ -72,9 +82,15 @@ init(Args) ->
     {ok, recover, #statem_data{
         endpoints = Endpoints,
         key_prefix = maps:get(etcd_prefix, Settings, <<"rabbitmq">>),
-        node_key_ttl_in_seconds = maps:get(etcd_node_ttl, Settings, ?DEFAULT_NODE_KEY_LEASE_TTL),
+        node_key_ttl_in_seconds = erlang:max(
+            ?MINIMUM_NODE_KEY_LEASE_TTL,
+            maps:get(etcd_node_ttl, Settings, ?DEFAULT_NODE_KEY_LEASE_TTL)
+        ),
         cluster_name = maps:get(cluster_name, Settings, <<"default">>),
-        lock_ttl_in_seconds = maps:get(lock_wait_time, Settings, 30)
+        lock_ttl_in_seconds = erlang:max(
+            ?MINIMUM_LOCK_WAIT_TTL,
+            maps:get(lock_wait_time, Settings, ?DEFAULT_LOCK_WAIT_TTL)
+        )
     }, Actions}.
 
 callback_mode() -> [state_functions, state_enter].
