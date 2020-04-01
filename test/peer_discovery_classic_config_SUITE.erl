@@ -81,7 +81,8 @@ init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery->
     NodeNamesWithHostname = [rabbit_nodes:make({Name, "localhost"}) || Name <- NodeNames],
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
-          {cluster_nodes, {NodeNamesWithHostname, disc}}
+          {cluster_nodes, {NodeNamesWithHostname, disc}},
+          {randomized_startup_delay_range, {1, 10}}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -109,7 +110,8 @@ init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery_with_
               {discovery_retry_limit, 10},
               {discovery_retry_interval, 200}
           ]},
-          {cluster_nodes, {NodeNamesWithHostname, disc}}
+          {cluster_nodes, {NodeNamesWithHostname, disc}},
+          {randomized_startup_delay_range, {1, 10}}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -123,7 +125,8 @@ init_per_testcase(no_nodes_configured = Testcase, Config) ->
       ]),
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
-          {cluster_nodes, {[], disc}}
+          {cluster_nodes, {[], disc}},
+          {randomized_startup_delay_range, {1, 10}}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
