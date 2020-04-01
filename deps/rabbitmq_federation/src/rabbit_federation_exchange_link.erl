@@ -207,7 +207,8 @@ terminate(Reason, #state{downstream_connection = DConn,
                          internal_exchange_timer = TRef,
                          internal_exchange     = IntExchange,
                          queue                 = Queue}) when Reason =:= shutdown;
-                                                              Reason =:= {shutdown, restart} ->
+                                                              Reason =:= {shutdown, restart};
+                                                              Reason =:= gone ->
     rabbit_log:info(""),
     timer:cancel(TRef),
 
