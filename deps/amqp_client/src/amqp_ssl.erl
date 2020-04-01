@@ -38,15 +38,9 @@ maybe_add_sni_0({server_name_indication, SniHost}, _Host, Options) ->
 maybe_add_sni_1(false, _Host, Options) ->
     % NB: host is not a DNS host name, so nothing to add
     Options;
-maybe_add_sni_1(true, _Host, Options) ->
-    % NB: For RabbitMQ 3.7.x, log a warning
-    ?LOG_WARN("Connection (~p): Server name indication is not enabled for this TLS connection. "
-              "Please see https://rabbitmq.com/ssl.html for more information.~n", [self()]),
-    Options.
-    % TODO FUTURE 3.8.x
-    % SNI will become the default in RabbitMQ 3.8.0
-    % Opts1 = [{server_name_indication, Host} | Options],
-    % maybe_add_verify_fun(lists:keymember(verify_fun, 1, Opts1), Host, Opts1).
+maybe_add_sni_1(true, Host, Options) ->
+    Opts1 = [{server_name_indication, Host} | Options],
+    maybe_add_verify_fun(lists:keymember(verify_fun, 1, Opts1), Host, Opts1).
 
 maybe_add_verify_fun(true, _Host, Options) ->
     % NB: verify_fun already present, don't add twice
