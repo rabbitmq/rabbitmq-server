@@ -26,24 +26,14 @@
 -export([lock/0, lock/1, lock/2, unlock/0, unlock/1, unlock/2]).
 -export([recover/3, connected/3, disconnected/3]).
 
+%% for tests
+-export([extract_node/1, registration_value/1, node_key_base/1, node_key/1, lock_key_base/1]).
+
 -import(rabbit_data_coercion, [to_binary/1]).
 
 -compile(nowarn_unused_function).
 
--record(statem_data, {
-    endpoints,
-    connection_name,
-    connection_pid,
-    connection_monitor,
-    key_prefix,
-    cluster_name,
-    node_key_lease_id,
-    node_key_ttl_in_seconds,
-    %% the pid of the process returned by eetcd_lease:keep_alive/2
-    %% which refreshes this node's key lease
-    node_lease_keepalive_pid,
-    lock_ttl_in_seconds
-}).
+-include("rabbit_peer_discovery_etcd.hrl").
 
 %%
 %% API
@@ -227,8 +217,8 @@ connected({call, From}, unregister, Data = #statem_data{connection_name = Conn})
     {keep_state, Data#statem_data{
         node_key_lease_id = undefined
     }};
-connected({call, From}, list_keys, #statem_data{connection_name = Conn, cluster_name = ClusterName, key_prefix = KP}) ->
-    Prefix = node_key_base(KP, ClusterName),
+connected({call, From}, list_keys, Data = #statem_data{connection_name = Conn}) ->
+    Prefix = node_key_base(Data),
     C1 = eetcd_kv:new(Conn),
     C2 = eetcd_kv:with_prefix(eetcd_kv:with_key(C1, Prefix)),
     rabbit_log:debug("etcd peer discovery: will use prefix ~s to query for node keys", [Prefix]),
@@ -288,11 +278,11 @@ unlock_context(ConnName, #statem_data{lock_ttl_in_seconds = Timeout}) ->
     %% sense than picking an arbitrary number. MK.
     eetcd_lock:with_timeout(eetcd_lock:new(ConnName), Timeout * 1000).
 
-node_key_base(Prefix, ClusterName) ->
+node_key_base(#statem_data{cluster_name = ClusterName, key_prefix = Prefix}) ->
     rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [Prefix, ClusterName]).
 
-node_key(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
-    to_binary(rabbit_misc:format("~s/~s", [node_key_base(Prefix, ClusterName), node()])).
+node_key(Data) ->
+    to_binary(rabbit_misc:format("~s/~s", [node_key_base(Data), node()])).
 
 lock_key_base(#statem_data{key_prefix = Prefix, cluster_name = ClusterName}) ->
     Key = rabbit_misc:format("/rabbitmq/locks/~s/clusters/~s/registration",

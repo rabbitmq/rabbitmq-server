@@ -1,46 +1,16 @@
--define(CONFIG_MODULE, rabbit_peer_discovery_config).
--define(UTIL_MODULE,   rabbit_peer_discovery_util).
--define(HTTPC_MODULE,  rabbit_peer_discovery_httpc).
-
 -define(BACKEND_CONFIG_KEY, peer_discovery_etcd).
 
-
--define(CONFIG_MAPPING,
-         #{
-          etcd_scheme    => #peer_discovery_config_entry_meta{
-                              type          = string,
-                              env_variable  = "ETCD_SCHEME",
-                              default_value = "http"
-                            },
-          etcd_host      => #peer_discovery_config_entry_meta{
-                              type          = string,
-                              env_variable  = "ETCD_HOST",
-                              default_value = "localhost"
-                            },
-          etcd_port      => #peer_discovery_config_entry_meta{
-                              type          = integer,
-                              env_variable  = "ETCD_PORT",
-                              default_value = 2379
-                            },
-          etcd_prefix    => #peer_discovery_config_entry_meta{
-                              type          = string,
-                              env_variable  = "ETCD_PREFIX",
-                              default_value = "rabbitmq"
-                            },
-          etcd_node_ttl  => #peer_discovery_config_entry_meta{
-                              type          = integer,
-                              env_variable  = "ETCD_NODE_TTL",
-                              default_value = 30
-                            },
-          cluster_name   => #peer_discovery_config_entry_meta{
-                              type          = string,
-                              env_variable  = "CLUSTER_NAME",
-                              default_value = "default"
-                            },
-          lock_wait_time  => #peer_discovery_config_entry_meta{
-                                type          = integer,
-                                env_variable  = "LOCK_WAIT_TIME",
-                                default_value = 300
-                               }
-         }).
-
+-record(statem_data, {
+    endpoints,
+    connection_name,
+    connection_pid,
+    connection_monitor,
+    key_prefix,
+    cluster_name,
+    node_key_lease_id,
+    node_key_ttl_in_seconds,
+    %% the pid of the process returned by eetcd_lease:keep_alive/2
+    %% which refreshes this node's key lease
+    node_lease_keepalive_pid,
+    lock_ttl_in_seconds
+}).
