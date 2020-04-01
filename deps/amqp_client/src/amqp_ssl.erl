@@ -53,9 +53,16 @@ maybe_add_verify(Options) ->
         true ->
             % NB: user has explicitly set 'verify'
             Options;
-        false ->
-            [{verify, verify_peer} | Options]
+        _ ->
+            ?LOG_WARN("Connection (~p): Certificate chain verification is not enabled for this TLS connection. "
+                    "Please see https://rabbitmq.com/ssl.html for more information.~n", [self()]),
+            Options
     end.
+    % TODO FUTURE 3.8.x
+    % verify_peer will become the default in RabbitMQ 3.8.0
+    %     false ->
+    %         [{verify, verify_peer} | Options]
+    % end.
 
 add_verify_fun_to_opts(Host, Options) ->
     add_verify_fun_to_opts(false, Host, Options).
