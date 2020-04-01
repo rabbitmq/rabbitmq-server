@@ -151,14 +151,14 @@ successful_discovery(Config) ->
                     3 =:= length(cluster_members_online(Config, 0)) andalso
                     3 =:= length(cluster_members_online(Config, 1))
                 end,
-    rabbit_ct_helpers:await_condition(Condition, 40000).
+    rabbit_ct_helpers:await_condition(Condition, 90000).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
     Condition = fun() ->
                     2 =:= length(cluster_members_online(Config, 0)) andalso
                     2 =:= length(cluster_members_online(Config, 1))
                 end,
-    rabbit_ct_helpers:await_condition(Condition, 40000).
+    rabbit_ct_helpers:await_condition(Condition, 90000).
 
 no_nodes_configured(Config) ->
     Condition = fun() -> length(cluster_members_online(Config, 0)) < 2 end,
