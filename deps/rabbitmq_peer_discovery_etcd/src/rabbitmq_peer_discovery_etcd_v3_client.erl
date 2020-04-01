@@ -39,6 +39,9 @@
     cluster_name,
     node_key_lease_id,
     node_key_ttl_in_seconds,
+    %% the pid of the process returned by eetcd_lease:keep_alive/2
+    %% which refreshes this node's key lease
+    node_lease_keepalive_pid,
     lock_ttl_in_seconds
 }).
 
@@ -188,8 +191,11 @@ connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_n
     Ctx = unlock_context(Conn, Data),
     case eetcd_lock:unlock(Ctx, GeneratedKey) of
         {ok, _} ->
+            rabbit_log:debug("etcd peer discovery: successfully released lock, lock owner key: ~s", [GeneratedKey]),
             reply_and_retain_state(From, ok);
         {error, _} = Error ->
+            rabbit_log:debug("etcd peer discovery: failed to release registration lock, lock owner key: ~s, error ~p",
+                             [GeneratedKey, Error]),
             reply_and_retain_state(From, Error)
     end;
 connected({call, From}, register, Data = #statem_data{connection_name = Conn}) ->
@@ -243,9 +249,11 @@ disconnected(enter, _PrevState, _Data) ->
 acquire_node_key_lease_grant(Data = #statem_data{connection_name = Name, node_key_ttl_in_seconds = TTL}) ->
     %% acquire a lease for TTL
     {ok, #{'ID' := LeaseID}} = eetcd_lease:grant(Name, TTL),
+    {ok, KeepalivePid} = eetcd_lease:keep_alive(Name, LeaseID),
     rabbit_log:debug("etcd peer discovery: acquired a lease ~p for node key ~s with TTL = ~p", [LeaseID, node_key(Data), TTL]),
     Data#statem_data{
-        node_key_lease_id = LeaseID
+        node_key_lease_id = LeaseID,
+        node_lease_keepalive_pid = KeepalivePid
     }.
 
 registration_context(ConnName, #statem_data{node_key_lease_id = LeaseID}) ->
@@ -262,7 +270,7 @@ lock_context(ConnName, #statem_data{lock_ttl_in_seconds = LeaseTTL}) ->
 unlock_context(ConnName, #statem_data{lock_ttl_in_seconds = Timeout}) ->
     %% caps the timeout here using the lock TTL value, it makes more
     %% sense than picking an arbitrary number. MK.
-    eetcd_lock:with_timeout(eetcd_lock:new(ConnName), Timeout).
+    eetcd_lock:with_timeout(eetcd_lock:new(ConnName), Timeout * 1000).
 
 node_key_base(Prefix, ClusterName) ->
     rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [Prefix, ClusterName]).
@@ -336,12 +344,13 @@ disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
     maybe_demonitor(Ref),
     do_disconnect(ConnName).
 
-unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID}) ->
+unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_keepalive_pid = KAPid}) ->
     Ctx = unregistration_context(Conn, Data),
     Key = node_key(Data),
     eetcd_kv:delete(Ctx, Key),
     rabbit_log:debug("etcd peer discovery: deleted key ~s, done with unregistration", [Key]),
     eetcd_lease:revoke(Ctx, LeaseID),
+    exit(KAPid, normal),
     rabbit_log:debug("etcd peer discovery: revoked a lease ~p for node key ~s", [LeaseID, Key]),
     ok.
 
