@@ -167,9 +167,6 @@ connected(info, {'DOWN', ConnRef, process, ConnPid, Reason}, Data = #statem_data
     rabbit_log:debug("etcd peer discovery: connection to etcd ~p is down: ~p", [ConnPid, Reason]),
     maybe_demonitor(ConnRef),
     {next_state, recover, reset_statem_data(Data)};
-connected(info, {gun_response, _, _, _, _, _}, _Data) ->
-    %% ignore stray gRPC responses
-    keep_state_and_data;
 connected({call, From}, {lock, _Node}, Data = #statem_data{connection_name = Conn, lock_ttl_in_seconds = TTL}) ->
     case eetcd_lease:grant(eetcd_kv:new(Conn), TTL) of
         {ok, #{'ID' := LeaseID}} ->
