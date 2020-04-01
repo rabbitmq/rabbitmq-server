@@ -142,7 +142,10 @@ amqp_uri_parsing(_Config) ->
 
     {ok, #amqp_params_network{host = "host1", ssl_options = TLSOpts1}} =
         amqp_uri:parse("amqps://host1/%2f?cacertfile=/path/to/cacertfile.pem"),
-    Exp1 = [{cacertfile,"/path/to/cacertfile.pem"}],
+    Exp1 = [
+        {cacertfile,"/path/to/cacertfile.pem"},
+        {server_name_indication,"host1"}
+    ],
     ?assertEqual(lists:usort(Exp1), lists:usort(TLSOpts1)),
 
     {ok, #amqp_params_network{host = "host2", ssl_options = TLSOpts2}} =
@@ -161,7 +164,8 @@ amqp_uri_parsing(_Config) ->
         amqp_uri:parse("amqps://host3/%2f?verify=verify_peer"
                        "&fail_if_no_peer_cert=true"),
     Exp3 = [{fail_if_no_peer_cert, true},
-            {verify, verify_peer}],
+            {verify, verify_peer},
+            {server_name_indication,"host3"}],
     ?assertEqual(lists:usort(Exp3), lists:usort(TLSOpts3)),
 
     {ok, #amqp_params_network{host = "host4", ssl_options = TLSOpts4}} =
@@ -172,7 +176,8 @@ amqp_uri_parsing(_Config) ->
     Exp4 = [{certfile,  "/path/to/certfile.pem"},
             {cacertfile,"/path/to/cacertfile.pem"},
             {password,  "topsecret"},
-            {depth,     5}],
+            {depth,     5},
+            {server_name_indication,"host4"}],
     ?assertEqual(lists:usort(Exp4), lists:usort(TLSOpts4)),
 
     {ok, #amqp_params_network{host = "host5", ssl_options = TLSOpts5}} =
