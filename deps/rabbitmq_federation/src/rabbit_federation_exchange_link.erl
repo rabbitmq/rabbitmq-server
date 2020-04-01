@@ -209,7 +209,6 @@ terminate(Reason, #state{downstream_connection = DConn,
                          queue                 = Queue}) when Reason =:= shutdown;
                                                               Reason =:= {shutdown, restart};
                                                               Reason =:= gone ->
-    rabbit_log:info(""),
     timer:cancel(TRef),
 
     rabbit_federation_link_util:ensure_connection_closed(DConn),
