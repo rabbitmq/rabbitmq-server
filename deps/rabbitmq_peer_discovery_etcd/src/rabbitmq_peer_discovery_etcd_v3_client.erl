@@ -27,7 +27,7 @@
 -export([recover/3, connected/3, disconnected/3]).
 
 %% for tests
--export([extract_node/1, registration_value/1, node_key_base/1, node_key/1, lock_key_base/1]).
+-export([extract_node/1, filter_node/1, registration_value/1, node_key_base/1, node_key/1, lock_key_base/1]).
 
 -import(rabbit_data_coercion, [to_binary/1]).
 
@@ -279,7 +279,7 @@ unlock_context(ConnName, #statem_data{lock_ttl_in_seconds = Timeout}) ->
     eetcd_lock:with_timeout(eetcd_lock:new(ConnName), Timeout * 1000).
 
 node_key_base(#statem_data{cluster_name = ClusterName, key_prefix = Prefix}) ->
-    rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [Prefix, ClusterName]).
+    to_binary(rabbit_misc:format("/rabbitmq/discovery/~s/clusters/~s/nodes", [Prefix, ClusterName])).
 
 node_key(Data) ->
     to_binary(rabbit_misc:format("~s/~s", [node_key_base(Data), node()])).
