@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include("amqp_client.hrl").
 -include("amqp_client_internal.hrl").
@@ -1405,7 +1406,7 @@ setup_publish(Channel, Payload) ->
 teardown(Connection, Channel) ->
     amqp_channel:close(Channel),
     wait_for_death(Channel),
-    amqp_connection:close(Connection),
+    ?assertEqual(ok, amqp_connection:close(Connection)),
     wait_for_death(Connection).
 
 wait_for_death(Pid) ->
