@@ -31,9 +31,6 @@ all() ->
     ].
 
 groups() ->
-    RejectTests = [
-      rejects_survive_policy
-    ],
     [
       {cluster_size_2, [], [
           rapid_redeclare,
@@ -46,10 +43,7 @@ groups() ->
           consume_survives_policy,
           auto_resume,
           auto_resume_no_ccn_client,
-          confirms_survive_stop,
-          confirms_survive_policy,
-          {overflow_reject_publish, [], RejectTests},
-          {overflow_reject_publish_dlx, [], RejectTests}
+          confirms_survive_stop
         ]}
     ].
 
@@ -71,14 +65,6 @@ init_per_group(cluster_size_2, Config) ->
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         {rmq_nodes_count, 3}
-      ]);
-init_per_group(overflow_reject_publish, Config) ->
-    rabbit_ct_helpers:set_config(Config, [
-        {overflow, <<"reject-publish">>}
-      ]);
-init_per_group(overflow_reject_publish_dlx, Config) ->
-    rabbit_ct_helpers:set_config(Config, [
-        {overflow, <<"reject-publish-dlx">>}
       ]).
 
 end_per_group(_, Config) ->
@@ -203,9 +189,6 @@ auto_resume_no_ccn_client(Cf) -> consume_survives(Cf, fun sigkill/2, false,
                                                   false).
 
 confirms_survive_stop(Cf)    -> confirms_survive(Cf, fun stop/2).
-confirms_survive_policy(Cf)  -> confirms_survive(Cf, fun policy/2).
-
-rejects_survive_policy(Cf) -> rejects_survive(Cf, fun policy/2).
 
 %%----------------------------------------------------------------------------
 
@@ -263,39 +246,6 @@ confirms_survive(Config, DeathFun) ->
     DeathFun(Config, A),
     rabbit_ha_test_producer:await_response(ProducerPid),
     ok.
-
-rejects_survive(Config, DeathFun) ->
-    [A, B, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Msgs = rabbit_ct_helpers:cover_work_factor(Config, 20000),
-    Node1Channel = rabbit_ct_client_helpers:open_channel(Config, A),
-    Node2Channel = rabbit_ct_client_helpers:open_channel(Config, B),
-
-    %% declare the queue on the master, mirrored to the two slaves
-    XOverflow = ?config(overflow, Config),
-    Queue = <<"test_rejects", "_", XOverflow/binary>>,
-    amqp_channel:call(Node1Channel,#'queue.declare'{queue       = Queue,
-                                                    auto_delete = false,
-                                                    durable     = true,
-                                                    arguments = [{<<"x-max-length">>, long, 1},
-                                                                 {<<"x-overflow">>, longstr, XOverflow}]}),
-    Payload = <<"there can be only one">>,
-    amqp_channel:call(Node1Channel,
-                      #'basic.publish'{routing_key = Queue},
-                      #amqp_msg{payload = Payload}),
-
-    %% send a bunch of messages from the producer. Tolerating nacks.
-    ProducerPid = rabbit_ha_test_producer:create(Node2Channel, Queue,
-                                                 self(), true, Msgs, nacks),
-    DeathFun(Config, A),
-    rabbit_ha_test_producer:await_response(ProducerPid),
-
-    {#'basic.get_ok'{}, #amqp_msg{payload = Payload}} =
-        amqp_channel:call(Node2Channel, #'basic.get'{queue = Queue}),
-    %% There is only one message.
-    #'basic.get_empty'{} = amqp_channel:call(Node2Channel, #'basic.get'{queue = Queue}),
-    ok.
-
-
 
 stop(Config, Node) ->
     rabbit_ct_broker_helpers:stop_node_after(Config, Node, 50).
