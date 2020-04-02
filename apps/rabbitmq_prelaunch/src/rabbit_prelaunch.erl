@@ -91,12 +91,16 @@ do_run() ->
 
     %% Complete context now that we have the final environment loaded.
     Context2 = rabbit_env:get_context_after_reloading_env(Context1),
-    ?assertMatch(#{}, Context2),
-    store_context(Context2),
-    rabbit_env:log_context(Context2),
+
+    %% Migrate the enabled_plugins file to the new location if necessary
+    Context3 = rabbit_plugins:maybe_migrate_enabled_plugins_file(Context2),
+
+    ?assertMatch(#{}, Context3),
+    store_context(Context3),
+    rabbit_env:log_context(Context3),
     ok = setup_shutdown_func(),
 
-    Context = Context2#{initial_pass => IsInitialPass},
+    Context = Context3#{initial_pass => IsInitialPass},
 
     rabbit_env:context_to_code_path(Context),
     rabbit_env:context_to_app_env_vars(Context),

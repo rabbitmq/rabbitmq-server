@@ -17,15 +17,22 @@
 -module(rabbit_plugins).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/zip.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3, running_plugins/0]).
 -export([ensure/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
--export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0]).
+-export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0,
+         maybe_migrate_enabled_plugins_file/1]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
+
+%%----------------------------------------------------------------------------
+
+-define(ENABLED_PLUGINS_FILENAME, "enabled_plugins").
+
 %%----------------------------------------------------------------------------
 
 -type plugin_name() :: atom().
@@ -99,12 +106,45 @@ plugins_dir() ->
 
 -spec enabled_plugins_file() -> file:filename().
 enabled_plugins_file() ->
-     case application:get_env(rabbit, enabled_plugins_file) of
+    case application:get_env(rabbit, enabled_plugins_file) of
         {ok, Val} ->
             Val;
         _ ->
             filename:join([rabbit_mnesia:dir(), "enabled_plugins"])
     end.
+
+-spec maybe_migrate_enabled_plugins_file(map()) -> map().
+maybe_migrate_enabled_plugins_file(#{enabled_plugins_file := EnabledPluginsFile} = Context)
+  when EnabledPluginsFile =/= undefined ->
+    Context;
+maybe_migrate_enabled_plugins_file(#{os_type := {unix, _},
+                                     config_base_dir := ConfigBaseDir,
+                                     data_dir := DataDir} = Context) ->
+    ModernLocation = filename:join(DataDir, ?ENABLED_PLUGINS_FILENAME),
+    LegacyLocation = filename:join(ConfigBaseDir, ?ENABLED_PLUGINS_FILENAME),
+    case {filelib:is_regular(ModernLocation),
+          file:read_file_info(LegacyLocation)} of
+        {false, {ok, #file_info{access = read_write}}} ->
+            rabbit_log_prelaunch:info("NOTICE: Using 'enabled_plugins' file"
+                                      " from ~p. Please migrate this file"
+                                      " to its new location, ~p, as the"
+                                      " previous location is deprecated.",
+                                      [LegacyLocation, ModernLocation]),
+            Context#{enabled_plugins_file := LegacyLocation};
+        {false, {ok, #file_info{access = read}}} ->
+            {ok, _} = file:copy(LegacyLocation, ModernLocation),
+            rabbit_log_prelaunch:info("NOTICE: An 'enabled_plugins' file was"
+                                      " found at ~p but was not read and"
+                                      " writable. It has been copied to its"
+                                      " new location at ~p and any changes"
+                                      " to plugin status will be reflected"
+                                      " there.", [LegacyLocation, ModernLocation]),
+            Context#{enabled_plugins_file := ModernLocation};
+        _ ->
+            Context#{enabled_plugins_file := ModernLocation}
+    end;
+maybe_migrate_enabled_plugins_file(#{data_dir := DataDir} = Context) ->
+    Context#{enabled_plugins_file := filename:join(DataDir, ?ENABLED_PLUGINS_FILENAME)}.
 
 -spec enabled_plugins() -> [atom()].
 enabled_plugins() ->
