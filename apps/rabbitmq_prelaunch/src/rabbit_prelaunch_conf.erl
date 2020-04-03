@@ -105,8 +105,6 @@ set_default_config() ->
     Config = [
               {ra,
                [
-                %% Use a larger segments size for queues.
-                {segment_max_entries, 32768},
                 {wal_max_size_bytes, 536870912} %% 5 * 2 ^ 20
                ]},
               {sysmon_handler,
