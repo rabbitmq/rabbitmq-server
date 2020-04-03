@@ -68,9 +68,14 @@ init(Args) ->
     ok = application:ensure_started(eetcd),
     Settings = normalize_settings(Args),
     Endpoints = maps:get(endpoints, Settings),
+    Username = maps:get(etcd_username, Settings, undefined),
+    Password = maps:get(etcd_password, Settings, undefined),
     Actions = [{next_event, internal, start}],
     {ok, recover, #statem_data{
         endpoints = Endpoints,
+        username = Username,
+        %% TODO: obfuscation
+        obfuscated_password = Password,
         key_prefix = maps:get(etcd_prefix, Settings, <<"rabbitmq">>),
         node_key_ttl_in_seconds = erlang:max(
             ?MINIMUM_NODE_KEY_LEASE_TTL,
@@ -144,7 +149,7 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
     Transport = tcp,
     TransportOpts = [],
     ConnName = ?ETCD_CONN_NAME,
-    case connect(ConnName, Endpoints, Transport, TransportOpts) of
+    case connect(ConnName, Endpoints, Transport, TransportOpts, Data) of
         {ok, Pid} ->
             rabbit_log:debug("etcd v3 API client connection: ~p", [Pid]),
             rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~p", [length(eetcd_conn_sup:info())]),
@@ -324,16 +329,20 @@ error_is_already_started({_Endpoint, already_started}) ->
 error_is_already_started({_Endpoint, _}) ->
     false.
 
-connect(Name, Endpoints, Transport, TransportOpts) ->
+connect(Name, Endpoints, Transport, TransportOpts, Data) ->
     case eetcd_conn:lookup(Name) of
         {ok, Pid} when is_pid(Pid) ->
             {ok, Pid};
         {error, eetcd_conn_unavailable} ->
-            do_connect(Name, Endpoints, Transport, TransportOpts)
+            do_connect(Name, Endpoints, Transport, TransportOpts, Data)
     end.
 
-do_connect(Name, Endpoints, Transport, TransportOpts) ->
-    case eetcd:open(Name, Endpoints, [{mode, random}], Transport, TransportOpts) of
+do_connect(Name, Endpoints, Transport, TransportOpts, Data = #statem_data{username = Username}) ->
+    case Username of
+        undefined -> rabbit_log:info("etcd peer discovery: will connect to etcd without authentication (no credentials configured)");
+        _         -> rabbit_log:info("etcd peer discovery: will connect to etcd as user '~s'", [Username])
+    end,
+    case eetcd:open(Name, Endpoints, connection_options(Data), Transport, TransportOpts) of
         {ok, Pid} -> {ok, Pid};
         {error, Errors0} ->
             Errors = case is_list(Errors0) of
@@ -411,3 +420,14 @@ normalize_settings(Map) when is_map(Map) ->
     AllEndpoints = Endpoints ++ LegacyEndpoints,
     maps:merge(maps:without([etcd_prefix, etcd_node_ttl, lock_wait_time], Map),
                #{endpoints => AllEndpoints}).
+
+
+connection_options(#statem_data{username = Username, obfuscated_password = Password}) ->
+    SharedOpts = [{mode, random}],
+    %% TODO: deobfuscate
+    case {Username, Password} of
+        {undefined, _} -> SharedOpts;
+        {_, undefined} -> SharedOpts;
+        {UVal, PVal}   ->
+            [{name, UVal}, {password, PVal}] ++ SharedOpts
+    end.

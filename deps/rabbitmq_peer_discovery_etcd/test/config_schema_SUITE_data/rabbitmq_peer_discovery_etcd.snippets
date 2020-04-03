@@ -21,12 +21,22 @@
             ]}
         ], [rabbitmq_peer_discovery_etcd]
     },
-    %% URI scheme
-    {etcd_scheme, "cluster_formation.etcd.scheme = https", [
+    %% credentials
+    {etcd_username, "cluster_formation.etcd.username = rabbitmq", [
             {rabbit, [
                 {cluster_formation, [
                     {peer_discovery_etcd, [
-                        {etcd_scheme, "https"}
+                        {etcd_username, "rabbitmq"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    {etcd_password, "cluster_formation.etcd.password = rabbitmq", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_password, "rabbitmq"}
                     ]}
                 ]}
             ]}
@@ -54,7 +64,7 @@
             ]}
         ], [rabbitmq_peer_discovery_etcd]
     },
-    %% node TTL
+    %% node key TTL
     {etcd_node_ttl, "cluster_formation.etcd.node_ttl = 60", [
             {rabbit, [
                 {cluster_formation, [

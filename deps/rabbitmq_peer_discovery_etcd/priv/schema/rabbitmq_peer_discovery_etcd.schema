@@ -61,7 +61,7 @@ fun(Conf) ->
     end
 end}.
 
-%% key prefix
+%% key prefix appended after /rabbitmq/{discovery,locks} (a mandatory prefix we enforce as of #22)
 
 {mapping, "cluster_formation.etcd.key_prefix", "rabbit.cluster_formation.peer_discovery_etcd.etcd_prefix", [
     {datatype, string}
@@ -89,7 +89,7 @@ fun(Conf) ->
     end
 end}.
 
-%% node ttl
+%% node key ttl
 
 {mapping, "cluster_formation.etcd.node_ttl", "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl", [
     {datatype, integer},
@@ -127,5 +127,31 @@ fun(Conf) ->
                     Value     -> Value
                 end;
         Value -> Value
+    end
+end}.
+
+%% authentication
+
+{mapping, "cluster_formation.etcd.username", "rabbit.cluster_formation.peer_discovery_etcd.etcd_username", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_username",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.username", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+{mapping, "cluster_formation.etcd.password", "rabbit.cluster_formation.peer_discovery_etcd.etcd_password", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_password",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.password", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
     end
 end}.
