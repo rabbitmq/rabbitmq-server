@@ -66,7 +66,8 @@ init_etcd(Config) ->
                 nomatch ->
                     ct:pal(?HI_IMPORTANCE, "init-etcd.sh output did not match what's expected: ~p", [Stdout])
             end;
-        _ ->
+        {error, Code, Reason} ->
+            ct:pal(?HI_IMPORTANCE, "init-etcd.sh exited with code ~p: ~p", [Code, Reason]),
             _ = rabbit_ct_helpers:exec(["pkill", "-INT", "etcd"]),
             {skip, "Failed to initialize etcd"}
     end.
