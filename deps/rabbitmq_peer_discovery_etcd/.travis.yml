@@ -1,6 +1,7 @@
 # vim:sw=2:et:
 
 os: linux
+sudo: true
 dist: xenial
 language: elixir
 notifications:
@@ -31,10 +32,7 @@ otp_release:
   - '22.2'
 
 install:
-  # This project being an Erlang one (we just set language to Elixir
-  # to ensure it is installed), we don't want Travis to run mix(1)
-  # automatically as it will break.
-  skip
+  - "./bin/ci/install_daemonize.sh"
 
 script:
   # $current_rmq_ref is also used by rabbitmq-components.mk to select
