@@ -123,11 +123,11 @@ lock(ServerRef, Node) ->
 unlock() ->
     unlock(?MODULE, node()).
 
-unlock(Node) ->
-    unlock(?MODULE, Node).
+unlock(LockKey) ->
+    unlock(?MODULE, LockKey).
 
-unlock(ServerRef, Node) ->
-    gen_statem:call(ServerRef, {unlock, Node}, ?CALL_TIMEOUT).
+unlock(ServerRef, LockKey) ->
+    gen_statem:call(ServerRef, {unlock, LockKey}, ?CALL_TIMEOUT).
 
 %%
 %% States
@@ -162,7 +162,11 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
 recover(state_timeout, _PrevState, Data) ->
     rabbit_log:debug("etcd peer discovery: connection entered a reconnection delay state"),
     ensure_disconnected(?ETCD_CONN_NAME, Data),
-    {next_state, recover, reset_statem_data(Data)}.
+    {next_state, recover, reset_statem_data(Data)};
+recover({call, From}, Req, _Data) ->
+    rabbit_log:error("etcd v3 API: client received a call ~p while not connected, will do nothing", [Req]),
+    gen_statem:reply(From, {error, not_connected}),
+    keep_state_and_data.
 
 
 connected(enter, _PrevState, Data) ->
@@ -331,7 +335,11 @@ connect(Name, Endpoints, Transport, TransportOpts) ->
 do_connect(Name, Endpoints, Transport, TransportOpts) ->
     case eetcd:open(Name, Endpoints, [{mode, random}], Transport, TransportOpts) of
         {ok, Pid} -> {ok, Pid};
-        {error, Errors} ->
+        {error, Errors0} ->
+            Errors = case is_list(Errors0) of
+                         true  -> Errors0;
+                         false -> [Errors0]
+                     end,
             rabbit_log:debug("etcd peer discovery: connection errors: ~p",
                              [Errors]),
             rabbit_log:debug("etcd peer discovery: are all connection errors benign?: ~p",
