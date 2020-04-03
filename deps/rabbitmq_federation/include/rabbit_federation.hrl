@@ -27,7 +27,8 @@
                    ack_mode,
                    ha_policy,
                    name,
-                   bind_nowait}).
+                   bind_nowait,
+                   resource_cleanup_mode}).
 
 -record(upstream_params,
         {uri,
