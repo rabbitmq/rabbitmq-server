@@ -7,10 +7,12 @@ case "$(uname -s)" in
     Linux)
         package_os="linux"
         tmpdir=/tmp
+        archive="tar.gz"
         ;;
     Darwin)
         package_os="darwin"
         tmpdir=$TMPDIR
+        archive="zip"
         ;;
     *)
         exit 1
@@ -28,11 +30,23 @@ DOWNLOAD_URL=${GITHUB_URL}
 
 rm -rf "${tmpdir}/etcd-${ETCD_VER}"
 
-if ! [ -f "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64.zip" ]; then
-  curl -L ${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-$package_os-amd64.zip -o "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64.zip"
+if ! [ -f "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64.$archive" ]; then
+  curl -L "${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-$package_os-amd64.$archive" -o "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64.$archive"
 fi
 
-unzip -q -o -d "$tmpdir" "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64.zip"
+case "$(uname -s)" in
+    Linux)
+      mkdir -p "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64/"
+      tar xzvf "/tmp/etcd-${ETCD_VER}-$package_os-amd64.$archive" -C "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64/" --strip-components=1
+      ;;
+    Darwin)
+      unzip -q -o -d "$tmpdir" "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64.$archive"
+      ;;
+    *)
+      exit 1
+      ;;
+esac
+
 mv "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64/" "${tmpdir}/etcd-${ETCD_VER}/"
 
 rm -rf "$etcd_data_dir"
@@ -48,8 +62,8 @@ daemonize -p "$pidfile" -l "${etcd_data_dir}/daemonize_lock" -- "$tmpdir/etcd-${
             --initial-cluster-state new
 
 
-for seconds in 1 2 3 4 5 6 7 8 9 10; do
-  etcdctl put rabbitmq-ct rabbitmq-ct --dial-timeout=1s && break
+for seconds in {1..30}; do
+  "$tmpdir/etcd-${ETCD_VER}/etcdctl" put rabbitmq-ct rabbitmq-ct --dial-timeout=1s && break
   sleep 1
 done
 
