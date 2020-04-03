@@ -34,11 +34,11 @@ all() ->
 
 groups() ->
     [
-      {non_parallel, [], [
-                          successful_discovery
-                          , successful_discovery_with_a_subset_of_nodes_coming_online
-                          , no_nodes_configured
-                         ]}
+     {non_parallel, [], [
+                         successful_discovery,
+                         successful_discovery_with_a_subset_of_nodes_coming_online,
+                         no_nodes_configured
+                        ]}
     ].
 
 suite() ->
@@ -64,7 +64,7 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery->
+init_per_testcase(successful_discovery = Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
 
     N = 3,
@@ -82,12 +82,14 @@ init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery->
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
           {cluster_nodes, {NodeNamesWithHostname, disc}},
-          {randomized_startup_delay_range, {1, 10}}
+          {cluster_formation, [
+              {randomized_startup_delay_range, {1, 10}}
+          ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps());
-init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery_with_a_subset_of_nodes_coming_online->
+init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
 
     N = 2,
@@ -111,7 +113,9 @@ init_per_testcase(Testcase, Config) when Testcase =:= successful_discovery_with_
               {discovery_retry_interval, 200}
           ]},
           {cluster_nodes, {NodeNamesWithHostname, disc}},
-          {randomized_startup_delay_range, {1, 10}}
+          {cluster_formation, [
+              {randomized_startup_delay_range, {1, 10}}
+          ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -126,7 +130,9 @@ init_per_testcase(no_nodes_configured = Testcase, Config) ->
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
           {cluster_nodes, {[], disc}},
-          {randomized_startup_delay_range, {1, 10}}
+          {cluster_formation, [
+              {randomized_startup_delay_range, {1, 10}}
+          ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
