@@ -29,16 +29,22 @@
          lock_acquisition_failure_mode/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
+
 %% what node type is used by default for this node when joining
 %% a new cluster as a virgin node
 -define(DEFAULT_NODE_TYPE, disc).
+
 %% default node prefix to attach to discovered hostnames
 -define(DEFAULT_PREFIX, "rabbit").
+
 %% default randomized delay range, in seconds
 -define(DEFAULT_STARTUP_RANDOMIZED_DELAY, {5, 60}).
 
--define(NODENAME_PART_SEPARATOR, "@").
+%% default discovery retries and interval.
+-define(DEFAULT_DISCOVERY_RETRY_COUNT, 10).
+-define(DEFAULT_DISCOVERY_RETRY_INTERVAL_MS, 500).
 
+-define(NODENAME_PART_SEPARATOR, "@").
 
 -spec backend() -> atom().
 
@@ -155,11 +161,11 @@ maybe_unregister() ->
 discovery_retries() ->
     case application:get_env(rabbit, cluster_formation) of
         {ok, Proplist} ->
-            Retries  = proplists:get_value(discovery_retry_limit,    Proplist, 10),
-            Interval = proplists:get_value(discovery_retry_interval, Proplist, 500),
+            Retries  = proplists:get_value(discovery_retry_limit,    Proplist, ?DEFAULT_DISCOVERY_RETRY_COUNT),
+            Interval = proplists:get_value(discovery_retry_interval, Proplist, ?DEFAULT_DISCOVERY_RETRY_INTERVAL_MS),
             {Retries, Interval};
         undefined ->
-            {10, 500}
+            {?DEFAULT_DISCOVERY_RETRY_COUNT, ?DEFAULT_DISCOVERY_RETRY_INTERVAL_MS}
     end.
 
 
