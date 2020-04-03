@@ -456,7 +456,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
             {State1, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers = Consumers, target_subscriptions = TargetSubscriptions} = State,
-    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, TargetSize:16, Target:TargetSize/binary, Offset:64/unsigned, Credit:16>>, Rest) ->
+    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, TargetSize:16, Target:TargetSize/binary, Offset:64/unsigned, Credit:16/signed>>, Rest) ->
     case lookup_cluster(Target, State) of
         cluster_not_found ->
             response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_TARGET_DOES_NOT_EXIST),
@@ -526,7 +526,7 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers, targ
             }, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = State,
-    <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16>>, Rest) ->
+    <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16/signed>>, Rest) ->
 
     case Consumers of
         #{SubscriptionId := Consumer} ->
