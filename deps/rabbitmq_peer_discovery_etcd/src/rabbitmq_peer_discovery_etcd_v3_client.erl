@@ -29,7 +29,7 @@
 %% for tests
 -export([extract_node/1, filter_node/1, registration_value/1, node_key_base/1, node_key/1, lock_key_base/1]).
 
--import(rabbit_data_coercion, [to_binary/1]).
+-import(rabbit_data_coercion, [to_binary/1, to_list/1]).
 
 -compile(nowarn_unused_function).
 
@@ -74,8 +74,7 @@ init(Args) ->
     {ok, recover, #statem_data{
         endpoints = Endpoints,
         username = Username,
-        %% TODO: obfuscation
-        obfuscated_password = Password,
+        obfuscated_password = obfuscate(Password),
         key_prefix = maps:get(etcd_prefix, Settings, <<"rabbitmq">>),
         node_key_ttl_in_seconds = erlang:max(
             ?MINIMUM_NODE_KEY_LEASE_TTL,
@@ -363,6 +362,24 @@ do_connect(Name, Endpoints, Transport, TransportOpts, Data = #statem_data{userna
             end
     end.
 
+connection_options(#statem_data{username = Username, obfuscated_password = Password}) ->
+    SharedOpts = [{mode, random}],
+    case {Username, Password} of
+        {undefined, _} -> SharedOpts;
+        {_, undefined} -> SharedOpts;
+        {UVal, PVal}   ->
+            [{name, UVal}, {password, to_list(deobfuscate(PVal))}] ++ SharedOpts
+    end.
+
+
+obfuscate(undefined) -> undefined;
+obfuscate(Password) ->
+    credentials_obfuscation:encrypt(to_binary(Password)).
+
+deobfuscate(undefined) -> undefined;
+deobfuscate(Password) ->
+    credentials_obfuscation:decrypt(to_binary(Password)).
+
 disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
     maybe_demonitor(Ref),
     do_disconnect(ConnName).
@@ -421,13 +438,3 @@ normalize_settings(Map) when is_map(Map) ->
     maps:merge(maps:without([etcd_prefix, etcd_node_ttl, lock_wait_time], Map),
                #{endpoints => AllEndpoints}).
 
-
-connection_options(#statem_data{username = Username, obfuscated_password = Password}) ->
-    SharedOpts = [{mode, random}],
-    %% TODO: deobfuscate
-    case {Username, Password} of
-        {undefined, _} -> SharedOpts;
-        {_, undefined} -> SharedOpts;
-        {UVal, PVal}   ->
-            [{name, UVal}, {password, PVal}] ++ SharedOpts
-    end.
