@@ -293,25 +293,37 @@ install-cli-scripts:
 		done; \
 	fi
 else
+
+ifneq ($(wildcard $(DEPS_DIR)/rabbit/scripts),)
+rabbit_scripts_dir = $(realpath $(DEPS_DIR)/rabbit/scripts)
+else ifneq ($(wildcard $(DEPS_DIR)/../scripts),)
+rabbit_scripts_dir = $(realpath $(DEPS_DIR)/../scripts)
+endif
+
 install-cli-scripts:
 	$(gen_verbose) \
+	set -e; \
+	test -d "$(rabbit_scripts_dir)"; \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(rabbit_scripts_dir)"/*; do \
+			test -f "$$file"; \
 			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
+		for file in "$(rabbit_scripts_dir)"/*; do \
+			test -f "$$file"; \
 			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "$(DEPS_DIR)/rabbit/scripts"/*; do \
+		for file in "$(rabbit_scripts_dir)"/*; do \
+			test -f "$$file"; \
 			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
 		done; \
