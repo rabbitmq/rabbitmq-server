@@ -1,7 +1,5 @@
-diff --git a/.travis.yml b/.travis.yml
-index e33c62a..fae28e0 100644
---- a/.travis.yml
-+++ b/.travis.yml
+--- .travis.yml
++++ .travis.yml
 @@ -13,6 +13,7 @@ addons:
    apt:
      packages:
