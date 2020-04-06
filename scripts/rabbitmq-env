@@ -105,8 +105,8 @@ saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 ## Get configuration variables from the configure environment file
 [ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
 if [ -f "${RABBITMQ_CONF_ENV_FILE}" ]; then
-	CONF_ENV_FILE_PHASE=rabbitmq-env
-	. ${RABBITMQ_CONF_ENV_FILE} || true
+    CONF_ENV_FILE_PHASE=rabbitmq-env
+    . ${RABBITMQ_CONF_ENV_FILE} || true
 fi
 
 [ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
