@@ -2,6 +2,7 @@
 
 -record(statem_data, {
     endpoints,
+    tls_options,
     connection_name,
     connection_pid,
     connection_monitor,

@@ -70,9 +70,11 @@ init(Args) ->
     Endpoints = maps:get(endpoints, Settings),
     Username = maps:get(etcd_username, Settings, undefined),
     Password = maps:get(etcd_password, Settings, undefined),
+    TLSOpts = maps:get(ssl_options, Settings, []),
     Actions = [{next_event, internal, start}],
     {ok, recover, #statem_data{
         endpoints = Endpoints,
+        tls_options = TLSOpts,
         username = Username,
         obfuscated_password = obfuscate(Password),
         key_prefix = maps:get(etcd_prefix, Settings, <<"rabbitmq">>),
@@ -145,8 +147,11 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
     rabbit_log:debug("etcd v3 API client will attempt to connect, endpoints: ~s",
                      [string:join(Endpoints, ",")]),
     maybe_demonitor(Ref),
-    Transport = tcp,
-    TransportOpts = [],
+    {Transport, TransportOpts} = pick_transport(Data),
+    case Transport of
+        tcp -> rabbit_log:info("etcd v3 API client is configured to connect over plain TCP, without using TLS");
+        tls -> rabbit_log:info("etcd v3 API client is configured to use TLS")
+    end,
     ConnName = ?ETCD_CONN_NAME,
     case connect(ConnName, Endpoints, Transport, TransportOpts, Data) of
         {ok, Pid} ->
@@ -424,7 +429,6 @@ do_disconnect(Name) ->
 reconnection_interval() ->
     3000.
 
-
 normalize_settings(Map) when is_map(Map) ->
     Endpoints = maps:get(endpoints, Map, []),
     LegacyEndpoints = case maps:get(etcd_host, Map, undefined) of
@@ -438,3 +442,7 @@ normalize_settings(Map) when is_map(Map) ->
     maps:merge(maps:without([etcd_prefix, etcd_node_ttl, lock_wait_time], Map),
                #{endpoints => AllEndpoints}).
 
+pick_transport(#statem_data{tls_options = []}) ->
+    {tcp, []};
+pick_transport(#statem_data{tls_options = Opts}) ->
+    {tls, Opts}.
