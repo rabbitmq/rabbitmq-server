@@ -1,7 +1,7 @@
 # vim:sw=2:et:
 
 os: linux
-dist: xenial
+dist: bionic
 language: elixir
 notifications:
   email:
