@@ -153,55 +153,36 @@ end_per_testcase(Testcase, Config) ->
 %%
 %% Test cases
 %%
-
 successful_discovery(Config) ->
     Condition = fun() ->
                     3 =:= length(cluster_members_online(Config, 0)) andalso
                     3 =:= length(cluster_members_online(Config, 1))
                 end,
-    try
-        rabbit_ct_helpers:await_condition(Condition, 30000)
-    catch
-        exit:{test_case_failed, _} ->
-            ct:pal(
-              ?LOW_IMPORTANCE,
-              "Possible dead-lock; resetting/restarting nodes 2 and 3"),
-            reset_and_restart_node(Config, 1),
-            reset_and_restart_node(Config, 2),
-            rabbit_ct_helpers:await_condition(Condition, 30000)
-    end.
+    await_cluster(Config, Condition, [1, 2]).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
     Condition = fun() ->
                     2 =:= length(cluster_members_online(Config, 0)) andalso
                     2 =:= length(cluster_members_online(Config, 1))
                 end,
-    try
-        rabbit_ct_helpers:await_condition(Condition, 30000)
-    catch
-        exit:{test_case_failed, _} ->
-            ct:pal(
-              ?LOW_IMPORTANCE,
-              "Possible dead-lock; resetting/restarting node 2"),
-            reset_and_restart_node(Config, 1),
-            rabbit_ct_helpers:await_condition(Condition, 30000)
-    end.
+    await_cluster(Config, Condition, [1]).
 
 no_nodes_configured(Config) ->
     Condition = fun() -> length(cluster_members_online(Config, 0)) < 2 end,
-    try
-        rabbit_ct_helpers:await_condition(Condition, 10000)
-    catch
-        exit:{test_case_failed, _} ->
-            ct:pal(
-              ?LOW_IMPORTANCE,
-              "Possible dead-lock; resetting/restarting node 2"),
-            reset_and_restart_node(Config, 1),
-            rabbit_ct_helpers:await_condition(Condition, 10000)
-    end.
+    await_cluster(Config, Condition, [1]).
 
 reset_and_restart_node(Config, I) when is_integer(I) andalso I >= 0 ->
     Name = rabbit_ct_broker_helpers:get_node_config(Config, I, nodename),
     rabbit_control_helper:command(stop_app, Name),
     rabbit_ct_broker_helpers:reset_node(Config, Name),
     rabbit_control_helper:command(start_app, Name).
+
+await_cluster(Config, Condition, Nodes) ->
+    try
+        rabbit_ct_helpers:await_condition(Condition, 30000)
+    catch
+        exit:{test_case_failed, _} ->
+            ct:pal(?LOW_IMPORTANCE, "Possible dead-lock; resetting/restarting these nodes: ~p", [Nodes]),
+            [reset_and_restart_node(Config, N) || N <- Nodes],
+            rabbit_ct_helpers:await_condition(Condition, 30000)
+    end.
