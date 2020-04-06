@@ -13,6 +13,7 @@ addons:
   apt:
     packages:
       - awscli
+      - daemonize
 cache:
   apt: true
 env:
