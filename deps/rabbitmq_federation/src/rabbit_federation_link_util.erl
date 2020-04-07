@@ -267,6 +267,9 @@ handle_upstream_down(Reason, _Args, State) ->
 
 %%----------------------------------------------------------------------------
 
+log_terminate(gone, _Upstream, _UParams, _XorQName) ->
+    %% the link cannot start, this has been logged already
+    ok;
 log_terminate({shutdown, restart}, _Upstream, _UParams, _XorQName) ->
     %% We've already logged this before munging the reason
     ok;

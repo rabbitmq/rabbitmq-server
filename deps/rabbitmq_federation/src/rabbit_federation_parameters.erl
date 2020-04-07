@@ -96,6 +96,7 @@ shared_validation() ->
      {<<"trust-user-id">>,  fun rabbit_parameter_validation:boolean/2, optional},
      {<<"ack-mode">>,       rabbit_parameter_validation:enum(
                               ['no-ack', 'on-publish', 'on-confirm']), optional},
+     {<<"resource-cleanup-mode">>, rabbit_parameter_validation:enum(['default', 'never']), optional},
      {<<"ha-policy">>,      fun rabbit_parameter_validation:binary/2, optional},
      {<<"bind-nowait">>,    fun rabbit_parameter_validation:boolean/2, optional}].
 

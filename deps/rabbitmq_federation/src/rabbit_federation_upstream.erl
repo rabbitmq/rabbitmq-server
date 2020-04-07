@@ -26,6 +26,7 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_federation_util, [name/1, vhost/1, r/1]).
+-import(rabbit_data_coercion, [to_atom/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -143,12 +144,11 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               expires         = bget(expires,           US, U, none),
               message_ttl     = bget('message-ttl',     US, U, none),
               trust_user_id   = bget('trust-user-id',   US, U, false),
-              ack_mode        = list_to_atom(
-                                  binary_to_list(
-                                    bget('ack-mode', US, U, <<"on-confirm">>))),
+              ack_mode        = to_atom(bget('ack-mode', US, U, <<"on-confirm">>)),
               ha_policy       = bget('ha-policy',       US, U, none),
               name            = Name,
-              bind_nowait     = bget('bind-nowait',     US, U, false)}.
+              bind_nowait     = bget('bind-nowait',     US, U, false),
+              resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>))}.
 
 %%----------------------------------------------------------------------------
 
