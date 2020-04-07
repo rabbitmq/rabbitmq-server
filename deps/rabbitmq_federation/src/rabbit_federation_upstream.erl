@@ -148,7 +148,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               ha_policy       = bget('ha-policy',       US, U, none),
               name            = Name,
               bind_nowait     = bget('bind-nowait',     US, U, false),
-              resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"regular">>))}.
+              resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>))}.
 
 %%----------------------------------------------------------------------------
 
