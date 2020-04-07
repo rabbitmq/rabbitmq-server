@@ -21,8 +21,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_broker_helpers, [
-    stop_node/2, reset_node/1, start_node/2,
-    rewrite_node_config_file/2, cluster_members_online/2
+    cluster_members_online/2
 ]).
 
 -compile(export_all).
@@ -154,22 +153,36 @@ end_per_testcase(Testcase, Config) ->
 %%
 %% Test cases
 %%
-
 successful_discovery(Config) ->
     Condition = fun() ->
                     3 =:= length(cluster_members_online(Config, 0)) andalso
                     3 =:= length(cluster_members_online(Config, 1))
                 end,
-    rabbit_ct_helpers:await_condition(Condition, 90000).
+    await_cluster(Config, Condition, [1, 2]).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
     Condition = fun() ->
                     2 =:= length(cluster_members_online(Config, 0)) andalso
                     2 =:= length(cluster_members_online(Config, 1))
                 end,
-    rabbit_ct_helpers:await_condition(Condition, 90000).
+    await_cluster(Config, Condition, [1]).
 
 no_nodes_configured(Config) ->
     Condition = fun() -> length(cluster_members_online(Config, 0)) < 2 end,
-    rabbit_ct_helpers:await_condition(Condition, 10000).
+    await_cluster(Config, Condition, [1]).
 
+reset_and_restart_node(Config, I) when is_integer(I) andalso I >= 0 ->
+    Name = rabbit_ct_broker_helpers:get_node_config(Config, I, nodename),
+    rabbit_control_helper:command(stop_app, Name),
+    rabbit_ct_broker_helpers:reset_node(Config, Name),
+    rabbit_control_helper:command(start_app, Name).
+
+await_cluster(Config, Condition, Nodes) ->
+    try
+        rabbit_ct_helpers:await_condition(Condition, 30000)
+    catch
+        exit:{test_case_failed, _} ->
+            ct:pal(?LOW_IMPORTANCE, "Possible dead-lock; resetting/restarting these nodes: ~p", [Nodes]),
+            [reset_and_restart_node(Config, N) || N <- Nodes],
+            rabbit_ct_helpers:await_condition(Condition, 30000)
+    end.
