@@ -33,7 +33,6 @@ all() ->
 groups() ->
     RejectTests = [
       rejects_survive_stop,
-      rejects_survive_sigkill,
       rejects_survive_policy
     ],
     [
@@ -45,12 +44,10 @@ groups() ->
         ]},
       {cluster_size_3, [], [
           consume_survives_stop,
-          consume_survives_sigkill,
           consume_survives_policy,
           auto_resume,
           auto_resume_no_ccn_client,
           confirms_survive_stop,
-          confirms_survive_sigkill,
           confirms_survive_policy,
           {overflow_reject_publish, [], RejectTests},
           {overflow_reject_publish_dlx, [], RejectTests}
@@ -207,11 +204,9 @@ auto_resume_no_ccn_client(Cf) -> consume_survives(Cf, fun sigkill/2, false,
                                                   false).
 
 confirms_survive_stop(Cf)    -> confirms_survive(Cf, fun stop/2).
-confirms_survive_sigkill(Cf) -> confirms_survive(Cf, fun sigkill/2).
 confirms_survive_policy(Cf)  -> confirms_survive(Cf, fun policy/2).
 
 rejects_survive_stop(Cf) -> rejects_survive(Cf, fun stop/2).
-rejects_survive_sigkill(Cf) -> rejects_survive(Cf, fun sigkill/2).
 rejects_survive_policy(Cf) -> rejects_survive(Cf, fun policy/2).
 
 %%----------------------------------------------------------------------------
