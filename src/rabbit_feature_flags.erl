@@ -1733,14 +1733,14 @@ check_node_compatibility(Node, Timeout) ->
     %% The goal is that such feature flags are not blocking the
     %% communication between nodes because the code (which would
     %% break) is missing on those nodes. Therefore they should not be
-    %% considered when determinig compatibility.
+    %% considered when determining compatibility.
     exchange_feature_flags_from_unknown_apps(Node, Timeout),
 
-    %% FIXME FIXME FIXME
-    %% Quand on tente de mettre deux nœuds en cluster, on a :
+    %% FIXME:
+    %% When we try to cluster two nodes, we get:
     %%   Feature flags: starting an unclustered node: all feature flags
     %%   will be enabled by default
-    %% Ça ne devrait sans doute pas être le cas...
+    %% It should probably not be the case...
 
     %% We can now proceed with the actual compatibility check.
     rabbit_log_feature_flags:debug(
