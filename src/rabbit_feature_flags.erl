@@ -1921,11 +1921,16 @@ merge_feature_flags_from_unknown_apps(FeatureFlags)
       end,
       #{},
       FeatureFlags),
-    rabbit_log_feature_flags:debug(
-      "Feature flags: register feature flags provided by applications "
-      "unknown locally: ~p",
-      [maps:keys(FeatureFlagsFromUnknownApps)]),
-    initialize_registry(FeatureFlagsFromUnknownApps).
+    case maps:keys(FeatureFlagsFromUnknownApps) of
+        [] ->
+            ok;
+        _ ->
+            rabbit_log_feature_flags:debug(
+              "Feature flags: register feature flags provided by applications "
+              "unknown locally: ~p",
+              [maps:keys(FeatureFlagsFromUnknownApps)]),
+            initialize_registry(FeatureFlagsFromUnknownApps)
+    end.
 
 exchange_feature_flags_from_unknown_apps(Node, Timeout) ->
     %% The first step is to fetch feature flags from Erlang applications
