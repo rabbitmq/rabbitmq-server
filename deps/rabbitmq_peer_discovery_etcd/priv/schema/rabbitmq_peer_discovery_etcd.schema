@@ -47,7 +47,7 @@ fun(Conf) ->
     end
 end}.
 
-%% Legacy: etcd scheme
+%% Legacy: etcd scheme. The key remains for backwards compatibility, it will not be used.
 
 {mapping, "cluster_formation.etcd.scheme", "rabbit.cluster_formation.peer_discovery_etcd.etcd_scheme", [
     {datatype, string}
