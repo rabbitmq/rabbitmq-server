@@ -199,7 +199,6 @@ handle_info(Msg, State) ->
 
 terminate(_Reason, {not_started, _}) ->
     ok;
-
 terminate(Reason, #state{downstream_connection = DConn,
                          connection            = Conn,
                          upstream              = Upstream,
@@ -207,15 +206,39 @@ terminate(Reason, #state{downstream_connection = DConn,
                          downstream_exchange   = XName,
                          internal_exchange_timer = TRef,
                          internal_exchange     = IntExchange,
-                         queue                 = Queue}) ->
+                         queue                 = Queue}) when Reason =:= shutdown;
+                                                              Reason =:= {shutdown, restart};
+                                                              Reason =:= gone ->
     timer:cancel(TRef),
-
-    %% Terminate the direct connection
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
-    %% Cleanup of internal queue and exchange
-    delete_upstream_queue(Conn, Queue),
-    delete_upstream_exchange(Conn, IntExchange),
+    rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~p", [Upstream#upstream.resource_cleanup_mode]),
+    case Upstream#upstream.resource_cleanup_mode of
+        never -> ok;
+        _     ->
+            %% This is a normal shutdown and we are allowed to clean up the internally used queue and exchange
+            rabbit_log:debug("Federated exchange '~s' link will delete its internal queue '~s'", [Upstream#upstream.exchange_name, Queue]),
+            delete_upstream_queue(Conn, Queue),
+            rabbit_log:debug("Federated exchange '~s' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
+            delete_upstream_exchange(Conn, IntExchange)
+    end,
+
+    rabbit_federation_link_util:ensure_connection_closed(Conn),
+    rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
+    ok;
+%% unexpected shutdown
+terminate(Reason, #state{downstream_connection = DConn,
+                         connection            = Conn,
+                         upstream              = Upstream,
+                         upstream_params       = UParams,
+                         downstream_exchange   = XName,
+                         internal_exchange_timer = TRef}) ->
+    timer:cancel(TRef),
+
+    rabbit_federation_link_util:ensure_connection_closed(DConn),
+
+    %% unlike in the clean shutdown case above, we keep the queue
+    %% and exchange around
 
     rabbit_federation_link_util:ensure_connection_closed(Conn),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
