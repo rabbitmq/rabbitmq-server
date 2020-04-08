@@ -885,7 +885,8 @@ initialize_registry(NewSupportedFeatureFlags,
     case Proceed of
         true ->
             rabbit_log_feature_flags:debug(
-              "Feature flags: (re)initialize registry"),
+              "Feature flags: (re)initialize registry (~p)",
+              [self()]),
             do_initialize_registry(AllFeatureFlags,
                                    FeatureStates,
                                    WrittenToDisk);
@@ -910,12 +911,34 @@ does_registry_need_refresh(AllFeatureFlags,
             %% changes.
             CurrentAllFeatureFlags = rabbit_ff_registry:list(all),
             CurrentFeatureStates = rabbit_ff_registry:states(),
-            CurrentWrittenToDisk = rabbit_ff_registry:is_registry_written_to_disk(),
+            CurrentWrittenToDisk =
+            rabbit_ff_registry:is_registry_written_to_disk(),
 
-            AllFeatureFlags =/= CurrentAllFeatureFlags orelse
-            FeatureStates =/= CurrentFeatureStates orelse
-            WrittenToDisk =/= CurrentWrittenToDisk;
+            if
+                AllFeatureFlags =/= CurrentAllFeatureFlags ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: "
+                      "yes, list of feature flags differs"),
+                    true;
+                FeatureStates =/= CurrentFeatureStates ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: "
+                      "yes, feature flag states differ"),
+                    true;
+                WrittenToDisk =/= CurrentWrittenToDisk ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: "
+                      "yes, \"written to disk\" state changed"),
+                    true;
+                true ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: no"),
+                    false
+            end;
         false ->
+            rabbit_log_feature_flags:debug(
+              "Feature flags: registry refresh needed: "
+              "yes, first-time initialization"),
             true
     end.
 
@@ -1255,14 +1278,21 @@ registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
 
 load_registry_mod(Mod, Bin) ->
     rabbit_log_feature_flags:debug(
-      "Feature flags: registry module ready, loading it..."),
-    FakeFilename = "Compiled and loaded by " ++ ?MODULE_STRING,
+      "Feature flags: registry module ready, loading it (~p)...",
+      [self()]),
+    FakeFilename = "Compiled and loaded by " ?MODULE_STRING,
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquired lock before reloading registry module (~p)",
+     [self()]),
     ok = purge_old_registry(Mod),
     true = code:delete(Mod),
     Ret = code:load_binary(Mod, FakeFilename, Bin),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: releasing lock after reloading registry module (~p)",
+     [self()]),
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
         {module, _} ->
