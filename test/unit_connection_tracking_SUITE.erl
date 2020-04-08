@@ -101,10 +101,10 @@ queue_count(Config) ->
 connection_count(Config) ->
     Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
 
-    wait_until(
+    rabbit_ct_helpers:await_condition(
       fun() ->
               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, []) == 1
-      end),
+      end, 30000),
 
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
@@ -114,10 +114,10 @@ connection_lookup(Config) ->
 
     %% Let's wait until the connection is registered, otherwise this test could fail in a slow
     %% machine as connection tracking is asynchronous
-    wait_until(
+    rabbit_ct_helpers:await_condition(
       fun() ->
               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, []) == 1
-      end),
+      end, 30000),
 
     [Connection] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []),
     ?assertMatch(Connection, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
@@ -126,17 +126,3 @@ connection_lookup(Config) ->
 
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
-
-wait_until(Condition) ->
-    wait_until(Condition, 60).
-
-wait_until(Condition, 0) ->
-    ?assertEqual(true, Condition());
-wait_until(Condition, N) ->
-    case Condition() of
-        true ->
-            ok;
-        _ ->
-            timer:sleep(500),
-            wait_until(Condition, N - 1)
-    end.
