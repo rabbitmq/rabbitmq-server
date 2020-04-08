@@ -133,7 +133,8 @@
          initialize_registry/3,
          query_supported_feature_flags/0,
          mark_as_enabled_remotely/2,
-         mark_as_enabled_remotely/4]).
+         mark_as_enabled_remotely/4,
+         registry_loading_lock/0]).
 -endif.
 
 %% Default timeout for operations on remote nodes.
@@ -1243,6 +1244,10 @@ maybe_log_registry_source_code(Forms) ->
         _ ->
             ok
     end.
+
+-ifdef(TEST).
+registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
+-endif.
 
 -spec load_registry_mod(atom(), binary()) ->
     ok | {error, any()} | no_return().
