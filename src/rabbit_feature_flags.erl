@@ -1447,6 +1447,8 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
     %% are unknown feature flags in that file, we want to keep their
     %% state, even though they are unsupported at this time. It could be
     %% that a plugin was disabled in the meantime.
+    %%
+    %% FIXME: Lock this code to fix concurrent read/modify/write.
     PreviouslyEnabled = case try_to_read_enabled_feature_flags_list() of
                             {error, _} -> [];
                             List       -> List
