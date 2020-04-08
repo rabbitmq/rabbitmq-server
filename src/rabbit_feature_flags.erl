@@ -1287,8 +1287,20 @@ load_registry_mod(Mod, Bin) ->
     rabbit_log_feature_flags:debug(
       "Feature flags: acquired lock before reloading registry module (~p)",
      [self()]),
+    %% We want to make sure that the old registry (not the one being
+    %% currently in use) is purged by the code server. It means no
+    %% process lingers on that old code.
+    %%
+    %% We use code:soft_purge() for that (meaning no process is killed)
+    %% and we wait in an infinite loop for that to succeed.
     ok = purge_old_registry(Mod),
-    true = code:delete(Mod),
+    %% Now we can replace the currently loaded registry by the new one.
+    %% The code server takes care of marking the current registry as old
+    %% and load the new module in an atomic operation.
+    %%
+    %% Therefore there is no chance of a window where there is no
+    %% registry module available, causing the one on disk to be
+    %% reloaded.
     Ret = code:load_binary(Mod, FakeFilename, Bin),
     rabbit_log_feature_flags:debug(
       "Feature flags: releasing lock after reloading registry module (~p)",
