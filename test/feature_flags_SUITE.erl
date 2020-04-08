@@ -151,6 +151,7 @@ init_per_testcase(Testcase, Config) ->
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     case ?config(tc_group_properties, Config) of
         [{name, registry} | _] ->
+            application:set_env(lager, colored, true),
             application:set_env(
               lager,
               handlers, [{lager_console_backend, [{level, debug}]}]),
@@ -158,6 +159,9 @@ init_per_testcase(Testcase, Config) ->
               lager,
               extra_sinks,
               [{rabbit_log_lager_event,
+                [{handlers, [{lager_console_backend, [{level, debug}]}]}]
+               },
+               {rabbit_log_feature_flags_lager_event,
                 [{handlers, [{lager_console_backend, [{level, debug}]}]}]
                }]),
             lager:start(),
@@ -271,7 +275,8 @@ registry_general_usage(_Config) ->
                      ff_b =>
                      #{desc      => "Feature flag B",
                        stability => stable}},
-    rabbit_feature_flags:inject_test_feature_flags(feature_flags_to_app_attrs(FeatureFlags)),
+    rabbit_feature_flags:inject_test_feature_flags(
+      feature_flags_to_app_attrs(FeatureFlags)),
 
     %% After initialization, it must know about the feature flags
     %% declared in this testsuite. They must be disabled however.
