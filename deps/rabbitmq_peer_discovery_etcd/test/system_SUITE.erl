@@ -91,9 +91,11 @@ etcd_connection_sanity_check_test(Config) ->
     Condition1 = fun() ->
                     1 =:= length(eetcd_conn_sup:info())
                 end,
-    rabbit_ct_helpers:await_condition(Condition1, 60000),
-
-    eetcd:close(test),
+    try
+        rabbit_ct_helpers:await_condition(Condition1, 60000)
+    after ->
+        eetcd:close(test)
+    end,
     Condition2 = fun() ->
                     0 =:= length(eetcd_conn_sup:info())
                 end,
@@ -101,18 +103,21 @@ etcd_connection_sanity_check_test(Config) ->
 
 init_opens_a_connection_test(Config) ->
     Endpoints = ?config(etcd_endpoints, Config),
-    {ok, Pid} = rabbitmq_peer_discovery_etcd_v3_client:start(#{endpoints => Endpoints}),
+    {ok, Pid} = start_client(Endpoints),
     Condition = fun() ->
                     1 =:= length(eetcd_conn_sup:info())
                 end,
-    rabbit_ct_helpers:await_condition(Condition, 90000),
-    gen_statem:stop(Pid),
+    try
+        rabbit_ct_helpers:await_condition(Condition, 90000)
+    after ->
+        gen_statem:stop(Pid)
+    end,
     ?assertEqual(0, length(eetcd_conn_sup:info())).
 
 
 registration_with_locking_test(Config) ->
     Endpoints = ?config(etcd_endpoints, Config),
-    {ok, Pid} = rabbitmq_peer_discovery_etcd_v3_client:start(#{endpoints => Endpoints}),
+    {ok, Pid} = start_client(Endpoints),
     Condition1 = fun() ->
                     1 =:= length(eetcd_conn_sup:info())
                  end,
@@ -125,6 +130,20 @@ registration_with_locking_test(Config) ->
     Condition2 = fun() ->
                     [node()] =:= rabbitmq_peer_discovery_etcd_v3_client:list_nodes(Pid)
                  end,
-    rabbit_ct_helpers:await_condition(Condition2, 45000),
+    try
+        rabbit_ct_helpers:await_condition(Condition2, 45000)
+    after ->
+        gen_statem:stop(Pid)
+    end.
 
-    gen_statem:stop(Pid).
+%%
+%% Helpers
+%%
+
+start_client(Endpoints) ->
+    case rabbitmq_peer_discovery_etcd_v3_client:start(#{endpoints => Endpoints}) of
+        {ok, Pid} ->
+            {ok, Pid};
+        {error, {already_started, Pid}} ->
+            {ok, Pid}
+    end.
