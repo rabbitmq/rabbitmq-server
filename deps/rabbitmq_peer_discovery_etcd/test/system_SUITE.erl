@@ -93,7 +93,7 @@ etcd_connection_sanity_check_test(Config) ->
                 end,
     try
         rabbit_ct_helpers:await_condition(Condition1, 60000)
-    after ->
+    after
         eetcd:close(test)
     end,
     Condition2 = fun() ->
@@ -109,7 +109,7 @@ init_opens_a_connection_test(Config) ->
                 end,
     try
         rabbit_ct_helpers:await_condition(Condition, 90000)
-    after ->
+    after
         gen_statem:stop(Pid)
     end,
     ?assertEqual(0, length(eetcd_conn_sup:info())).
@@ -132,7 +132,7 @@ registration_with_locking_test(Config) ->
                  end,
     try
         rabbit_ct_helpers:await_condition(Condition2, 45000)
-    after ->
+    after
         gen_statem:stop(Pid)
     end.
 
