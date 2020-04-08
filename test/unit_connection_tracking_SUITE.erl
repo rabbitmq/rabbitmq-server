@@ -93,16 +93,31 @@ queue_count(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
+%% connection_count/1 has been failing on Travis. This seems a legit failure, as the registering
+%% of connections in the tracker is async. `rabbit_connection_tracking_handler` receives a rabbit
+%% event with `connection_created`, which then forwards as a cast to `rabbit_connection_tracker`
+%% for register. We should wait a reasonable amount of time for the counter to increase before
+%% failing.
 connection_count(Config) ->
     Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
 
-    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, [])),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, []) == 1
+      end, 30000),
 
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
 connection_lookup(Config) ->
     Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
+
+    %% Let's wait until the connection is registered, otherwise this test could fail in a slow
+    %% machine as connection tracking is asynchronous
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, []) == 1
+      end, 30000),
 
     [Connection] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []),
     ?assertMatch(Connection, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
