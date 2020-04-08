@@ -37,6 +37,10 @@
          is_registry_initialized/0,
          is_registry_written_to_disk/0]).
 
+-ifdef(TEST).
+-on_load(on_load/0).
+-endif.
+
 -spec get(rabbit_feature_flags:feature_name()) ->
     rabbit_feature_flags:feature_props() | undefined.
 %% @doc
@@ -183,3 +187,12 @@ always_return_true() ->
 
 always_return_false() ->
     not always_return_true().
+
+-ifdef(TEST).
+on_load() ->
+     _ = (catch rabbit_log_feature_flags:debug(
+                  "Feature flags: Loading initial (uninitialized) registry "
+                  "module (~p)",
+                  [self()])),
+    ok.
+-endif.
