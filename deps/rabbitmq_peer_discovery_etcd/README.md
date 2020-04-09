@@ -18,12 +18,10 @@ are not in scope for this plugin.
 
 This plugin requires RabbitMQ 3.7.0 or later.
 
-For an etcd-based peer discovery and cluster formation
-mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster).
 
 ## Supported etcd Versions
 
-The plugin supports etcd v2 and v3.
+The plugin supports etcd 3.4 or later and uses the current stable v3 gRPC API.
 
 ## Installation
 

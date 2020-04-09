@@ -21,10 +21,18 @@
 %%
 
 -behaviour(application).
--export([start/2, stop/1]).
+-export([start/2, stop/1, prep_stop/1]).
 
 start(_Type, _StartArgs) ->
+    %% The tree had been started earlier, see rabbit_peer_discovery_etcd:init/0. MK.
     rabbitmq_peer_discovery_etcd_sup:start_link().
+
+prep_stop(_State) ->
+    try
+        rabbitmq_peer_discovery_etcd_v3_client:unregister()
+    catch
+        _:_ -> ok
+    end.
 
 stop(_State) ->
     ok.

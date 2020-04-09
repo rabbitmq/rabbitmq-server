@@ -78,21 +78,16 @@ ask the core team for their opinion on the [RabbitMQ users mailing list][rmq-use
 
 ## Running Tests
 
-To run a "fast suite" (a subset of tests):
-
-    make ct-fast
-
-To run a "slow suite" (a subset of tests that take much longer to run):
-
-    make ct-slow
+See [RUNNING_TESTS.md](./RUNNING_TESTS.md) to learn how the test suites provision an `etcd`
+node and what the prerequisites are.
 
 To run a particular suite:
 
     make ct-$suite_name
 
-for example, to run the `backing_queue` suite:
+for example, to run the `system` suite:
 
-    make ct-backing_queue
+    make ct-system
 
 Finally,
 
