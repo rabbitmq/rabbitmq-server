@@ -218,10 +218,12 @@ log_file_initialised_during_startup1(_Config) ->
     ok = rabbit:start(),
 
     %% start application with logging to non-existing directory
-    NonExistent = "/tmp/non-existent/test.log",
+    NonExistent = rabbit_misc:format(
+                    "/tmp/non-existent/~s.log", [?FUNCTION_NAME]),
     delete_file(NonExistent),
     delete_file(filename:dirname(NonExistent)),
     ok = rabbit:stop(),
+    ct:pal("Setting lager_default_file to \"~s\"", [NonExistent]),
     ok = application:set_env(rabbit, lager_default_file, NonExistent),
     application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
@@ -264,56 +266,45 @@ log_file_fails_to_initialise_during_startup(Config) ->
 
 log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     [LogFile|_] = rabbit:log_locations(),
+    delete_file(LogFile),
+    Fn = rabbit_misc:format("~s.log", [?FUNCTION_NAME]),
 
     %% start application with logging to directory with no
     %% write permissions
+    NoPermission1 = filename:join(NonWritableDir, Fn),
+    delete_file(NoPermission1),
+    delete_file(filename:dirname(NoPermission1)),
+
     ok = rabbit:stop(),
+    ct:pal("Setting lager_default_file to \"~s\"", [NoPermission1]),
+    ok = application:set_env(rabbit, lager_default_file, NoPermission1),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
 
-    Run1 = fun() ->
-      NoPermission1 = filename:join(NonWritableDir, "test.log"),
-      delete_file(NoPermission1),
-      delete_file(filename:dirname(NoPermission1)),
-      ok = rabbit:stop(),
-      ok = application:set_env(rabbit, lager_default_file, NoPermission1),
-      application:unset_env(rabbit, log),
-      application:unset_env(lager, handlers),
-      application:unset_env(lager, extra_sinks),
-      rabbit:start()
-    end,
-
-    ok = try Run1() of
-        ok -> exit({got_success_but_expected_failure,
-                    log_rotation_no_write_permission_dir_test})
-    catch
-        throw:{error, {rabbit, {{cannot_log_to_file, _, _}, _}}} -> ok
-    end,
+    ct:pal("`rabbit` application env.: ~p", [application:get_all_env(rabbit)]),
+    ?assertThrow(
+       {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
+       rabbit:start()),
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
     NoPermission2 = filename:join([NonWritableDir,
                                    "non-existent",
-                                   "test.log"]),
+                                   Fn]),
+    delete_file(NoPermission2),
+    delete_file(filename:dirname(NoPermission2)),
 
-    Run2 = fun() ->
-      delete_file(NoPermission2),
-      delete_file(filename:dirname(NoPermission2)),
-      case rabbit:stop() of
-          ok                         -> ok;
-          {error, lager_not_running} -> ok
-      end,
-      ok = application:set_env(rabbit, lager_default_file, NoPermission2),
-      application:unset_env(rabbit, log),
-      application:unset_env(lager, handlers),
-      application:unset_env(lager, extra_sinks),
-      rabbit:start()
-    end,
+    ct:pal("Setting lager_default_file to \"~s\"", [NoPermission2]),
+    ok = application:set_env(rabbit, lager_default_file, NoPermission2),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
 
-    ok = try Run2() of
-        ok -> exit({got_success_but_expected_failure,
-                    log_rotation_parent_dirs_test})
-    catch
-        throw:{error, {rabbit, {{cannot_log_to_file, _, _}, _}}} -> ok
-    end,
+    ct:pal("`rabbit` application env.: ~p", [application:get_all_env(rabbit)]),
+    ?assertThrow(
+       {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
+       rabbit:start()),
 
     %% clean up
     ok = application:set_env(rabbit, lager_default_file, LogFile),
