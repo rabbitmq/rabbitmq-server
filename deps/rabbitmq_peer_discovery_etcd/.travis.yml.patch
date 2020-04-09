@@ -1,0 +1,19 @@
+--- .travis.yml
++++ .travis.yml
+@@ -1,7 +1,7 @@
+ # vim:sw=2:et:
+
+ os: linux
+-dist: xenial
++dist: bionic
+ language: elixir
+ notifications:
+   email:
+@@ -13,6 +13,7 @@ addons:
+   apt:
+     packages:
+       - awscli
++      - daemonize
+ cache:
+   apt: true
+ env:
