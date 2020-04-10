@@ -3097,16 +3097,20 @@ rates_test(Config) ->
                   QueueTotals = maps:get(queue_totals, Overview, #{}),
                   HasPub andalso maps:get(messages_ready, QueueTotals, 0) > 0
           end,
-    wait_until(Fun, 250),
-    Overview = http_get(Config, "/overview"),
-    MsgStats = maps:get(message_stats, Overview),
-    QueueTotals = maps:get(queue_totals, Overview),
-    ?assert(maps:get(messages_ready, QueueTotals) > 0),
-    ?assert(maps:get(messages, QueueTotals) > 0),
-    ?assert(maps:get(publish, MsgStats) > 0),
-    ?assert(maps:get(rate, maps:get(publish_details, MsgStats)) > 0),
-    ?assert(maps:get(rate, maps:get(messages_ready_details, QueueTotals)) > 0),
-    ?assert(maps:get(rate, maps:get(messages_details, QueueTotals)) > 0),
+
+    Condition = fun() ->
+        Overview = http_get(Config, "/overview"),
+        MsgStats = maps:get(message_stats, Overview),
+        QueueTotals = maps:get(queue_totals, Overview),
+
+        maps:get(messages_ready, QueueTotals) > 0 andalso
+        maps:get(messages, QueueTotals) > 0 andalso
+        maps:get(publish, MsgStats) > 0 andalso
+        maps:get(rate, maps:get(publish_details, MsgStats)) > 0 andalso
+        maps:get(rate, maps:get(messages_ready_details, QueueTotals)) > 0 andalso
+        maps:get(rate, maps:get(messages_details, QueueTotals)) > 0
+    end,
+    rabbit_ct_helpers:await_condition(Condition, 60000),
     Pid ! stop_publish,
     close_channel(Ch),
     close_connection(Conn),
@@ -3272,7 +3276,7 @@ publish(Ch) ->
     receive
         stop_publish ->
             ok
-    after 50 ->
+    after 20 ->
         publish(Ch)
     end.
 
