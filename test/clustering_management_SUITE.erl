@@ -625,9 +625,6 @@ erlang_config(Config) ->
     ok = start_app(Hare),
     assert_clustered([Rabbit, Hare]),
 
-    %% If we use an invalid node type, the node fails to start.
-    %% The Erlang VM has stopped after previous rabbit app failure
-    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
