@@ -85,6 +85,11 @@ list_queues_online_and_offline(Config) ->
 
     rabbit_ct_broker_helpers:rabbitmqctl(Config, B, ["stop"]),
 
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [A] == rpc:call(A, rabbit_mnesia, cluster_nodes, [running])
+      end, 60000),
+
     GotUp = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
         ["list_queues", "--online", "name", "--no-table-headers"])),
     ExpectUp = [[<<"q_a_1">>], [<<"q_a_2">>]],
