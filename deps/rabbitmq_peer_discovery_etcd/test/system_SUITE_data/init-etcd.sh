@@ -52,6 +52,9 @@ mv "${tmpdir}/etcd-${ETCD_VER}-$package_os-amd64/" "${tmpdir}/etcd-${ETCD_VER}/"
 rm -rf "$etcd_data_dir"
 mkdir -p "$etcd_data_dir"
 
+# daemonize(1) is installed under this path on Debian
+PATH=$PATH:/usr/sbin
+
 daemonize -p "$pidfile" -l "${etcd_data_dir}/daemonize_lock" -- "$tmpdir/etcd-${ETCD_VER}/etcd" \
             --data-dir "$etcd_data_dir" --name peer-discovery-0 --initial-advertise-peer-urls http://127.0.0.1:2380 \
             --listen-peer-urls http://127.0.0.1:2380 \
