@@ -823,8 +823,10 @@ def format_list(json_list, columns, args, options):
         print(json_list)
         return
     elif format == "pretty_json":
-        enc = json.JSONEncoder(False, False, True, True, True, 2)
-        print(enc.encode(json.loads(json_list)))
+        json_list_parsed = json.loads(json_list)
+        print(json.dumps(json_list_parsed,
+            skipkeys=False, ensure_ascii=False, check_circular=True,
+            allow_nan=True, sort_keys=True, indent=2))
         return
     else:
         formatter = FORMATS[format]
