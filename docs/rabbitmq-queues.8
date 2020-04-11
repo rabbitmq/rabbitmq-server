@@ -181,6 +181,20 @@ Displays quorum status of a quorum queue.
 Example:
 .Sp
 .Dl rabbitmq-queues quorum_status --vhost Qo a-vhost Qc Qo a-queue Qc
+.It Cm check_if_node_is_mirror_sync_critical
+.Pp
+Health check that exits with a non-zero code if there are classic mirrored queues without online synchronised mirrors (queues that would potentially lose data if the target node is shut down).
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues check_if_node_is_mirror_sync_critical
+.It Cm check_if_node_is_quorum_critical
+.Pp
+Health check that exits with a non-zero code if there are queues with minimum online quorum (queues that would lose their quorum if the target node is shut down).
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues check_if_node_is_quorum_critical
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------
