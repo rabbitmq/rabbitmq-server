@@ -35,20 +35,43 @@ all() ->
     ].
 
 groups() ->
-    PublisherConfirmTests = [publisher_confirms,
-                             publisher_confirms_with_deleted_queue,
-                             confirm_select_ok,
-                             confirm_nowait,
-                             confirm_ack,
-                             confirm_acks,
-                             confirm_mandatory_unroutable,
-                             confirm_unroutable_message],
     [
      {publisher_confirm_tests, [],
       [
-       {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {mirrored_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {quorum_queue, [parallel], PublisherConfirmTests ++ [confirm_minority]}
+       {classic_queue,
+        [parallel],
+        [publisher_confirms,
+         publisher_confirms_with_deleted_queue,
+         confirm_select_ok,
+         confirm_nowait,
+         confirm_ack,
+         confirm_acks,
+         confirm_mandatory_unroutable,
+         confirm_unroutable_message,
+         confirm_nack]
+       },
+       {mirrored_queue,
+        [parallel],
+        [publisher_confirms_with_deleted_queue,
+         confirm_select_ok,
+         confirm_nowait,
+         confirm_ack,
+         confirm_acks,
+         confirm_mandatory_unroutable,
+         confirm_unroutable_message]
+       },
+       {quorum_queue,
+        [parallel],
+        [publisher_confirms,
+         publisher_confirms_with_deleted_queue,
+         confirm_select_ok,
+         confirm_nowait,
+         confirm_ack,
+         confirm_acks,
+         confirm_mandatory_unroutable,
+         confirm_unroutable_message,
+         confirm_minority]
+       }
       ]}
     ].
 
