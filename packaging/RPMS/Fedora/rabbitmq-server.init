@@ -25,6 +25,10 @@ CONTROL=/usr/sbin/rabbitmqctl
 DESC=rabbitmq-server
 USER=rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
+<<<<<<< HEAD
+=======
+RABBITMQ_LOG_BASE=/var/log/rabbitmq
+>>>>>>> 6945402... Add timeout to rabbitmqctl wait statement
 RABBITMQ_STARTUP_TIMEOUT=600
 
 START_PROG= # Set when building package
@@ -76,7 +80,7 @@ start_rabbitmq () {
             > "${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_log" \
             2> "${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_err" \
             0<&- &
-        $CONTROL wait $PID_FILE >/dev/null 2>&1
+        $CONTROL wait --timeout $RABBITMQ_STARTUP_TIMEOUT $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
         case "$RETVAL" in

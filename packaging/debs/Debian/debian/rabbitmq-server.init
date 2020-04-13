@@ -72,7 +72,7 @@ start_rabbitmq () {
             --chuid rabbitmq --start \
             --pidfile "$PID_FILE" --background \
             --startas /bin/sh -- -c "exec $DAEMON >'${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_log' 2>'${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_err'"
-        $CONTROL wait $PID_FILE >/dev/null 2>&1
+        $CONTROL wait --timeout $RABBITMQ_STARTUP_TIMEOUT $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
         if [ $RETVAL != 0 ] ; then
