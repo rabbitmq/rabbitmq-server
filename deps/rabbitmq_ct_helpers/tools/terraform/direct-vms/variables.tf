@@ -97,7 +97,12 @@ variable "erlang_version_to_system" {
     "21.3"   = "debian-stretch"
     "22.0"   = "debian-stretch"
     "22.1"   = "debian-stretch"
+    "22.2"   = "debian-stretch"
+    "22.3"   = "debian-stretch"
     "23.0"   = "debian-stretch"
+    "23.1"   = "debian-stretch"
+    "23.2"   = "debian-stretch"
+    "23.3"   = "debian-stretch"
   }
 }
 
