@@ -24,6 +24,7 @@ DESC="message broker"
 USER=rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
 RABBITMQ_LOG_BASE=/var/log/rabbitmq
+RABBITMQ_STARTUP_TIMEOUT=600
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0
@@ -59,7 +60,7 @@ start_rabbitmq () {
         RABBITMQ_PID_FILE=$PID_FILE start-stop-daemon --quiet \
             --chuid rabbitmq --start --exec $DAEMON \
             --pidfile "$PID_FILE" --background
-        $CONTROL wait $PID_FILE >/dev/null 2>&1
+        $CONTROL wait --timeout $RABBITMQ_STARTUP_TIMEOUT $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
         if [ $RETVAL != 0 ] ; then
