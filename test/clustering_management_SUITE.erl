@@ -34,7 +34,7 @@ groups() ->
     [
       {unclustered, [], [
           {cluster_size_2, [], [
-              erlang_config
+              classic_config_discovery_node_list
             ]},
           {cluster_size_3, [], [
               join_and_part_cluster,
@@ -157,7 +157,6 @@ persistent_cluster_id(Config) ->
     end.
 
 create_bad_schema(Rabbit, Hare, Config) ->
-
     {ok, RabbitMnesiaDir} = rpc:call(Rabbit, application, get_env, [mnesia, dir]),
     {ok, HareMnesiaDir} = rpc:call(Hare, application, get_env, [mnesia, dir]),
     %% Make sure we don't use the current dir:
@@ -579,7 +578,7 @@ update_cluster_nodes(Config) ->
     assert_not_clustered(Hare),
     assert_clustered([Rabbit, Bunny]).
 
-erlang_config(Config) ->
+classic_config_discovery_node_list(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
 
     ok = stop_app(Hare),
@@ -597,26 +596,6 @@ erlang_config(Config) ->
     assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
                           [Rabbit, Hare]),
 
-    %% Check having a stop_app'ed node around doesn't break completely.
-    ok = stop_app(Hare),
-    ok = reset(Hare),
-    ok = stop_app(Rabbit),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, {[Rabbit], disc}]),
-    ok = start_app(Hare),
-    ok = start_app(Rabbit),
-    assert_not_clustered(Hare),
-    assert_not_clustered(Rabbit),
-
-    %% We get a warning but we start anyway
-    ok = stop_app(Hare),
-    ok = reset(Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, {[non@existent], disc}]),
-    ok = start_app(Hare),
-    assert_not_clustered(Hare),
-    assert_not_clustered(Rabbit),
-
     %% List of nodes [node()] is equivalent to {[node()], disk}
     ok = stop_app(Hare),
     ok = reset(Hare),
@@ -627,29 +606,7 @@ erlang_config(Config) ->
 
     ok = stop_app(Hare),
     ok = reset(Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, {["Mike's computer"], disc}]),
-    %% Rabbit app stops abnormally
-    assert_failure(fun () -> start_app(Hare) end),
-    assert_not_clustered(Rabbit),
-
-    %% If we use an invalid node type, the node fails to start.
-    ok = reset(Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, {[Rabbit], blue}]),
-    %% Rabbit app stops abnormally
-    assert_failure(fun () -> start_app(Hare) end),
-    assert_not_clustered(Rabbit),
-
     %% If we use an invalid cluster_nodes conf, the node fails to start.
-    ok = reset(Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, true]),
-    %% Rabbit app stops abnormally
-    assert_failure(fun () -> start_app(Hare) end),
-    assert_not_clustered(Rabbit),
-
-    ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, "Yes, please"]),
     assert_failure(fun () -> start_app(Hare) end),
