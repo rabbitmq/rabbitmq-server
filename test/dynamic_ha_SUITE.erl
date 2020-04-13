@@ -514,7 +514,7 @@ master_migrates_on_vhost_down(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = <<"master_migrates_on_vhost_down-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
-    timer:sleep(200),
+    timer:sleep(500),
     assert_slaves(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on the node hosting queue master
@@ -528,7 +528,7 @@ slave_recovers_after_vhost_down_and_master_migrated(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = <<"slave_recovers_after_vhost_down_and_master_migrated-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
-    timer:sleep(200),
+    timer:sleep(500),
     assert_slaves(A, QName, {A, [B]}, [{A, []}]),
     %% Crash vhost on the node hosting queue master
     rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
@@ -574,8 +574,9 @@ promote_slave_after_standalone_restart(Config) ->
     rabbit_ct_client_helpers:publish(Ch, ?QNAME, 15),
     rabbit_ct_client_helpers:close_channel(Ch),
 
-    timer:sleep(500),
-    15 = proplists:get_value(messages, find_queue(?QNAME, A)),
+    rabbit_ct_helpers:await_condition(fun() ->
+                                        15 =:= proplists:get_value(messages, find_queue(?QNAME, A))
+                                      end, 60000),
 
     rabbit_ct_broker_helpers:stop_node(Config, C),
     rabbit_ct_broker_helpers:stop_node(Config, B),
@@ -586,7 +587,9 @@ promote_slave_after_standalone_restart(Config) ->
     forget_cluster_node(Config, B, A),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, B),
-    15 = proplists:get_value(messages, find_queue(?QNAME, B)),
+    rabbit_ct_helpers:await_condition(fun() ->
+                                        15 =:= proplists:get_value(messages, find_queue(?QNAME, B))
+                                      end, 60000),
     ok = rabbit_ct_broker_helpers:stop_node(Config, B),
 
     %% Restart the other
@@ -628,11 +631,15 @@ rebalance_all(Config) ->
     {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun(NodeData) ->
+    Condition1 = fun() ->
+                     lists:all(fun(NodeData) ->
                               lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
                                            (_) -> true end,
                                         NodeData)
-                      end, Summary)),
+                      end, Summary)
+                 end,
+    rabbit_ct_helpers:await_condition(Condition1, 60000),
+
     %% Check that Q1 and Q2 haven't moved
     assert_slaves(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
     assert_slaves(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
@@ -677,14 +684,21 @@ rebalance_exactly(Config) ->
     {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun(NodeData) ->
-                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
-                                           (_) -> true end,
-                                        NodeData)
-                      end, Summary)),
+    Condition1 = fun() ->
+                     lists:all(fun(NodeData) ->
+                                   lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                                (_) -> true end,
+                                             NodeData)
+                               end, Summary)
+                 end,
+    rabbit_ct_helpers:await_condition(Condition1, 60000),
+
     %% Check that Q1 and Q2 haven't moved
-    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q1, A)))),
-    ?assertEqual(A, node(proplists:get_value(pid, find_queue(Q2, A)))),
+    Condition2 = fun () ->
+                    A =:= node(proplists:get_value(pid, find_queue(Q1, A))) andalso
+                    A =:= node(proplists:get_value(pid, find_queue(Q2, A)))
+                 end,
+    rabbit_ct_helpers:await_condition(Condition2, 40000),
 
     ok.
 
