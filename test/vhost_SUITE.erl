@@ -34,15 +34,12 @@ groups() ->
     ClusterSize1Tests = [
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
-        dead_vhost_connection_refused,
         vhost_creation_idempotency
     ],
     ClusterSize2Tests = [
         cluster_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
-        dead_vhost_connection_refused,
         vhost_failure_forces_connection_closure_on_failure_node,
-        dead_vhost_connection_refused_on_failure_node,
         node_starts_with_dead_vhosts,
         node_starts_with_dead_vhosts_with_mirrors,
         vhost_creation_idempotency
@@ -186,27 +183,6 @@ vhost_failure_forces_connection_closure(Config) ->
     close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost1)).
 
-dead_vhost_connection_refused(Config) ->
-    VHost1 = <<"vhost1">>,
-    VHost2 = <<"vhost2">>,
-
-    set_up_vhost(Config, VHost1),
-    set_up_vhost(Config, VHost2),
-
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost2),
-    timer:sleep(200),
-
-    [_Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
-
-    [_Conn2] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    expect_that_client_connection_is_rejected(Config, 0, VHost2).
-
 
 vhost_failure_forces_connection_closure_on_failure_node(Config) ->
     VHost1 = <<"vhost1">>,
@@ -235,36 +211,6 @@ vhost_failure_forces_connection_closure_on_failure_node(Config) ->
     close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost1)).
 
-dead_vhost_connection_refused_on_failure_node(Config) ->
-    VHost1 = <<"vhost1">>,
-    VHost2 = <<"vhost2">>,
-
-    set_up_vhost(Config, VHost1),
-    set_up_vhost(Config, VHost2),
-
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    rabbit_ct_broker_helpers:force_vhost_failure(Config, 0, VHost2),
-    timer:sleep(200),
-    %% Can open connections to vhost1 on node 0 and 1
-    [_Conn10] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
-    [_Conn11] = open_connections(Config, [{1, VHost1}]),
-    ?assertEqual(2, count_connections_in(Config, VHost1)),
-
-    %% Connection on vhost2 on node 0 is refused
-    [_Conn20] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    expect_that_client_connection_is_rejected(Config, 0, VHost2),
-
-    %% Can open connections to vhost2 on node 1
-    [_Conn21] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
 
 cluster_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
