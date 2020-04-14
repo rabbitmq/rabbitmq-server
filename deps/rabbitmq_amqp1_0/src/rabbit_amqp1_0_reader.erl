@@ -322,8 +322,12 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
     catch
         _:#'v1_0.error'{} = Reason ->
             handle_exception(State, 0, Reason);
-        _:Reason ->
-            Trace = erlang:get_stacktrace(),
+        _:{error, {not_allowed, Username}} ->
+            %% section 2.8.15 in http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-complete-v1.0-os.pdf
+            handle_exception(State, 0, error_frame(
+                                         ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                                         "Access for user '~s' was refused: insufficient permissions~n", [Username]));
+        _:Reason:Trace ->
             handle_exception(State, 0, error_frame(
                                          ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                          "Reader error: ~p~n~p~n",
@@ -709,6 +713,8 @@ send_to_new_1_0_session(Channel, Frame, State) ->
             put({ch_fr_pid, ChFrPid}, {channel, Channel}),
             ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
         {error, {not_allowed, _}} ->
+            rabbit_log:error("AMQP 1.0: user '~s' is not allowed to access virtual host '~s'",
+                [User#user.username, vhost(Hostname)]),
             %% Let's skip the supervisor trace, this is an expected error
             throw({error, {not_allowed, User#user.username}});
         {error, _} = E ->
