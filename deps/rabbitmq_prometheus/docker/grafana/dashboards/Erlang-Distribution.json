@@ -533,43 +533,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -689,43 +689,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -824,43 +824,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -959,43 +959,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -1092,43 +1092,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -1225,43 +1225,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -1360,43 +1360,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -1507,43 +1507,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -2000,43 +2000,43 @@
       },
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
@@ -2140,43 +2140,43 @@
       },
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@\\w+0/",
+          "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@\\w+1/",
+          "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@\\w+2/",
+          "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@\\w+3/",
+          "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@\\w+4/",
+          "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@\\w+5/",
+          "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@\\w+6/",
+          "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@\\w+7/",
+          "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@\\w+8/",
+          "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@\\w+9/",
+          "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
       ],
