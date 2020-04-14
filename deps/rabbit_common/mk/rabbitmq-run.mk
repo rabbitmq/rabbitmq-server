@@ -65,7 +65,8 @@ node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
 # Broker startup variables for the test environment.
-RABBITMQ_NODENAME ?= rabbit
+HOSTNAME := $(shell hostname -s)
+RABBITMQ_NODENAME ?= rabbit@$(HOSTNAME)
 RABBITMQ_NODENAME_FOR_PATHS ?= $(RABBITMQ_NODENAME)
 NODE_TMPDIR ?= $(call node_tmpdir,$(RABBITMQ_NODENAME_FOR_PATHS))
 
@@ -311,6 +312,11 @@ endif
 
 RMQCTL_WAIT_TIMEOUT ?= 60
 
+define rmq_started
+true = rpc:call('$(1)', rabbit, is_running, []),
+halt().
+endef
+
 start-background-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
@@ -326,7 +332,7 @@ start-background-broker: node-tmpdir $(DIST_TARGET)
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) && \
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) status >/dev/null
+	  $(call erlang,$(call rmq_started,$(RABBITMQ_NODENAME)),-sname sbb-$$$$ -hidden)
 
 start-rabbit-on-node:
 	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
@@ -344,9 +350,10 @@ stop-rabbit-on-node:
 
 stop-node:
 	$(exec_verbose) ( \
-	  pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)) && \
-	  ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) stop && \
+	  pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)); \
+	  test "$$pid" && \
+	  kill -TERM "$$pid" && \
+	  echo waiting for process to exit && \
 	  while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
 	  ) || :
 
