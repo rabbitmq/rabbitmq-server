@@ -1677,7 +1677,6 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
               "nodes", [FeatureName, IsEnabled]),
             ok;
         _ ->
-            T1 = erlang:timestamp(),
             rabbit_log:error(
               "Feature flags: failed to mark feature flag `~s` as enabled=~p "
               "on the following nodes:", [FeatureName, IsEnabled]),
@@ -1686,12 +1685,17 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
                [Node, Ret])
              || {Node, Ret} <- Rets,
                 Ret =/= ok],
-            NewTimeout = Timeout - (timer:now_diff(T1, T0) div 1000),
+            Sleep = 1000,
+            T1 = erlang:timestamp(),
+            Duration = timer:now_diff(T1, T0),
+            NewTimeout = (Timeout * 1000 - Duration) div 1000 - Sleep,
             if
                 NewTimeout > 0 ->
                     rabbit_log:debug(
                       "Feature flags:   retrying with a timeout of ~b "
-                      "milliseconds", [NewTimeout]),
+                      "ms after sleeping for ~b ms",
+                      [NewTimeout, Sleep]),
+                    timer:sleep(Sleep),
                     mark_as_enabled_remotely(FailedNodes,
                                              FeatureName,
                                              IsEnabled,
