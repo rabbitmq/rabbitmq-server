@@ -81,7 +81,7 @@ variable "aws_ec2_region" {
 }
 
 variable "erlang_version_to_system" {
-  type = "map"
+  type = map
   default = {
     "R16B03" = "debian-wheezy"
     "17.5"   = "debian-jessie"
@@ -107,7 +107,7 @@ variable "erlang_version_to_system" {
 }
 
 variable "ec2_instance_types" {
-  type = "map"
+  type = map
   default = {
     "sles-11"      = "t2.medium" # Need more than 2 GiB of RAM
     "ubuntu-14.04" = "m3.medium" # `t2.micro` unsupported
@@ -119,7 +119,7 @@ variable "ec2_instance_types" {
 
 # AMIs for eu-west-1 (Ireland)
 variable "amis" {
-  type = "map"
+  type = map
   default = {
     "centos-6"            = "ami-051b1563"
     "centos-7"            = "ami-061b1560"
@@ -148,7 +148,7 @@ variable "amis" {
 }
 
 variable "usernames" {
-  type = "map"
+  type = map
   default = {
     "centos-6"           = "centos"
     "centos-7"           = "centos"
