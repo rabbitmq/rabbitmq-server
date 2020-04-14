@@ -105,8 +105,8 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config, [
-        fun rabbit_ct_broker_helpers:enable_dist_proxy_manager/1
-      ]).
+      fun rabbit_ct_broker_helpers:configure_dist_proxy/1
+    ]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -118,8 +118,7 @@ init_per_group(enabling_on_single_node, Config) ->
 init_per_group(enabling_in_cluster, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{rmq_nodes_count, 5},
-       {rmq_nodes_clustered, false}]);
+      [{rmq_nodes_count, 5}]);
 init_per_group(clustering, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
@@ -225,9 +224,7 @@ init_per_testcase(Testcase, Config) ->
             Config3 = rabbit_ct_helpers:run_steps(
                         Config2,
                         rabbit_ct_broker_helpers:setup_steps() ++
-                        rabbit_ct_client_helpers:setup_steps() ++
-                        [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
-                         fun rabbit_ct_broker_helpers:cluster_nodes/1]),
+                        rabbit_ct_client_helpers:setup_steps()),
             case Config3 of
                 {skip, _} ->
                     Config3;

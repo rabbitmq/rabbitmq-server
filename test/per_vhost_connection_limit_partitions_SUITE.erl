@@ -54,8 +54,8 @@ suite() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config, [
-                                               fun rabbit_ct_broker_helpers:enable_dist_proxy_manager/1
-                                              ]).
+      fun rabbit_ct_broker_helpers:configure_dist_proxy/1
+    ]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -68,15 +68,11 @@ init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
-                                                    {rmq_nodename_suffix, Suffix},
-                                                    {rmq_nodes_clustered, false}
+                                                    {rmq_nodename_suffix, Suffix}
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps() ++ [
-        fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
-        fun rabbit_ct_broker_helpers:cluster_nodes/1
-      ]).
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
