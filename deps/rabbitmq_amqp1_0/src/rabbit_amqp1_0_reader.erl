@@ -418,6 +418,12 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                          heartbeater = Heartbeater,
                          queue_collector = Collector}
         end,
+    HostnameVal = case Hostname of
+                    undefined -> undefined;
+                    {utf8, Val} -> Val
+                  end,
+    rabbit_log:debug("AMQP 1.0 connection.open frame: hostname = ~s, extracted vhost = ~s, idle_timeout = ~p" ,
+                    [HostnameVal, vhost(Hostname), HeartbeatSec * 1000]),
     %% TODO enforce channel_max
     ok = send_on_channel0(
            Sock,
