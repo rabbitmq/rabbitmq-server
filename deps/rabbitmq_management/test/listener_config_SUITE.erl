@@ -105,6 +105,3 @@ multiple_listeners(_Config) ->
 get_single_listener_config() ->
     [Config] = rabbit_mgmt_app:get_listeners_config(),
     lists:usort(Config).
-
-deep_sort(List) ->
-    lists:usort(lists:map(fun lists:usort/1, List)).
