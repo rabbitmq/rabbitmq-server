@@ -25,6 +25,7 @@
 -define(TCP_CONTEXT, rabbitmq_prometheus_tcp).
 -define(TLS_CONTEXT, rabbitmq_prometheus_tls).
 -define(DEFAULT_PORT, 15692).
+-define(DEFAULT_TLS_PORT, 15691).
 
 start(_Type, _StartArgs) ->
     %% TCP listener uses prometheus.tcp.*.
@@ -41,20 +42,33 @@ init(_) ->
 
 -spec start_configured_listener() -> ok.
 start_configured_listener() ->
-    Listeners = case {has_configured_tcp_listener(),
-                      has_configured_tls_listener()} of
-                    {false, false} ->
-                        %% nothing is configured
-                        [get_tcp_listener()];
-                    {false, true} ->
-                        [get_tls_listener()];
-                    {true, false} ->
-                        [get_tcp_listener()];
-                    {true, true} ->
-                        [get_tcp_listener(),
-                         get_tls_listener()]
-                end,
-    [ start_listener(Listener) || Listener <- Listeners ].
+    Listeners0 = case {has_configured_tcp_listener(),
+                       has_configured_tls_listener()} of
+                     {false, false} ->
+                         %% nothing is configured
+                         [get_tcp_listener()];
+                     {false, true} ->
+                         [get_tls_listener()];
+                     {true, false} ->
+                         [get_tcp_listener()];
+                     {true, true} ->
+                         [get_tcp_listener(),
+                          get_tls_listener()]
+                 end,
+    Listeners1 = maybe_disable_sendfile(Listeners0),
+    [start_listener(Listener) || Listener <- Listeners1].
+
+maybe_disable_sendfile(Listeners) ->
+    DisableSendfile = #{sendfile => false},
+    F = fun(L0) ->
+                CowboyOptsL0 = proplists:get_value(cowboy_opts, L0, []),
+                CowboyOptsM0 = maps:from_list(CowboyOptsL0),
+                CowboyOptsM1 = maps:merge(DisableSendfile, CowboyOptsM0),
+                CowboyOptsL1 = maps:to_list(CowboyOptsM1),
+                L1 = lists:keydelete(cowboy_opts, 1, L0),
+                [{cowboy_opts, CowboyOptsL1}|L1]
+        end,
+    lists:map(F, Listeners).
 
 has_configured_tcp_listener() ->
     has_configured_listener(tcp_config).
@@ -70,33 +84,47 @@ has_configured_listener(Key) ->
 
 get_tls_listener() ->
     {ok, Listener0} = application:get_env(rabbitmq_prometheus, ssl_config),
-    [{ssl, true} | Listener0].
+     case proplists:get_value(cowboy_opts, Listener0) of
+        undefined ->
+             [{ssl, true}, {ssl_opts, Listener0}];
+        CowboyOpts ->
+            Listener1 = lists:keydelete(cowboy_opts, 1, Listener0),
+            [{ssl, true}, {ssl_opts, Listener1}, {cowboy_opts, CowboyOpts}]
+     end.
 
 get_tcp_listener() ->
     application:get_env(rabbitmq_prometheus, tcp_config, []).
 
-start_listener(Listener) ->
-    {Type, ContextName, Protocol} = case is_tls(Listener) of
+start_listener(Listener0) ->
+    {Type, ContextName, Protocol} = case is_tls(Listener0) of
         true  -> {tls, ?TLS_CONTEXT, 'https/prometheus'};
         false -> {tcp, ?TCP_CONTEXT, 'http/prometheus'}
     end,
-    {ok, _} = register_context(ContextName, Protocol, Listener),
-    log_startup(Type, Listener).
+    {ok, Listener1} = ensure_port_and_protocol(Type, Protocol, Listener0),
+    {ok, _} = register_context(ContextName, Listener1),
+    log_startup(Type, Listener1).
 
-register_context(ContextName, Protocol, Listener0) ->
-    M0 = maps:from_list(Listener0),
-    %% include default port if it's not provided in the config
-    %% as Cowboy won't start if the port is missing
-    M1 = maps:merge(#{port => ?DEFAULT_PORT,
-                      protocol => Protocol}, M0),
+register_context(ContextName, Listener) ->
+    Dispatcher = rabbit_prometheus_dispatcher:build_dispatcher(),
     rabbit_web_dispatch:register_context_handler(
-      ContextName, maps:to_list(M1), "",
-      rabbit_prometheus_dispatcher:build_dispatcher(),
-      "RabbitMQ Prometheus").
+      ContextName, Listener, "",
+      Dispatcher, "RabbitMQ Prometheus").
 
 unregister_all_contexts() ->
     rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
     rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
+
+ensure_port_and_protocol(tls, Protocol, Listener) ->
+    do_ensure_port_and_protocol(?DEFAULT_TLS_PORT, Protocol, Listener);
+ensure_port_and_protocol(tcp, Protocol, Listener) ->
+    do_ensure_port_and_protocol(?DEFAULT_PORT, Protocol, Listener).
+
+do_ensure_port_and_protocol(Port, Protocol, Listener) ->
+    %% include default port if it's not provided in the config
+    %% as Cowboy won't start if the port is missing
+    M0 = maps:from_list(Listener),
+    M1 = maps:merge(#{port => Port, protocol => Protocol}, M0),
+    {ok, maps:to_list(M1)}.
 
 log_startup(tcp, Listener) ->
     rabbit_log:info("Prometheus metrics: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
