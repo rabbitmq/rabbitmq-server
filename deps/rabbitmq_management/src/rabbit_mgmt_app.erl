@@ -29,6 +29,7 @@
 -define(TCP_CONTEXT, rabbitmq_management_tcp).
 -define(TLS_CONTEXT, rabbitmq_management_tls).
 -define(DEFAULT_PORT, 15672).
+-define(DEFAULT_TLS_PORT, 15671).
 
 start(_Type, _StartArgs) ->
     case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
@@ -94,12 +95,15 @@ get_listeners_config() ->
 
 maybe_disable_sendfile(Listeners) ->
     DisableSendfile = #{sendfile => false},
-    lists:map(fun(Listener) ->
-        CowboyOpts0 = maps:from_list(proplists:get_value(cowboy_opts, Listener, [])),
-
-        [{cowboy_opts, maps:to_list(maps:merge(DisableSendfile, CowboyOpts0))} | lists:keydelete(cowboy_opts, 1, Listener)]
-    end,
-    Listeners).
+    F = fun(L0) ->
+                CowboyOptsL0 = proplists:get_value(cowboy_opts, L0, []),
+                CowboyOptsM0 = maps:from_list(CowboyOptsL0),
+                CowboyOptsM1 = maps:merge(DisableSendfile, CowboyOptsM0),
+                CowboyOptsL1 = maps:to_list(CowboyOptsM1),
+                L1 = lists:keydelete(cowboy_opts, 1, L0),
+                [{cowboy_opts, CowboyOptsL1}|L1]
+        end,
+    lists:map(F, Listeners).
 
 has_configured_legacy_listener() ->
     has_configured_listener(listener).
@@ -121,37 +125,46 @@ get_legacy_listener() ->
     Listener.
 
 get_tls_listener() ->
-    {ok, Listener0} = application:get_env(rabbitmq_management, ssl_config),
-    [{ssl, true} | Listener0].
+    {ok, Listener} = application:get_env(rabbitmq_management, ssl_config),
+    [{ssl, true}, {ssl_opts, Listener}].
 
 get_tcp_listener() ->
     application:get_env(rabbitmq_management, tcp_config, []).
 
-start_listener(Listener, IgnoreApps, NeedLogStartup) ->
-    {Type, ContextName} = case is_tls(Listener) of
+start_listener(Listener0, IgnoreApps, NeedLogStartup) ->
+    {Type, ContextName} = case is_tls(Listener0) of
         true  -> {tls, ?TLS_CONTEXT};
         false -> {tcp, ?TCP_CONTEXT}
     end,
-    {ok, _} = register_context(ContextName, Listener, IgnoreApps),
+    {ok, Listener1} = ensure_port(Type, Listener0),
+    {ok, _} = register_context(ContextName, Listener1, IgnoreApps),
     case NeedLogStartup of
-        true  -> log_startup(Type, Listener);
+        true  -> log_startup(Type, Listener1);
         false -> ok
     end,
     ok.
 
-register_context(ContextName, Listener0, IgnoreApps) ->
-    M0 = maps:from_list(Listener0),
-    %% include default port if it's not provided in the config
-    %% as Cowboy won't start if the port is missing
-    M1 = maps:merge(#{port => ?DEFAULT_PORT}, M0),
+register_context(ContextName, Listener, IgnoreApps) ->
+    Dispatcher = rabbit_mgmt_dispatcher:build_dispatcher(IgnoreApps),
     rabbit_web_dispatch:register_context_handler(
-      ContextName, maps:to_list(M1), "",
-      rabbit_mgmt_dispatcher:build_dispatcher(IgnoreApps),
-      "RabbitMQ Management").
+      ContextName, Listener, "",
+      Dispatcher, "RabbitMQ Management").
 
 unregister_all_contexts() ->
     rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
     rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
+
+ensure_port(tls, Listener) ->
+    do_ensure_port(?DEFAULT_TLS_PORT, Listener);
+ensure_port(tcp, Listener) ->
+    do_ensure_port(?DEFAULT_PORT, Listener).
+
+do_ensure_port(Port, Listener) ->
+    %% include default port if it's not provided in the config
+    %% as Cowboy won't start if the port is missing
+    M0 = maps:from_list(Listener),
+    M1 = maps:merge(#{port => Port}, M0),
+    {ok, maps:to_list(M1)}.
 
 log_startup(tcp, Listener) ->
     rabbit_log:info("Management plugin: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
