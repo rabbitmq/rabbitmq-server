@@ -125,8 +125,14 @@ get_legacy_listener() ->
     Listener.
 
 get_tls_listener() ->
-    {ok, Listener} = application:get_env(rabbitmq_management, ssl_config),
-    [{ssl, true}, {ssl_opts, Listener}].
+    {ok, Listener0} = application:get_env(rabbitmq_management, ssl_config),
+     case proplists:get_value(cowboy_opts, Listener0) of
+        undefined ->
+             [{ssl, true}, {ssl_opts, Listener0}];
+        CowboyOpts ->
+            Listener1 = lists:keydelete(cowboy_opts, 1, Listener0),
+            [{ssl, true}, {ssl_opts, Listener1}, {cowboy_opts, CowboyOpts}]
+     end.
 
 get_tcp_listener() ->
     application:get_env(rabbitmq_management, tcp_config, []).
