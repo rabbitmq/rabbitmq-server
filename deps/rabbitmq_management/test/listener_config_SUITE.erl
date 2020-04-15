@@ -99,7 +99,37 @@ ssl_config_only(_Config) ->
     ?assertEqual(lists:usort(Expected), get_single_listener_config()).
 
 multiple_listeners(_Config) ->
-    ok.
+    application:set_env(rabbitmq_management, tcp_config, [
+        {port, 998},
+        {cowboy_opts, [
+            {idle_timeout, 10000}
+        ]}
+    ]),
+    application:set_env(rabbitmq_management, ssl_config, [
+        {port, 999},
+        {idle_timeout, 10000}
+    ]),
+    Expected = [
+        [
+            {cowboy_opts, [
+                {idle_timeout, 10000},
+                {sendfile, false}
+            ]},
+            {port,998}
+        ],
+
+        [
+            {cowboy_opts,[
+                {sendfile, false}
+            ]},
+            {ssl, true},
+            {ssl_opts, [
+                {port, 999},
+                {idle_timeout, 10000}
+            ]}
+        ]
+    ],
+    ?assertEqual(lists:usort(Expected), rabbit_mgmt_app:get_listeners_config()).
 
 
 get_single_listener_config() ->
