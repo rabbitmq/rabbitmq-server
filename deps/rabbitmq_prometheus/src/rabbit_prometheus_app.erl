@@ -42,20 +42,33 @@ init(_) ->
 
 -spec start_configured_listener() -> ok.
 start_configured_listener() ->
-    Listeners = case {has_configured_tcp_listener(),
-                      has_configured_tls_listener()} of
-                    {false, false} ->
-                        %% nothing is configured
-                        [get_tcp_listener()];
-                    {false, true} ->
-                        [get_tls_listener()];
-                    {true, false} ->
-                        [get_tcp_listener()];
-                    {true, true} ->
-                        [get_tcp_listener(),
-                         get_tls_listener()]
-                end,
-    [ start_listener(Listener) || Listener <- Listeners ].
+    Listeners0 = case {has_configured_tcp_listener(),
+                       has_configured_tls_listener()} of
+                     {false, false} ->
+                         %% nothing is configured
+                         [get_tcp_listener()];
+                     {false, true} ->
+                         [get_tls_listener()];
+                     {true, false} ->
+                         [get_tcp_listener()];
+                     {true, true} ->
+                         [get_tcp_listener(),
+                          get_tls_listener()]
+                 end,
+    Listeners1 = maybe_disable_sendfile(Listeners0),
+    [start_listener(Listener) || Listener <- Listeners1].
+
+maybe_disable_sendfile(Listeners) ->
+    DisableSendfile = #{sendfile => false},
+    F = fun(L0) ->
+                CowboyOptsL0 = proplists:get_value(cowboy_opts, L0, []),
+                CowboyOptsM0 = maps:from_list(CowboyOptsL0),
+                CowboyOptsM1 = maps:merge(DisableSendfile, CowboyOptsM0),
+                CowboyOptsL1 = maps:to_list(CowboyOptsM1),
+                L1 = lists:keydelete(cowboy_opts, 1, L0),
+                [{cowboy_opts, CowboyOptsL1}|L1]
+        end,
+    lists:map(F, Listeners).
 
 has_configured_tcp_listener() ->
     has_configured_listener(tcp_config).
@@ -70,8 +83,14 @@ has_configured_listener(Key) ->
     end.
 
 get_tls_listener() ->
-    {ok, Listener} = application:get_env(rabbitmq_prometheus, ssl_config),
-    [{ssl, true}, {ssl_opts, Listener}].
+    {ok, Listener0} = application:get_env(rabbitmq_prometheus, ssl_config),
+     case proplists:get_value(cowboy_opts, Listener0) of
+        undefined ->
+             [{ssl, true}, {ssl_opts, Listener0}];
+        CowboyOpts ->
+            Listener1 = lists:keydelete(cowboy_opts, 1, Listener0),
+            [{ssl, true}, {ssl_opts, Listener1}, {cowboy_opts, CowboyOpts}]
+     end.
 
 get_tcp_listener() ->
     application:get_env(rabbitmq_prometheus, tcp_config, []).
