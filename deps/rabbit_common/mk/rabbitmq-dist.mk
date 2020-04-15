@@ -324,7 +324,7 @@ install-cli-scripts:
 		done'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "'$$rabbit_scripts_dir'"/*; do \
+		for file in "$$rabbit_scripts_dir"/*; do \
 			test -f "$$file"; \
 			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
 			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
