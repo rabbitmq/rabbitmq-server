@@ -65,7 +65,7 @@ node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
 # Broker startup variables for the test environment.
-HOSTNAME := $(shell hostname -s)
+HOSTNAME := $(shell U="$$(uname)"; if [ "$$U" = Darwin -o "$$U" = FreeBSD  ]; then hostname -s; else hostname; fi)
 RABBITMQ_NODENAME ?= rabbit@$(HOSTNAME)
 RABBITMQ_NODENAME_FOR_PATHS ?= $(RABBITMQ_NODENAME)
 NODE_TMPDIR ?= $(call node_tmpdir,$(RABBITMQ_NODENAME_FOR_PATHS))
@@ -367,7 +367,7 @@ NODES ?= 2
 
 start-brokers start-cluster: $(DIST_TARGET)
 	@for n in $$(seq $(NODES)); do \
-		nodename="rabbit-$$n@$$(hostname -s)"; \
+		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
@@ -393,7 +393,7 @@ start-brokers start-cluster: $(DIST_TARGET)
 
 stop-brokers stop-cluster:
 	@for n in $$(seq $(NODES) -1 1); do \
-		nodename="rabbit-$$n@$$(hostname -s)"; \
+		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) stop-node \
 		  RABBITMQ_NODENAME="$$nodename"; \
 	done
