@@ -114,6 +114,10 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
     end)
   end
 
+  defp init_items_stream(_node, _mod, _fun, _args, 0, pid, ref) do
+    set_stream_timeout(pid, ref, 0)
+  end
+
   defp init_items_stream(node, mod, fun, args, timeout, pid, ref) do
     :rabbit_control_misc.spawn_emitter_caller(node, mod, fun, args, ref, pid, timeout)
     set_stream_timeout(pid, ref, timeout)
