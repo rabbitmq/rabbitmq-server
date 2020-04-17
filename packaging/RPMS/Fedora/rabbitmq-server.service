@@ -8,7 +8,7 @@ User=rabbitmq
 Group=rabbitmq
 UMask=0027
 NotifyAccess=all
-TimeoutStartSec=3600
+TimeoutStartSec=600
 
 # To override LimitNOFILE, create the following file:
 #
