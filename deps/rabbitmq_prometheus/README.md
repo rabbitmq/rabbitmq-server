@@ -21,14 +21,22 @@ This plugin is included into RabbitMQ 3.8.x releases. Like all [plugins](https:/
 
 To enable it with [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
 
-    rabbitmq-plugins enable rabbitmq_prometheus
+``` shell
+rabbitmq-plugins enable rabbitmq_prometheus
+```
 
 ## Usage
 
 See the [documentation guide](https://www.rabbitmq.com/prometheus.html).
 
-Default port used by the plugin is `15692`. In most environments there would be no configuration
-necessary.
+Default port used by the plugin is `15692` and the endpoint path is at `/metrics`.
+To try it with `curl`:
+
+```shell
+curl -v -H "Accept:text/plain;version=0.0.4" "http://localhost:15692/metrics"
+```
+
+In most environments there would be no configuration necessary.
 
 See the entire list of [metrics](metrics.md) exposed via the default port.
 
