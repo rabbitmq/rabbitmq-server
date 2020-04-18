@@ -20,6 +20,7 @@ from __future__ import print_function
 from optparse import OptionParser, TitledHelpFormatter
 
 import base64
+import copy
 import json
 import os
 import socket
@@ -312,6 +313,8 @@ def fmt_usage_stanza(root, verb):
 
 default_options = {"hostname": "localhost",
                    "port": "15672",
+                   # default config file section name
+                   "node": "default",
                    "path_prefix": "",
                    "declare_vhost": "/",
                    "username": "guest",
@@ -410,56 +413,72 @@ def default_config():
 
 def make_configuration():
     make_parser()
-    (options, args) = parser.parse_args()
-    setattr(options, "declare_vhost", None)
-    if options.version:
+    (cli_options, args) = parser.parse_args()
+
+    if cli_options.version:
         print_version()
-    if options.config is None:
+
+    setattr(cli_options, "declare_vhost", None)
+    final_options = copy.copy(cli_options)
+
+    # Resolve config file path
+    if cli_options.config is None:
         config_file = default_config()
         if config_file is not None:
-            setattr(options, "config", config_file)
+            setattr(final_options, "config", config_file)
     else:
-        if not os.path.isfile(options.config):
-            assert_usage(False, "Could not read config file '%s'" % options.config)
+        if not os.path.isfile(cli_options.config):
+            assert_usage(False, "Could not read config file '%s'" % cli_options.config)
 
-    if options.node is None and options.config:
-        options.node = "default"
-    else:
-        options.node = options.node
-    for (key, val) in default_options.items():
-        if getattr(options, key) is None:
-            setattr(options, key, val)
+    final_options = merge_default_options(cli_options, final_options)
+    final_options = merge_config_file_options(cli_options, final_options)
+    final_options = expand_base_uri_options(cli_options, final_options)
 
-    if options.config is not None:
-        config = ConfigParser()
+    return (final_options, args)
+
+def merge_default_options(cli_options, final_options):
+    for (key, default_val) in default_options.items():
+        if getattr(cli_options, key) is None:
+            setattr(final_options, key, default_val)
+    return final_options
+
+def merge_config_file_options(cli_options, final_options):
+    # Parse config file and load it, making sure that CLI flags
+    # take precedence
+    if final_options.config is not None:
+        config_parser = ConfigParser()
         try:
-            config.read(options.config)
-            new_conf = dict(config.items(options.node))
+            config_parser.read(final_options.config)
+            section_settings = dict(config_parser.items(final_options.node))
         except NoSectionError as error:
-            if options.node == "default":
+            # Report if an explicitly provided section (node) does not exist in the file
+            if final_options.node == "default":
                 pass
             else:
-                msg = "Could not read section '%s' in config file '%s':\n   %s" % (options.node, options.config, error)
+                msg = "Could not read section '%s' in config file '%s':\n   %s" % (final_options.node, final_options.config, error)
                 assert_usage(False, msg)
         else:
-            for key, val in new_conf.items():
+            for key, section_val in section_settings.items():
+                # special case --ssl
                 if key == 'ssl':
-                    setattr(options, key, val == "True")
+                    setattr(final_options, key, section_val == "True")
                 else:
-                    setattr(options, key, val)
+                    # if CLI options do not contain this key, set it from the config file
+                    if getattr(cli_options, key) is None:
+                        setattr(final_options, key, section_val)
+    return final_options
 
+def expand_base_uri_options(cli_options, final_options):
     # if --base-uri is passed, set connection parameters from it
-    if options.base_uri is not None:
-        u = urlparse.urlparse(options.base_uri)
+    if final_options.base_uri is not None:
+        u = urlparse.urlparse(final_options.base_uri)
         for key in ["hostname", "port", "username", "password"]:
             if getattr(u, key) is not None:
-                setattr(options, key, getattr(u, key))
+                setattr(final_options, key, getattr(u, key))
 
         if u.path is not None and (u.path != "") and (u.path != "/"):
             eprint("WARNING: path in --base-uri is ignored. Please specify --vhost and/or --path-prefix separately.\n")
-
-    return (options, args)
-
+    return final_options
 
 def assert_usage(expr, error):
     if not expr:
