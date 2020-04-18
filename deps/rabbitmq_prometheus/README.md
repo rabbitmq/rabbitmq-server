@@ -33,7 +33,7 @@ Default port used by the plugin is `15692` and the endpoint path is at `/metrics
 To try it with `curl`:
 
 ```shell
-curl -v -H "Accept:text/plain;version=0.0.4" "http://localhost:15692/metrics"
+curl -v -H "Accept:text/plain" "http://localhost:15692/metrics"
 ```
 
 In most environments there would be no configuration necessary.
