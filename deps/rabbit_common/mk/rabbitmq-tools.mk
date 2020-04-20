@@ -1,3 +1,9 @@
+ifeq ($(PLATFORM),msys2)
+HOSTNAME := $(COMPUTERNAME)
+else
+HOSTNAME := $(shell hostname -s)
+endif
+
 READY_DEPS = $(foreach DEP,\
 	       $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)), \
 	       $(if $(wildcard $(DEPS_DIR)/$(DEP)),$(DEP),))
@@ -361,7 +367,7 @@ ifeq ($(PLATFORM),darwin)
 TAR := gtar
 endif
 
-CT_LOGS_ARCHIVE ?= $(PROJECT)-ct-logs-$(subst _,-,$(subst -,,$(subst .,,$(patsubst ct_run.ct_$(PROJECT)@$(shell hostname -s).%,%,$(notdir $(lastword $(wildcard logs/ct_run.*))))))).tar.xz
+CT_LOGS_ARCHIVE ?= $(PROJECT)-ct-logs-$(subst _,-,$(subst -,,$(subst .,,$(patsubst ct_run.ct_$(PROJECT)@$(HOSTNAME).%,%,$(notdir $(lastword $(wildcard logs/ct_run.*))))))).tar.xz
 
 ifeq ($(patsubst %.tar.xz,%,$(CT_LOGS_ARCHIVE)),$(CT_LOGS_ARCHIVE))
 $(error CT_LOGS_ARCHIVE file must use '.tar.xz' as its filename extension)
