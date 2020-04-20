@@ -69,10 +69,7 @@
 
     set_partition_handling_mode/3,
     set_partition_handling_mode_globally/2,
-    enable_dist_proxy_manager/1,
-    enable_dist_proxy/1,
-    start_dist_proxy_on_node/2,
-    disconnect_from_other_nodes/2,
+    configure_dist_proxy/1,
     block_traffic_between/2,
     allow_traffic_between/2,
 
@@ -893,56 +890,17 @@ stop_rabbitmq_node(Config, NodeConfig) ->
 %% Helpers for partition simulation
 %% -------------------------------------------------------------------
 
-enable_dist_proxy_manager(Config) ->
-    inet_tcp_proxy_manager:start(),
+configure_dist_proxy(Config) ->
     rabbit_ct_helpers:set_config(Config,
-      {erlang_dist_module, inet_proxy_dist}).
-
-enable_dist_proxy(Config) ->
-    NodeConfigs = get_node_configs(Config),
-    Nodes = [?config(nodename, NodeConfig) || NodeConfig <- NodeConfigs],
-    ManagerNode = node(),
-    %% We first start the proxy process on all nodes, then we close the
-    %% existing connection.
-    %%
-    %% If we do that in a single loop, i.e. start the proxy on node 1
-    %% and disconnect it, then, start the proxy on node 2 and disconnect
-    %% it, etc., there is a chance that the connection is reopened
-    %% by a node where the proxy is still disabled. Therefore, that
-    %% connection would bypass the proxy process even though we believe
-    %% it to be enabled.
-    ok = lists:foreach(
-      fun(NodeConfig) ->
-          ok = rpc(Config,
-            ?config(nodename, NodeConfig),
-            ?MODULE, start_dist_proxy_on_node,
-            [NodeConfig, ManagerNode])
-      end, NodeConfigs),
-    ok = lists:foreach(
-      fun(NodeConfig) ->
-          ok = rpc(Config,
-            ?config(nodename, NodeConfig),
-            ?MODULE, disconnect_from_other_nodes,
-            [NodeConfig, Nodes])
-      end, NodeConfigs),
-    Config.
-
-start_dist_proxy_on_node(NodeConfig, ManagerNode) ->
-    DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
-    ProxyPort = ?config(tcp_port_erlang_dist_proxy, NodeConfig),
-    ok = inet_tcp_proxy:start(ManagerNode, DistPort, ProxyPort).
-
-disconnect_from_other_nodes(NodeConfig, Nodes) ->
-    Nodename = ?config(nodename, NodeConfig),
-    ok = inet_tcp_proxy:reconnect(Nodes -- [Nodename]).
+      {erlang_dist_module, inet_tcp_proxy_dist}).
 
 block_traffic_between(NodeA, NodeB) ->
-    rpc:call(NodeA, inet_tcp_proxy, block, [NodeB]),
-    rpc:call(NodeB, inet_tcp_proxy, block, [NodeA]).
+    rpc:call(NodeA, inet_tcp_proxy_dist, block, [NodeB]),
+    rpc:call(NodeB, inet_tcp_proxy_dist, block, [NodeA]).
 
 allow_traffic_between(NodeA, NodeB) ->
-    rpc:call(NodeA, inet_tcp_proxy, allow, [NodeB]),
-    rpc:call(NodeB, inet_tcp_proxy, allow, [NodeA]).
+    rpc:call(NodeA, inet_tcp_proxy_dist, allow, [NodeB]),
+    rpc:call(NodeB, inet_tcp_proxy_dist, allow, [NodeA]).
 
 set_partition_handling_mode_globally(Config, Mode) ->
     rpc_all(Config,
