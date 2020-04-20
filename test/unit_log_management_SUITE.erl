@@ -138,26 +138,36 @@ log_management1(_Config) ->
 
     %% simple log rotation
     ok = rabbit:rotate_logs(),
-    %% FIXME: rabbit:rotate_logs/0 is asynchronous due to a limitation
-    %% in Lager. Therefore, we have no choice but to wait an arbitrary
+    %% rabbit:rotate_logs/0 is asynchronous due to a limitation in
+    %% Lager. Therefore, we have no choice but to wait an arbitrary
     %% amount of time.
-    timer:sleep(2000),
-    [true, true] = non_empty_files([LogFile ++ Suffix, LogFile]),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() ->
+                   [true, true] =:=
+                       non_empty_files([LogFile ++ Suffix, LogFile])
+           end, 5000),
     ok = test_logs_working([LogFile]),
 
     %% log rotation on empty files
     ok = clean_logs([LogFile], Suffix),
     ok = rabbit:rotate_logs(),
-    timer:sleep(2000),
-    ?assertEqual([true, true], non_empty_files([LogFile ++ Suffix, LogFile])),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() ->
+                   [true, true] =:=
+                       non_empty_files([LogFile ++ Suffix, LogFile])
+           end, 5000),
 
     %% logs with suffix are not writable
     ok = rabbit:rotate_logs(),
-    timer:sleep(2000),
-    ok = make_files_non_writable([LogFile ++ Suffix]),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() ->
+                   ok =:= make_files_non_writable([LogFile ++ Suffix])
+           end, 5000),
     ok = rabbit:rotate_logs(),
-    timer:sleep(2000),
-    ok = test_logs_working([LogFile]),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() ->
+                   ok =:= test_logs_working([LogFile])
+           end, 5000),
 
     %% rotate when original log files are not writable
     ok = make_files_non_writable([LogFile]),
