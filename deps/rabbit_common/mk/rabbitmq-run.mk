@@ -65,7 +65,12 @@ node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
 # Broker startup variables for the test environment.
-HOSTNAME := $(shell U="$$(uname)"; if [ "$$U" = Darwin -o "$$U" = FreeBSD  ]; then hostname -s; else hostname; fi)
+ifeq ($(PLATFORM),msys2)
+HOSTNAME := $(COMPUTERNAME)
+else
+HOSTNAME := $(shell hostname -s)
+endif
+
 RABBITMQ_NODENAME ?= rabbit@$(HOSTNAME)
 RABBITMQ_NODENAME_FOR_PATHS ?= $(RABBITMQ_NODENAME)
 NODE_TMPDIR ?= $(call node_tmpdir,$(RABBITMQ_NODENAME_FOR_PATHS))
