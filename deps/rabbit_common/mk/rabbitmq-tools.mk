@@ -1,4 +1,8 @@
-HOSTNAME := $(shell U="$$(uname)"; if [ "$$U" = Darwin -o "$$U" = FreeBSD  ]; then hostname -s; else hostname; fi)
+ifeq ($(PLATFORM),msys2)
+HOSTNAME := $(COMPUTERNAME)
+else
+HOSTNAME := $(shell hostname -s)
+endif
 
 READY_DEPS = $(foreach DEP,\
 	       $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)), \
