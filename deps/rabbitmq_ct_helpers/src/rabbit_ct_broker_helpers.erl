@@ -749,13 +749,17 @@ cluster_nodes(Config, Nodes) ->
       get_node_config(Config, Node) || Node <- Nodes],
     cluster_nodes1(Config, NodeConfig1, NodeConfigs).
 
-cluster_nodes1(Config, NodeConfig1, [NodeConfig2 | Rest]) ->
-    case cluster_nodes(Config, NodeConfig2, NodeConfig1) of
-        ok    -> cluster_nodes1(Config, NodeConfig1, Rest);
-        Error -> Error
-    end;
-cluster_nodes1(Config, _, []) ->
-    Config.
+cluster_nodes1(Config, NodeConfig1, NodeConfigs) ->
+    Results = handle_nodes_in_parallel(
+                NodeConfigs,
+                fun(NodeConfig2) ->
+                        cluster_nodes(Config, NodeConfig2, NodeConfig1)
+                end),
+    Errors = [Ret || {_, Ret} <- Results, Ret =/= ok],
+    case Errors of
+        [Error | _] -> Error;
+        _           -> Config
+    end.
 
 cluster_nodes(Config, NodeConfig1, NodeConfig2) ->
     Nodename1 = ?config(nodename, NodeConfig1),
@@ -776,6 +780,45 @@ cluster_nodes1(Config, Nodename1, Nodename2, [Cmd | Rest]) ->
     end;
 cluster_nodes1(_, _, _, []) ->
     ok.
+
+handle_nodes_in_parallel(NodeConfigs, Fun) ->
+    T0 = erlang:timestamp(),
+    Parent = self(),
+    Procs = [
+             begin
+                 timer:sleep(rand:uniform(1000)),
+      spawn_link(fun() ->
+                         T1 = erlang:timestamp(),
+                         Ret = Fun(NodeConfig),
+                         T2 = erlang:timestamp(),
+                         ct:pal(
+                           ?LOW_IMPORTANCE,
+                           "Time to run ~p for node ~s: ~b µs",
+                          [Fun,
+                           ?config(nodename, NodeConfig),
+                           timer:now_diff(T2, T1)]),
+                         Parent ! {parallel_handling_ret,
+                                   self(),
+                                   NodeConfig,
+                                   Ret}
+                 end) end
+      || NodeConfig <- NodeConfigs
+    ],
+    wait_for_node_handling(Procs, Fun, T0, []).
+
+wait_for_node_handling([], Fun, T0, Results) ->
+    T3 = erlang:timestamp(),
+    ct:pal(
+      ?LOW_IMPORTANCE,
+      "Time to run ~p for all nodes: ~b µs",
+      [Fun, timer:now_diff(T3, T0)]),
+    Results;
+wait_for_node_handling(Procs, Fun, T0, Results) ->
+    receive
+        {parallel_handling_ret, Proc, NodeConfig, Ret} ->
+            Results1 = [{NodeConfig, Ret} | Results],
+            wait_for_node_handling(Procs -- [Proc], Fun, T0, Results1)
+    end.
 
 move_nonworking_nodedir_away(NodeConfig) ->
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
@@ -871,7 +914,11 @@ stop_rabbitmq_nodes_on_vms(Config, [], NodeConfigsPerCTPeer) ->
 
 stop_rabbitmq_nodes(Config) ->
     NodeConfigs = get_node_configs(Config),
-    [stop_rabbitmq_node(Config, NodeConfig) || NodeConfig <- NodeConfigs],
+    _ = handle_nodes_in_parallel(
+          NodeConfigs,
+          fun(NodeConfig) ->
+                  stop_rabbitmq_node(Config, NodeConfig)
+          end),
     proplists:delete(rmq_nodes, Config).
 
 stop_rabbitmq_node(Config, NodeConfig) ->
