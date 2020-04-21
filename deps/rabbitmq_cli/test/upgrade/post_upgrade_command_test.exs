@@ -51,7 +51,7 @@ defmodule PostUpgradeCommandTest do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], opts)))
   end
 
-  test "run: returns the erlang cookie hash", context do
+  test "run: returns an OK", context do
     assert match?({:ok, _}, @command.run([], context[:opts]))
   end
 
