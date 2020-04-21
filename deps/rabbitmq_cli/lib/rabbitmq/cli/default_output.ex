@@ -19,16 +19,14 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
   defmacro __using__(_) do
     quote do
-      def output(result, _opts) do
-        RabbitMQ.CLI.DefaultOutput.output(result)
+      def output(result, opts) do
+        RabbitMQ.CLI.DefaultOutput.output(result, opts)
       end
     end
   end
 
-  def output(result) do
-    result
-    |> normalize_output()
-    |> format_output()
+  def output(result, opts) do
+    format_output(normalize_output(result, opts))
   end
 
   def mnesia_running_error(node_name) do
@@ -36,30 +34,37 @@ defmodule RabbitMQ.CLI.DefaultOutput do
       "Please stop RabbitMQ with 'rabbitmqctl stop_app' first."
   end
 
-  defp normalize_output(:ok), do: :ok
-  defp normalize_output({:ok, _} = input), do: input
-  defp normalize_output({:stream, _} = input), do: input
-  defp normalize_output({:badrpc_multi, _, _} = input), do: {:error, input}
-  defp normalize_output({:badrpc, :nodedown} = input), do: {:error, input}
-  defp normalize_output({:badrpc, :timeout} = input), do: {:error, input}
-  defp normalize_output({:badrpc, {:timeout, _n}} = input), do: {:error, input}
-  defp normalize_output({:badrpc, {:timeout, _n, _msg}} = input), do: {:error, input}
-  defp normalize_output({:badrpc, {:EXIT, reason}}), do: {:error, reason}
-  defp normalize_output({:error, exit_code, string}) when is_integer(exit_code) do
+  defp normalize_output(:ok, %{node: node_name, formatter: "json"}) do
+    {:ok, %{"result" => "ok", "node" => node_name}}
+  end
+  defp normalize_output(:ok, _opts), do: :ok
+  defp normalize_output({:ok, value}, %{node: node_name, formatter: "json"}) do
+    {:ok, %{"result" => "ok", "node" => node_name, "value" => value}}
+  end
+  defp normalize_output({:ok, _} = input, _opts), do: input
+  defp normalize_output({:stream, _} = input, _opts), do: input
+  defp normalize_output({:badrpc_multi, _, _} = input, _opts), do: {:error, input}
+  defp normalize_output({:badrpc, :nodedown} = input, _opts), do: {:error, input}
+  defp normalize_output({:badrpc, :timeout} = input, _opts), do: {:error, input}
+  defp normalize_output({:badrpc, {:timeout, _n}} = input, _opts), do: {:error, input}
+  defp normalize_output({:badrpc, {:timeout, _n, _msg}} = input, _opts), do: {:error, input}
+  defp normalize_output({:badrpc, {:EXIT, reason}}, _opts), do: {:error, reason}
+  defp normalize_output({:error, exit_code, string}, _opts) when is_integer(exit_code) do
     {:error, exit_code, to_string(string)}
   end
-  defp normalize_output({:error, format, args})
+  defp normalize_output({:error, format, args}, _opts)
        when (is_list(format) or is_binary(format)) and is_list(args) do
     {:error, to_string(:rabbit_misc.format(format, args))}
   end
-  defp normalize_output({:error, _} = input), do: input
-  defp normalize_output({:error_string, string}) do
+  defp normalize_output({:error, _} = input, _opts), do: input
+  defp normalize_output({:error_string, string}, _opts) do
     {:error, to_string(string)}
   end
-  defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
-  defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
-  defp normalize_output(result) when not is_atom(result), do: {:ok, result}
+  defp normalize_output(unknown, _opts) when is_atom(unknown), do: {:error, unknown}
+  defp normalize_output({unknown, _} = input, _opts) when is_atom(unknown), do: {:error, input}
+  defp normalize_output(result, _opts) when not is_atom(result), do: {:ok, result}
 
+  
   defp format_output({:error, _} = result) do
     result
   end
