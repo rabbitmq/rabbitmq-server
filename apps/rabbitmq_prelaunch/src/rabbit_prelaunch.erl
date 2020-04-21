@@ -93,7 +93,7 @@ do_run() ->
     Context2 = rabbit_env:get_context_after_reloading_env(Context1),
 
     %% Migrate the enabled_plugins file to the new location if necessary
-    Context3 = rabbit_plugins:maybe_migrate_enabled_plugins_file(Context2),
+    Context3 = rabbit_prelaunch_plugins:maybe_migrate_enabled_plugins_file(Context2),
 
     ?assertMatch(#{}, Context3),
     store_context(Context3),

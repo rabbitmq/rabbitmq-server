@@ -14,7 +14,7 @@
 %% Copyright (c) 2019-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(rabbit_plugins_SUITE).
+-module(rabbit_prelaunch_plugins_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -100,7 +100,7 @@ end_per_testcase(_, Config) ->
 check_enabled_plugins_file_passthrough(_) ->
     Context = #{enabled_plugins_file => "/some/dir/enabled_plugins"},
     ?assertMatch(#{enabled_plugins_file := "/some/dir/enabled_plugins"},
-                 rabbit_plugins:maybe_migrate_enabled_plugins_file(Context)).
+                 rabbit_prelaunch_plugins:maybe_migrate_enabled_plugins_file(Context)).
 
 check_enabled_plugins_file_modern(Config) ->
     DataDir = proplists:get_value(rabbit_data_dir, Config),
@@ -113,7 +113,7 @@ check_enabled_plugins_file_modern(Config) ->
                 data_dir => DataDir,
                 enabled_plugins_file => undefined},
     ?assertMatch(#{enabled_plugins_file := ExpectedLocation},
-                 rabbit_plugins:maybe_migrate_enabled_plugins_file(Context)).
+                 rabbit_prelaunch_plugins:maybe_migrate_enabled_plugins_file(Context)).
 
 check_enabled_plugins_file_default(Config) ->
     DataDir = proplists:get_value(rabbit_data_dir, Config),
@@ -127,7 +127,7 @@ check_enabled_plugins_file_default(Config) ->
                 data_dir => DataDir,
                 enabled_plugins_file => undefined},
     ?assertMatch(#{enabled_plugins_file := ExpectedLocation},
-                 rabbit_plugins:maybe_migrate_enabled_plugins_file(Context)).
+                 rabbit_prelaunch_plugins:maybe_migrate_enabled_plugins_file(Context)).
 
 check_enabled_plugins_file_legacy(Config) ->
     DataDir = proplists:get_value(rabbit_data_dir, Config),
@@ -141,7 +141,7 @@ check_enabled_plugins_file_legacy(Config) ->
                 data_dir => DataDir,
                 enabled_plugins_file => undefined},
     ?assertMatch(#{enabled_plugins_file := ExpectedLocation},
-                 rabbit_plugins:maybe_migrate_enabled_plugins_file(Context)).
+                 rabbit_prelaunch_plugins:maybe_migrate_enabled_plugins_file(Context)).
 
 check_enabled_plugins_file_copy(Config) ->
     DataDir = proplists:get_value(rabbit_data_dir, Config),
@@ -157,7 +157,7 @@ check_enabled_plugins_file_copy(Config) ->
                 data_dir => DataDir,
                 enabled_plugins_file => undefined},
     ?assertMatch(#{enabled_plugins_file := ExpectedLocation},
-                 rabbit_plugins:maybe_migrate_enabled_plugins_file(Context)),
+                 rabbit_prelaunch_plugins:maybe_migrate_enabled_plugins_file(Context)),
     {ok, File} = file:read_file(ExpectedLocation),
     ?assertEqual("[rabbitmq_management].", unicode:characters_to_list(File)).    
 
