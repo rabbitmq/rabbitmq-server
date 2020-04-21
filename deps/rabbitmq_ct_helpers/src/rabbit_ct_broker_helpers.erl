@@ -926,7 +926,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),
-    Cmd = ["stop-rabbit-on-node", "stop-node",
+    Cmd = ["stop-node",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"TEST_TMPDIR=~s", [PrivDir]}],
