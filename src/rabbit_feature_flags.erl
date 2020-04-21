@@ -133,7 +133,8 @@
          initialize_registry/3,
          query_supported_feature_flags/0,
          mark_as_enabled_remotely/2,
-         mark_as_enabled_remotely/4]).
+         mark_as_enabled_remotely/4,
+         registry_loading_lock/0]).
 -endif.
 
 %% Default timeout for operations on remote nodes.
@@ -234,6 +235,8 @@
 %% the previous instance failed to write the feature flags list file.
 
 -type migration_fun_context() :: enable | is_enabled.
+
+-type registry_vsn() :: term().
 
 -export_type([feature_flag_modattr/0,
               feature_props/0,
@@ -831,6 +834,26 @@ list_of_enabled_feature_flags_to_feature_states(FeatureNames) ->
 initialize_registry(NewSupportedFeatureFlags,
                     NewFeatureStates,
                     WrittenToDisk) ->
+    Ret = maybe_initialize_registry(NewSupportedFeatureFlags,
+                                    NewFeatureStates,
+                                    WrittenToDisk),
+    case Ret of
+        ok      -> ok;
+        restart -> initialize_registry(NewSupportedFeatureFlags,
+                                       NewFeatureStates,
+                                       WrittenToDisk);
+        Error   -> Error
+    end.
+
+maybe_initialize_registry(NewSupportedFeatureFlags,
+                          NewFeatureStates,
+                          WrittenToDisk) ->
+    %% We save the version of the current registry before computing
+    %% the new one. This is used when we do the actual reload: if the
+    %% current registry was reloaded in the meantime, we need to restart
+    %% the computation to make sure we don't loose data.
+    RegistryVsn = registry_vsn(),
+
     %% We take the feature flags already registered.
     RegistryInitialized = rabbit_ff_registry:is_registry_initialized(),
     KnownFeatureFlags1 = case RegistryInitialized of
@@ -884,10 +907,18 @@ initialize_registry(NewSupportedFeatureFlags,
     case Proceed of
         true ->
             rabbit_log_feature_flags:debug(
-              "Feature flags: (re)initialize registry"),
-            do_initialize_registry(AllFeatureFlags,
-                                   FeatureStates,
-                                   WrittenToDisk);
+              "Feature flags: (re)initialize registry (~p)",
+              [self()]),
+            T0 = erlang:timestamp(),
+            Ret = do_initialize_registry(RegistryVsn,
+                                         AllFeatureFlags,
+                                         FeatureStates,
+                                         WrittenToDisk),
+            T1 = erlang:timestamp(),
+            rabbit_log_feature_flags:debug(
+              "Feature flags: time to regen registry: ~p µs",
+              [timer:now_diff(T1, T0)]),
+            Ret;
         false ->
             rabbit_log_feature_flags:debug(
               "Feature flags: registry already up-to-date, skipping init"),
@@ -909,22 +940,46 @@ does_registry_need_refresh(AllFeatureFlags,
             %% changes.
             CurrentAllFeatureFlags = rabbit_ff_registry:list(all),
             CurrentFeatureStates = rabbit_ff_registry:states(),
-            CurrentWrittenToDisk = rabbit_ff_registry:is_registry_written_to_disk(),
+            CurrentWrittenToDisk =
+            rabbit_ff_registry:is_registry_written_to_disk(),
 
-            AllFeatureFlags =/= CurrentAllFeatureFlags orelse
-            FeatureStates =/= CurrentFeatureStates orelse
-            WrittenToDisk =/= CurrentWrittenToDisk;
+            if
+                AllFeatureFlags =/= CurrentAllFeatureFlags ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: "
+                      "yes, list of feature flags differs"),
+                    true;
+                FeatureStates =/= CurrentFeatureStates ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: "
+                      "yes, feature flag states differ"),
+                    true;
+                WrittenToDisk =/= CurrentWrittenToDisk ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: "
+                      "yes, \"written to disk\" state changed"),
+                    true;
+                true ->
+                    rabbit_log_feature_flags:debug(
+                      "Feature flags: registry refresh needed: no"),
+                    false
+            end;
         false ->
+            rabbit_log_feature_flags:debug(
+              "Feature flags: registry refresh needed: "
+              "yes, first-time initialization"),
             true
     end.
 
--spec do_initialize_registry(feature_flags(),
+-spec do_initialize_registry(registry_vsn(),
+                             feature_flags(),
                              feature_states(),
                              boolean()) ->
     ok | {error, any()} | no_return().
 %% @private
 
-do_initialize_registry(AllFeatureFlags,
+do_initialize_registry(RegistryVsn,
+                       AllFeatureFlags,
                        FeatureStates,
                        WrittenToDisk) ->
     %% We log the state of those feature flags.
@@ -954,15 +1009,10 @@ do_initialize_registry(AllFeatureFlags,
 
     %% We request the registry to be regenerated and reloaded with the
     %% new state.
-    T0 = erlang:timestamp(),
-    Ret = regen_registry_mod(AllFeatureFlags,
-                             FeatureStates,
-                             WrittenToDisk),
-    T1 = erlang:timestamp(),
-    rabbit_log_feature_flags:debug(
-      "Feature flags: time to regen registry: ~p µs",
-      [timer:now_diff(T1, T0)]),
-    Ret.
+    regen_registry_mod(RegistryVsn,
+                       AllFeatureFlags,
+                       FeatureStates,
+                       WrittenToDisk).
 
 -spec query_supported_feature_flags() -> feature_flags().
 %% @private
@@ -1040,12 +1090,15 @@ merge_new_feature_flags(AllFeatureFlags, App, FeatureName, FeatureProps)
     maps:merge(AllFeatureFlags,
                #{FeatureName => FeatureProps1}).
 
--spec regen_registry_mod(feature_flags(),
+-spec regen_registry_mod(registry_vsn(),
+                         feature_flags(),
                          feature_states(),
-                         boolean()) -> ok | {error, any()} | no_return().
+                         boolean()) ->
+    ok | restart | {error, any()} | no_return().
 %% @private
 
-regen_registry_mod(AllFeatureFlags,
+regen_registry_mod(RegistryVsn,
+                   AllFeatureFlags,
                    FeatureStates,
                    WrittenToDisk) ->
     %% Here, we recreate the source code of the `rabbit_ff_registry`
@@ -1222,7 +1275,7 @@ regen_registry_mod(AllFeatureFlags,
                    return_warnings],
     case compile:forms(Forms, CompileOpts) of
         {ok, Mod, Bin, _} ->
-            load_registry_mod(Mod, Bin);
+            load_registry_mod(RegistryVsn, Mod, Bin);
         {error, Errors, Warnings} ->
             rabbit_log_feature_flags:error(
               "Feature flags: registry compilation:~n"
@@ -1244,32 +1297,73 @@ maybe_log_registry_source_code(Forms) ->
             ok
     end.
 
--spec load_registry_mod(atom(), binary()) ->
-    ok | {error, any()} | no_return().
+-ifdef(TEST).
+registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
+-endif.
+
+-spec load_registry_mod(registry_vsn(), atom(), binary()) ->
+    ok | restart | no_return().
 %% @private
 
-load_registry_mod(Mod, Bin) ->
+load_registry_mod(RegistryVsn, Mod, Bin) ->
     rabbit_log_feature_flags:debug(
-      "Feature flags: registry module ready, loading it..."),
-    FakeFilename = "Compiled and loaded by " ++ ?MODULE_STRING,
+      "Feature flags: registry module ready, loading it (~p)...",
+      [self()]),
+    FakeFilename = "Compiled and loaded by " ?MODULE_STRING,
     %% Time to load the new registry, replacing the old one. We use a
     %% lock here to synchronize concurrent reloads.
     global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquired lock before reloading registry module (~p)",
+     [self()]),
+    %% We want to make sure that the old registry (not the one being
+    %% currently in use) is purged by the code server. It means no
+    %% process lingers on that old code.
+    %%
+    %% We use code:soft_purge() for that (meaning no process is killed)
+    %% and we wait in an infinite loop for that to succeed.
     ok = purge_old_registry(Mod),
-    true = code:delete(Mod),
-    Ret = code:load_binary(Mod, FakeFilename, Bin),
+    %% Now we can replace the currently loaded registry by the new one.
+    %% The code server takes care of marking the current registry as old
+    %% and load the new module in an atomic operation.
+    %%
+    %% Therefore there is no chance of a window where there is no
+    %% registry module available, causing the one on disk to be
+    %% reloaded.
+    Ret = case registry_vsn() of
+              RegistryVsn -> code:load_binary(Mod, FakeFilename, Bin);
+              OtherVsn    -> {error, {restart, RegistryVsn, OtherVsn}}
+          end,
+    rabbit_log_feature_flags:debug(
+      "Feature flags: releasing lock after reloading registry module (~p)",
+     [self()]),
     global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
         {module, _} ->
             rabbit_log_feature_flags:debug(
-              "Feature flags: registry module loaded"),
+              "Feature flags: registry module loaded (vsn: ~p -> ~p)",
+              [RegistryVsn, registry_vsn()]),
             ok;
+        {error, {restart, Expected, Current}} ->
+            rabbit_log_feature_flags:error(
+              "Feature flags: another registry module was loaded in the "
+              "meantime (expected old vsn: ~p, current vsn: ~p); "
+              "restarting the regen",
+              [Expected, Current]),
+            restart;
         {error, Reason} ->
             rabbit_log_feature_flags:error(
               "Feature flags: failed to load registry module: ~p",
               [Reason]),
             throw({feature_flag_registry_reload_failure, Reason})
     end.
+
+-spec registry_vsn() -> registry_vsn().
+%% @private
+
+registry_vsn() ->
+    Attrs = rabbit_ff_registry:module_info(attributes),
+    proplists:get_value(vsn, Attrs, undefined).
 
 purge_old_registry(Mod) ->
     case code:is_loaded(Mod) of
@@ -1353,6 +1447,8 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
     %% are unknown feature flags in that file, we want to keep their
     %% state, even though they are unsupported at this time. It could be
     %% that a plugin was disabled in the meantime.
+    %%
+    %% FIXME: Lock this code to fix concurrent read/modify/write.
     PreviouslyEnabled = case try_to_read_enabled_feature_flags_list() of
                             {error, _} -> [];
                             List       -> List
@@ -1599,7 +1695,6 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
               "nodes", [FeatureName, IsEnabled]),
             ok;
         _ ->
-            T1 = erlang:timestamp(),
             rabbit_log_feature_flags:error(
               "Feature flags: failed to mark feature flag `~s` as enabled=~p "
               "on the following nodes:", [FeatureName, IsEnabled]),
@@ -1608,12 +1703,17 @@ mark_as_enabled_remotely(Nodes, FeatureName, IsEnabled, Timeout) ->
                [Node, Ret])
              || {Node, Ret} <- Rets,
                 Ret =/= ok],
-            NewTimeout = Timeout - (timer:now_diff(T1, T0) div 1000),
+            Sleep = 1000,
+            T1 = erlang:timestamp(),
+            Duration = timer:now_diff(T1, T0),
+            NewTimeout = (Timeout * 1000 - Duration) div 1000 - Sleep,
             if
                 NewTimeout > 0 ->
                     rabbit_log_feature_flags:debug(
                       "Feature flags:   retrying with a timeout of ~b "
-                      "milliseconds", [NewTimeout]),
+                      "ms after sleeping for ~b ms",
+                      [NewTimeout, Sleep]),
+                    timer:sleep(Sleep),
                     mark_as_enabled_remotely(FailedNodes,
                                              FeatureName,
                                              IsEnabled,
@@ -1733,14 +1833,14 @@ check_node_compatibility(Node, Timeout) ->
     %% The goal is that such feature flags are not blocking the
     %% communication between nodes because the code (which would
     %% break) is missing on those nodes. Therefore they should not be
-    %% considered when determinig compatibility.
+    %% considered when determining compatibility.
     exchange_feature_flags_from_unknown_apps(Node, Timeout),
 
-    %% FIXME FIXME FIXME
-    %% Quand on tente de mettre deux nœuds en cluster, on a :
+    %% FIXME:
+    %% When we try to cluster two nodes, we get:
     %%   Feature flags: starting an unclustered node: all feature flags
     %%   will be enabled by default
-    %% Ça ne devrait sans doute pas être le cas...
+    %% It should probably not be the case...
 
     %% We can now proceed with the actual compatibility check.
     rabbit_log_feature_flags:debug(
@@ -1921,11 +2021,16 @@ merge_feature_flags_from_unknown_apps(FeatureFlags)
       end,
       #{},
       FeatureFlags),
-    rabbit_log_feature_flags:debug(
-      "Feature flags: register feature flags provided by applications "
-      "unknown locally: ~p",
-      [maps:keys(FeatureFlagsFromUnknownApps)]),
-    initialize_registry(FeatureFlagsFromUnknownApps).
+    case maps:keys(FeatureFlagsFromUnknownApps) of
+        [] ->
+            ok;
+        _ ->
+            rabbit_log_feature_flags:debug(
+              "Feature flags: register feature flags provided by applications "
+              "unknown locally: ~p",
+              [maps:keys(FeatureFlagsFromUnknownApps)]),
+            initialize_registry(FeatureFlagsFromUnknownApps)
+    end.
 
 exchange_feature_flags_from_unknown_apps(Node, Timeout) ->
     %% The first step is to fetch feature flags from Erlang applications
