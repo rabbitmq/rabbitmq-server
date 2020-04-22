@@ -30,12 +30,12 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
+      {tests, [], [
           amqp10_destination_no_ack,
           amqp10_destination_on_publish,
           amqp10_destination_on_confirm,
@@ -108,15 +108,40 @@ amqp10_destination(Config, AckMode) ->
                                                         TargetQ, settled, unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 5, never),
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Timestamp = erlang:system_time(millisecond),
     Msg = #amqp_msg{payload = <<42>>,
                     props = #'P_basic'{delivery_mode = 2,
-                                       content_type = ?UNSHOVELLED}},
+                                       headers = [{<<"header1">>, long, 1},
+                                                  {<<"header2">>, longstr, <<"h2">>}],
+                                       content_encoding = ?UNSHOVELLED,
+                                       content_type = ?UNSHOVELLED,
+                                       correlation_id = ?UNSHOVELLED,
+                                       %% needs to be guest here
+                                       user_id = <<"guest">>,
+                                       message_id = ?UNSHOVELLED,
+                                       reply_to = ?UNSHOVELLED,
+                                       timestamp = Timestamp,
+                                       type = ?UNSHOVELLED
+                                      }},
     publish(Chan, Msg, ?EXCHANGE, ?TO_SHOVEL),
 
     receive
         {amqp10_msg, Receiver, InMsg} ->
             [<<42>>] = amqp10_msg:body(InMsg),
-            #{content_type := ?UNSHOVELLED} = amqp10_msg:properties(InMsg),
+            #{content_type := ?UNSHOVELLED,
+              content_encoding := ?UNSHOVELLED,
+              correlation_id := ?UNSHOVELLED,
+              user_id := <<"guest">>,
+              message_id := ?UNSHOVELLED,
+              reply_to := ?UNSHOVELLED
+              %% timestamp gets overwritten
+              % creation_time := Timestamp
+             } = amqp10_msg:properties(InMsg),
+            #{<<"routing_key">> := ?TO_SHOVEL,
+              <<"type">> := ?UNSHOVELLED,
+              <<"header1">> := 1,
+              <<"header2">> := <<"h2">>
+             } = amqp10_msg:application_properties(InMsg),
             #{durable := true} = amqp10_msg:headers(InMsg),
             ok
     after ?TIMEOUT ->
