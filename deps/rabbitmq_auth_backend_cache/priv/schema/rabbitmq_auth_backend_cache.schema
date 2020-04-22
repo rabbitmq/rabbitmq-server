@@ -38,7 +38,7 @@ fun(Conf) ->
             cuttlefish:warn(io_lib:format("Cached authZ backend undefined. Using ~p", [AuthN])),
             {AuthN, AuthN};
         {undefined, undefined, V} when V =/= undefined ->
-            cuttlefish:warn(io_lib:format("Cached suthN backend undefined. Using ~p", [AuthZ])),
+            cuttlefish:warn(io_lib:format("Cached authN backend undefined. Using ~p", [AuthZ])),
             {AuthZ, AuthZ};
         {V, undefined, undefined} when V =/= undefined ->
             Common;
