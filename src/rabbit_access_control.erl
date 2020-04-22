@@ -48,21 +48,17 @@ check_user_login(Username, AuthProps) ->
     %% extra auth properties like MQTT client id are in AuthProps
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     R = lists:foldl(
-          fun ({ModN, ModZs0}, {refused, _, _, _}) ->
-                  ModZs = case ModZs0 of
-                              A when is_atom(A) -> [A];
-                              L when is_list(L) -> L
-                          end,
+          fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
+                  %% It is possible to specify authn/authz within the cache module settings,
+                  %% so we have to do both auth steps here
+                  %% See this rabbitmq-users discussion:
+                  %% https://groups.google.com/d/topic/rabbitmq-users/ObqM7MQdA3I/discussion
+                  try_authenticate_and_try_authorize(ModN, ModN, Username, AuthProps);
+              ({ModN, ModZs}, {refused, _, _, _}) ->
                   %% Different modules for authN vs authZ. So authenticate
                   %% with authN module, then if that succeeds do
                   %% passwordless (i.e pre-authenticated) login with authZ.
-                  case try_authenticate(ModN, Username, AuthProps) of
-                      {ok, ModNUser = #auth_user{username = Username2}} ->
-                          rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, ModN]),
-                          user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
-                      Else ->
-                          Else
-                  end;
+                  try_authenticate_and_try_authorize(ModN, ModZs, Username, AuthProps);
               (Mod, {refused, _, _, _}) ->
                   %% Same module for authN and authZ. Just take the result
                   %% it gives us
@@ -79,6 +75,19 @@ check_user_login(Username, AuthProps) ->
           end,
           {refused, Username, "No modules checked '~s'", [Username]}, Modules),
     R.
+
+try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
+    ModZs = case ModZs0 of
+                A when is_atom(A) -> [A];
+                L when is_list(L) -> L
+            end,
+    case try_authenticate(ModN, Username, AuthProps) of
+        {ok, ModNUser = #auth_user{username = Username2}} ->
+            rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, ModN]),
+            user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
+        Else ->
+            Else
+    end.
 
 try_authenticate(Module, Username, AuthProps) ->
     case Module:user_login_authentication(Username, AuthProps) of
