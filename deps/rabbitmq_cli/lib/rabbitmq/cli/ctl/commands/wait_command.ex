@@ -73,9 +73,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     )
   end
 
-  def output({:error, err}, _opts) do
+  def output({:error, err}, opts) do
     case format_error(err) do
-      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err})
+      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err}, opts)
       error_str -> {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(), error_str}
     end
   end

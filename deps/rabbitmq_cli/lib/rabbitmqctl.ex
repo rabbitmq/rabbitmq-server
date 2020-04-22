@@ -477,9 +477,14 @@ defmodule RabbitMQCtl do
     op = CommandModules.module_to_command(module)
 
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{
-       opts[:timeout]
-     }"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{opts[:timeout]}"}
+  end
+
+  defp format_error({:error, :timeout, msg}, opts, module) do
+    op = CommandModules.module_to_command(module)
+
+    {:error, ExitCodes.exit_code_for(:timeout),
+     "Error: operation #{op} on node #{opts[:node]} timed out: #{msg}. Timeout value used: #{opts[:timeout]}"}
   end
 
   # Plugins
@@ -536,6 +541,15 @@ defmodule RabbitMQCtl do
   end
 
   # Catch all clauses
+  defp format_error({:error, err}, %{formatter: "json"}, _) when is_map(err) do
+    {:ok, res} = JSON.encode(err)
+    {:error, ExitCodes.exit_unavailable(), res}
+  end
+  defp format_error({:error, exit_code, err}, %{formatter: "json"}, _) when is_map(err) do
+    {:ok, res} = JSON.encode(err)
+    {:error, exit_code, res}
+  end
+
   defp format_error({:error, exit_code, err}, _, _) do
     string_err = Helpers.string_or_inspect(err)
 

@@ -11,14 +11,14 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 
-defmodule PostUpgradeCommandTest do
+defmodule AwaitOnlineQuorumPlusOneCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Upgrade.Commands.PostUpgradeCommand
+  @command RabbitMQ.CLI.Upgrade.Commands.AwaitOnlineQuorumPlusOneCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -33,8 +33,8 @@ defmodule PostUpgradeCommandTest do
       }}
   end
 
-  test "merge_defaults: nothing to do" do
-    assert @command.merge_defaults([], %{}) == {[], %{}}
+  test "merge_defaults: overrides a timeout" do
+    assert @command.merge_defaults([], %{}) == {[], %{timeout: 120}}
   end
 
   test "validate: accepts no positional arguments" do
@@ -49,10 +49,6 @@ defmodule PostUpgradeCommandTest do
   test "run: targeting an unreachable node throws a badrpc", context do
     opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], opts)))
-  end
-
-  test "run: returns an OK", context do
-    assert match?({:ok, _}, @command.run([], context[:opts]))
   end
 
 end
