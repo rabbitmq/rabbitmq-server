@@ -16,7 +16,7 @@ alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.DefaultOutput do
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
-  # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
+  # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/2.
   defmacro __using__(_) do
     quote do
       def output(result, opts) do
@@ -25,7 +25,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
     end
   end
 
-  def output(result, opts) do
+  def output(result, opts \\ %{}) do
     format_output(normalize_output(result, opts))
   end
 
