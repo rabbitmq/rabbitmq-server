@@ -55,7 +55,7 @@ services:
       - "15698:15692"
   stress-dist-tls:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.10.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:

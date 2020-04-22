@@ -1,15 +1,15 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.8 release - https://ci.rabbitmq.com/teams/main/pipelines/server-release:v3.8.x/jobs/build-test-package-generic-unix-latest-toolchain
-BASED_ON_RABBITMQ_VERSION := 3.8.3-alpha.93
+BASED_ON_RABBITMQ_VERSION := 3.8.4-alpha.23
 DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
 # This is taken from the CI job above
-RABBITMQ_BUILD_NUMBER := 880
+RABBITMQ_BUILD_NUMBER := 941
 # make find-latest-otp
-OTP_VERSION := 22.2.6
-OTP_SHA256 := 4cf44ed12f657c309a2c00e7806f36f56a88e5b74de6814058796561f3842f66
+OTP_VERSION := 22.3.2
+OTP_SHA256 := 4a3719c71a7998e4f57e73920439b4b1606f7c045e437a0f0f9f1613594d3eaa
 
 define PROJECT_ENV
 [
@@ -120,7 +120,7 @@ dib: docker-image-build
 docker-image-bump: ## diu | Bump Docker image version across all docker-compose-* files
 	@sed -i '' \
 	  -e 's|$(DOCKER_IMAGE_NAME):.*|$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)|g' \
-	  -e 's|pivotalrabbitmq/perf-test:.*|pivotalrabbitmq/perf-test:2.10.0-ubuntu|g' \
+	  -e 's|pivotalrabbitmq/perf-test:.*|pivotalrabbitmq/perf-test:2.11.0-ubuntu|g' \
 	  docker/docker-compose-{overview,dist-tls,qq}.yml
 .PHONY: diu
 diu: docker-image-bump

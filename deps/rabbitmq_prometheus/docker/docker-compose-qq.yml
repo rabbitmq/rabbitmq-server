@@ -47,7 +47,7 @@ services:
       - "15681:15672"
       - "15701:15692"
   qq-moderate-load:
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.10.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
