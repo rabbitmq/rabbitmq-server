@@ -26,16 +26,20 @@
 
 all() ->
     [
-      {group, unclustered},
-      {group, clustered}
+      {group, unclustered_2_nodes},
+      {group, unclustered_3_nodes},
+      {group, clustered_2_nodes},
+      {group, clustered_4_nodes}
     ].
 
 groups() ->
     [
-      {unclustered, [], [
+      {unclustered_2_nodes, [], [
           {cluster_size_2, [], [
               classic_config_discovery_node_list
-            ]},
+            ]}
+        ]},
+      {unclustered_3_nodes, [], [
           {cluster_size_3, [], [
               join_and_part_cluster,
               join_cluster_bad_operations,
@@ -47,7 +51,7 @@ groups() ->
               force_reset_node
             ]}
         ]},
-      {clustered, [], [
+      {clustered_2_nodes, [], [
           {cluster_size_2, [], [
               forget_removes_things,
               reset_removes_things,
@@ -58,7 +62,9 @@ groups() ->
               await_running_count,
               start_with_invalid_schema_in_path,
               persistent_cluster_id
-            ]},
+            ]}
+        ]},
+      {clustered_4_nodes, [], [
           {cluster_size_4, [], [
               forget_promotes_offline_slave
             ]}
@@ -87,9 +93,13 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(unclustered, Config) ->
+init_per_group(unclustered_2_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
-init_per_group(clustered, Config) ->
+init_per_group(unclustered_3_nodes, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
+init_per_group(clustered_2_nodes, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
+init_per_group(clustered_4_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
