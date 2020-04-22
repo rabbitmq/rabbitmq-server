@@ -43,6 +43,7 @@
         ]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_data_coercion, [to_binary/1]).
 
 -define(INFO(Text, Args), error_logger:info_msg(Text, Args)).
 -define(LINK_CREDIT_TIMEOUT, 5000).
@@ -353,17 +354,52 @@ add_forward_headers(#{dest := #{cached_forward_headers := Props}}, Msg) ->
 add_forward_headers(_, Msg) -> Msg.
 
 set_message_properties(Props, Msg) ->
-    maps:fold(fun(delivery_mode, 2, M) ->
-                      amqp10_msg:set_headers(#{durable => true}, M);
-                 (content_type, Ct, M) ->
-                      amqp10_msg:set_properties(
-                        #{content_type => rabbit_data_coercion:to_binary(Ct)}, M);
-                 (_, _, M) -> M
-              end, Msg, Props).
+    %% this is effectively special handling properties from amqp 0.9.1
+    maps:fold(
+      fun(content_type, Ct, M) ->
+              amqp10_msg:set_properties(
+                #{content_type => to_binary(Ct)}, M);
+         (content_encoding, Ct, M) ->
+              amqp10_msg:set_properties(
+                #{content_encoding => to_binary(Ct)}, M);
+         (delivery_mode, 2, M) ->
+              amqp10_msg:set_headers(#{durable => true}, M);
+         (correlation_id, Ct, M) ->
+              amqp10_msg:set_properties(#{correlation_id => to_binary(Ct)}, M);
+         (reply_to, Ct, M) ->
+              amqp10_msg:set_properties(#{reply_to => to_binary(Ct)}, M);
+         (message_id, Ct, M) ->
+              amqp10_msg:set_properties(#{message_id => to_binary(Ct)}, M);
+         (timestamp, Ct, M) ->
+              amqp10_msg:set_properties(#{creation_time => Ct}, M);
+         (user_id, Ct, M) ->
+              amqp10_msg:set_properties(#{user_id => Ct}, M);
+         (headers, Headers0, M) when is_list(Headers0) ->
+              %% AMPQ 0.9.1 are added as applicatin properties
+              %% TODO: filter headers to make safe
+              Headers = lists:foldl(
+                          fun ({K, _T, V}, Acc) ->
+                                  case is_amqp10_compat(V) of
+                                      true ->
+                                          Acc#{to_binary(K) => V};
+                                      false ->
+                                          Acc
+                                  end
+                          end, #{}, Headers0),
+              amqp10_msg:set_application_properties(Headers, M);
+         (Key, Value, M) ->
+              case is_amqp10_compat(Value) of
+                  true ->
+                      amqp10_msg:set_application_properties(
+                        #{to_binary(Key) => Value}, M);
+                  false ->
+                      M
+              end
+      end, Msg, Props).
 
 gen_unique_name(Pre0, Post0) ->
-    Pre = rabbit_data_coercion:to_binary(Pre0),
-    Post = rabbit_data_coercion:to_binary(Post0),
+    Pre = to_binary(Pre0),
+    Post = to_binary(Post0),
     Id = bin_to_hex(crypto:strong_rand_bytes(8)),
     <<Pre/binary, <<"_">>/binary, Id/binary, <<"_">>/binary, Post/binary>>.
 
@@ -371,3 +407,10 @@ bin_to_hex(Bin) ->
     <<<<if N >= 10 -> N -10 + $a;
            true  -> N + $0 end>>
       || <<N:4>> <= Bin>>.
+
+is_amqp10_compat(T) ->
+    is_binary(T) orelse
+    is_number(T) orelse
+    %% TODO: not all lists are compatible
+    is_list(T) orelse
+    is_boolean(T).
