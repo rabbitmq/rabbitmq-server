@@ -43,6 +43,7 @@
         ]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_data_coercion, [to_binary/1]).
 
 -define(INFO(Text, Args), error_logger:info_msg(Text, Args)).
 -define(LINK_CREDIT_TIMEOUT, 5000).
@@ -397,13 +398,10 @@ set_message_properties(Props, Msg) ->
       end, Msg, Props).
 
 gen_unique_name(Pre0, Post0) ->
-    Pre = rabbit_data_coercion:to_binary(Pre0),
-    Post = rabbit_data_coercion:to_binary(Post0),
+    Pre = to_binary(Pre0),
+    Post = to_binary(Post0),
     Id = bin_to_hex(crypto:strong_rand_bytes(8)),
     <<Pre/binary, <<"_">>/binary, Id/binary, <<"_">>/binary, Post/binary>>.
-
-to_binary(X) ->
-    rabbit_data_coercion:to_binary(X).
 
 bin_to_hex(Bin) ->
     <<<<if N >= 10 -> N -10 + $a;
