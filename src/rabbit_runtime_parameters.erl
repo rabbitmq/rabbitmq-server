@@ -130,6 +130,7 @@ parse_set_global(Name, String, ActingUser) ->
 
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
+    rabbit_log:debug("Setting global parameter '~s' to ~p", [NameAsAtom, Term]),
     mnesia_update(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
                                                {value, Term},
