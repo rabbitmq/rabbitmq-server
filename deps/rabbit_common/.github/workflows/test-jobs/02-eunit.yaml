@@ -1,0 +1,30 @@
+  eunit:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: eunit
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: $(ERLANG_VERSION)
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: $(ELIXIR_VERSION)
+      - name: CACHE DEPS
+        uses: actions/cache@v1
+        with:
+          path: deps
+          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
+      - name: CACHE APP MODULES
+        uses: actions/cache@v1
+        with:
+          path: ebin
+          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_ebin
+      - name: RUN TESTS
+        run: |
+          ! test -d ebin || touch ebin/*
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          make eunit base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=

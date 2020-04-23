@@ -21,3 +21,7 @@ endif
 ifeq ($(filter rabbitmq-tools.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-tools.mk
 endif
+
+ifeq ($(filter rabbitmq-tools.mk,$(notdir $(MAKEFILE_LIST))),)
+include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-github-actions.mk
+endif

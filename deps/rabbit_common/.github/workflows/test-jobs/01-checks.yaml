@@ -1,0 +1,53 @@
+  checks:
+    name: checks
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: $(ERLANG_VERSION)
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: $(ELIXIR_VERSION)
+      - name: CHECK RABBITMQ COMPONENTS
+        # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
+        id: ref
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
+          make check-rabbitmq-components.mk base_rmq_ref=master current_rmq_ref=$branch_or_tag_name
+      - name: CHECK SCRIPTS
+        run: |
+          make bats base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+      # https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows
+      - name: CACHE DEPS
+        uses: actions/cache@v1
+        with:
+          path: deps
+          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
+      - name: RESOLVE & COMPILE DEPS
+        run: |
+          make deps test-deps base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+          echo "Capture versions of the RabbitMQ components used in this workflow..."
+          make $(PROJECT)-rabbitmq-deps.mk
+          mv $(PROJECT)-rabbitmq-deps.mk deps/
+          echo "Remove directories not used in the subsequent jobs..."
+          rm -fr deps/*/{.git,test}
+      - name: UPLOAD DEPS VERSIONS
+        uses: actions/upload-artifact@v2-preview
+        with:
+          name: $(PROJECT)-rabbitmq-deps.mk
+          path: deps/$(PROJECT)-rabbitmq-deps.mk
+      - name: CACHE APP MODULES
+        uses: actions/cache@v1
+        with:
+          path: ebin
+          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_ebin
+      - name: CHECK CROSS REFERENCES
+        run: |
+          make xref base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+      - name: COMPILE FOR TEST
+        run: |
+          make test-build base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
