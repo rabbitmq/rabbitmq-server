@@ -1,5 +1,5 @@
-[![OTP v21.3](https://github.com/rabbitmq/rabbitmq-server/workflows/OTP%20v21.3/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22OTP+v21.3%22)
-[![OTP v22.3](https://github.com/rabbitmq/rabbitmq-server/workflows/OTP%20v22.3/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22OTP+v22.3%22)
+[![OTPv21.3](https://github.com/rabbitmq/rabbitmq-server/workflows/OTP%20v21.3/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22OTP+v21.3%22)
+[![OTPv22.3](https://github.com/rabbitmq/rabbitmq-server/workflows/OTP%20v22.3/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22OTP+v22.3%22)
 [![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-server.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-server)
 
 # RabbitMQ Server
