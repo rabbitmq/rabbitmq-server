@@ -837,9 +837,20 @@ start(normal, []) ->
     try
         run_prelaunch_second_phase(),
 
-        rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
-                        [product_name(), product_version(), rabbit_misc:otp_release(),
-                         ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+        ProductInfo = product_info(),
+        case ProductInfo of
+            #{product_overridden := true,
+              product_base_name := BaseName,
+              product_base_version := BaseVersion} ->
+                rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n Based on ~s ~s~n ~s~n ~s~n",
+                                [product_name(), product_version(), rabbit_misc:otp_release(),
+                                 BaseName, BaseVersion,
+                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]);
+            _ ->
+                rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
+                                [product_name(), product_version(), rabbit_misc:otp_release(),
+                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE])
+        end,
         log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
 
