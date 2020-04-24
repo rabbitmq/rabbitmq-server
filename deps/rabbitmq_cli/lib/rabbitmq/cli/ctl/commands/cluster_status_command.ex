@@ -223,13 +223,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   end
 
   defp versions_by_node(node, timeout) do
-    {rmq_vsn, otp_vsn} = case :rabbit_misc.rpc_call(
-                          to_atom(node), :rabbit_misc, :rabbitmq_and_erlang_versions, [], timeout) do
-      {:badrpc, _} -> {nil, nil}
-      pair         -> pair
+    {rmq_name, rmq_vsn, otp_vsn} = case :rabbit_misc.rpc_call(
+                          to_atom(node), :rabbit, :product_info, [], timeout) do
+      {:badrpc, _} ->
+        {nil, nil, nil}
+      map ->
+        %{:otp_release => otp} = map
+        name = case map do
+          %{:product_name => v} -> v
+          %{:product_base_name => v} -> v
+        end
+        vsn = case map do
+          %{:product_version => v} -> v
+          %{:product_base_version => v} -> v
+        end
+        {name, vsn, otp}
     end
 
-    {node, %{rabbitmq_version: to_string(rmq_vsn), erlang_version: to_string(otp_vsn)}}
+    {node, %{rabbitmq_name: to_string(rmq_name), rabbitmq_version: to_string(rmq_vsn), erlang_version: to_string(otp_vsn)}}
   end
 
   defp node_lines(nodes) do
@@ -237,8 +248,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   end
 
   defp version_lines(mapping) do
-    Enum.map(mapping, fn {node, %{rabbitmq_version: rmq_vsn, erlang_version: otp_vsn}} ->
-                        "#{node}: RabbitMQ #{rmq_vsn} on Erlang #{otp_vsn}"
+    Enum.map(mapping, fn {node, %{rabbitmq_name: rmq_name, rabbitmq_version: rmq_vsn, erlang_version: otp_vsn}} ->
+                        "#{node}: #{rmq_name} #{rmq_vsn} on Erlang #{otp_vsn}"
                       end)
   end
 
