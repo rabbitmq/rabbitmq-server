@@ -40,11 +40,6 @@
         with:
           name: $(PROJECT)-rabbitmq-deps.mk
           path: deps/$(PROJECT)-rabbitmq-deps.mk
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_ebin
       - name: CHECK CROSS REFERENCES
         run: |
           make xref base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}

@@ -18,11 +18,6 @@
         with:
           path: deps
           key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
