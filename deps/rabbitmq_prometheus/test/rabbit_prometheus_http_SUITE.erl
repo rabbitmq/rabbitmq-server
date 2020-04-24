@@ -25,20 +25,28 @@
 
 all() ->
     [
-     {group, default_config},
-     {group, config_path},
-     {group, config_port},
-     {group, aggregated_metrics},
-     {group, per_object_metrics}
+        {group, default_config},
+        {group, config_path},
+        {group, config_port},
+        {group, aggregated_metrics},
+        {group, per_object_metrics}
     ].
 
 groups() ->
     [
-     {default_config, [], all_tests()},
-     {config_path, [], all_tests()},
-     {config_port, [], all_tests()},
-     {aggregated_metrics, [], [aggregated_metrics_test, build_info_test, identity_info_test]},
-     {per_object_metrics, [], [per_object_metrics_test, build_info_test, identity_info_test]}
+        {default_config, [], all_tests()},
+        {config_path, [], all_tests()},
+        {config_port, [], all_tests()},
+        {aggregated_metrics, [], [
+            aggregated_metrics_test,
+            build_info_test,
+            identity_info_test
+        ]},
+        {per_object_metrics, [], [
+            per_object_metrics_test,
+            build_info_test,
+            identity_info_test
+        ]}
     ].
 
 all_tests() ->
@@ -148,8 +156,8 @@ sleeping_consumer() ->
 %% -------------------------------------------------------------------
 
 get_test(Config) ->
-    {_Headers, Body} = http_get(Config, [], 200),
-    %% Let's check that the body looks like a valid response
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    %% Check that the body looks like a valid response
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     Port = proplists:get_value(prometheus_port, Config, 15692),
     URI = lists:flatten(io_lib:format("http://localhost:~p/metricsooops", [Port])),
@@ -157,16 +165,16 @@ get_test(Config) ->
     ?assertMatch(404, CodeAct).
 
 content_type_test(Config) ->
-    {Headers, Body} = http_get(Config, [{"accept", "text/plain"}], 200),
+    {Headers, Body} = http_get_with_pal(Config, [{"accept", "text/plain"}], 200),
     ?assertEqual(match, re:run(proplists:get_value("content-type", Headers),
                                "text/plain", [{capture, none}])),
-    %% Let's check that the body looks like a valid response
+    %% Check that the body looks like a valid response
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
 
-    http_get(Config, [{"accept", "text/plain, text/html"}], 200),
-    http_get(Config, [{"accept", "*/*"}], 200),
-    http_get(Config, [{"accept", "text/xdvi"}], 406),
-    http_get(Config, [{"accept", "application/vnd.google.protobuf"}], 406).
+    http_get_with_pal(Config, [{"accept", "text/plain, text/html"}], 200),
+    http_get_with_pal(Config, [{"accept", "*/*"}], 200),
+    http_get_with_pal(Config, [{"accept", "text/xdvi"}], 406),
+    http_get_with_pal(Config, [{"accept", "application/vnd.google.protobuf"}], 406).
 
 encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "deflate"}], 200),
@@ -180,13 +188,11 @@ gzip_encoding_test(Config) ->
     ?assertEqual(match, re:run(zlib:gunzip(Body), "^# TYPE", [{capture, none}, multiline])).
 
 aggregated_metrics_test(Config) ->
-    {_Headers, Body} = http_get(Config, [], 200),
-    %% Checking that the body looks like a valid response
-    ct:pal(Body),
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
     ?assertEqual(nomatch, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
-    %% Checking the first metric value from each ETS table owned by rabbitmq_metrics
+    %% Check the first metric value from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_process_reductions_total ", [{capture, none}, multiline])),
@@ -201,22 +207,20 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ", [{capture, none}, multiline])),
-    %% Checking the first metric value in each ETS table that requires converting
+    %% Check the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
-    %% Checking the first TOTALS metric value
+    %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
-    %% Checking raft_entry_commit_latency_seconds because we are aggregating it
+    %% Check raft_entry_commit_latency_seconds because we are aggregating it
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds ", [{capture, none}, multiline])).
 
 per_object_metrics_test(Config) ->
-    {_Headers, Body} = http_get(Config, [], 200),
-    %% Checking that the body looks like a valid response
-    ct:pal(Body),
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
-    %% Checking the first metric value from each ETS table owned by rabbitmq_metrics
+    %% Check the first metric value from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_process_reductions_total{", [{capture, none}, multiline])),
@@ -231,15 +235,15 @@ per_object_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers{", [{capture, none}, multiline])),
-    %% Checking the first metric value in each ETS table that requires converting
+    %% Check the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds{", [{capture, none}, multiline])),
-    %% Checking the first TOTALS metric value
+    %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
 
 build_info_test(Config) ->
-    {_Headers, Body} = http_get(Config, [], 200),
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
     ?assertEqual(match, re:run(Body, "^rabbitmq_build_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_plugin_version=\"", [{capture, none}])),
@@ -247,7 +251,7 @@ build_info_test(Config) ->
     ?assertEqual(match, re:run(Body, "erlang_version=\"", [{capture, none}])).
 
 identity_info_test(Config) ->
-    {_Headers, Body} = http_get(Config, [], 200),
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
     ?assertEqual(match, re:run(Body, "^rabbitmq_identity_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_node=", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])).
@@ -259,4 +263,10 @@ http_get(Config, ReqHeaders, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, Body}} =
         httpc:request(get, {URI, ReqHeaders}, ?HTTPC_OPTS, []),
     ?assertMatch(CodeExp, CodeAct),
+    {Headers, Body}.
+
+http_get_with_pal(Config, ReqHeaders, CodeExp) ->
+    {Headers, Body} = http_get(Config, ReqHeaders, CodeExp),
+    %% Print and log response body - it makes is easier to find why a match failed
+    ct:pal(Body),
     {Headers, Body}.
