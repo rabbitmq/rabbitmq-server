@@ -673,15 +673,11 @@ maybe_print_boot_progress(true, IterationsLeft) ->
 
 status() ->
     Version = base_product_version(),
-    #{name := ProductName,
-      version := ProductVersion} = product_info(),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
           {rabbitmq_version,     Version},
-          {product_name,         ProductName},
-          {product_version,      ProductVersion},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
@@ -723,7 +719,16 @@ status() ->
                      []
              end,
     S7 = [{totals, Totals}],
-    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7.
+    S8 = lists:filter(
+           fun
+               ({product_base_name, _}) -> true;
+               ({product_base_version, _}) -> true;
+               ({product_name, _}) -> true;
+               ({product_version, _}) -> true;
+               (_) -> false
+           end,
+           maps:to_list(product_info())),
+    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7 ++ S8.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
@@ -1283,17 +1288,25 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
 -spec product_name() -> string().
 
 product_name() ->
-    #{name := ProductName} = product_info(),
-    ProductName.
+    case product_info() of
+        #{product_name := ProductName}   -> ProductName;
+        #{product_base_name := BaseName} -> BaseName
+    end.
 
 -spec product_version() -> string().
 
 product_version() ->
-    #{version := ProductVersion} = product_info(),
-    ProductVersion.
+    case product_info() of
+        #{product_version := ProductVersion}   -> ProductVersion;
+        #{product_base_version := BaseVersion} -> BaseVersion
+    end.
 
--spec product_info() -> #{name := string(),
-                           version := string()}.
+-spec product_info() -> #{product_base_name := string(),
+                          product_base_version := string(),
+                          product_overridden := boolean(),
+                          product_name => string(),
+                          product_version => string(),
+                          otp_release := string()}.
 
 product_info() ->
     PTKey = {?MODULE, product},
@@ -1303,6 +1316,12 @@ product_info() ->
         persistent_term:get(PTKey)
     catch
         error:badarg ->
+            BaseName = base_product_name(),
+            BaseVersion = base_product_version(),
+            Info0 = #{product_base_name => BaseName,
+                      product_base_version => BaseVersion,
+                      otp_release => rabbit_misc:otp_release()},
+
             {NameFromEnv, VersionFromEnv} =
             case rabbit_env:get_context() of
                 #{product_name := NFE,
@@ -1310,34 +1329,41 @@ product_info() ->
                 _                         -> {undefined, undefined}
             end,
 
-            Info =
-            if
-                NameFromEnv =/= undefined andalso
-                VersionFromEnv =/= undefined ->
-                    #{name => NameFromEnv,
-                      version => VersionFromEnv};
-                true ->
-                    Name = case NameFromEnv of
-                               undefined ->
-                                   string_from_app_env(
-                                     product_name,
-                                     base_product_name());
-                               _ ->
-                                   NameFromEnv
-                           end,
-                    Version = case VersionFromEnv of
-                                  undefined ->
-                                      string_from_app_env(
-                                        product_version,
-                                        base_product_version());
-                                  _ ->
-                                      VersionFromEnv
-                              end,
-                    #{name => Name,
-                      version => Version}
-            end,
-            persistent_term:put(PTKey, Info),
-            Info
+            Info1 = case NameFromEnv of
+                        undefined ->
+                            NameFromApp = string_from_app_env(
+                                            product_name,
+                                            undefined),
+                            case NameFromApp of
+                                undefined ->
+                                    Info0;
+                                _ ->
+                                    Info0#{product_name => NameFromApp,
+                                           product_overridden => true}
+                            end;
+                        _ ->
+                            Info0#{product_name => NameFromEnv,
+                                   product_overridden => true}
+                    end,
+
+            Info2 = case VersionFromEnv of
+                        undefined ->
+                            VersionFromApp = string_from_app_env(
+                                               product_version,
+                                               undefined),
+                            case VersionFromApp of
+                                undefined ->
+                                    Info1;
+                                _ ->
+                                    Info1#{product_version => VersionFromApp,
+                                           product_overridden => true}
+                            end;
+                        _ ->
+                            Info1#{product_version => VersionFromEnv,
+                                   product_overridden => true}
+                    end,
+            persistent_term:put(PTKey, Info2),
+            Info2
     end.
 
 string_from_app_env(Key, Default) ->
