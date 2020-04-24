@@ -248,7 +248,7 @@ build_info_test(Config) ->
     ?assertEqual(match, re:run(Body, "rabbitmq_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_plugin_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_client_version=\"", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "erlang_versio=\"", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "erlang_version=\"", [{capture, none}])).
 
 identity_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
