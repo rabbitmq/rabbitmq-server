@@ -45,11 +45,6 @@ jobs:
         with:
           name: rabbit-rabbitmq-deps.mk
           path: deps/rabbit-rabbitmq-deps.mk
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: CHECK CROSS REFERENCES
         run: |
           make xref base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
@@ -76,14 +71,8 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
-          ! test -d ebin || touch ebin/*
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           make eunit base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
 # To find what ct suites we need to add & in which order:
@@ -108,15 +97,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-amqqueue_backward_compatibility base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -149,15 +132,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-backing_queue base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -190,15 +167,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-channel_interceptor base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -231,15 +202,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-channel_operation_timeout base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -272,15 +237,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-cluster base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -313,15 +272,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-cluster_rename base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -354,15 +307,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-clustering_management t=clustered_2_nodes base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -395,15 +342,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-clustering_management t=clustered_4_nodes base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -436,15 +377,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-clustering_management t=unclustered_2_nodes base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -477,15 +412,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-clustering_management t=unclustered_3_nodes base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -518,15 +447,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-config_schema base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -559,15 +482,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-confirms_rejects base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -600,15 +517,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-consumer_timeout base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -641,15 +552,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-crashing_queues base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -682,15 +587,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-dead_lettering base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -723,15 +622,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-definition_import base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -764,15 +657,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-disconnect_detected_during_alarm base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -805,15 +692,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-dynamic_ha base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -846,15 +727,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-dynamic_qq base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -887,15 +762,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-eager_sync base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -928,15 +797,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-feature_flags base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -969,15 +832,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-health_check base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1010,15 +867,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-lazy_queue base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1051,15 +902,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-list_consumers_sanity_check base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1092,15 +937,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-list_queues_online_and_offline base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1133,15 +972,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-many_node_ha base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1174,15 +1007,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-message_size_limit base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1215,15 +1042,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-metrics base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1256,15 +1077,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-mirrored_supervisor base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1297,15 +1112,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-msg_store base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1338,15 +1147,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-peer_discovery_classic_config base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1379,15 +1182,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-peer_discovery_dns base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1420,15 +1217,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-per_user_connection_tracking base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1461,15 +1252,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-per_vhost_connection_limit base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1502,15 +1287,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-per_vhost_connection_limit_partitions base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1543,15 +1322,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-per_vhost_msg_store base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1584,15 +1357,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-per_vhost_queue_limit base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1625,15 +1392,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-policy base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1666,15 +1427,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-priority_queue base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1707,15 +1462,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-priority_queue_recovery base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1748,15 +1497,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-product_info base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1789,15 +1532,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-proxy_protocol base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1830,15 +1567,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-publisher_confirms_parallel base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1871,15 +1602,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-queue_length_limits base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1912,15 +1637,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-queue_master_location base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1953,15 +1672,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-queue_parallel base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -1994,15 +1707,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-quorum_queue base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2035,15 +1742,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbit_core_metrics_gc base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2076,15 +1777,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbit_fifo base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2117,15 +1812,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbit_fifo_int base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2158,15 +1847,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbit_fifo_prop base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2199,15 +1882,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbitmq_queues_cli_integration base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2240,15 +1917,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbitmqctl_integration base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2281,15 +1952,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-rabbitmqctl_shutdown base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2322,15 +1987,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-signal_handling base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2363,15 +2022,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-simple_ha base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2404,15 +2057,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-single_active_consumer base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2445,15 +2092,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-sup_delayed_restart base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2486,15 +2127,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-sync_detection base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2527,15 +2162,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-term_to_binary_compat_prop base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2568,15 +2197,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-topic_permission base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2609,15 +2232,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_access_control base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2650,15 +2267,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_access_control_authn_authz_context_propagation base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2691,15 +2302,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_access_control_credential_validation base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2732,15 +2337,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_amqp091_content_framing base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2773,15 +2372,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_amqp091_server_properties base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2814,15 +2407,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_app_management base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2855,15 +2442,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_cluster_formation_locking_mocks base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2896,15 +2477,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_collections base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2937,15 +2512,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_config_value_encryption base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -2978,15 +2547,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_connection_tracking base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3019,15 +2582,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_credit_flow base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3060,15 +2617,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_disk_monitor base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3101,15 +2652,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_disk_monitor_mocks base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3142,15 +2687,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_file_handle_cache base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3183,15 +2722,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_gen_server2 base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3224,15 +2757,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_gm base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3265,15 +2792,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_log_config base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3306,15 +2827,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_log_management base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3347,15 +2862,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_operator_policy base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3388,15 +2897,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_pg_local base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3429,15 +2932,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_plugin_directories base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3470,15 +2967,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_plugin_versioning base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3511,15 +3002,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_priority_queue base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3552,15 +3037,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_queue_consumers base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3593,15 +3072,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_stats_and_metrics base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3634,15 +3107,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_supervisor2 base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3675,15 +3142,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-unit_vm_memory_monitor base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3716,15 +3177,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-upgrade_preparation base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
@@ -3757,15 +3212,9 @@ jobs:
         with:
           path: deps
           key: otp-21.3_git-${{ github.sha }}_deps
-      - name: CACHE APP MODULES
-        uses: actions/cache@v1
-        with:
-          path: ebin
-          key: otp-21.3_git-${{ github.sha }}_ebin
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
           make ct-vhost base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
