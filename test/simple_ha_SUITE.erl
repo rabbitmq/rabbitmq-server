@@ -32,6 +32,7 @@ all() ->
 
 groups() ->
     RejectTests = [
+      rejects_survive_stop,
       rejects_survive_policy
     ],
     [
@@ -205,6 +206,7 @@ auto_resume_no_ccn_client(Cf) -> consume_survives(Cf, fun sigkill/2, false,
 confirms_survive_stop(Cf)    -> confirms_survive(Cf, fun stop/2).
 confirms_survive_policy(Cf)  -> confirms_survive(Cf, fun policy/2).
 
+rejects_survive_stop(Cf) -> rejects_survive(Cf, fun stop/2).
 rejects_survive_policy(Cf) -> rejects_survive(Cf, fun policy/2).
 
 %%----------------------------------------------------------------------------
