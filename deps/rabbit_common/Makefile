@@ -41,7 +41,8 @@ DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 	      $(PROJECT)/mk/rabbitmq-hexpm.mk \
 	      $(PROJECT)/mk/rabbitmq-dist.mk \
 	      $(PROJECT)/mk/rabbitmq-test.mk \
-	      $(PROJECT)/mk/rabbitmq-tools.mk
+	      $(PROJECT)/mk/rabbitmq-tools.mk \
+	      $(PROJECT)/mk/rabbitmq-github-actions.mk
 
 WITHOUT = plugins/proper
 
