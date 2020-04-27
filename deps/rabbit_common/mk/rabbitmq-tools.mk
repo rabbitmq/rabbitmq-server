@@ -414,13 +414,14 @@ dep_$(1) := git $(dir $(RABBITMQ_UPSTREAM_FETCH_URL))$(call rmq_cmp_repo_name,$(
 endef
 
 $(PROJECT)-rabbitmq-deps.mk: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(gen_verbose) cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | \
+	$(gen_verbose) echo "# In $(PROJECT) - commit $$(git rev-parse HEAD)" > $@
+	$(verbose) cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | \
 	while read -r dir; do \
 	  component=$$(basename "$$dir"); \
 	  case "$$component" in \
 	  $(foreach component,$(RABBITMQ_COMPONENTS),$(component)$(closing_paren) echo "$(call rmq_deps_mk_line,$(component),$$dir)" ;;) \
 	  esac; \
-	done > $@
+	done >> $@
 
 clean:: clean-rabbitmq-deps.mk
 
