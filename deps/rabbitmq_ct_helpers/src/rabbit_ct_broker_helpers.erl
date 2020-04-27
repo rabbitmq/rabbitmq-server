@@ -1172,7 +1172,7 @@ delete_vhost(Config, Node, VHost, Username) ->
 force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
 
 force_vhost_failure(Config, Node, VHost) ->
-    force_vhost_failure(Config, Node, VHost, 10).
+    force_vhost_failure(Config, Node, VHost, 100).
 
 force_vhost_failure(_Config, _Node, VHost, 0) ->
     error({failed_to_force_vhost_failure, no_more_attempts_left, VHost});
