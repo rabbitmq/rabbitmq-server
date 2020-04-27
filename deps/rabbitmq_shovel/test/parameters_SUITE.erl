@@ -83,7 +83,7 @@ parse_amqp091_maps(_Config) ->
          {<<"publish-properties">>, #{<<"cluster_id">> => <<"x">>,
                                       <<"delivery_mode">> => 2}},
          {<<"ack-mode">>, <<"on-publish">>},
-         {<<"delete-after">>, <<"queue-length">>},
+         {<<"src-delete-after">>, <<"queue-length">>},
          {<<"prefetch-count">>, 30},
          {<<"reconnect-delay">>, 1001},
          {<<"src-queue">>, <<"a-src-queue">>},

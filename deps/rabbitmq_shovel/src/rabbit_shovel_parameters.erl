@@ -84,7 +84,7 @@ validate_amqp091_src(Def) ->
          one  -> ok;
          both -> {error, "Cannot specify 'src-exchange' and 'src-queue'", []}
      end,
-     case {pget(<<"delete-after">>, Def), pget(<<"ack-mode">>, Def)} of
+     case {pget(<<"src-delete-after">>, Def, pget(<<"delete-after">>, Def)), pget(<<"ack-mode">>, Def)} of
          {N, <<"no-ack">>} when is_integer(N) ->
              {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
          _ ->
@@ -131,7 +131,9 @@ amqp091_src_validation(_Def, User) ->
      {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
      {<<"src-prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     %% a deprecated pre-3.7 setting
      {<<"delete-after">>, fun validate_delete_after/2, optional},
+     %% currently used multi-protocol friend name, introduced in 3.7
      {<<"src-delete-after">>, fun validate_delete_after/2, optional}
     ].
 

@@ -39,7 +39,7 @@ init([Name, Config0]) ->
     end,
     Restart = case Delay of
         N when is_integer(N) andalso N > 0 ->
-          case pget(<<"src-delete-after">>, Config, <<"never">>) of
+          case pget(<<"src-delete-after">>, Config, pget(<<"delete-after">>, Config, <<"never">>)) of
             %% always try to reconnect
             <<"never">>                        -> {permanent, N};
             %% this Shovel is an autodelete one

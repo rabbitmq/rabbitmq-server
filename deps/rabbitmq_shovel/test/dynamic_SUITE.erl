@@ -276,7 +276,7 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"dest-queue">>,   <<"dest">>},
                            {<<"src-prefetch-count">>, 50},
                            {<<"ack-mode">>,     AckMode},
-                           {<<"delete-after">>, After}]),
+                           {<<"src-delete-after">>, After}]),
             await_autodelete(Config, <<"test">>),
             expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest),
             expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc)
@@ -320,7 +320,7 @@ validation(Config) ->
     invalid_param(Config,
                   [{<<"ack-mode">>,        <<"whenever">>} | QURIs]),
     invalid_param(Config,
-                  [{<<"delete-after">>,    <<"whenever">>} | QURIs]),
+                  [{<<"src-delete-after">>,    <<"whenever">>} | QURIs]),
 
     %% Check properties have to look property-ish
     valid_param(Config,
@@ -344,6 +344,10 @@ validation(Config) ->
                   [{<<"publish-properties">>, <<"something">>}]),
 
     %% Can't use explicit message count and no-ack together
+    invalid_param(Config,
+                  [{<<"src-delete-after">>,    1},
+                   {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
+    %% superseded by src-delete-after
     invalid_param(Config,
                   [{<<"delete-after">>,    1},
                    {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
