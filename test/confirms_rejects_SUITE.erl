@@ -18,7 +18,8 @@ groups() ->
     [
       {parallel_tests, [parallel], [
         {overflow_reject_publish_dlx, [parallel], OverflowTests},
-        {overflow_reject_publish, [parallel], OverflowTests}
+        {overflow_reject_publish, [parallel], OverflowTests},
+        dead_queue_rejects
       ]}
     ].
 
@@ -62,7 +63,8 @@ init_per_testcase(policy_resets_to_default = Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(
         rabbit_ct_helpers:set_config(Config, [{conn, Conn}]), Testcase);
 init_per_testcase(Testcase, Config)
-        when Testcase == confirms_rejects_conflict ->
+        when Testcase == confirms_rejects_conflict;
+             Testcase == dead_queue_rejects ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
 
@@ -87,6 +89,10 @@ end_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
     XOverflow = ?config(overflow, Config),
     QueueName = <<"confirms_rejects_conflict", "_", XOverflow/binary>>,
     amqp_channel:call(Ch, #'queue.delete'{queue = QueueName}),
+    end_per_testcase0(Testcase, Config);
+end_per_testcase(dead_queue_rejects = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"dead_queue_rejects">>}),
     end_per_testcase0(Testcase, Config).
 
 end_per_testcase0(Testcase, Config) ->
@@ -101,6 +107,37 @@ end_per_testcase0(Testcase, Config) ->
     clean_acks_mailbox(),
 
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+dead_queue_rejects(Config) ->
+    Conn = ?config(conn, Config),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QueueName = <<"dead_queue_rejects">>,
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+
+    amqp_channel:call(Ch, #'queue.declare'{queue = QueueName,
+                                           durable = true}),
+
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
+                                  #amqp_msg{payload = <<"HI">>}),
+
+    receive
+        {'basic.ack',_,_} -> ok
+    after 10000 ->
+        error(timeout_waiting_for_initial_ack)
+    end,
+
+    kill_the_queue(QueueName, Config),
+
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = QueueName},
+                      #amqp_msg{payload = <<"HI">>}),
+
+    receive
+        {'basic.ack',_,_} -> error(expecting_nack_got_ack);
+        {'basic.nack',_,_,_} -> ok
+    after 10000 ->
+        error(timeout_waiting_for_nack)
+    end.
 
 confirms_rejects_conflict(Config) ->
     Conn = ?config(conn, Config),
@@ -284,7 +321,7 @@ clean_acks_mailbox() ->
     end.
 
 kill_the_queue(QueueName, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, kill_the_queue, [QueueName]).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, kill_the_queue, [QueueName]).
 
 kill_the_queue(QueueName) ->
     [begin
@@ -300,8 +337,3 @@ kill_the_queue(QueueName) ->
         true  -> kill_the_queue(QueueName);
         false -> ok
     end.
-
-
-
-
-
