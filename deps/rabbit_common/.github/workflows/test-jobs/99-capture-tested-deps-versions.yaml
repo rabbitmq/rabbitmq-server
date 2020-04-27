@@ -26,4 +26,4 @@
          AWS_REGION: ${{ secrets.AWS_REGION }}
          FILE: deps/$(PROJECT)-rabbitmq-deps.mk
          S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-         S3_KEY: $(RABBITMQ_COMPONENT_REPO_NAME)/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.sha }}/otp-21.3/$(PROJECT)-rabbitmq-deps.mk
+         S3_KEY: $(RABBITMQ_COMPONENT_REPO_NAME)/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-21.3/$(PROJECT)-rabbitmq-deps.mk
