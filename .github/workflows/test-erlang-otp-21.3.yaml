@@ -3321,4 +3321,4 @@ jobs:
          AWS_REGION: ${{ secrets.AWS_REGION }}
          FILE: deps/rabbit-rabbitmq-deps.mk
          S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-         S3_KEY: rabbitmq-server/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.sha }}/otp-21.3/rabbit-rabbitmq-deps.mk
+         S3_KEY: rabbitmq-server/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-21.3/rabbit-rabbitmq-deps.mk
