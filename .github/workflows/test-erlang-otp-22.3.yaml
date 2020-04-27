@@ -3305,7 +3305,7 @@ jobs:
         uses: actions/cache@v1
         with:
           path: deps
-          key: otp-21.3_git-${{ github.sha }}_deps
+          key: otp-22.3_git-${{ github.sha }}_deps
       - name: FORMAT GIT REF
         # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
         id: ref
@@ -3321,4 +3321,4 @@ jobs:
          AWS_REGION: ${{ secrets.AWS_REGION }}
          FILE: deps/rabbit-rabbitmq-deps.mk
          S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-         S3_KEY: rabbitmq-server/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-21.3/rabbit-rabbitmq-deps.mk
+         S3_KEY: rabbitmq-server/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-22.3/rabbit-rabbitmq-deps.mk
