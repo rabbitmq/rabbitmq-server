@@ -68,8 +68,8 @@ clean-docker: ## cd  | Clean all Docker containers & volumes
 .PHONY: cd
 cd: clean-docker
 
-.PHONY: preview-readme
-preview-readme: ## pre | Preview README & live reload on edit
+.PHONY: readme
+readme: ## r   | Preview README & live reload on edit
 	@docker run --interactive --tty --rm --name changelog_md \
 	  --volume $(CURDIR):/data \
 	  --volume $(HOME)/.grip:/.grip \
@@ -86,9 +86,11 @@ docker run --rm --interactive --tty \
   --name ctop_$(USER) \
   quay.io/vektorlab/ctop:latest
 endef
-.PHONY: cto
-cto: ## cto | Interact with all containers via a top-like utility
+.PHONY: ctop
+ctop: ## c   | Interact with all containers via a top-like utility
 	@$(CTOP_CONTAINER)
+.PHONY: c
+c: ctop
 
 .PHONY: dockerhub-login
 dockerhub-login: ## dl  | Login to Docker Hub as pivotalrabbitmq
@@ -142,15 +144,15 @@ docker-image-run: ## dir | Run container with local Docker image
 .PHONY: dir
 dir: docker-image-run
 
-DOCKER_COMPOSE_ACTION ?= up --detach && docker-compose --file $(@F) logs --follow
+RUN ?= up --detach && docker-compose --file $(@F) logs --follow
 DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
 .PHONY: $(DOCKER_COMPOSE_FILES)
 $(DOCKER_COMPOSE_FILES):
 	@cd docker && \
-	docker-compose --file $(@F) $(DOCKER_COMPOSE_ACTION) ; \
+	docker-compose --file $(@F) $(RUN) ; \
 	true
 .PHONY: down
-down: DOCKER_COMPOSE_ACTION = down
+down: RUN = down
 down: $(DOCKER_COMPOSE_FILES) ## d   | Stop all containers
 .PHONY: d
 d: down
@@ -197,8 +199,10 @@ dist-tls: ## dt  | Make Erlang-Distribution panels come alive - HIGH LOAD
 .PHONY: dt
 dt: dist-tls
 .PHONY: qq
-qq: ##     | Make RabbitMQ-Quorum-Queues-Raft panels come alive - HIGH LOAD
+qq: ## q   | Make RabbitMQ-Quorum-Queues-Raft panels come alive - HIGH LOAD
 	@$(DOCKER_COMPOSE_UP)
+.PHONY: q
+q: qq
 
 .PHONY: h
 h:
