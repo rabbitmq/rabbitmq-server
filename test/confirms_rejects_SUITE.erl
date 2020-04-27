@@ -94,7 +94,8 @@ end_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
     end_per_testcase0(Testcase, Config);
 end_per_testcase(dead_queue_rejects = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"dead_queue_rejects">>});
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"dead_queue_rejects">>}),
+    end_per_testcase0(Testcase, Config);
 end_per_testcase(mixed_dead_alive_queues_reject = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_dead">>}),
@@ -144,6 +145,7 @@ dead_queue_rejects(Config) ->
         {'basic.nack',_,_,_} -> ok
     after 10000 ->
         error(timeout_waiting_for_nack)
+    end.
 
 mixed_dead_alive_queues_reject(Config) ->
     Conn = ?config(conn, Config),
@@ -184,14 +186,14 @@ mixed_dead_alive_queues_reject(Config) ->
 
     kill_the_queue(QueueNameDead, Config),
 
-    amqp_channel:call(Ch, #'basic.publish'{exchange = ExchangeName,
+    amqp_channel:cast(Ch, #'basic.publish'{exchange = ExchangeName,
                                            routing_key = <<"route">>},
                       #amqp_msg{payload = <<"HI">>}),
 
     receive
         {'basic.nack',_,_,_} -> ok;
         {'basic.ack',_,_} -> error(expecting_nack_got_ack)
-    after 50000 ->
+    after 10000 ->
         error({timeout_waiting_for_nack, process_info(self(), messages)})
     end.
 
