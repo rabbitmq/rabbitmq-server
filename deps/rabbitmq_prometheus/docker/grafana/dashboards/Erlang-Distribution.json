@@ -40,6 +40,7 @@
   "annotations": {
     "list": [
       {
+        "$$hashKey": "object:13",
         "builtIn": 1,
         "datasource": "-- Grafana --",
         "enable": true,
@@ -54,7 +55,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "iteration": 1570119158161,
+  "id": null,
+  "iteration": 1587996382757,
   "links": [],
   "panels": [
     {
@@ -92,7 +94,6 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
-      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -177,7 +178,6 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
-      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -262,7 +262,6 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
-      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -347,7 +346,6 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
-      "options": {},
       "postfix": "",
       "postfixFontSize": "50%",
       "prefix": "",
@@ -456,7 +454,6 @@
       },
       "links": [],
       "nullPointMode": "as empty",
-      "options": {},
       "targets": [
         {
           "aggregation": "Last",
@@ -501,7 +498,7 @@
       "dashes": false,
       "datasource": null,
       "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the 64MB threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
-      "fill": 1,
+      "fill": 0,
       "fillGradient": 0,
       "gridPos": {
         "h": 5,
@@ -509,6 +506,7 @@
         "x": 12,
         "y": 4
       },
+      "hiddenSeries": false,
       "id": 62,
       "legend": {
         "alignAsTable": true,
@@ -533,42 +531,52 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
+          "$$hashKey": "object:130",
           "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
+          "$$hashKey": "object:131",
           "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
+          "$$hashKey": "object:132",
           "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
+          "$$hashKey": "object:133",
           "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
+          "$$hashKey": "object:134",
           "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
+          "$$hashKey": "object:135",
           "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
+          "$$hashKey": "object:136",
           "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
+          "$$hashKey": "object:137",
           "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
+          "$$hashKey": "object:138",
           "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
+          "$$hashKey": "object:139",
           "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
@@ -580,6 +588,7 @@
         {
           "expr": "erlang_vm_dist_node_queue_size * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
@@ -587,6 +596,7 @@
       ],
       "thresholds": [
         {
+          "$$hashKey": "object:234",
           "colorMode": "critical",
           "fill": true,
           "line": true,
@@ -614,6 +624,7 @@
       },
       "yaxes": [
         {
+          "$$hashKey": "object:206",
           "decimals": 0,
           "format": "decbytes",
           "label": null,
@@ -623,6 +634,7 @@
           "show": true
         },
         {
+          "$$hashKey": "object:207",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -665,6 +677,7 @@
         "x": 0,
         "y": 10
       },
+      "hiddenSeries": false,
       "id": 3,
       "legend": {
         "alignAsTable": true,
@@ -798,6 +811,7 @@
         "x": 12,
         "y": 10
       },
+      "hiddenSeries": false,
       "id": 2,
       "legend": {
         "alignAsTable": true,
@@ -824,42 +838,52 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
+          "$$hashKey": "object:276",
           "alias": "/^rabbit@[\\w.-]+0/",
           "color": "#56A64B"
         },
         {
+          "$$hashKey": "object:277",
           "alias": "/^rabbit@[\\w.-]+1/",
           "color": "#F2CC0C"
         },
         {
+          "$$hashKey": "object:278",
           "alias": "/^rabbit@[\\w.-]+2/",
           "color": "#3274D9"
         },
         {
+          "$$hashKey": "object:279",
           "alias": "/^rabbit@[\\w.-]+3/",
           "color": "#A352CC"
         },
         {
+          "$$hashKey": "object:280",
           "alias": "/^rabbit@[\\w.-]+4/",
           "color": "#FF780A"
         },
         {
+          "$$hashKey": "object:281",
           "alias": "/^rabbit@[\\w.-]+5/",
           "color": "#96D98D"
         },
         {
+          "$$hashKey": "object:282",
           "alias": "/^rabbit@[\\w.-]+6/",
           "color": "#FFEE52"
         },
         {
+          "$$hashKey": "object:283",
           "alias": "/^rabbit@[\\w.-]+7/",
           "color": "#8AB8FF"
         },
         {
+          "$$hashKey": "object:284",
           "alias": "/^rabbit@[\\w.-]+8/",
           "color": "#CA95E5"
         },
         {
+          "$$hashKey": "object:285",
           "alias": "/^rabbit@[\\w.-]+9/",
           "color": "#FFB357"
         }
@@ -896,6 +920,7 @@
       },
       "yaxes": [
         {
+          "$$hashKey": "object:352",
           "decimals": 1,
           "format": "Bps",
           "label": null,
@@ -905,6 +930,7 @@
           "show": true
         },
         {
+          "$$hashKey": "object:353",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -933,6 +959,7 @@
         "x": 0,
         "y": 15
       },
+      "hiddenSeries": false,
       "id": 4,
       "legend": {
         "alignAsTable": true,
@@ -1068,6 +1095,7 @@
         "x": 12,
         "y": 15
       },
+      "hiddenSeries": false,
       "id": 5,
       "legend": {
         "alignAsTable": true,
@@ -1201,6 +1229,7 @@
         "x": 0,
         "y": 20
       },
+      "hiddenSeries": false,
       "id": 39,
       "legend": {
         "alignAsTable": true,
@@ -1334,6 +1363,7 @@
         "x": 12,
         "y": 20
       },
+      "hiddenSeries": false,
       "id": 50,
       "legend": {
         "alignAsTable": true,
@@ -1483,6 +1513,7 @@
         "x": 0,
         "y": 26
       },
+      "hiddenSeries": false,
       "id": 12,
       "legend": {
         "alignAsTable": true,
@@ -1616,6 +1647,7 @@
         "x": 12,
         "y": 26
       },
+      "hiddenSeries": false,
       "id": 7,
       "legend": {
         "alignAsTable": true,
@@ -1719,13 +1751,6 @@
       "id": 14,
       "panels": [],
       "repeat": "erlang_vm_dist_proc_type",
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "dist",
-          "value": "dist"
-        }
-      },
       "title": "$erlang_vm_dist_proc_type process",
       "type": "row"
     },
@@ -1796,14 +1821,6 @@
       },
       "links": [],
       "nullPointMode": "as empty",
-      "options": {},
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "dist",
-          "value": "dist"
-        }
-      },
       "targets": [
         {
           "aggregation": "Last",
@@ -1856,6 +1873,7 @@
         "x": 12,
         "y": 32
       },
+      "hiddenSeries": false,
       "id": 16,
       "legend": {
         "alignAsTable": true,
@@ -1878,13 +1896,6 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "dist",
-          "value": "dist"
-        }
-      },
       "seriesOverrides": [
         {
           "alias": "/rabbit/",
@@ -1969,6 +1980,7 @@
         "x": 0,
         "y": 37
       },
+      "hiddenSeries": false,
       "id": 15,
       "legend": {
         "alignAsTable": true,
@@ -1991,13 +2003,6 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "dist",
-          "value": "dist"
-        }
-      },
       "seriesOverrides": [
         {
           "alias": "/^rabbit@[\\w.-]+0/",
@@ -2109,6 +2114,7 @@
         "x": 12,
         "y": 37
       },
+      "hiddenSeries": false,
       "id": 17,
       "legend": {
         "alignAsTable": true,
@@ -2131,13 +2137,6 @@
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
-      "scopedVars": {
-        "erlang_vm_dist_proc_type": {
-          "selected": false,
-          "text": "dist",
-          "value": "dist"
-        }
-      },
       "seriesOverrides": [
         {
           "alias": "/^rabbit@[\\w.-]+0/",
@@ -2236,7 +2235,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 20,
+  "schemaVersion": 22,
   "style": "dark",
   "tags": [
     "rabbitmq-prometheus"
@@ -2253,6 +2252,7 @@
         "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
+        "index": -1,
         "label": "RabbitMQ Cluster",
         "multi": false,
         "name": "rabbitmq_cluster",
@@ -2280,6 +2280,7 @@
         "definition": "label_values(erlang_vm_dist_proc_status, type)",
         "hide": 0,
         "includeAll": true,
+        "index": -1,
         "label": "Process type",
         "multi": true,
         "name": "erlang_vm_dist_proc_type",
@@ -2324,5 +2325,8 @@
   "timezone": "",
   "title": "Erlang-Distribution",
   "uid": "d-SFCCmZz",
-  "version": 1
+  "variables": {
+    "list": []
+  },
+  "version": 4
 }
