@@ -39,4 +39,4 @@ callgraph.dot*
 
 PACKAGES/*
 
-rabbitmq-server-tested-deps.mk
+rabbit-rabbitmq-deps.mk
