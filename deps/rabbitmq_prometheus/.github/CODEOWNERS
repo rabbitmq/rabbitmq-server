@@ -1,0 +1,9 @@
+.github/workflows @gerhard @dumbbell
+docker/  @gerhard
+priv/schema @michaelklishin
+src/ @dcorbacho @gerhard
+test/ @dcorbacho @gerhard
+Dockerfile @gerhard
+Makefile @gerhard @dumbbell
+rabbitmq-components.mk @dumbbell @gerhard
+rabbitmq-disable-metrics-collector.conf @gerhard
