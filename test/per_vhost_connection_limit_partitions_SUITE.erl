@@ -132,10 +132,11 @@ cluster_full_partition_with_autoheal(Config) ->
 %% -------------------------------------------------------------------
 
 wait_for_count_connections_in(Config, VHost, Expected, Time) when Time =< 0 ->
-    ?assertEqual(Expected, count_connections_in(Config, VHost));
+    ?assertMatch(Connections when length(Connections) == Expected,
+                                  connections_in(Config, VHost));
 wait_for_count_connections_in(Config, VHost, Expected, Time) ->
-    case count_connections_in(Config, VHost) of
-        Expected ->
+    case connections_in(Config, VHost) of
+        Connections when length(Connections) == Expected ->
             ok;
         _ ->
             Sleep = 3000,
