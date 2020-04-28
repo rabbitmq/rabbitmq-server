@@ -46,10 +46,11 @@ CT_SUITE_JOB_BASENAME := $(filter %-CT_SUITE.yaml,$(TESTING_JOB_BASENAMES))
 
 WORKFLOWS := $(TESTING_WORKFLOWS)
 
-SILENT := true
-
 github-actions: $(WORKFLOWS)
-	@$(SILENT)
+	$(verbose) if test "$(DO_COMMIT)" = 'yes'; then \
+		git diff --quiet -- $(WORKFLOWS) \
+		|| git commit -m 'GitHub Actions: Regen workflows' -- $(WORKFLOWS); \
+	fi
 
 # The actual recipe which creates the workflow.
 #
