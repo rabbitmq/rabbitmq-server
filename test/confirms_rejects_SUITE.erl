@@ -135,17 +135,9 @@ dead_queue_rejects(Config) ->
         error(timeout_waiting_for_initial_ack)
     end,
 
-    kill_the_queue(QueueName, Config),
-
-    amqp_channel:cast(Ch, #'basic.publish'{routing_key = QueueName},
-                      #amqp_msg{payload = <<"HI">>}),
-
-    receive
-        {'basic.ack',_,_} -> error(expecting_nack_got_ack);
-        {'basic.nack',_,_,_} -> ok
-    after 10000 ->
-        error(timeout_waiting_for_nack)
-    end.
+    BasicPublish = #'basic.publish'{routing_key = QueueName},
+    AmqpMsg = #amqp_msg{payload = <<"HI">>},
+    kill_queue_expect_nack(Config, Ch, QueueName, BasicPublish, AmqpMsg, 5).
 
 mixed_dead_alive_queues_reject(Config) ->
     Conn = ?config(conn, Config),
@@ -184,17 +176,28 @@ mixed_dead_alive_queues_reject(Config) ->
         error({timeout_waiting_for_initial_ack, process_info(self(), messages)})
     end,
 
-    kill_the_queue(QueueNameDead, Config),
+    BasicPublish = #'basic.publish'{exchange = ExchangeName, routing_key = <<"route">>},
+    AmqpMsg = #amqp_msg{payload = <<"HI">>},
+    kill_queue_expect_nack(Config, Ch, QueueNameDead, BasicPublish, AmqpMsg, 5).
 
-    amqp_channel:cast(Ch, #'basic.publish'{exchange = ExchangeName,
-                                           routing_key = <<"route">>},
-                      #amqp_msg{payload = <<"HI">>}),
-
-    receive
-        {'basic.nack',_,_,_} -> ok;
-        {'basic.ack',_,_} -> error(expecting_nack_got_ack)
-    after 10000 ->
-        error({timeout_waiting_for_nack, process_info(self(), messages)})
+kill_queue_expect_nack(_Config, _Ch, _QueueName, _BasicPublish, _AmqpMsg, 0) ->
+    error(expecting_nack_got_ack);
+kill_queue_expect_nack(Config, Ch, QueueName, BasicPublish, AmqpMsg, Tries) ->
+    kill_the_queue(QueueName, Config),
+    amqp_channel:cast(Ch, BasicPublish, AmqpMsg),
+    R = receive
+            {'basic.nack',_,_,_} ->
+                ok;
+            {'basic.ack',_,_} ->
+                retry
+        after 10000 ->
+                  error({timeout_waiting_for_nack, process_info(self(), messages)})
+        end,
+    case R of
+        ok ->
+            ok;
+        retry ->
+            kill_queue_expect_nack(Config, Ch, QueueName, BasicPublish, AmqpMsg, Tries - 1)
     end.
 
 confirms_rejects_conflict(Config) ->
