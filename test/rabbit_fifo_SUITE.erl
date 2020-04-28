@@ -295,6 +295,27 @@ return_test(_) ->
                                                            State3#rabbit_fifo.consumers),
     ok.
 
+return_dequeue_delivery_limit_test(_) ->
+    Init = init(#{name => test,
+                  queue_resource => rabbit_misc:r("/", queue,
+                                                  atom_to_binary(test, utf8)),
+                  release_cursor_interval => 0,
+                  delivery_limit => 1}),
+    {State0, _} = enq(1, 1, msg, Init),
+
+    Cid = {<<"cid">>, self()},
+    Cid2 = {<<"cid2">>, self()},
+
+    {State1, {MsgId1, _}} = deq(2, Cid, unsettled, State0),
+    {State2, _, _} = apply(meta(4), rabbit_fifo:make_return(Cid, [MsgId1]),
+                           State1),
+
+    {State3, {MsgId2, _}} = deq(2, Cid2, unsettled, State2),
+    {State4, _, _} = apply(meta(4), rabbit_fifo:make_return(Cid2, [MsgId2]),
+                           State3),
+    ?assertMatch(#{num_messages := 0}, rabbit_fifo:overview(State4)),
+    ok.
+
 return_non_existent_test(_) ->
     Cid = {<<"cid">>, self()},
     {State0, [_, _Inactive]} = enq(1, 1, second, test_init(test)),

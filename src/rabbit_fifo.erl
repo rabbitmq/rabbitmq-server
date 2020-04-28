@@ -1116,13 +1116,19 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
                                   return_one(MsgId, MsgNum, Msg, S0, E0,
                                              ConsumerId)
                           end, {State0, Effects0}, Returned),
-    #{ConsumerId := Con0} = Cons0 = State1#?MODULE.consumers,
-    Con = Con0#consumer{credit = increase_credit(Con0, map_size(Returned))},
-    {Cons, SQ, Effects2} = update_or_remove_sub(ConsumerId, Con, Cons0,
-                                                SQ0, Effects1),
-    State2 = State1#?MODULE{consumers = Cons,
-                            service_queue = SQ},
-    {State, ok, Effects} = checkout(Meta, State2, Effects2),
+    {State2, Effects3} =
+        case State1#?MODULE.consumers of
+            #{ConsumerId := Con0} = Cons0 ->
+                Con = Con0#consumer{credit = increase_credit(Con0,
+                                                             map_size(Returned))},
+                {Cons, SQ, Effects2} = update_or_remove_sub(ConsumerId, Con,
+                                                            Cons0, SQ0, Effects1),
+                {State1#?MODULE{consumers = Cons,
+                               service_queue = SQ}, Effects2};
+            _ ->
+                {State1, Effects1}
+        end,
+    {State, ok, Effects} = checkout(Meta, State2, Effects3),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 % used to processes messages that are finished
