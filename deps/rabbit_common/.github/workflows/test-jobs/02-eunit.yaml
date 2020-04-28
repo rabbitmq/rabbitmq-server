@@ -22,4 +22,4 @@
         run: |
           ! test -d ebin || touch ebin/*
           branch_or_tag_name=${GITHUB_REF#refs/*/}
-          make eunit base_rmq_ref=master current_rmq_ref=$branch_or_tag_name FULL=
+          make eunit base_rmq_ref=$(base_rmq_ref) current_rmq_ref=$branch_or_tag_name FULL=

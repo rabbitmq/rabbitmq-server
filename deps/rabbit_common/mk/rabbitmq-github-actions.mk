@@ -46,10 +46,11 @@ CT_SUITE_JOB_BASENAME := $(filter %-CT_SUITE.yaml,$(TESTING_JOB_BASENAMES))
 
 WORKFLOWS := $(TESTING_WORKFLOWS)
 
-SILENT := true
-
 github-actions: $(WORKFLOWS)
-	@$(SILENT)
+	$(verbose) if test "$(DO_COMMIT)" = 'yes'; then \
+		git diff --quiet -- $(WORKFLOWS) \
+		|| git commit -m 'GitHub Actions: Regen workflows' -- $(WORKFLOWS); \
+	fi
 
 # The actual recipe which creates the workflow.
 #
@@ -75,6 +76,7 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	  -e 's/\$$$$\(ELIXIR_VERSION\)/$(ELIXIR_VERSION)/g' \
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
+	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
 	  -e 's/\$$$$\(CT_SUITE\)/$$(ct_suite)/g' \
 	  < "$$(job)" >> "$$@";\
 	)\
@@ -84,6 +86,7 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	  -e 's/\$$$$\(ELIXIR_VERSION\)/$(ELIXIR_VERSION)/g' \
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
+	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
 	  < "$$(job)" | \
 	awk \
 	  '\
