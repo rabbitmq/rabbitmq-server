@@ -225,8 +225,7 @@ change_policy(Config) ->
     ok.
 
 change_cluster(Config) ->
-    [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
+    [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     rabbit_ct_broker_helpers:cluster_nodes(Config, [A, B, C]),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
 
@@ -234,13 +233,12 @@ change_cluster(Config) ->
     assert_slaves(A, ?QNAME, {A, ''}),
 
     %% Give it policy exactly 4, it should mirror to all 3 nodes
-    rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
-      {<<"exactly">>, 4}),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, {<<"exactly">>, 4}),
     assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     %% Add D and E, D joins in
     rabbit_ct_broker_helpers:cluster_nodes(Config, [A, D, E]),
-    assert_slaves(A, ?QNAME, {A, [B, C, D]}, [{A, [B, C]}]),
+    assert_slaves(A, ?QNAME, {A, [B, C, D]}, , [{A, [B, C]}, {A, [B, C, E]}]),
 
     %% Remove D, E joins in
     rabbit_ct_broker_helpers:stop_node(Config, D),
