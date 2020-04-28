@@ -75,6 +75,7 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	  -e 's/\$$$$\(ELIXIR_VERSION\)/$(ELIXIR_VERSION)/g' \
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
+	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
 	  -e 's/\$$$$\(CT_SUITE\)/$$(ct_suite)/g' \
 	  < "$$(job)" >> "$$@";\
 	)\
@@ -84,6 +85,7 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	  -e 's/\$$$$\(ELIXIR_VERSION\)/$(ELIXIR_VERSION)/g' \
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
+	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
 	  < "$$(job)" | \
 	awk \
 	  '\
