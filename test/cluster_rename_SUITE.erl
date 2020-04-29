@@ -266,7 +266,7 @@ do_rename_node(Config, Nodename, Map) ->
       || N <- Map
     ],
     Ret = rabbit_ct_broker_helpers:rabbitmqctl(Config, Nodename,
-      ["rename_cluster_node" | Map1]),
+      ["rename_cluster_node" | Map1], 120000),
     case Ret of
         {ok, _} ->
             Config1 = update_config_after_rename(Config, Map1),
