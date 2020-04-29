@@ -39,7 +39,7 @@
     node_uri/2, node_uri/3,
 
     control_action/2, control_action/3, control_action/4,
-    rabbitmqctl/3, rabbitmqctl_list/3,
+    rabbitmqctl/3, rabbitmqctl/4, rabbitmqctl_list/3,
     rabbitmq_queues/3,
 
     add_code_path_to_node/2,
@@ -973,6 +973,9 @@ control_action(Command, Node, Args, Opts) ->
 %% Use rabbitmqctl(1) instead of using the Erlang API.
 
 rabbitmqctl(Config, Node, Args) ->
+    rabbitmqctl(Config, Node, Args, infinity).
+
+rabbitmqctl(Config, Node, Args, Timeout) ->
     Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
@@ -994,7 +997,7 @@ rabbitmqctl(Config, Node, Args) ->
                   [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
           end,
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
-    rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
+    rabbit_ct_helpers:exec(Cmd, [{env, Env}, {timeout, Timeout}]).
 
 rabbitmqctl_list(Config, Node, Args) ->
     {ok, StdOut} = rabbitmqctl(Config, Node, Args),

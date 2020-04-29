@@ -778,6 +778,7 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
     {LocalOptions, PortOptions} = lists:partition(
       fun
           ({match_stdout, _}) -> true;
+          ({timeout, _})      -> true;
           (drop_stdout)       -> true;
           (_)                 -> false
       end, Options),
@@ -829,7 +830,16 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
             {args, Args1},
             exit_status
             | PortOptions2]),
-        port_receive_loop(Port, "", LocalOptions)
+
+        case lists:keytake(timeout, 1, LocalOptions) of
+            false ->
+                port_receive_loop(Port, "", LocalOptions, infinity);
+            {value, {timeout, infinity}, LocalOptions1} ->
+                port_receive_loop(Port, "", LocalOptions1, infinity);
+            {value, {timeout, Timeout}, LocalOptions1} ->
+                Until = erlang:system_time(millisecond) + Timeout,
+                port_receive_loop(Port, "", LocalOptions1, Until)
+        end
     catch
         error:Reason ->
             ct:pal(?LOW_IMPORTANCE, "~s: ~s",
@@ -844,34 +854,41 @@ format_arg(Arg) when is_atom(Arg) ->
 format_arg(Arg) ->
     Arg.
 
-port_receive_loop(Port, Stdout, Options) ->
-    receive
-        {Port, {exit_status, X}} ->
-            DropStdout = lists:member(drop_stdout, Options) orelse
-              Stdout =:= "",
-            if
-                DropStdout ->
-                    ct:pal(?LOW_IMPORTANCE, "Exit code: ~p (pid ~p)",
-                      [X, self()]);
-                true ->
-                    ct:pal(?LOW_IMPORTANCE, "~ts~nExit code: ~p (pid ~p)",
-                      [Stdout, X, self()])
+port_receive_loop(Port, Stdout, Options, Until) ->
+  Timeout = case Until of
+                infinity -> infinity;
+                _ -> max(0, Until - erlang:system_time(millisecond))
             end,
-            case proplists:get_value(match_stdout, Options) of
-                undefined ->
-                    case X of
-                        0 -> {ok, Stdout};
-                        _ -> {error, X, Stdout}
-                    end;
-                RE ->
-                    case re:run(Stdout, RE, [{capture, none}]) of
-                        match   -> {ok, Stdout};
-                        nomatch -> {error, X, Stdout}
-                    end
-            end;
-        {Port, {data, Out}} ->
-            port_receive_loop(Port, Stdout ++ Out, Options)
-    end.
+  receive
+      {Port, {exit_status, X}} ->
+          DropStdout = lists:member(drop_stdout, Options) orelse
+              Stdout =:= "",
+          if
+              DropStdout ->
+                  ct:pal(?LOW_IMPORTANCE, "Exit code: ~p (pid ~p)",
+                         [X, self()]);
+              true ->
+                  ct:pal(?LOW_IMPORTANCE, "~ts~nExit code: ~p (pid ~p)",
+                         [Stdout, X, self()])
+          end,
+          case proplists:get_value(match_stdout, Options) of
+              undefined ->
+                  case X of
+                      0 -> {ok, Stdout};
+                      _ -> {error, X, Stdout}
+                  end;
+              RE ->
+                  case re:run(Stdout, RE, [{capture, none}]) of
+                      match   -> {ok, Stdout};
+                      nomatch -> {error, X, Stdout}
+                  end
+          end;
+      {Port, {data, Out}} ->
+          port_receive_loop(Port, Stdout ++ Out, Options, Until)
+  after
+      Timeout ->
+          {error, timeout, Stdout}
+  end.
 
 make(Config, Dir, Args) ->
     make(Config, Dir, Args, []).
