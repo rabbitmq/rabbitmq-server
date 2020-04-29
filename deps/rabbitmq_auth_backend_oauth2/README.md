@@ -2,12 +2,12 @@
 
 [![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-auth-backend-oauth2.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-auth-backend-oauth2)
 
-This **experimental** [RabbitMQ authentication/authorisation backend](https://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
+This [RabbitMQ authentication/authorisation backend](https://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
 and users authenticate and authorize using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
 It is not specific to but developed against [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa).
 
-OAuth 2.0 primers are available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
+An OAuth 2.0 primer is available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
 
 
 ## Supported RabbitMQ Versions
