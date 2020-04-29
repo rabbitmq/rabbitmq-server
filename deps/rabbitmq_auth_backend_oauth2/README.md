@@ -12,8 +12,11 @@ OAuth 2.0 primers are available [elsewhere on the Web](https://auth0.com/blog/oa
 
 ## Supported RabbitMQ Versions
 
-This plugins is developed for RabbitMQ 3.8 (currently in development) and has to be built
-against compatible RabbitMQ server, e.g. using the [umbrella repository](https://github.com/rabbitmq/rabbitmq-public-umbrella).
+The plugin targets and ships with RabbitMQ 3.8. Like all RabbitMQ [plugins](https://www.rabbitmq.com/plugins.html), it must be enabled before it can be used:
+
+``` shell
+rabbitmq-plugins enable rabbitmq_auth_backend_oauth2
+```
 
 
 ## How it Works
@@ -187,13 +190,13 @@ In the OAuth context, tags can be added as part of the scope, using a format lik
 example, if `resource_server_id` is "my_rabbit", a scope to grant access to the management plugin with
 the `monitoring` tag will be `my_rabbit.tag:monitoring`.
 
-### Examples
+## Examples
 
 The [demo](/demo) directory contains example configuration files which can be used to set up
 a development UAA server and issue tokens, which can be used to access RabbitMQ
 resources.
 
-#### UAA and RabbitMQ Config Files
+### UAA and RabbitMQ Config Files
 
 To run the demo you need to have a [UAA](https://github.com/cloudfoundry/uaa) node
 installed or built from source.
@@ -213,7 +216,7 @@ To run UAA with a custom config file path, use the following from the UAA git re
 CLOUDFOUNDRY_CONFIG_PATH=<path_to_plugin>/demo/symmetric_keys ./gradlew run
 ```
 
-#### Running RabbitMQ
+### Running RabbitMQ
 
 ```
 RABBITMQ_CONFIG_FILE=<path_to_plugin>/demo/symmetric_keys/rabbitmq rabbitmq-server
@@ -223,13 +226,13 @@ make run-broker RABBITMQ_CONFIG_FILE=demo/symmetric_keys/rabbitmq
 
 The `rabbitmq_auth_backend_oauth2` plugin must be enabled on the RabbitMQ node.
 
-#### Asymmetric Key Example
+### Asymmetric Key Example
 
 To use an RSA (asymmetric) key, you can set `CLOUDFOUNDRY_CONFIG_PATH` to  `demo/rsa_keys`.
 This directory also contains `rabbit.config` file, as well as a public key (`public_key.pem`)
 which will be used for signature verification.
 
-#### UAA User and Permission Management
+### UAA User and Permission Management
 
 UAA sets scopes from client scopes and user groups. The demo uses groups to set up
 a set of RabbitMQ permissions scopes.
