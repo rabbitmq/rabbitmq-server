@@ -236,13 +236,13 @@ change_cluster(Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, {<<"exactly">>, 4}),
     assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
-    %% Add D and E, D joins in
+    %% Add D and E, D or E joins in
     rabbit_ct_broker_helpers:cluster_nodes(Config, [A, D, E]),
-    assert_slaves(A, ?QNAME, {A, [B, C, D]}, , [{A, [B, C]}, {A, [B, C, E]}]),
+    assert_slaves(A, ?QNAME, [{A, [B, C, D]}, {A, [B, C, E]}], [{A, [B, C]}]),
 
-    %% Remove D, E joins in
+    %% Remove one, the other joins in
     rabbit_ct_broker_helpers:stop_node(Config, D),
-    assert_slaves(A, ?QNAME, {A, [B, C, E]}, [{A, [B, C]}]),
+    assert_slaves(A, ?QNAME, [{A, [B, C, D]}, {A, [B, C, E]}], [{A, [B, C]}]),
 
     ok.
 
@@ -803,9 +803,23 @@ assert_slaves(RPCNode, QName, Exp, PermittedIntermediate) ->
                   [{get(previous_exp_m_node), get(previous_exp_s_nodes)} |
                    PermittedIntermediate], 1000).
 
-assert_slaves0(_, _, _, _, 0) ->
-    error(give_up_waiting_for_slaves);
+assert_slaves0(_RPCNode, _QName, [], _PermittedIntermediate, _Attempts) ->
+    error(invalid_expectation);
+assert_slaves0(RPCNode, QName, [{ExpMNode, ExpSNodes}|T], PermittedIntermediate, Attempts) ->
+    case assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, nofail) of
+        ok ->
+            ok;
+        failed ->
+            assert_slaves0(RPCNode, QName, T, PermittedIntermediate, Attempts)
+    end;
 assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts) ->
+    assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, fail).
+
+assert_slaves1(_RPCNode, _QName, _Exp, _PermittedIntermediate, 0, fail) ->
+    error(give_up_waiting_for_slaves);
+assert_slaves1(_RPCNode, _QName, _Exp, _PermittedIntermediate, 0, nofail) ->
+    failed;
+assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, FastFail) ->
     Q = find_queue(QName, RPCNode),
     Pid = proplists:get_value(pid, Q),
     SPids = proplists:get_value(slave_pids, Q),
@@ -823,16 +837,22 @@ assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Att
             case [{PermMNode, PermSNodes} || {PermMNode, PermSNodes} <- PermittedIntermediate,
                            PermMNode =:= ActMNode,
                            equal_list(PermSNodes, ActSNodes)] of
-                [] -> ct:fail("Expected ~p / ~p, got ~p / ~p~nat ~p~n",
-                              [ExpMNode, ExpSNodes, ActMNode, ActSNodes,
-                               get_stacktrace()]);
+                [] ->
+                    case FastFail of
+                        fail ->
+                            ct:fail("Expected ~p / ~p, got ~p / ~p~nat ~p~n",
+                                    [ExpMNode, ExpSNodes, ActMNode, ActSNodes,
+                                    get_stacktrace()]);
+                        nofail ->
+                            failed
+                    end;
                 State  ->
                     ct:pal("Waiting to leave state ~p~n Waiting for ~p~n",
                            [State, {ExpMNode, ExpSNodes}]),
                     timer:sleep(200),
-                    assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes},
+                    assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes},
                                    PermittedIntermediate,
-                                   Attempts - 1)
+                                   Attempts - 1, FastFail)
             end;
         true ->
             put(previous_exp_m_node, ExpMNode),
