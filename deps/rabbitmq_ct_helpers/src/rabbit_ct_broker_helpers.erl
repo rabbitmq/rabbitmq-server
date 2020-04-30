@@ -749,17 +749,13 @@ cluster_nodes(Config, Nodes) ->
       get_node_config(Config, Node) || Node <- Nodes],
     cluster_nodes1(Config, NodeConfig1, NodeConfigs).
 
-cluster_nodes1(Config, NodeConfig1, NodeConfigs) ->
-    Results = handle_nodes_in_parallel(
-                NodeConfigs,
-                fun(NodeConfig2) ->
-                        cluster_nodes(Config, NodeConfig2, NodeConfig1)
-                end),
-    Errors = [Ret || {_, Ret} <- Results, Ret =/= ok],
-    case Errors of
-        [Error | _] -> Error;
-        _           -> Config
-    end.
+cluster_nodes1(Config, NodeConfig1, [NodeConfig2 | Rest]) ->
+    case cluster_nodes(Config, NodeConfig2, NodeConfig1) of
+        ok    -> cluster_nodes1(Config, NodeConfig1, Rest);
+        Error -> Error
+    end;
+cluster_nodes1(Config, _, []) ->
+    Config.
 
 cluster_nodes(Config, NodeConfig1, NodeConfig2) ->
     Nodename1 = ?config(nodename, NodeConfig1),
