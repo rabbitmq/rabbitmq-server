@@ -52,28 +52,8 @@ start_link() ->
 init([]) ->
     {Me, Host} = rabbit_nodes:parts(node()),
     Mod = net_kernel:epmd_module(),
-    init_handle_port_please(Mod:port_please(Me, Host), Mod, Me, Host).
-
-init_handle_port_please(noport, Mod, Me, Host) ->
-    State = #state{mod = Mod,
-                   me = Me,
-                   host = Host,
-                   port = undefined},
-    rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
-    {ok, ensure_timer(State)};
-init_handle_port_please({port, Port, _Version}, Mod, Me, Host) ->
-    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~p", [Port]),
-    State = #state{mod = Mod,
-                   me = Me,
-                   host = Host,
-                   port = Port},
-    {ok, ensure_timer(State)};
-init_handle_port_please({error, Error}, Mod, Me, Host) ->
-    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
-    State = #state{mod = Mod,
-                   me = Me,
-                   host = Host,
-                   port = undefined},
+    {ok, Port} = handle_port_please(init, Mod:port_please(Me, Host), Me, undefined),
+    State = #state{mod = Mod, me = Me, host = Host, port = Port},
     {ok, ensure_timer(State)}.
 
 handle_call(_Request, _From, State) ->
@@ -106,20 +86,28 @@ ensure_timer(State) ->
 check_epmd(State = #state{mod  = Mod,
                           me   = Me,
                           host = Host,
-                          port = Port}) ->
+                          port = Port0}) ->
     rabbit_log:debug("Asked to [re-]register this node (~s@~s) with epmd...", [Me, Host]),
-    Port1 = case Mod:port_please(Me, Host) of
-                noport ->
-                    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n",
-                                       [Me, Port]),
-                    Port;
-                {port, NewPort, _Version} ->
-                    NewPort;
-                {error, Error} ->
-                    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
-                    Port
-            end,
+    {ok, Port1} = handle_port_please(check, Mod:port_please(Me, Host), Me, Port0),
     rabbit_nodes:ensure_epmd(),
     Mod:register_node(Me, Port1),
     rabbit_log:debug("[Re-]registered this node (~s@~s) with epmd at port ~p", [Me, Host, Port1]),
     {ok, State#state{port = Port1}}.
+
+handle_port_please(init, noport, Me, Port) ->
+    rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
+    {ok, Port};
+handle_port_please(check, noport, Me, Port) ->
+    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n", [Me, Port]),
+    {ok, Port};
+handle_port_please(_, closed, _Me, Port) ->
+    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
+    {ok, Port};
+handle_port_please(init, {port, NewPort, _Version}, _Me, _Port) ->
+    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~p", [NewPort]),
+    {ok, NewPort};
+handle_port_please(check, {port, NewPort, _Version}, _Me, _Port) ->
+    {ok, NewPort};
+handle_port_please(_, {error, Error}, _Me, Port) ->
+    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
+    {ok, Port}.
