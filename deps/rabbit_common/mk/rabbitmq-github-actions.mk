@@ -44,6 +44,48 @@ TESTING_JOBS := \
 # common_test testsuite available in the project.
 CT_SUITE_JOB_BASENAME := $(filter %-CT_SUITE.yaml,$(TESTING_JOB_BASENAMES))
 
+MIXED_VERSION_TESTING_WITH := $(shell \
+	git tag -l --sort=v:refname v* | \
+	awk '\
+	BEGIN { \
+	  current_branch = "$(patsubst v%,%,$(base_rmq_ref))"; \
+	  n = split(current_branch, cmps, "."); \
+	  if (n == 3) { \
+	    current_major = cmps[1]; \
+	    current_minor = cmps[2]; \
+	  } \
+	} \
+	/^v[1-9][0-9]*\.[0-9]+\.[0-9]+$$/ { \
+	  version = $$0; \
+	  sub(/^v/, "", version); \
+	  n = split(version, cmps, "."); \
+	  if (n != 3) { \
+	    next; \
+	  } \
+	  major = cmps[1]; \
+	  minor = cmps[2]; \
+	  branch = "v" major "." minor ".x"; \
+	  if (current_major) { \
+	    if (major < current_major || \
+	        (major == current_major && minor == current_minor)) { \
+	      if (!tags[branch]) { \
+	        tags[branch] = $$0; \
+	      } \
+	    } else if (major < current_major || \
+	        (major == current_major && minor < current_minor)) { \
+	      tags[branch] = $$0; \
+	    } \
+	  } else { \
+	    tags[branch] = $$0; \
+	  } \
+	} \
+	END { \
+	  for (branch in tags) { \
+	    print tags[branch]; \
+	  } \
+	} \
+	')
+
 WORKFLOWS := $(TESTING_WORKFLOWS)
 
 github-actions: $(WORKFLOWS)
@@ -55,8 +97,8 @@ github-actions: $(WORKFLOWS)
 # The actual recipe which creates the workflow.
 #
 # There is a condition on the input file name: if it is `*-CT_SUITE.yaml` the
-# file will appended once per common_test testsuite. The name of the testsuite
-# is replaced.
+# file will be appended once per common_test testsuite. The name of the
+# testsuite is replaced.
 #
 # For all other files, they are appended once in total. There is a special
 # handling of lines containing `$(CT_SUITES)`: the line is duplicated for each
@@ -64,6 +106,13 @@ github-actions: $(WORKFLOWS)
 define test_workflow
 
 .PHONY: $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml
+
+ifeq ($(1),$$(firstword $$(ERLANG_VERSIONS)))
+$(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml: ERLANG_VERSION_IS = oldest
+else ifeq ($(1),$$(lastword $$(ERLANG_VERSIONS)))
+$(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml: ERLANG_VERSION_IS = latest
+endif
+
 $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	$$(gen_verbose) mkdir -p "$$(dir $$@)"
 	$$(verbose) :> "$$@"
@@ -73,20 +122,24 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	$$(foreach ct_suite,$$(sort $$(CT_SUITES)),\
 	sed -E \
 	  -e 's/\$$$$\(ERLANG_VERSION\)/$(1)/g' \
+	  -e 's/\$$$$\(ERLANG_VERSION_IS\)/$$(ERLANG_VERSION_IS)/g' \
 	  -e 's/\$$$$\(ELIXIR_VERSION\)/$(ELIXIR_VERSION)/g' \
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
 	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
+	  -e 's/\$$$$\(MIXED_VERSION_TESTING_WITH\)/$(MIXED_VERSION_TESTING_WITH)/g' \
 	  -e 's/\$$$$\(CT_SUITE\)/$$(ct_suite)/g' \
 	  < "$$(job)" >> "$$@";\
 	)\
 	,\
 	sed -E \
 	  -e 's/\$$$$\(ERLANG_VERSION\)/$(1)/g' \
+	  -e 's/\$$$$\(ERLANG_VERSION_IS\)/$$(ERLANG_VERSION_IS)/g' \
 	  -e 's/\$$$$\(ELIXIR_VERSION\)/$(ELIXIR_VERSION)/g' \
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
 	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
+	  -e 's/\$$$$\(MIXED_VERSION_TESTING_WITH\)/$(MIXED_VERSION_TESTING_WITH)/g' \
 	  < "$$(job)" | \
 	awk \
 	  '\

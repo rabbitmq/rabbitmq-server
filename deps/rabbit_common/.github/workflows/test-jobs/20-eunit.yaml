@@ -1,7 +1,8 @@
-  ct-$(CT_SUITE):
+  # vim:sw=2:et:
+  eunit:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
-    name: ct-$(CT_SUITE)
+    name: eunit
     runs-on: ubuntu-18.04
     steps:
       - name: CHECKOUT REPOSITORY
@@ -20,17 +21,11 @@
           key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
       - name: RUN TESTS
         run: |
-          branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
-          make ct-$(CT_SUITE) base_rmq_ref=$(base_rmq_ref) current_rmq_ref=$branch_or_tag_name FULL=
-      - name: ON FAILURE ARCHIVE TESTS LOGS
-        if: failure()
-        run: |
-          make ct-logs-archive
-      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-        # https://github.com/marketplace/actions/upload-artifact
-        uses: actions/upload-artifact@v2-preview
-        if: failure()
-        with:
-          name: ct-$(CT_SUITE)-logs
-          path: "*-ct-logs-*.tar.xz"
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          make eunit \
+            base_rmq_ref=$(base_rmq_ref) \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1

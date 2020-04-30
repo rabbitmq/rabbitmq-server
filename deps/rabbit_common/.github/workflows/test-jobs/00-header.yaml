@@ -1,4 +1,5 @@
+# vim:sw=2:et:
 # https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow
-name: "Test: Erlang/OTP v$(ERLANG_VERSION)"
+name: "Test - Erlang $(ERLANG_VERSION)"
 on: push
 jobs:
