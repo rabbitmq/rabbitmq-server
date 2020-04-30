@@ -1,3 +1,6 @@
+[![OTP v21.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-management/Test%20-%20Erlang%2021.3?label=Erlang%2021.3)](https://github.com/rabbitmq/rabbitmq-management/actions?query=workflow%3A%22Test+-+Erlang+21.3%22)
+[![OTP v22.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-management/Test%20-%20Erlang%2022.3?label=Erlang%2022.3)](https://github.com/rabbitmq/rabbitmq-management/actions?query=workflow%3A%22Test+-+Erlang+22.3%22)
+
 # RabbitMQ Management Plugin
 
 This plugin provides a management UI and HTTP API for RabbitMQ.
