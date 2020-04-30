@@ -416,7 +416,9 @@ wrap_ap_value(V) when is_integer(V) ->
 wrap_ap_value(V) when is_binary(V) ->
     utf8(V);
 wrap_ap_value(V) when is_list(V) ->
-    utf8(list_to_binary(V)).
+    utf8(list_to_binary(V));
+wrap_ap_value(V) when is_atom(V) ->
+    utf8(atom_to_list(V)).
 
 
 %% LOCAL
