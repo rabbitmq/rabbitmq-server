@@ -1,5 +1,5 @@
-[![OTP v21.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/OTP%20v21.3?label=OTP%20v21.3)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22OTP+v21.3%22)
-[![OTP v22.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/OTP%20v22.3?label=OTP%20v22.3)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22OTP+v22.3%22)
+[![OTP v21.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/Test%20-%20Erlang%2021.3?label=Erlang%2021.3)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22Test+-+Erlang+21.3%22)
+[![OTP v22.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/Test%20-%20Erlang%2022.3?label=Erlang%2022.3)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22Test+-+Erlang+22.3%22)
 
 # RabbitMQ Server
 
