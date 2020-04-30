@@ -23,7 +23,12 @@
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
-          make ct-$(CT_SUITE) base_rmq_ref=$(base_rmq_ref) current_rmq_ref=$branch_or_tag_name FULL=
+          make ct-$(CT_SUITE) \
+            base_rmq_ref=$(base_rmq_ref) \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
         run: |
