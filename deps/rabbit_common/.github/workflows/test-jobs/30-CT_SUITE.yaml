@@ -29,6 +29,30 @@
             FULL= \
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
+      - name: CACHE SECONDARY UMBRELLAS
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        uses: actions/cache@v1
+        with:
+          path: umbrellas
+          key: git-${{ github.sha }}_secondary_umbrellas
+      - name: RUN TESTS [mixed-versions]
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        run: |
+          set -x
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d $umbrella
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-$(CT_SUITE) \
+              base_rmq_ref=$(base_rmq_ref) \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
       - name: ON FAILURE ARCHIVE TESTS LOGS
         if: failure()
         run: |
