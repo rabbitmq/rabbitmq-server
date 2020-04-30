@@ -19,9 +19,6 @@
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
           make check-rabbitmq-components.mk base_rmq_ref=$(base_rmq_ref) current_rmq_ref=$branch_or_tag_name
-      - name: CHECK SCRIPTS
-        run: |
-          make bats base_rmq_ref=$(base_rmq_ref) current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
       # https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows
       - name: CACHE DEPS
         uses: actions/cache@v1
