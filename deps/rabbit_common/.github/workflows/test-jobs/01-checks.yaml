@@ -1,3 +1,4 @@
+  # vim:sw=2:et:
   checks:
     name: checks
     runs-on: ubuntu-18.04
