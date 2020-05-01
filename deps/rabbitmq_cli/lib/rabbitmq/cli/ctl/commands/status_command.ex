@@ -76,14 +76,29 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
     m = result_map(result)
 
+    product_name_section = case m do
+      %{:product_name => product_name} when product_name != "" ->
+        ["Product name: #{product_name}"]
+      _ ->
+        []
+    end
+    product_version_section = case m do
+      %{:product_version => product_version} when product_version != "" ->
+        ["Product version: #{product_version}"]
+      _ ->
+        []
+    end
+
     runtime_section = [
       "#{bright("Runtime")}\n",
       "OS PID: #{m[:pid]}",
       "OS: #{m[:os]}",
       # TODO: format
       "Uptime (seconds): #{m[:uptime]}",
-      "Product name: #{m[:product_name]}",
-      "Product version: #{m[:product_version]}",
+    ] ++
+    product_name_section ++
+    product_version_section ++
+    [
       "RabbitMQ version: #{m[:rabbitmq_version]}",
       "Node name: #{node_name}",
       "Erlang configuration: #{m[:erlang_version]}",
@@ -196,8 +211,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     %{
       os: os_name(Keyword.get(result, :os)),
       pid: Keyword.get(result, :pid),
-      product_name: Keyword.get(result, :product_name, "RabbitMQ") |> to_string,
-      product_version: Keyword.get(result, :product_version, Keyword.get(result, :rabbitmq_version)) |> to_string,
+      product_name: Keyword.get(result, :product_name) |> to_string,
+      product_version: Keyword.get(result, :product_version) |> to_string,
       rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
       erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
       uptime: Keyword.get(result, :uptime),
