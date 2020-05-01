@@ -1,7 +1,11 @@
 # vim:sw=2:et:
 # https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow
 name: "Test - Erlang 21.3"
-on: push
+on:
+  push:
+  repository_dispatch:
+    types:
+      - new-commit-to-dep-release-branch
 jobs:
   # vim:sw=2:et:
   checks:
