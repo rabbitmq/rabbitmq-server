@@ -411,6 +411,10 @@ set_message_annotations(
     Anns1 = #'v1_0.message_annotations'{content = maps:to_list(Anns)},
     Msg#amqp10_msg{message_annotations = Anns1}.
 
+wrap_ap_value(true) ->
+    {boolean, true};
+wrap_ap_value(false) ->
+    {boolean, false};
 wrap_ap_value(V) when is_integer(V) ->
     {uint, V};
 wrap_ap_value(V) when is_binary(V) ->
