@@ -86,7 +86,8 @@ set_default_config() ->
     Config = [
               {ra,
                [
-                {wal_max_size_bytes, 536870912} %% 5 * 2 ^ 20
+                {wal_max_size_bytes, 536870912}, %% 5 * 2 ^ 20
+                {wal_max_batch_size, 4096}
                ]},
               {sysmon_handler,
                [{process_limit, 100},
