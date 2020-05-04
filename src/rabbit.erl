@@ -33,6 +33,8 @@
 -export([product_info/0,
          product_name/0,
          product_version/0,
+         base_product_name/0,
+         base_product_version/0,
          motd_file/0,
          motd/0]).
 -export([log_locations/0, config_files/0]). %% for testing and mgmt-agent
@@ -670,7 +672,7 @@ maybe_print_boot_progress(true, IterationsLeft) ->
                {memory, any()}].
 
 status() ->
-    Version = product_version(),
+    Version = base_product_version(),
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
@@ -717,7 +719,16 @@ status() ->
                      []
              end,
     S7 = [{totals, Totals}],
-    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7.
+    S8 = lists:filter(
+           fun
+               ({product_base_name, _}) -> true;
+               ({product_base_version, _}) -> true;
+               ({product_name, _}) -> true;
+               ({product_version, _}) -> true;
+               (_) -> false
+           end,
+           maps:to_list(product_info())),
+    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7 ++ S8.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
@@ -823,9 +834,20 @@ start(normal, []) ->
     try
         run_prelaunch_second_phase(),
 
-        rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
-                        [product_name(), product_version(), rabbit_misc:otp_release(),
-                         ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
+        ProductInfo = product_info(),
+        case ProductInfo of
+            #{product_overridden := true,
+              product_base_name := BaseName,
+              product_base_version := BaseVersion} ->
+                rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n Based on ~s ~s~n ~s~n ~s~n",
+                                [product_name(), product_version(), rabbit_misc:otp_release(),
+                                 BaseName, BaseVersion,
+                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]);
+            _ ->
+                rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
+                                [product_name(), product_version(), rabbit_misc:otp_release(),
+                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE])
+        end,
         log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
 
@@ -1274,17 +1296,25 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
 -spec product_name() -> string().
 
 product_name() ->
-    #{name := ProductName} = product_info(),
-    ProductName.
+    case product_info() of
+        #{product_name := ProductName}   -> ProductName;
+        #{product_base_name := BaseName} -> BaseName
+    end.
 
 -spec product_version() -> string().
 
 product_version() ->
-    #{version := ProductVersion} = product_info(),
-    ProductVersion.
+    case product_info() of
+        #{product_version := ProductVersion}   -> ProductVersion;
+        #{product_base_version := BaseVersion} -> BaseVersion
+    end.
 
--spec product_info() -> #{name := string(),
-                           version := string()}.
+-spec product_info() -> #{product_base_name := string(),
+                          product_base_version := string(),
+                          product_overridden := boolean(),
+                          product_name => string(),
+                          product_version => string(),
+                          otp_release := string()}.
 
 product_info() ->
     PTKey = {?MODULE, product},
@@ -1294,37 +1324,54 @@ product_info() ->
         persistent_term:get(PTKey)
     catch
         error:badarg ->
-            NameFromEnv = os:getenv("RABBITMQ_PRODUCT_NAME"),
-            VersionFromEnv = os:getenv("RABBITMQ_PRODUCT_VERSION"),
+            BaseName = base_product_name(),
+            BaseVersion = base_product_version(),
+            Info0 = #{product_base_name => BaseName,
+                      product_base_version => BaseVersion,
+                      otp_release => rabbit_misc:otp_release()},
 
-            Info =
-            if
-                NameFromEnv =/= false andalso
-                VersionFromEnv =/= false ->
-                    #{name => NameFromEnv,
-                      version => VersionFromEnv};
-                true ->
-                    Name = case NameFromEnv of
-                               false ->
-                                   string_from_app_env(
-                                     product_name,
-                                     base_product_name());
-                               _ ->
-                                   NameFromEnv
-                           end,
-                    Version = case VersionFromEnv of
-                                  false ->
-                                      string_from_app_env(
-                                        product_version,
-                                        base_product_version());
-                                  _ ->
-                                      VersionFromEnv
-                              end,
-                    #{name => Name,
-                      version => Version}
+            {NameFromEnv, VersionFromEnv} =
+            case rabbit_env:get_context() of
+                #{product_name := NFE,
+                  product_version := VFE} -> {NFE, VFE};
+                _                         -> {undefined, undefined}
             end,
-            persistent_term:put(PTKey, Info),
-            Info
+
+            Info1 = case NameFromEnv of
+                        undefined ->
+                            NameFromApp = string_from_app_env(
+                                            product_name,
+                                            undefined),
+                            case NameFromApp of
+                                undefined ->
+                                    Info0;
+                                _ ->
+                                    Info0#{product_name => NameFromApp,
+                                           product_overridden => true}
+                            end;
+                        _ ->
+                            Info0#{product_name => NameFromEnv,
+                                   product_overridden => true}
+                    end,
+
+            Info2 = case VersionFromEnv of
+                        undefined ->
+                            VersionFromApp = string_from_app_env(
+                                               product_version,
+                                               undefined),
+                            case VersionFromApp of
+                                undefined ->
+                                    Info1;
+                                _ ->
+                                    Info1#{product_version => VersionFromApp,
+                                           product_overridden => true}
+                            end;
+                        _ ->
+                            Info1#{product_version => VersionFromEnv,
+                                   product_overridden => true}
+                    end,
+            persistent_term:put(PTKey, Info2),
+            Info2
     end.
 
 string_from_app_env(Key, Default) ->
@@ -1359,21 +1406,18 @@ motd_file() ->
     %%   1. The environment variable;
     %%   2. The `motd_file` configuration parameter;
     %%   3. The default value.
-    case os:getenv("RABBITMQ_MOTD_FILE") of
-        false ->
-            string_from_app_env(motd_file, default_motd_file());
-        Val ->
-            Val
-    end.
-
-default_motd_file() ->
-    EnabledPluginsFile = rabbit_plugins:enabled_plugins_file(),
-    ConfigDir = filename:dirname(EnabledPluginsFile),
-    case os:type() of
-        {unix, _} ->
-            filename:join(ConfigDir, "motd");
-        {win32, _} ->
-            filename:join(ConfigDir, "motd.txt")
+    Context = rabbit_env:get_context(),
+    case Context of
+        #{motd_file := File,
+          var_origins := #{motd_file := environment}}
+          when File =/= undefined ->
+            File;
+        _ ->
+            Default = case Context of
+                          #{motd_file := File} -> File;
+                          _                    -> undefined
+                      end,
+            string_from_app_env(motd_file, Default)
     end.
 
 motd() ->
