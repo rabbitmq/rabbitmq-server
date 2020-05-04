@@ -643,6 +643,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      true -> ["RABBITMQ_KEEP_PID_FILE_ON_EXIT=yes" | ExtraArgs2];
                      _    -> ExtraArgs2
                  end,
+    ExtraArgs4 = case WithPlugins of
+                     false -> ExtraArgs3;
+                     _     -> ["NOBUILD=1" | ExtraArgs3]
+                 end,
     ExtraArgs = case UseSecondaryUmbrella of
                     true ->
                         DepsDir = ?config(erlang_mk_depsdir, Config),
@@ -673,9 +677,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                          {"RABBITMQ_SERVER=~s/rabbitmq-server", [SecScriptsDir]},
                          {"RABBITMQCTL=~s/rabbitmqctl", [SecScriptsDir]},
                          {"RABBITMQ_PLUGINS=~s/rabbitmq-plugins", [SecScriptsDir]}
-                         | ExtraArgs3];
+                         | ExtraArgs4];
                     false ->
-                        ExtraArgs3
+                        ExtraArgs4
                 end,
     MakeVars = [
       {"RABBITMQ_NODENAME=~s", [Nodename]},
@@ -686,8 +690,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24",
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
-      {"TEST_TMPDIR=~s", [PrivDir]},
-      "NOBUILD=1"
+      {"TEST_TMPDIR=~s", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
     case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
