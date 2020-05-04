@@ -1,0 +1,56 @@
+# vim:sw=2:et:
+
+os: linux
+dist: xenial
+language: elixir
+notifications:
+  email:
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
+addons:
+  apt:
+    packages:
+      - awscli
+cache:
+  apt: true
+env:
+  global:
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=v3.8.x
+
+jobs:
+  include:
+    - elixir: '1.8'
+      otp_release: '21.3'
+    - elixir: '1.10'
+      otp_release: '22.2'
+
+install:
+  # This project being an Erlang one (we just set language to Elixir
+  # to ensure it is installed), we don't want Travis to run mix(1)
+  # automatically as it will break.
+  - mix local.rebar --force
+
+script:
+  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+  # the appropriate branch for dependencies.
+  - make
+    DEPS_DIR=$PWD/..
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - |
+    git clone \
+      --branch "$base_rmq_ref" \
+      --depth 1 \
+      https://github.com/rabbitmq/rabbitmq-server-release.git \
+      ../rabbitmq_server_release
+    make start-background-broker -C ../rabbitmq_server_release \
+      DEPS_DIR=$PWD/.. \
+      PLUGINS='rabbitmq_federation rabbitmq_stomp' \
+      PROJECT_VERSION=3.9.0 \
+      current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make tests
+    DEPS_DIR=$PWD/..
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
