@@ -1406,21 +1406,18 @@ motd_file() ->
     %%   1. The environment variable;
     %%   2. The `motd_file` configuration parameter;
     %%   3. The default value.
-    case os:getenv("RABBITMQ_MOTD_FILE") of
-        false ->
-            string_from_app_env(motd_file, default_motd_file());
-        Val ->
-            Val
-    end.
-
-default_motd_file() ->
-    EnabledPluginsFile = rabbit_plugins:enabled_plugins_file(),
-    ConfigDir = filename:dirname(EnabledPluginsFile),
-    case os:type() of
-        {unix, _} ->
-            filename:join(ConfigDir, "motd");
-        {win32, _} ->
-            filename:join(ConfigDir, "motd.txt")
+    Context = rabbit_env:get_context(),
+    case Context of
+        #{motd_file := File,
+          var_origins := #{motd_file := environment}}
+          when File =/= undefined ->
+            File;
+        _ ->
+            Default = case Context of
+                          #{motd_file := File} -> File;
+                          _                    -> undefined
+                      end,
+            string_from_app_env(motd_file, Default)
     end.
 
 motd() ->
