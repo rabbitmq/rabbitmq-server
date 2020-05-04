@@ -631,8 +631,13 @@ function setup_global_vars() {
       'User ' + (user_administrator ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
     );
 
+    var product = overview.rabbitmq_version;
+    if (overview.product_name && overview.product_version) {
+        product = overview.product_name + ' ' + overview.product_version;
+    }
+
     $('#versions').html(
-      '<abbr title="Available exchange types: ' + exchange_types.join(", ") + '">' + fmt_escape_html(overview.rabbitmq_version) + '</abbr>' +
+      '<abbr title="Available exchange types: ' + exchange_types.join(", ") + '">' + fmt_escape_html(product) + '</abbr>' +
       '<abbr title="' + fmt_escape_html(overview.erlang_full_version) + '">Erlang ' + fmt_escape_html(overview.erlang_version) + '</abbr>'
     );
     nodes_interesting = false;
