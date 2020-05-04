@@ -67,8 +67,8 @@ all_definitions(ReqData, Context) ->
     Bs = [B || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                export_binding(B, QNames)],
     Vsn = rabbit:base_product_version(),
-    #{name := ProductName,
-      version := ProductVersion} = rabbit:product_info(),
+    ProductName = rabbit:product_name(),
+    ProductVersion = rabbit:product_version(),
     rabbit_mgmt_util:reply(
       [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
        {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)},
