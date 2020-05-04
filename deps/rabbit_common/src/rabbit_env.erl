@@ -57,12 +57,15 @@
          "RABBITMQ_LOGS",
          "RABBITMQ_MNESIA_BASE",
          "RABBITMQ_MNESIA_DIR",
+         "RABBITMQ_MOTD_FILE",
          "RABBITMQ_NODE_IP_ADDRESS",
          "RABBITMQ_NODE_PORT",
          "RABBITMQ_NODENAME",
          "RABBITMQ_PID_FILE",
          "RABBITMQ_PLUGINS_DIR",
          "RABBITMQ_PLUGINS_EXPAND_DIR",
+         "RABBITMQ_PRODUCT_NAME",
+         "RABBITMQ_PRODUCT_VERSION",
          "RABBITMQ_QUORUM_DIR",
          "RABBITMQ_UPGRADE_LOG",
          "RABBITMQ_USE_LONGNAME",
@@ -139,7 +142,10 @@ get_context_after_reloading_env(Context) ->
              fun maybe_stop_dist_for_remote_query/1,
              fun amqp_ipaddr/1,
              fun amqp_tcp_port/1,
-             fun erlang_dist_tcp_port/1
+             fun erlang_dist_tcp_port/1,
+             fun product_name/1,
+             fun product_version/1,
+             fun motd_file/1
             ],
 
     run_context_steps(Context, Steps).
@@ -1244,6 +1250,125 @@ output_supports_colors(#{os_type := {unix, _}} = Context) ->
     update_context(Context, output_supports_colors, true, default);
 output_supports_colors(#{os_type := {win32, _}} = Context) ->
     update_context(Context, output_supports_colors, false, default).
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_PRODUCT_NAME
+%%   Override the product name
+%%   Default: unset (i.e. "RabbitMQ")
+%%
+%% RABBITMQ_PRODUCT_VERSION
+%%   Override the product version
+%%   Default: unset (i.e. `rabbit` application version).
+%%
+%% RABBITMQ_MOTD_FILE
+%%   Indicate a filename containing a "message of the day" to add to
+%%   the banners, both the logged and the printed ones.
+%%   Default: (Unix) ${SYS_PREFIX}/etc/rabbitmq/motd
+%%         (Windows) ${RABBITMQ_BASE}\motd.txt
+
+product_name(#{from_remote_node := Remote} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_PRODUCT_NAME") of
+        false when Remote =:= offline ->
+            update_context(Context, product_name, undefined, default);
+        false ->
+            product_name_from_node(Context);
+        Value ->
+            update_context(Context, product_name, Value, environment)
+    end;
+product_name(Context) ->
+    product_name_from_env(Context).
+
+product_name_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_PRODUCT_NAME") of
+        false ->
+            update_context(Context, product_name, undefined, default);
+        Value ->
+            update_context(Context, product_name, Value, environment)
+    end.
+
+product_name_from_node(#{from_remote_node := Remote} = Context) ->
+    Ret = (catch query_remote(Remote, rabbit, product_name, [])),
+    case Ret of
+        {badrpc, nodedown} ->
+            update_context(Context, product_name, undefined, default);
+        {query, _, _} ->
+            update_context(Context, product_name, undefined, default);
+        Value  ->
+            update_context(Context, product_name, Value, remote_node)
+    end.
+
+product_version(#{from_remote_node := Remote} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_PRODUCT_VERSION") of
+        false when Remote =:= offline ->
+            update_context(Context, product_version, undefined, default);
+        false ->
+            product_version_from_node(Context);
+        Value ->
+            update_context(Context, product_version, Value, environment)
+    end;
+product_version(Context) ->
+    product_version_from_env(Context).
+
+product_version_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_PRODUCT_VERSION") of
+        false ->
+            update_context(Context, product_version, undefined, default);
+        Value ->
+            update_context(Context, product_version, Value, environment)
+    end.
+
+product_version_from_node(#{from_remote_node := Remote} = Context) ->
+    Ret = (catch query_remote(Remote, rabbit, product_version, [])),
+    case Ret of
+        {badrpc, _} ->
+            update_context(Context, product_version, undefined, default);
+        {query, _, _} ->
+            update_context(Context, product_version, undefined, default);
+        Value ->
+            update_context(Context, product_version, Value, remote_node)
+    end.
+
+motd_file(#{from_remote_node := Remote} = Context) ->
+    case get_prefixed_env_var("RABBITMQ_MOTD_FILE") of
+        false when Remote =:= offline ->
+            update_context(Context, motd_file, undefined, default);
+        false ->
+            motd_file_from_node(Context);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, motd_file, File, environment)
+    end;
+motd_file(Context) ->
+    motd_file_from_env(Context).
+
+motd_file_from_env(Context) ->
+    case get_prefixed_env_var("RABBITMQ_MOTD_FILE") of
+        false ->
+            File = get_default_motd_file(Context),
+            update_context(Context, motd_file, File, default);
+        Value ->
+            File = normalize_path(Value),
+            update_context(Context, motd_file, File, environment)
+    end.
+
+get_default_motd_file(#{os_type := {unix, _},
+                        config_base_dir := ConfigBaseDir}) ->
+    filename:join(ConfigBaseDir, "motd");
+get_default_motd_file(#{os_type := {win32, _},
+                        config_base_dir := ConfigBaseDir}) ->
+    filename:join(ConfigBaseDir, "motd.txt").
+
+motd_file_from_node(#{from_remote_node := Remote} = Context) ->
+    Ret = (catch query_remote(Remote, rabbit, motd_file, [])),
+    case Ret of
+        {badrpc, _} ->
+            update_context(Context, motd_file, undefined, default);
+        {query, _, _} ->
+            update_context(Context, motd_file, undefined, default);
+        File ->
+            update_context(Context, motd_file, File, remote_node)
+    end.
 
 %% -------------------------------------------------------------------
 %% Loading of rabbitmq-env.conf.
