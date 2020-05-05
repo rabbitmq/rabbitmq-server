@@ -12,7 +12,7 @@ As of 3.7.0, this plugin is distributed with RabbitMQ.
 This plugin provides a way to cache [authentication and authorization backend](https://rabbitmq.com/access-control.html)
 results for a configurable amount of time.
 It's not an independent auth backend but a caching layer for existing backends
-such as the built-in, [LDAP](github.com/rabbitmq/rabbitmq-auth-backend-ldap), or [HTTP](github.com/rabbitmq/rabbitmq-auth-backend-http)
+such as the built-in, [LDAP](https://github.com/rabbitmq/rabbitmq-auth-backend-ldap), or [HTTP](https://github.com/rabbitmq/rabbitmq-auth-backend-http)
 ones.
 
 Cache expiration is currently time-based. It is not very useful with the built-in
