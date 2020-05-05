@@ -74,6 +74,7 @@ init_per_suite(Config) ->
                                       ]).
 
 end_per_suite(Config) ->
+    ?assertNotEqual(os:getenv("HOME"), ?config(priv_dir, Config)),
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
                                              rabbit_ct_broker_helpers:teardown_steps()).
@@ -88,12 +89,14 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(config, Config) ->
-    rabbit_ct_helpers:set_config(Config, {env_home, os:getenv("HOME")});
+init_per_testcase(config_file, Config) ->
+    Home = os:getenv("HOME"),
+    os:putenv("HOME", ?config(priv_dir, Config)),
+    rabbit_ct_helpers:set_config(Config, {env_home, Home});
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(config, Config) ->
+end_per_testcase(config_file, Config) ->
     Home = rabbit_ct_helpers:get_config(Config, env_home),
     os:putenv("HOME", Home);
 end_per_testcase(Testcase, Config) ->
@@ -128,8 +131,6 @@ base_uri(Config) ->
 
 
 config_file(Config) ->
-    PrivDir = ?config(priv_dir, Config),
-    os:putenv("HOME", PrivDir),
     MgmtPort = integer_to_list(http_api_port(Config)),
     {_DefConf, TestConf} = write_test_config(Config),
 
@@ -156,7 +157,6 @@ config_file(Config) ->
     ?assertMatch({ok, _}, run(Config, ["--node", "bad_credentials", "--username", "guest", "--password", "guest", "show", "overview"])),
     %% overrides --username and --password on the command line with incorrect credentials
     ?assertMatch({error, _, _}, run(Config, ["--node", "bad_credentials", "--username", "gu3st", "--password", "guesTTTT", "show", "overview"])).
-    
 
 user(Config) ->
     ?assertMatch({ok, _}, run(Config, ["--user", "guest", "--password", "guest", "show", "overview"])),
