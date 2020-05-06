@@ -59,7 +59,8 @@
          check_RABBITMQ_USE_LOGNAME/1,
          check_value_is_yes/1,
          check_log_process_env/1,
-         check_log_context/1
+         check_log_context/1,
+         check_get_used_env_vars/1
         ]).
 
 all() ->
@@ -97,7 +98,8 @@ all() ->
      check_RABBITMQ_USE_LOGNAME,
      check_value_is_yes,
      check_log_process_env,
-     check_log_context
+     check_log_context,
+     check_get_used_env_vars
     ].
 
 suite() ->
@@ -952,6 +954,17 @@ check_log_process_env(_) ->
 check_log_context(_) ->
     Context = rabbit_env:get_context(),
     ok = rabbit_env:log_context(Context).
+
+check_get_used_env_vars(_) ->
+    os:putenv("RABBITMQ_LOGS", "-"),
+    os:putenv("CONFIG_FILE", "filename"),
+    Vars = rabbit_env:get_used_env_vars(),
+    ?assert(lists:keymember("RABBITMQ_LOGS", 1, Vars)),
+    ?assert(lists:keymember("CONFIG_FILE", 1, Vars)),
+    ?assertNot(lists:keymember("HOME", 1, Vars)),
+    ?assertNot(lists:keymember("PATH", 1, Vars)),
+    os:unsetenv("RABBITMQ_LOGS"),
+    os:unsetenv("CONFIG_FILE").
 
 check_variable(Variable, Key, ValueToSet, Comparison) ->
     os:putenv(Variable, ValueToSet),
