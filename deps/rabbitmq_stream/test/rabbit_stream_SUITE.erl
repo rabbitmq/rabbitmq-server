@@ -75,15 +75,15 @@ test_server(Port) ->
     {ok, S} = gen_tcp:connect("localhost", Port, [{active, false},
         {mode, binary}]),
     test_authenticate(S),
-    Target = <<"target1">>,
-    test_create_target(S, Target),
+    Stream = <<"stream1">>,
+    test_create_stream(S, Stream),
     Body = <<"hello">>,
-    test_publish_confirm(S, Target, Body),
+    test_publish_confirm(S, Stream, Body),
     SubscriptionId = 42,
-    test_subscribe(S, SubscriptionId, Target),
+    test_subscribe(S, SubscriptionId, Stream),
     test_deliver(S, SubscriptionId, Body),
-    test_delete_target(S, Target),
-    test_metadata_update_target_deleted(S, Target),
+    test_delete_stream(S, Stream),
+    test_metadata_update_stream_deleted(S, Stream),
     test_close(S),
     closed = wait_for_socket_close(S, 10),
     ok.
@@ -142,32 +142,32 @@ test_authenticate(S) ->
     {ok, <<10:32, ?COMMAND_OPEN:16, ?VERSION_0:16, 3:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
 
 
-test_create_target(S, Target) ->
-    TargetSize = byte_size(Target),
-    CreateTargetFrame = <<?COMMAND_CREATE_TARGET:16, ?VERSION_0:16, 1:32, TargetSize:16, Target:TargetSize/binary>>,
-    FrameSize = byte_size(CreateTargetFrame),
-    gen_tcp:send(S, <<FrameSize:32, CreateTargetFrame/binary>>),
-    {ok, <<_Size:32, ?COMMAND_CREATE_TARGET:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
+test_create_stream(S, Stream) ->
+    StreamSize = byte_size(Stream),
+    CreateStreamFrame = <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, 1:32, StreamSize:16, Stream:StreamSize/binary>>,
+    FrameSize = byte_size(CreateStreamFrame),
+    gen_tcp:send(S, <<FrameSize:32, CreateStreamFrame/binary>>),
+    {ok, <<_Size:32, ?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
 
-test_delete_target(S, Target) ->
-    TargetSize = byte_size(Target),
-    DeleteTargetFrame = <<?COMMAND_DELETE_TARGET:16, ?VERSION_0:16, 1:32, TargetSize:16, Target:TargetSize/binary>>,
-    FrameSize = byte_size(DeleteTargetFrame),
-    gen_tcp:send(S, <<FrameSize:32, DeleteTargetFrame/binary>>),
+test_delete_stream(S, Stream) ->
+    StreamSize = byte_size(Stream),
+    DeleteStreamFrame = <<?COMMAND_DELETE_STREAM:16, ?VERSION_0:16, 1:32, StreamSize:16, Stream:StreamSize/binary>>,
+    FrameSize = byte_size(DeleteStreamFrame),
+    gen_tcp:send(S, <<FrameSize:32, DeleteStreamFrame/binary>>),
     ResponseFrameSize = 10,
-    {ok, <<ResponseFrameSize:32, ?COMMAND_DELETE_TARGET:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 4 + 10, 5000).
+    {ok, <<ResponseFrameSize:32, ?COMMAND_DELETE_STREAM:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 4 + 10, 5000).
 
-test_publish_confirm(S, Target, Body) ->
+test_publish_confirm(S, Stream, Body) ->
     BodySize = byte_size(Body),
-    TargetSize = byte_size(Target),
-    PublishFrame = <<?COMMAND_PUBLISH:16, ?VERSION_0:16, TargetSize:16, Target:TargetSize/binary, 1:32, 1:64, BodySize:32, Body:BodySize/binary>>,
+    StreamSize = byte_size(Stream),
+    PublishFrame = <<?COMMAND_PUBLISH:16, ?VERSION_0:16, StreamSize:16, Stream:StreamSize/binary, 1:32, 1:64, BodySize:32, Body:BodySize/binary>>,
     FrameSize = byte_size(PublishFrame),
     gen_tcp:send(S, <<FrameSize:32, PublishFrame/binary>>),
     {ok, <<_Size:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16, 1:32, 1:64>>} = gen_tcp:recv(S, 0, 5000).
 
-test_subscribe(S, SubscriptionId, Target) ->
-    TargetSize = byte_size(Target),
-    SubscribeFrame = <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, 1:32, SubscriptionId:32, TargetSize:16, Target:TargetSize/binary, 0:64, 10:16>>,
+test_subscribe(S, SubscriptionId, Stream) ->
+    StreamSize = byte_size(Stream),
+    SubscribeFrame = <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, 1:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary, 0:64, 10:16>>,
     FrameSize = byte_size(SubscribeFrame),
     gen_tcp:send(S, <<FrameSize:32, SubscribeFrame/binary>>),
     Res = gen_tcp:recv(S, 0, 5000),
@@ -179,9 +179,9 @@ test_deliver(S, SubscriptionId, Body) ->
     <<48:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:32, 5:4/unsigned, 0:4/unsigned, 1:16, 1:32, _Epoch:64, 0:64, _Crc:32, _DataLength:32,
         0:1, BodySize:31/unsigned, Body/binary>> = Frame.
 
-test_metadata_update_target_deleted(S, Target) ->
-    TargetSize = byte_size(Target),
-    {ok, <<15:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16, ?RESPONSE_CODE_TARGET_DELETED:16, TargetSize:16, Target/binary>>} = gen_tcp:recv(S, 0, 5000).
+test_metadata_update_stream_deleted(S, Stream) ->
+    StreamSize = byte_size(Stream),
+    {ok, <<15:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16, ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>} = gen_tcp:recv(S, 0, 5000).
 
 test_close(S) ->
     CloseReason = <<"OK">>,
