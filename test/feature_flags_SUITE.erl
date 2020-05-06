@@ -29,7 +29,8 @@
          init_per_testcase/2,
          end_per_testcase/2,
 
-         registry/1,
+         registry_general_usage/1,
+         registry_concurrent_reloads/1,
          enable_feature_flag_in_a_healthy_situation/1,
          enable_unsupported_feature_flag_in_a_healthy_situation/1,
          enable_feature_flag_when_ff_file_is_unwritable/1,
@@ -63,7 +64,8 @@ groups() ->
     [
      {registry, [],
       [
-       registry
+       registry_general_usage,
+       registry_concurrent_reloads
       ]},
      {enabling_on_single_node, [],
       [
@@ -103,8 +105,8 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config, [
-        fun rabbit_ct_broker_helpers:enable_dist_proxy_manager/1
-      ]).
+      fun rabbit_ct_broker_helpers:configure_dist_proxy/1
+    ]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -116,8 +118,7 @@ init_per_group(enabling_on_single_node, Config) ->
 init_per_group(enabling_in_cluster, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{rmq_nodes_count, 5},
-       {rmq_nodes_clustered, false}]);
+      [{rmq_nodes_count, 5}]);
 init_per_group(clustering, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
@@ -143,6 +144,7 @@ init_per_testcase(Testcase, Config) ->
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     case ?config(tc_group_properties, Config) of
         [{name, registry} | _] ->
+            application:set_env(lager, colored, true),
             application:set_env(
               lager,
               handlers, [{lager_console_backend, [{level, debug}]}]),
@@ -213,9 +215,7 @@ init_per_testcase(Testcase, Config) ->
             Config3 = rabbit_ct_helpers:run_steps(
                         Config2,
                         rabbit_ct_broker_helpers:setup_steps() ++
-                        rabbit_ct_client_helpers:setup_steps() ++
-                        [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
-                         fun rabbit_ct_broker_helpers:cluster_nodes/1]),
+                        rabbit_ct_client_helpers:setup_steps()),
             case Config3 of
                 {skip, _} ->
                     Config3;
@@ -253,7 +253,7 @@ end_per_testcase(Testcase, Config) ->
 -define(list_ff(Which),
         lists:sort(maps:keys(rabbit_ff_registry:list(Which)))).
 
-registry(_Config) ->
+registry_general_usage(_Config) ->
     %% At first, the registry must be uninitialized.
     ?assertNot(rabbit_ff_registry:is_registry_initialized()),
 
@@ -263,7 +263,8 @@ registry(_Config) ->
                      ff_b =>
                      #{desc      => "Feature flag B",
                        stability => stable}},
-    rabbit_feature_flags:inject_test_feature_flags(feature_flags_to_app_attrs(FeatureFlags)),
+    rabbit_feature_flags:inject_test_feature_flags(
+      feature_flags_to_app_attrs(FeatureFlags)),
 
     %% After initialization, it must know about the feature flags
     %% declared in this testsuite. They must be disabled however.
@@ -376,6 +377,112 @@ registry(_Config) ->
     ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
     ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
     ?assertNot(rabbit_ff_registry:is_enabled(ff_d)).
+
+registry_concurrent_reloads(_Config) ->
+    case rabbit_ff_registry:is_registry_initialized() of
+        true  -> ok;
+        false -> rabbit_feature_flags:initialize_registry()
+    end,
+    ?assert(rabbit_ff_registry:is_registry_initialized()),
+
+    Parent = self(),
+
+    MakeName = fun(I) ->
+                       list_to_atom(rabbit_misc:format("ff_~2..0b", [I]))
+               end,
+
+    ProcIs = lists:seq(1, 10),
+    Fun = fun(I) ->
+                  %% Each process will declare its own feature flag to
+                  %% make sure that each generated registry module is
+                  %% different, and we don't loose previously declared
+                  %% feature flags.
+                  Name = MakeName(I),
+                  Desc = rabbit_misc:format("Feature flag ~b", [I]),
+                  NewFF = #{Name =>
+                            #{desc      => Desc,
+                              stability => stable}},
+                  rabbit_feature_flags:initialize_registry(NewFF),
+                  unlink(Parent)
+          end,
+
+    %% Prepare feature flags which the spammer process should get at
+    %% some point.
+    FeatureFlags = #{ff_a =>
+                     #{desc      => "Feature flag A",
+                       stability => stable},
+                     ff_b =>
+                     #{desc      => "Feature flag B",
+                       stability => stable}},
+    rabbit_feature_flags:inject_test_feature_flags(
+      feature_flags_to_app_attrs(FeatureFlags)),
+
+    %% Spawn a process which heavily uses the registry.
+    FinalFFList = lists:sort(
+                    maps:keys(FeatureFlags) ++
+                    [MakeName(I) || I <- ProcIs]),
+    Spammer = spawn_link(fun() -> registry_spammer([], FinalFFList) end),
+    rabbit_log:info(
+      ?MODULE_STRING ": Started registry spammer (~p)",
+      [self()]),
+
+    %% We acquire the lock from the main process to synchronize the test
+    %% processes we are about to spawn.
+    Lock = rabbit_feature_flags:registry_loading_lock(),
+    ThisNode = [node()],
+    rabbit_log:info(
+      ?MODULE_STRING ": Acquiring registry load lock"),
+    global:set_lock(Lock, ThisNode),
+
+    Pids = [begin
+                Pid = spawn_link(fun() -> Fun(I) end),
+                _ = erlang:monitor(process, Pid),
+                Pid
+            end
+            || I <- ProcIs],
+
+    %% We wait for one second to make sure all processes were started
+    %% and already sleep on the lock. Not really "make sure" because
+    %% we don't have a way to verify this fact, but it must be enough,
+    %% right?
+    timer:sleep(1000),
+    rabbit_log:info(
+      ?MODULE_STRING ": Releasing registry load lock"),
+    global:del_lock(Lock, ThisNode),
+
+    rabbit_log:info(
+      ?MODULE_STRING ": Wait for test processes to finish"),
+    lists:foreach(
+      fun(Pid) ->
+              receive {'DOWN', _, process, Pid, normal} -> ok end
+      end,
+      Pids),
+
+    %% We wait for one more second to make sure the spammer sees
+    %% all added feature flags.
+    timer:sleep(1000),
+
+    unlink(Spammer),
+    exit(Spammer, normal).
+
+registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
+    %% Infinite loop.
+    case ?list_ff(all) of
+        CurrentFeatureNames ->
+            registry_spammer(CurrentFeatureNames, FinalFeatureNames);
+        FinalFeatureNames ->
+            rabbit_log:info(
+              ?MODULE_STRING ": Registry spammer: all feature flags "
+              "appeared"),
+            registry_spammer1(FinalFeatureNames);
+        NewFeatureNames
+          when length(NewFeatureNames) > length(CurrentFeatureNames) ->
+            registry_spammer(NewFeatureNames, FinalFeatureNames)
+    end.
+
+registry_spammer1(FeatureNames) ->
+    ?assertEqual(FeatureNames, ?list_ff(all)),
+    registry_spammer1(FeatureNames).
 
 enable_feature_flag_in_a_healthy_situation(Config) ->
     FeatureName = ff_from_testsuite,
