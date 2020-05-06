@@ -101,8 +101,8 @@ register() ->
 unregister() ->
     gen_server:call(?MODULE, {unregister, self()}).
 
-lookup(Target) ->
-    gen_server:call(?MODULE, {lookup, Target}).
+lookup(Stream) ->
+    gen_server:call(?MODULE, {lookup, Stream}).
 
 replicas_for_current_node() ->
     rabbit_mnesia:cluster_nodes(all) -- [node()].
@@ -167,8 +167,8 @@ handle_call({unregister, Pid}, _From, #state{listeners = Listeners, monitors = M
                         maps:remove(Pid, Monitors)
                 end,
     {reply, ok, State#state{listeners = lists:delete(Pid, Listeners), monitors = Monitors1}};
-handle_call({lookup, Target}, _From, State) ->
-    Res = case read(Target) of
+handle_call({lookup, Stream}, _From, State) ->
+    Res = case read(Stream) of
               [] ->
                   cluster_not_found;
               [#?MODULE{leader_pid = LeaderPid}] ->
