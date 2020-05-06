@@ -695,7 +695,11 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     Cmd = ["start-background-broker" | MakeVars],
     case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
         {ok, _} ->
-            query_node(Config, NodeConfig);
+            NodeConfig1 = rabbit_ct_helpers:set_config(
+                            NodeConfig,
+                            [{effective_srcdir, SrcDir},
+                             {make_vars_for_node_startup, MakeVars}]),
+            query_node(Config, NodeConfig1);
         _ ->
             AbortCmd = ["stop-node" | MakeVars],
             _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
@@ -921,14 +925,9 @@ stop_rabbitmq_nodes(Config) ->
     proplists:delete(rmq_nodes, Config).
 
 stop_rabbitmq_node(Config, NodeConfig) ->
-    SrcDir = ?config(current_srcdir, Config),
-    PrivDir = ?config(priv_dir, Config),
-    Nodename = ?config(nodename, NodeConfig),
-    InitialNodename = ?config(initial_nodename, NodeConfig),
-    Cmd = ["stop-node",
-      {"RABBITMQ_NODENAME=~s", [Nodename]},
-      {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
-      {"TEST_TMPDIR=~s", [PrivDir]}],
+    SrcDir = ?config(effective_srcdir, NodeConfig),
+    MakeVars = ?config(make_vars_for_node_startup, NodeConfig),
+    Cmd = ["stop-node" | MakeVars],
     rabbit_ct_helpers:make(Config, SrcDir, Cmd),
     NodeConfig.
 
