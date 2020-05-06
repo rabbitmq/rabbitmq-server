@@ -53,13 +53,23 @@ register() ->
                           {operator_policy_validator, <<"max-in-memory-length">>},
                           {operator_policy_validator, <<"max-in-memory-bytes">>},
                           {operator_policy_validator, <<"delivery-limit">>},
+                          {operator_policy_validator, <<"ha-mode">>},
+                          {operator_policy_validator, <<"ha-params">>},
+                          {operator_policy_validator, <<"ha-sync-mode">>},
+                          {operator_policy_validator, <<"ha-promote-on-shutdown">>},
+                          {operator_policy_validator, <<"ha-promote-on-failure">>},
                           {policy_merge_strategy, <<"expires">>},
                           {policy_merge_strategy, <<"message-ttl">>},
                           {policy_merge_strategy, <<"max-length">>},
                           {policy_merge_strategy, <<"max-length-bytes">>},
                           {policy_merge_strategy, <<"max-in-memory-length">>},
                           {policy_merge_strategy, <<"max-in-memory-bytes">>},
-                          {policy_merge_strategy, <<"delivery-limit">>}]],
+                          {policy_merge_strategy, <<"delivery-limit">>},
+                          {policy_merge_strategy, <<"ha-mode">>},
+                          {policy_merge_strategy, <<"ha-params">>},
+                          {policy_merge_strategy, <<"ha-sync-mode">>},
+                          {policy_merge_strategy, <<"ha-promote-on-shutdown">>},
+                          {policy_merge_strategy, <<"ha-promote-on-failure">>}]],
     ok.
 
 validate_policy(Terms) ->
@@ -140,7 +150,41 @@ validate_policy0(<<"delivery-limit">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
 validate_policy0(<<"delivery-limit">>, Value) ->
-    {error, "~p is not a valid delivery limit", [Value]}.
+    {error, "~p is not a valid delivery limit", [Value]};
+
+validate_policy0(<<"ha-mode">>, <<"exactly">>) ->
+    ok;
+validate_policy0(<<"ha-mode">>, <<"all">>) ->
+    ok;
+validate_policy0(<<"ha-mode">>, Value) ->
+    {error, "~p is not a valid ha-mode", [Value]};
+
+validate_policy0(<<"ha-params">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"ha-params">>, Value) ->
+    {error, "~p is not valid for ha-params", [Value]};
+
+validate_policy0(<<"ha-sync-mode">>, <<"automatic">>) ->
+    ok;
+validate_policy0(<<"ha-sync-mode">>, <<"manual">>) ->
+    ok;
+validate_policy0(<<"ha-sync-mode">>, Value) ->
+    {error, "~p is not valid for ha-sync-mode", [Value]};
+
+validate_policy0(<<"ha-promote-on-failure">>, <<"always">>) ->
+    ok;
+validate_policy0(<<"ha-promote-on-failure">>, <<"when-synced">>) ->
+    ok;
+validate_policy0(<<"ha-promote-on-failure">>, Value) ->
+    {error, "~p is not valid for ha-promote-on-failure", [Value]};
+
+validate_policy0(<<"ha-promote-on-shutdown">>, <<"always">>) ->
+    ok;
+validate_policy0(<<"ha-promote-on-shutdown">>, <<"when-synced">>) ->
+    ok;
+validate_policy0(<<"ha-promote-on-shutdown">>, Value) ->
+    {error, "~p is not valid for ha-promote-on-shutdown", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);
@@ -148,4 +192,12 @@ merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-length">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal);
-merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal).
+merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal);
+%% For HA Stuff we can't really do a merge as most are string values
+%% I think I just want to override things
+%% Apart from ha-params where it probably makes sense to pick max
+merge_policy_value(<<"ha-mode">>, _Val, OpVal)   -> OpVal;
+merge_policy_value(<<"ha-params">>, Val, OpVal)   -> max(Val, OpVal);
+merge_policy_value(<<"ha-sync-mode">>, _Val, OpVal)   -> OpVal;
+merge_policy_value(<<"ha-promote-on-failure">>, _Val, OpVal)   -> OpVal;
+merge_policy_value(<<"ha-promote-on-shutdown">>, _Val, OpVal)   -> OpVal.
