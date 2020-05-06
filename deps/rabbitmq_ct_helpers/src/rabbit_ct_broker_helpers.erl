@@ -926,7 +926,13 @@ stop_rabbitmq_nodes(Config) ->
 
 stop_rabbitmq_node(Config, NodeConfig) ->
     SrcDir = ?config(effective_srcdir, NodeConfig),
-    MakeVars = ?config(make_vars_for_node_startup, NodeConfig),
+    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
+    Nodename = ?config(nodename, NodeConfig),
+    InitialNodename = ?config(initial_nodename, NodeConfig),
+    MakeVars = InitialMakeVars ++ [
+      {"RABBITMQ_NODENAME=~s", [Nodename]},
+      {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]}
+    ],
     Cmd = ["stop-node" | MakeVars],
     rabbit_ct_helpers:make(Config, SrcDir, Cmd),
     NodeConfig.
