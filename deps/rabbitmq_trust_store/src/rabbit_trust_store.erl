@@ -167,7 +167,7 @@ handle_info(refresh, #state{refresh_interval = Interval,
                             providers_state = ProvidersState} = St) ->
         Config = application:get_all_env(rabbitmq_trust_store),
         try
-            rabbit_log:error("Trust store will attempt to refresh certificates..."),
+            rabbit_log:debug("Trust store will attempt to refresh certificates..."),
             NewProvidersState = refresh_certs(Config, ProvidersState),
             {noreply, St#state{providers_state = NewProvidersState}}
         catch
