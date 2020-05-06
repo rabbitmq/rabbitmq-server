@@ -25,6 +25,7 @@
          get_context_after_logging_init/1,
          get_context_after_reloading_env/1,
          dbg_config/0,
+         get_used_env_vars/0,
          log_process_env/0,
          log_context/1,
          context_to_app_env_vars/1,
@@ -214,6 +215,11 @@ update_context(Context, Key, Value, Origin)
   when ?origin_is_valid(Origin) ->
     Context#{Key => Value,
              var_origins => #{Key => Origin}}.
+
+get_used_env_vars() ->
+    lists:filter(
+      fun({Var, _}) -> var_is_used(Var) end,
+      lists:sort(os:list_env_vars())).
 
 log_process_env() ->
     rabbit_log_prelaunch:debug("Process environment:"),
@@ -1623,6 +1629,8 @@ get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName,
 
 var_is_used("RABBITMQ_" ++ _ = PrefixedVar) ->
     lists:member(PrefixedVar, ?USED_ENV_VARS);
+var_is_used("HOME") ->
+    false;
 var_is_used(Var) ->
     lists:member("RABBITMQ_" ++ Var, ?USED_ENV_VARS).
 
