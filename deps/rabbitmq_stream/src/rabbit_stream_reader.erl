@@ -160,19 +160,18 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                     listen_loop_post_auth(Transport, State2, Configuration)
             end;
         {stream_manager, cluster_deleted, ClusterReference} ->
-            Stream = list_to_binary(ClusterReference),
-            State1 = case clean_state_after_stream_deletion(Stream, State) of
+            State1 = case clean_state_after_stream_deletion(ClusterReference, State) of
                          {cleaned, NewState} ->
-                             StreamSize = byte_size(Stream),
+                             StreamSize = byte_size(ClusterReference),
                              FrameSize = 2 + 2 + 2 + 2 + StreamSize,
                              Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                 ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
+                                 ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, ClusterReference/binary>>]),
                              NewState;
                          {not_cleaned, SameState} ->
                              SameState
                      end,
             listen_loop_post_auth(Transport, State1, Configuration);
-        {osiris_written, _Name, CorrelationIdList} ->
+        {'$gen_cast', {queue_event, _QueueResource, {osiris_written, _QueueResource, CorrelationIdList}}} ->
             CorrelationIdBinaries = [<<CorrelationId:64>> || CorrelationId <- CorrelationIdList],
             CorrelationIdCount = length(CorrelationIdList),
             FrameSize = 2 + 2 + 4 + CorrelationIdCount * 8,
@@ -194,10 +193,10 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                              State
                      end,
             listen_loop_post_auth(Transport, State1, Configuration);
-        {osiris_offset, StreamName, -1} ->
+        {'$gen_cast', {queue_event, #resource{name = StreamName}, {osiris_offset, _QueueResource, -1}}} ->
             error_logger:info_msg("received osiris offset event for ~p with offset ~p~n", [StreamName, -1]),
             listen_loop_post_auth(Transport, State, Configuration);
-        {osiris_offset, StreamName, Offset} when Offset > -1 ->
+        {'$gen_cast', {queue_event, #resource{name = StreamName}, {osiris_offset, _QueueResource, Offset}}} when Offset > -1 ->
             State1 = case maps:get(StreamName, StreamSubscriptions, undefined) of
                          undefined ->
                              error_logger:info_msg("osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)", [StreamName]),
@@ -462,8 +461,6 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
             response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
             {State, Rest};
         {ClusterLeader, State1} ->
-            % offset message uses a list for the stream, so storing this in the state for easier retrieval
-            StreamKey = binary_to_list(Stream),
             case subscription_exists(StreamSubscriptions, SubscriptionId) of
                 true ->
                     response(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
@@ -475,7 +472,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
                         leader = ClusterLeader, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
                         segment = Segment,
                         credit = Credit,
-                        stream = StreamKey
+                        stream = Stream
                     },
                     error_logger:info_msg("registering consumer ~p in ~p~n", [ConsumerState, self()]),
 
@@ -489,10 +486,10 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
 
                     StreamSubscriptions1 =
                         case StreamSubscriptions of
-                            #{StreamKey := SubscriptionIds} ->
-                                StreamSubscriptions#{StreamKey => [SubscriptionId] ++ SubscriptionIds};
+                            #{Stream := SubscriptionIds} ->
+                                StreamSubscriptions#{Stream => [SubscriptionId] ++ SubscriptionIds};
                             _ ->
-                                StreamSubscriptions#{StreamKey => [SubscriptionId]}
+                                StreamSubscriptions#{Stream => [SubscriptionId]}
                         end,
                     {State1#stream_connection{consumers = Consumers1, stream_subscriptions = StreamSubscriptions1}, Rest}
             end
@@ -513,7 +510,7 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers, stre
                     0 ->
                         %% no more subscriptions for this stream
                         {maps:remove(Stream, StreamSubscriptions),
-                            maps:remove(list_to_binary(Stream), Clusters)
+                            maps:remove(Stream, Clusters)
                         };
                     _ ->
                         {StreamSubscriptions#{Stream => SubscriptionsForThisStream1}, Clusters}
@@ -545,20 +542,24 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = St
             error_logger:warning_msg("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
             {State, Rest}
     end;
-handle_frame_post_auth(Transport, State,
+handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
-    case rabbit_stream_manager:create(binary_to_list(Stream)) of
+    case rabbit_stream_manager:create(VirtualHost, Stream, Username) of
         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
             error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
             response_ok(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId),
             {State, Rest};
         {error, reference_already_exists} ->
             response(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
+            {State, Rest};
+        {error, _} ->
+            response(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
             {State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost,
+    user = #user{username = Username}} = State,
     <<?COMMAND_DELETE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
-    case rabbit_stream_manager:delete(binary_to_list(Stream)) of
+    case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
         {ok, deleted} ->
             response_ok(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId),
             State1 = case clean_state_after_stream_deletion(Stream, State) of
@@ -574,6 +575,9 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
             {State1, Rest};
         {error, reference_not_found} ->
             response(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+            {State, Rest};
+        {error, internal_error} ->
+            response(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
             {State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
@@ -677,23 +681,22 @@ extract_stream_list(<<Length:16, Stream:Length/binary, Rest/binary>>, Streams) -
 
 clean_state_after_stream_deletion(Stream, #stream_connection{clusters = Clusters, stream_subscriptions = StreamSubscriptions,
     consumers = Consumers} = State) ->
-    StreamAsList = binary_to_list(Stream),
-    case maps:is_key(StreamAsList, StreamSubscriptions) of
+    case maps:is_key(Stream, StreamSubscriptions) of
         true ->
-            #{StreamAsList := SubscriptionIds} = StreamSubscriptions,
+            #{Stream := SubscriptionIds} = StreamSubscriptions,
             {cleaned, State#stream_connection{
                 clusters = maps:remove(Stream, Clusters),
-                stream_subscriptions = maps:remove(StreamAsList, StreamSubscriptions),
+                stream_subscriptions = maps:remove(Stream, StreamSubscriptions),
                 consumers = maps:without(SubscriptionIds, Consumers)
             }};
         false ->
             {not_cleaned, State}
     end.
 
-lookup_cluster(Stream, #stream_connection{clusters = Clusters} = State) ->
+lookup_cluster(Stream, #stream_connection{clusters = Clusters, virtual_host = VirtualHost} = State) ->
     case maps:get(Stream, Clusters, undefined) of
         undefined ->
-            case lookup_cluster_from_manager(Stream) of
+            case lookup_cluster_from_manager(VirtualHost, Stream) of
                 cluster_not_found ->
                     cluster_not_found;
                 ClusterPid ->
@@ -703,8 +706,8 @@ lookup_cluster(Stream, #stream_connection{clusters = Clusters} = State) ->
             {ClusterPid, State}
     end.
 
-lookup_cluster_from_manager(Stream) ->
-    rabbit_stream_manager:lookup(Stream).
+lookup_cluster_from_manager(VirtualHost, Stream) ->
+    rabbit_stream_manager:lookup(VirtualHost, Stream).
 
 frame(Transport, #stream_connection{socket = S}, Frame) ->
     FrameSize = byte_size(Frame),
