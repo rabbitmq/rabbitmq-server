@@ -127,7 +127,8 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
 	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
-	  -e 's/\$$$$\(MIXED_VERSION_TESTING_WITH\)/$(MIXED_VERSION_TESTING_WITH)/g' \
+	  -e 's/\$$$$\(MIXED_VERSION_TESTING_WITH\)/$(sort $(MIXED_VERSION_TESTING_WITH))/g' \
+	  -e 's/\$$$$\(SECONDARY_UMBRELLAS_CACHE_KEY\)/secondary-umbrellas-$(subst $(space),-,$(sort $(MIXED_VERSION_TESTING_WITH)))-erlang-$(1)-rev1/g' \
 	  -e 's/\$$$$\(CT_SUITE\)/$$(ct_suite)/g' \
 	  < "$$(job)" >> "$$@";\
 	)\
@@ -139,7 +140,8 @@ $(WORKFLOWS_DIR)/test-erlang-otp-$(1).yaml:
 	  -e 's/\$$$$\(PROJECT\)/$(PROJECT)/g' \
 	  -e 's/\$$$$\(RABBITMQ_COMPONENT_REPO_NAME\)/$(RABBITMQ_COMPONENT_REPO_NAME)/g' \
 	  -e 's/\$$$$\(base_rmq_ref\)/$(base_rmq_ref)/g' \
-	  -e 's/\$$$$\(MIXED_VERSION_TESTING_WITH\)/$(MIXED_VERSION_TESTING_WITH)/g' \
+	  -e 's/\$$$$\(MIXED_VERSION_TESTING_WITH\)/$(sort $(MIXED_VERSION_TESTING_WITH))/g' \
+	  -e 's/\$$$$\(SECONDARY_UMBRELLAS_CACHE_KEY\)/secondary-umbrellas-$(subst $(space),-,$(sort $(MIXED_VERSION_TESTING_WITH)))-erlang-$(1)-rev1/g' \
 	  < "$$(job)" | \
 	awk \
 	  '\

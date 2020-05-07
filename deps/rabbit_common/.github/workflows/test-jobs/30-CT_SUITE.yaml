@@ -34,7 +34,7 @@
         uses: actions/cache@v1
         with:
           path: umbrellas
-          key: git-${{ github.sha }}_secondary_umbrellas
+          key: $(SECONDARY_UMBRELLAS_CACHE_KEY)
       - name: RUN TESTS [mixed-versions]
         if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
         run: |
