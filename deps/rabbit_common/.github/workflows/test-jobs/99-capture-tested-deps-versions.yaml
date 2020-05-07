@@ -1,6 +1,7 @@
   # vim:sw=2:et:
   capture-tested-deps-versions:
     needs:
+      - dialyzer
       - eunit
       - ct-$(CT_SUITES)
     runs-on: ubuntu-18.04
