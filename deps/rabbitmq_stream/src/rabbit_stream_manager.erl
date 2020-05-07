@@ -71,9 +71,14 @@ handle_call({delete, VirtualHost, Reference, Username}, _From, #state{listeners 
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
-            {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
-            [Pid ! {stream_manager, cluster_deleted, Reference} || Pid <- Listeners],
-            {reply, {ok, deleted}, State};
+            case is_stream_queue(Q) of
+                true ->
+                    {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
+                    [Pid ! {stream_manager, cluster_deleted, Reference} || Pid <- Listeners],
+                    {reply, {ok, deleted}, State};
+                _ ->
+                    {reply, {error, reference_not_found}, State}
+            end;
         {error, not_found} ->
             {reply, {error, reference_not_found}, State};
         Other ->
@@ -102,8 +107,13 @@ handle_call({lookup, VirtualHost, Stream}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
     Res = case rabbit_amqqueue:lookup(Name) of
               {ok, Q} ->
-                  #{leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
-                  LeaderPid;
+                  case is_stream_queue(Q) of
+                      true ->
+                          #{leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
+                          LeaderPid;
+                      _ ->
+                          cluster_not_found
+                  end;
               _ ->
                   cluster_not_found
           end,
@@ -117,3 +127,11 @@ handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, #state{listeners = Liste
 handle_info(Info, State) ->
     error_logger:info_msg("Received info ~p~n", [Info]),
     {noreply, State}.
+
+is_stream_queue(Q) ->
+    case amqqueue:get_type(Q) of
+        rabbit_stream_queue ->
+            true;
+        _ ->
+            false
+    end.
