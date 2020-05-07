@@ -29,7 +29,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     ListQueuesCommand,
     StatusCommand
   }
-  alias RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand
+  alias RabbitMQ.CLI.Diagnostics.Commands.{
+    CommandLineArgumentsCommand,
+    OsEnvCommand
+  }
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -63,7 +66,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
           run_command(EnvironmentCommand, [], opts),
           run_command(ListConnectionsCommand, info_keys(ListConnectionsCommand), opts),
           run_command(ListChannelsCommand, info_keys(ListChannelsCommand), opts),
-          run_command(CommandLineArgumentsCommand, [], opts)
+          run_command(CommandLineArgumentsCommand, [], opts),
+          run_command(OsEnvCommand, [], opts)
         ]
 
         vhost_data =
@@ -78,7 +82,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
               run_command(ListPermissionsCommand, [], opts),
               run_command(ListPoliciesCommand, [], opts),
               run_command(ListGlobalParametersCommand, [], opts),
-              run_command(ListParametersCommand, [], opts)
+              run_command(ListParametersCommand, [], opts),
+
             ]
           end)
 
