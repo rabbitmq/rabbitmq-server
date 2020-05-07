@@ -71,6 +71,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.OsEnvCommand do
   def description(), do: "Lists RabbitMQ-specific environment variables set on target node"
 
   def banner(_, %{node: node_name}) do
-    "Asking node #{node_name} to report its defined RabbitMQ-specific environment variables..."
+    "Listing RabbitMQ-specific environment variables defined on node #{node_name}..."
   end
 end
