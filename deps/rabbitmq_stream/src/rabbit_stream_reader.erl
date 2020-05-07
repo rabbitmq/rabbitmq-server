@@ -605,6 +605,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
                 <<Acc/binary, StreamLength:16, Stream:StreamLength/binary, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST:16,
                     -1:16, 0:32>>;
             {Cluster, _} ->
+                %% FIXME get replicas and leader from amqqueue record
                 LeaderNode = node(Cluster),
                 #{LeaderNode := NodeInfo} = NodesInfo,
                 {{index, LeaderIndex}, {host, _}, {port, _}} = NodeInfo,
