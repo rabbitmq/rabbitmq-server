@@ -196,8 +196,8 @@ sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
     ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
     {next_state, hdr_sent, State};
-sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 1}},
-               #state{} = State) ->
+sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, C}},
+               #state{} = State) when C==1;C==2;C==3;C==4 ->
     {stop, sasl_auth_failure, State}.
 
 hdr_sent({protocol_header_received, 0, 1, 0, 0}, State) ->
