@@ -810,7 +810,7 @@ assert_slaves0(RPCNode, QName, [{ExpMNode, ExpSNodes}|T], PermittedIntermediate,
         ok ->
             ok;
         failed ->
-            assert_slaves0(RPCNode, QName, T, PermittedIntermediate, Attempts)
+            assert_slaves0(RPCNode, QName, T, PermittedIntermediate, Attempts - 1)
     end;
 assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts) ->
     assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, fail).
