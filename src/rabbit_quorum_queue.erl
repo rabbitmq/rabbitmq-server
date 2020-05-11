@@ -618,7 +618,8 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
                     rabbit_types:ctag(), ExclusiveConsume :: boolean(),
                     Args :: rabbit_framing:amqp_table(), ActingUser :: binary(),
                     any(), rabbit_fifo_client:state()) ->
-    {'ok', rabbit_fifo_client:state()}.
+    {'ok', rabbit_fifo_client:state()} |
+    {error, timeout | term()}.
 
 basic_consume(Q, NoAck, ChPid,
               ConsumerPrefetchCount, ConsumerTag0, ExclusiveConsume, Args,
