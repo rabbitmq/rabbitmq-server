@@ -494,11 +494,7 @@ put_user(User, Version, ActingUser) ->
                       end,
 
     UserExists      = case rabbit_auth_backend_internal:lookup_user(Username) of
-                          %% expected
                           {error, not_found} -> false;
-                          %% shouldn't normally happen but worth guarding
-                          %% against
-                          {error, _}         -> false;
                           _                  -> true
                       end,
 
