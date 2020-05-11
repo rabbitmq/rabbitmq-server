@@ -845,6 +845,11 @@ initialize_registry(NewSupportedFeatureFlags,
         Error   -> Error
     end.
 
+-spec maybe_initialize_registry(feature_flags(),
+                                feature_states(),
+                                boolean()) ->
+    ok | restart | {error, any()} | no_return().
+
 maybe_initialize_registry(NewSupportedFeatureFlags,
                           NewFeatureStates,
                           WrittenToDisk) ->
@@ -975,7 +980,7 @@ does_registry_need_refresh(AllFeatureFlags,
                              feature_flags(),
                              feature_states(),
                              boolean()) ->
-    ok | {error, any()} | no_return().
+    ok | restart | {error, any()} | no_return().
 %% @private
 
 do_initialize_registry(RegistryVsn,
