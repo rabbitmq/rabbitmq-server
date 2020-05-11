@@ -128,13 +128,6 @@ init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
                 rabbit_peer_discovery:maybe_register()
             after
                 rabbit_peer_discovery:unlock(Data)
-            end;
-        Data when is_binary(Data) or is_list(Data) ->
-            try
-                RunPeerDiscovery(),
-                rabbit_peer_discovery:maybe_register()
-            after
-                rabbit_peer_discovery:unlock(Data)
             end
     end.
 

@@ -250,7 +250,7 @@ unregister() ->
       ok
   end.
 
--spec lock() -> ok | {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
+-spec lock() -> {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
 
 lock() ->
     Backend = backend(),
