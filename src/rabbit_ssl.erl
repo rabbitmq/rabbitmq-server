@@ -108,9 +108,10 @@ format_cipher_openssl22(Cipher) ->
 format_cipher_openssl21(Cipher) ->
     ssl_cipher_format:suite_to_str(Cipher).
 
--spec get_highest_protocol_version() -> tls_record:tls_version().
+-spec get_highest_protocol_version() -> tls_record:tls_atom_version().
 get_highest_protocol_version() ->
-    tls_record:highest_protocol_version([]).
+    tls_record:protocol_version(
+      tls_record:highest_protocol_version([])).
 
 %%--------------------------------------------------------------------------
 %% High-level functions used by reader
