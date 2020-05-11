@@ -100,6 +100,43 @@ jobs:
           done
           rm -fr umbrellas/master
   # vim:sw=2:et:
+  dialyzer:
+    name: dialyzer
+    needs: [checks]
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        if: success() && 'oldest' == 'latest'
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        if: success() && 'oldest' == 'latest'
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 21.3
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.8.0
+      - name: CACHE DEPS
+        if: success() && 'oldest' == 'latest'
+        uses: actions/cache@v1
+        with:
+          path: deps
+          key: otp-21.3_git-${{ github.sha }}_deps
+      - name: CACHE DIALYZER PLT
+        if: success() && 'oldest' == 'latest'
+        uses: actions/cache@v1
+        with:
+          path: .rabbit.plt
+          key: plt-rabbit-erlang-21.3-g${{ github.sha }}
+      - name: RUN DIALYZER
+        if: success() && 'oldest' == 'latest'
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          make dialyze \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL=
+  # vim:sw=2:et:
   eunit:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -8920,6 +8957,7 @@ jobs:
   # vim:sw=2:et:
   capture-tested-deps-versions:
     needs:
+      - dialyzer
       - eunit
       - ct-amqqueue_backward_compatibility
       - ct-backing_queue
