@@ -53,19 +53,28 @@
       - name: PREPARE SECONDARY UMBRELLA COPIES
         if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
         run: |
+          # ----------------------------------------------------------
+          # CAUTION:
+          # The same script must be copied to `03-CT_SUITE.yaml`. It is used to
+          # recreate the umbrellas if the cache restore fails.
+          # ----------------------------------------------------------
           set -x
-          if ! test -f umbrellas/.ready; then
-            git config --global advice.detachedHead false
-            # We recreate the directory in case something incomplete was
-            # cached.
-            rm -rf umbrellas
-            mkdir -p umbrellas
-            git clone \
-              https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
-              umbrellas/master
-            make -C umbrellas/master co # To get RabbitMQ components.
-            for version in $(MIXED_VERSION_TESTING_WITH); do
-              umbrella="umbrellas/$version"
+          for version in $(MIXED_VERSION_TESTING_WITH); do
+            umbrella="umbrellas/$version"
+            if ! test -d "$umbrella"  ||
+               ! make -C "$umbrella/deps/$(PROJECT)" test-dist; then
+              rm -rf "$umbrella"
+
+              # Fetch the master Umbrella; the final umbrellas are created from
+              # the master copy.
+              if ! test -d umbrellas/master; then
+                git config --global advice.detachedHead false
+                git clone \
+                  https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
+                  umbrellas/master
+                make -C umbrellas/master co # To get RabbitMQ components.
+              fi
+
               # We copy the master Umbrella and checkout the appropriate tag.
               cp -a umbrellas/master "$umbrella"
               git -C "$umbrella" checkout "$(base_rmq_ref)"
@@ -78,7 +87,6 @@
               make -C "$umbrella" up
               make -C "$umbrella/deps/$(PROJECT)" test-dist
               rm -fr "$umbrella"/deps/*/{.git,test} "$umbrella"/.git
-            done
-            rm -fr umbrellas/master
-            touch umbrellas/.ready
-          fi
+            fi
+          done
+          rm -fr umbrellas/master
