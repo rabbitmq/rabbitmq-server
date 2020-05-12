@@ -37,6 +37,7 @@ all() ->
       join_leave,
       broadcast,
       confirmed_broadcast,
+      member_death,
       receive_in_order,
       unexpected_msg,
       down_in_members_change
@@ -72,6 +73,32 @@ broadcast(_Config) ->
 
 confirmed_broadcast(_Config) ->
     passed = do_broadcast(fun gm:confirmed_broadcast/2).
+
+member_death(_Config) ->
+    passed = with_two_members(
+      fun (Pid, Pid2) ->
+              {ok, Pid3} = gm:start_link(
+                             ?MODULE, ?MODULE, self(),
+                             fun rabbit_misc:execute_mnesia_transaction/1),
+              passed = receive_joined(Pid3, [Pid, Pid2, Pid3],
+                                      timeout_joining_gm_group_3),
+              passed = receive_birth(Pid, Pid3, timeout_waiting_for_birth_3_1),
+              passed = receive_birth(Pid2, Pid3, timeout_waiting_for_birth_3_2),
+
+              unlink(Pid3),
+              exit(Pid3, kill),
+
+              %% Have to do some broadcasts to ensure that all members
+              %% find out about the death.
+              BFun = broadcast_fun(fun gm:confirmed_broadcast/2),
+              passed = BFun(Pid, Pid2),
+              passed = BFun(Pid, Pid2),
+
+              passed = receive_death(Pid, Pid3, timeout_waiting_for_death_3_1),
+              passed = receive_death(Pid2, Pid3, timeout_waiting_for_death_3_2),
+
+              passed
+      end).
 
 receive_in_order(_Config) ->
     passed = with_two_members(
