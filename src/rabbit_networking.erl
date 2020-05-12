@@ -21,7 +21,8 @@
 
 -export([boot/0, start_tcp_listener/2, start_ssl_listener/3,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
-         node_listeners/1, register_connection/1, unregister_connection/1,
+         node_listeners/1, node_client_listeners/1,
+         register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
@@ -296,6 +297,17 @@ active_listeners() ->
 
 node_listeners(Node) ->
     mnesia:dirty_read(rabbit_listener, Node).
+
+-spec node_client_listeners(node()) -> [rabbit_types:listener()].
+
+node_client_listeners(Node) ->
+    case node_listeners(Node) of
+        [] -> [];
+        Xs ->
+            lists:filter(fun (#listener{protocol = clustering}) -> false;
+                             (_) -> true
+                         end, Xs)
+    end.
 
 -spec on_node_down(node()) -> 'ok'.
 
