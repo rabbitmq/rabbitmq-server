@@ -261,6 +261,7 @@ tracked_connection_per_vhost_table_name_for(Node) ->
 
 
 -spec register_connection(rabbit_types:tracked_connection()) -> ok.
+-dialyzer([{nowarn_function, [register_connection/1]}, race_conditions]).
 
 register_connection(#tracked_connection{vhost = VHost, id = ConnId, node = Node} = Conn) when Node =:= node() ->
     TableName = tracked_connection_table_name_for(Node),

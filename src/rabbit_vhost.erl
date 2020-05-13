@@ -366,7 +366,7 @@ update(VHost, Fun) ->
     end.
 
 set_limits(VHost, undefined) ->
-    vhost:set_limits(VHost, undefined);
+    vhost:set_limits(VHost, []);
 set_limits(VHost, Limits) ->
     vhost:set_limits(VHost, Limits).
 

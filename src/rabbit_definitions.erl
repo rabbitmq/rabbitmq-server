@@ -304,7 +304,7 @@ sequential_for_all(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing ~p ~s...", [N, human_readable_category_name(Category)])
+                N -> rabbit_log:info("Importing sequentially ~p ~s...", [N, human_readable_category_name(Category)])
             end,
             [begin
                  %% keys are expected to be atoms
@@ -324,7 +324,7 @@ concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing ~p ~s...", [N, human_readable_category_name(Category)])
+                N -> rabbit_log:info("Importing concurrently ~p ~s...", [N, human_readable_category_name(Category)])
             end,
             WorkPoolFun = fun(M) ->
                                   Fun(atomize_keys(M), ActingUser)
@@ -597,24 +597,11 @@ build_filtered_map([Queue|Rest], AccMap0) ->
     {Rec, VHost} = build_queue_data(Queue),
     case rabbit_amqqueue:lookup(Rec) of
         {error, not_found} ->
-            AccMap1 = maps_update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
+            AccMap1 = maps:update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
             build_filtered_map(Rest, AccMap1);
         {ok, _} ->
             build_filtered_map(Rest, AccMap0)
     end.
-
-%% Copy of maps:with_util/3 from Erlang 20.0.1.
-maps_update_with(Key,Fun,Init,Map) when is_function(Fun,1), is_map(Map) ->
-    case maps:find(Key,Map) of
-        {ok,Val} -> maps:update(Key,Fun(Val),Map);
-        error -> maps:put(Key,Init,Map)
-    end;
-maps_update_with(Key,Fun,Init,Map) ->
-    erlang:error(maps_error_type(Map),[Key,Fun,Init,Map]).
-
-%% Copy of maps:error_type/1 from Erlang 20.0.1.
-maps_error_type(M) when is_map(M) -> badarg;
-maps_error_type(V) -> {badmap, V}.
 
 validate_vhost_limit(VHost, AddCount, ok) ->
     WouldExceed = rabbit_vhost_limit:would_exceed_queue_limit(AddCount, VHost),

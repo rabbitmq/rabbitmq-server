@@ -1088,7 +1088,8 @@ list_local_mirrored_classic_names() ->
            is_local_to_node(amqqueue:get_pid(Q), node()),
            is_replicated(Q)].
 
--spec list_local_mirrored_classic_without_synchronised_mirrors() -> [amqqueue:amqqueue()].
+-spec list_local_mirrored_classic_without_synchronised_mirrors() ->
+    [amqqueue:amqqueue()].
 list_local_mirrored_classic_without_synchronised_mirrors() ->
     [ Q || Q <- list(),
          amqqueue:get_state(Q) =/= crashed,
@@ -1097,7 +1098,8 @@ list_local_mirrored_classic_without_synchronised_mirrors() ->
          is_replicated(Q),
          not has_synchronised_mirrors_online(Q)].
 
--spec list_local_mirrored_classic_without_synchronised_mirrors_for_cli() -> [amqqueue:amqqueue()].
+-spec list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
+    [#{binary => any()}].
 list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
     ClassicQs = list_local_mirrored_classic_without_synchronised_mirrors(),
     [begin
