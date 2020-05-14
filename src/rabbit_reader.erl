@@ -1560,14 +1560,10 @@ ssl_info(F, #v1{sock = Sock}) ->
         {error, _}  -> '';
         {ok, Items} ->
             P = proplists:get_value(protocol, Items),
-            CS = proplists:get_value(cipher_suite, Items),
-            %% The first form is R14.
-            %% The second is R13 - the extra term is exportability (by
-            %% inspection, the docs are wrong).
-            case CS of
-                {K, C, H}    -> F({P, {K, C, H}});
-                {K, C, H, _} -> F({P, {K, C, H}})
-            end
+            #{cipher := C,
+              key_exchange := K,
+              mac := H} = proplists:get_value(selected_cipher_suite, Items),
+            F({P, {K, C, H}})
     end.
 
 cert_info(F, #v1{sock = Sock}) ->
@@ -1583,7 +1579,7 @@ maybe_emit_stats(State) ->
 
 emit_stats(State) ->
     [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
-	= infos(?SIMPLE_METRICS, State),
+      = infos(?SIMPLE_METRICS, State),
     Infos = infos(?OTHER_METRICS, State),
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
