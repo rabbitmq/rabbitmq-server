@@ -47,6 +47,7 @@ dep_rabbitmq_auth_backend_amqp        = git_rmq rabbitmq-auth-backend-amqp $(cur
 dep_rabbitmq_auth_backend_cache       = git_rmq rabbitmq-auth-backend-cache $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_http        = git_rmq rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_oauth2      = git_rmq rabbitmq-auth-backend-oauth2 $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_aws                      = git_rmq rabbitmq-aws $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
@@ -132,6 +133,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_auth_backend_cache \
 		      rabbitmq_auth_backend_http \
 		      rabbitmq_auth_backend_ldap \
+		      rabbitmq_auth_backend_oauth2 \
 		      rabbitmq_auth_mechanism_ssl \
 		      rabbitmq_aws \
 		      rabbitmq_boot_steps_visualiser \
