@@ -214,10 +214,11 @@ ssl_info(Sock) ->
         case rabbit_net:ssl_info(Sock) of
             {ok, Infos} ->
                 {_, P} = lists:keyfind(protocol, 1, Infos),
-                case lists:keyfind(cipher_suite, 1, Infos) of
-                    {_,{K, C, H}}    -> {P, K, C, H};
-                    {_,{K, C, H, _}} -> {P, K, C, H}
-                end;
+                #{cipher := C,
+                  key_exchange := K,
+                  mac := H} = proplists:get_value(
+                                selected_cipher_suite, Infos),
+                {P, K, C, H};
             _           ->
                 {unknown, unknown, unknown, unknown}
         end,
