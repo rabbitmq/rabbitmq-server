@@ -1,4 +1,4 @@
-version=3
-
-https://www.rabbitmq.com/releases/rabbitmq-server/v(.*)/rabbitmq-server-(\d.*)\.tar\.gz \
-	debian uupdate
+version=4
+opts="filenamemangle=s%(?:.*?)?v?@PACKAGE@-(\d[\d.]*)\.tar\.xz%@PACKAGE@-$1.tar.xz%" \
+      https://github.com/rabbitmq/@PACKAGE@/releases \
+      (?:.*?/)?v?@PACKAGE@-(\d[\d.]*)\.tar\.xz debian uupdate
