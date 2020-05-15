@@ -34,9 +34,14 @@ readonly erlang_cookie='${erlang_cookie}'
 readonly debian_codename="$${distribution#debian-*}"
 
 case "$erlang_version" in
-  23.*)
+  24.*)
     if test -z "$erlang_git_ref"; then
       erlang_git_ref='master'
+    fi
+    ;;
+  23.*)
+    if test -z "$erlang_git_ref"; then
+      erlang_git_ref='maint-23'
     fi
     ;;
   22.*|21.*|20.*|19.3)
@@ -213,7 +218,7 @@ install_kiex() {
 
 kiex_install_elixir() {
   case "$erlang_version" in
-    22.*|23.*)
+    22.*|23.*|24.*)
       url="https://github.com/elixir-lang/elixir/releases/download/v$elixir_version/Precompiled.zip"
       wget -q -O/tmp/elixir.zip "$url"
 
