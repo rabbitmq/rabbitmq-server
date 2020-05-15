@@ -61,6 +61,7 @@ defmodule OsEnvCommandTest do
   test "run: returns defines RabbitMQ-specific environment variable", context do
     vars = @command.run([], context[:opts])
 
-    assert vars["RABBITMQ_CONFIG_FILE"] != nil
+    # only variables that are prefixed with RABBITMQ are returned
+    assert Enum.any?(vars, fn({k, _v}) -> String.starts_with?(k, "RABBITMQ_") end)
   end
 end
