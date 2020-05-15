@@ -62,6 +62,8 @@ defmodule OsEnvCommandTest do
     vars = @command.run([], context[:opts])
 
     # only variables that are prefixed with RABBITMQ are returned
-    assert Enum.any?(vars, fn({k, _v}) -> String.starts_with?(k, "RABBITMQ_") end)
+    assert Enum.any?(vars, fn({k, _v}) ->
+      String.starts_with?(k, "RABBITMQ_") or String.starts_with?(k, "rabbitmq_")
+    end)
   end
 end
