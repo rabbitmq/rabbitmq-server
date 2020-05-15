@@ -505,7 +505,7 @@ ensure_ssl_certs(Config) ->
             FailIfNoPeerCert = get_config(
                                  Config,
                                  rabbitmq_ct_tls_fail_if_no_peer_cert,
-                                 true),
+                                 true) andalso Verify =/= verify_none,
             Config1 = merge_app_env(Config,
               {rabbit, [
                   {ssl_options, [
