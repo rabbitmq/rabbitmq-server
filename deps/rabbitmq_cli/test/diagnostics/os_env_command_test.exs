@@ -61,7 +61,9 @@ defmodule OsEnvCommandTest do
   test "run: returns defines RabbitMQ-specific environment variable", context do
     vars = @command.run([], context[:opts])
 
-    # only variables that are prefixed with RABBITMQ are returned
+    # Only variables that are used by RABBITMQ are returned.
+    # They can be prefixed with RABBITMQ_ or not, rabbit_env tries both
+    # when filtering env variables down.
     assert Enum.any?(vars, fn({k, _v}) ->
       String.starts_with?(k, "RABBITMQ_") or String.starts_with?(k, "rabbitmq_")
     end)
