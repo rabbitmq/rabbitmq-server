@@ -104,9 +104,9 @@ define PROJECT_ENV
 	    {channel_operation_timeout, 15000},
 
 	    %% see rabbitmq-server#486
-	    {autocluster,
-              [{peer_discovery_backend, rabbit_peer_discovery_classic_config}]
-            },
+	    {autocluster, [
+	        {peer_discovery_backend, rabbit_peer_discovery_classic_config}]
+	    },
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
@@ -127,13 +127,17 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-		%% interval at which the channel can perform periodic actions
+	    %% interval at which the channel can perform periodic actions
 	    {channel_tick_interval, 60000},
 	    %% Default max message size is 128 MB
 	    {max_message_size, 134217728},
 	    %% Socket writer will run GC every 1 GB of outgoing data
-	    {writer_gc_threshold, 1000000000}
-	  ]
+	    {writer_gc_threshold, 1000000000},
+	    {credentials_obfuscation, [
+	        {enabled, true},
+	        {secret, cookie}
+	    ]}
+	]
 endef
 
 # With Erlang.mk default behavior, the value of `$(APPS_DIR)` is always
