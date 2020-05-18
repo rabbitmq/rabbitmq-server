@@ -28,7 +28,7 @@
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, force_connection_event_refresh/1,
-         handshake/2, tcp_host/1]).
+         handshake/2, tcp_host/1, ranch_ref/2]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -184,9 +184,21 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
             {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
             {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
             NumAcceptors, Label],
-    {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-     {tcp_listener_sup, start_link, Args},
-     transient, infinity, supervisor, [tcp_listener_sup]}.
+    #{
+        id => rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
+        start => {tcp_listener_sup, start_link, Args},
+        restart => transient,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [tcp_listener_sup]
+    }.
+
+-spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
+
+%% Returns a reference that identifies a TCP listener in Ranch.
+ranch_ref(IPAddress, Port) ->
+    {acceptor, IPAddress, Port}.
+
 
 -spec start_tcp_listener(
         listener_config(), integer()) -> 'ok' | {'error', term()}.
