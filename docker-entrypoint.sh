@@ -55,7 +55,6 @@ rabbitConfigKeys=(
 	default_pass
 	default_user
 	default_vhost
-	hipe_compile
 	vm_memory_high_watermark
 )
 fileConfigKeys=(
@@ -261,13 +260,13 @@ rabbit_env_config() {
 		local key="$conf"
 		case "$prefix" in
 			ssl) key="ssl_options.$key" ;;
-			management_ssl) key="management.listener.ssl_opts.$key" ;;
+			management_ssl) key="management.ssl.$key" ;;
 		esac
 
 		local val="${!var:-}"
 		local rawVal="$val"
 		case "$conf" in
-			fail_if_no_peer_cert|hipe_compile)
+			fail_if_no_peer_cert)
 				case "${val,,}" in
 					false|no|0|'') rawVal='false' ;;
 					true|yes|1|*) rawVal='true' ;;
@@ -388,7 +387,11 @@ fi
 combinedSsl='/tmp/rabbitmq-ssl/combined.pem'
 if [ "$haveSslConfig" ] && [[ "$1" == rabbitmq* ]] && [ ! -f "$combinedSsl" ]; then
 	# Create combined cert
-	cat "$RABBITMQ_SSL_CERTFILE" "$RABBITMQ_SSL_KEYFILE" > "$combinedSsl"
+	{
+		cat "$RABBITMQ_SSL_CERTFILE"
+		echo # https://github.com/docker-library/rabbitmq/issues/357#issuecomment-517755647
+		cat "$RABBITMQ_SSL_KEYFILE"
+	} > "$combinedSsl"
 	chmod 0400 "$combinedSsl"
 fi
 if [ "$haveSslConfig" ] && [ -f "$combinedSsl" ]; then
