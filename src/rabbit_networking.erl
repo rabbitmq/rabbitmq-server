@@ -180,12 +180,12 @@ tcp_listener_addresses_auto(Port) ->
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
                   Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors, Label) ->
+    Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
+            {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
+            {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
+            NumAcceptors, Label],
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-     {tcp_listener_sup, start_link,
-      [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
-       {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
-       {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
-       NumAcceptors, Label]},
+     {tcp_listener_sup, start_link, Args},
      transient, infinity, supervisor, [tcp_listener_sup]}.
 
 -spec start_tcp_listener(
