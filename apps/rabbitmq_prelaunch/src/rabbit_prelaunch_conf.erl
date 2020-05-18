@@ -67,6 +67,7 @@ setup(Context) ->
                       config_advanced_file => undefined}
             end,
     ok = override_with_hard_coded_critical_config(),
+    ok = set_credentials_obfuscation_secret(),
     rabbit_log_prelaunch:debug(
       "Saving config state to application env: ~p", [State]),
     store_config_state(State).
@@ -367,6 +368,12 @@ apply_app_env_vars(App, [{Var, Value} | Rest]) ->
     apply_app_env_vars(App, Rest);
 apply_app_env_vars(_, []) ->
     ok.
+
+set_credentials_obfuscation_secret() ->
+    CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
+    rabbit_log_prelaunch:debug(
+      "Setting credentials obfuscation secret to erlang cookie: ~p", [CookieBin]),
+    ok = credentials_obfuscation:set_secret(CookieBin).
 
 %% -------------------------------------------------------------------
 %% Config decryption.
