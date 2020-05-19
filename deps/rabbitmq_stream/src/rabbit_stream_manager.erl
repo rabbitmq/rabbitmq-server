@@ -21,7 +21,7 @@
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
--export([start_link/1, create/3, register/0, delete/3, lookup/2, unregister/0]).
+-export([start_link/1, create/4, register/0, delete/3, lookup/2, unregister/0]).
 
 -record(state, {
     configuration, listeners, monitors
@@ -33,8 +33,8 @@ start_link(Conf) ->
 init([Conf]) ->
     {ok, #state{configuration = Conf, listeners = [], monitors = #{}}}.
 
-create(VirtualHost, Reference, Username) ->
-    gen_server:call(?MODULE, {create, VirtualHost, Reference, Username}).
+create(VirtualHost, Reference, Arguments, Username) ->
+    gen_server:call(?MODULE, {create, VirtualHost, Reference, Arguments, Username}).
 
 delete(VirtualHost, Reference, Username) ->
     gen_server:call(?MODULE, {delete, VirtualHost, Reference, Username}).
@@ -48,11 +48,29 @@ unregister() ->
 lookup(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup, VirtualHost, Stream}).
 
-handle_call({create, VirtualHost, Reference, Username}, _From, State) ->
+stream_queue_arguments(Arguments) ->
+    stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}], Arguments).
+
+stream_queue_arguments(ArgumentsAcc, Arguments) when map_size(Arguments) =:= 0 ->
+    ArgumentsAcc;
+stream_queue_arguments(ArgumentsAcc, #{<<"max-length-bytes">> := Value} = Arguments) ->
+    stream_queue_arguments(
+        [{<<"x-max-length-bytes">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
+        maps:remove(<<"max-length-bytes">>, Arguments)
+    );
+stream_queue_arguments(ArgumentsAcc, #{<<"max-segment-size">> := Value} = Arguments) ->
+    stream_queue_arguments(
+        [{<<"x-max-segment-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
+        maps:remove(<<"max-segment-size">>, Arguments)
+    );
+stream_queue_arguments(ArgumentsAcc, _Arguments) ->
+    ArgumentsAcc.
+
+handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
     Q0 = amqqueue:new(
         Name,
-        none, true, false, none, [{<<"x-queue-type">>, longstr, <<"stream">>}],
+        none, true, false, none, stream_queue_arguments(Arguments),
         VirtualHost, #{user => Username}, rabbit_stream_queue
     ),
     try

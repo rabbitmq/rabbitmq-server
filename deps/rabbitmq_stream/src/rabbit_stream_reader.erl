@@ -543,8 +543,10 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = St
             {State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = State,
-    <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
-    case rabbit_stream_manager:create(VirtualHost, Stream, Username) of
+    <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
+    _ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
+    Arguments = parse_arguments(ArgumentsBinary),
+    case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
             error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
             response_ok(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId),
@@ -643,6 +645,17 @@ handle_frame_post_auth(Transport, State, Frame, Rest) ->
         CloseReasonLength:16, CloseReason:CloseReasonLength/binary>>,
     frame(Transport, State, CloseFrame),
     {State#stream_connection{connection_step = close_sent}, Rest}.
+
+parse_arguments(<<>>) ->
+    #{};
+parse_arguments(Arguments) ->
+    parse_arguments(#{}, Arguments).
+
+parse_arguments(Acc, <<>>) ->
+    Acc;
+parse_arguments(Acc, <<KeySize:16,Key:KeySize/binary,ValueSize:16,Value:ValueSize/binary, Rest/binary>>) ->
+    parse_arguments(maps:put(Key, Value, Acc), Rest).
+
 
 handle_frame_post_close(_Transport, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
