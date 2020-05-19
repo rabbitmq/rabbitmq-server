@@ -34,7 +34,7 @@ defmodule AwaitOnlineSynchronizedMirrorsCommandTest do
   end
 
   test "merge_defaults: overrides a timeout" do
-    assert @command.merge_defaults([], %{}) == {[], %{timeout: 120}}
+    assert @command.merge_defaults([], %{}) == {[], %{timeout: 120_000}}
   end
 
   test "validate: accepts no positional arguments" do
