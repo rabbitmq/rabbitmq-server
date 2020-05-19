@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.AwaitOnlineSynchronizedMirrorCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @default_timeout 120
+  @default_timeout 120_000
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
