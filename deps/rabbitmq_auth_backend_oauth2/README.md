@@ -44,6 +44,8 @@ To use this plugin
 1. Client authorize with OAuth 2.0 provider, requesting an `access_token` (using any grant type desired)
 2. Token scope returned by OAuth 2.0 provider must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'")
 3. Client passes the token as password when connecting to a RabbitMQ node. **The username field is ignored**.
+4. The translated permissions are stored as part of the authenticated connection state and used the same
+   way permissions from RabbitMQ's internal database would be used.
 
 
 ## Usage
@@ -103,7 +105,7 @@ VwIDAQAB
 ].
 ```
 
-If you are using a symmetric key, the configuration will look like this:
+If a symmetric key is used, the configuration will look like this:
 
 ```erlang
 [
@@ -119,8 +121,6 @@ If you are using a symmetric key, the configuration will look like this:
   ]},
 ].
 ```
-
-Key signature verification is implemented by the [UAA JWT library](https://github.com/rabbitmq/uaa_jwt).
 
 ### Resource Server ID and Scope Prefixes
 
@@ -156,7 +156,7 @@ There can be multiple wildcards in a pattern:
  * `start*middle*end`
  * `*before*after*`
 
-**If you want to use special characters like `*`, `%`, or `/` in a wildcard pattern,
+**To use special characters like `*`, `%`, or `/` in a wildcard pattern,
 the pattern must be [URL-encoded](https://en.wikipedia.org/wiki/Percent-encoding).**
 
 These are the typical permissions examples:
