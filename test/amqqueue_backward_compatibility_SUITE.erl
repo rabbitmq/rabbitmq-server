@@ -133,7 +133,7 @@ amqqueue_v1_state_matching(_) ->
                                        VHost,
                                        #{},
                                        ?amqqueue_v1_type),
-    ?assert(?amqqueue_state_is(Queue1, undefined)),
+    ?assert(?amqqueue_state_is(Queue1, live)),
     Queue2 = amqqueue:set_state(Queue1, stopped),
     ?assert(?amqqueue_state_is(Queue2, stopped)).
 
