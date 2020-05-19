@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitStartupCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @default_timeout 300
+  @default_timeout 300_000
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{timeout: @default_timeout}, opts)}

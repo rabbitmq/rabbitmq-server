@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.AwaitOnlineSynchronizedMirrorCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @default_timeout 120
+  @default_timeout 120_000
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Upgrade.Commands.AwaitOnlineSynchronizedMirrorCommand do
 
   def run([], %{node: node_name, timeout: timeout}) do
     rpc_timeout = timeout + 500
-    case :rabbit_misc.rpc_call(node_name, :rabbit_upgrade_preparation, :await_online_synchronised_mirror, [timeout], rpc_timeout) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_upgrade_preparation, :await_online_synchronised_mirrors, [timeout], rpc_timeout) do
       {:error, _} = err -> err
       {:error, _, _} = err -> err
       {:badrpc, _} = err -> err
