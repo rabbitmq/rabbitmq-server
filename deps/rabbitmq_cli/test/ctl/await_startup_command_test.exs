@@ -31,7 +31,7 @@ defmodule AwaitStartupCommandTest do
   end
 
   test "merge_defaults: default timeout is 5 minutes" do
-    assert @command.merge_defaults([], %{}) == {[], %{timeout: 300}}
+    assert @command.merge_defaults([], %{}) == {[], %{timeout: 300_000}}
   end
 
   test "validate: accepts no arguments", context do
