@@ -144,7 +144,7 @@ test_authenticate(S) ->
 
 test_create_stream(S, Stream) ->
     StreamSize = byte_size(Stream),
-    CreateStreamFrame = <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, 1:32, StreamSize:16, Stream:StreamSize/binary>>,
+    CreateStreamFrame = <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, 1:32, StreamSize:16, Stream:StreamSize/binary, 0:32>>,
     FrameSize = byte_size(CreateStreamFrame),
     gen_tcp:send(S, <<FrameSize:32, CreateStreamFrame/binary>>),
     {ok, <<_Size:32, ?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = gen_tcp:recv(S, 0, 5000).
