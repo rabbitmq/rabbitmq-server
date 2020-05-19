@@ -196,9 +196,9 @@
 -spec is_mirrored(rabbit_types:amqqueue()) -> boolean().
 
 -spec pid_of(rabbit_types:amqqueue()) ->
-          {'ok', pid()} | rabbit_types:error('not_found').
+          pid().
 -spec pid_of(rabbit_types:vhost(), rabbit_misc:resource_name()) ->
-          {'ok', pid()} | rabbit_types:error('not_found').
+          pid() | rabbit_types:error('not_found').
 
 %%----------------------------------------------------------------------------
 

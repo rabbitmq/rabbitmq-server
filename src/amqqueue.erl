@@ -91,6 +91,8 @@
          macros/0]).
 
 -define(record_version, amqqueue_v1).
+-define(is_backwards_compat_classic(T),
+        (T =:= classic orelse T =:= ?amqqueue_v1_type)).
 
 -type amqqueue() :: amqqueue_v1().
 -type amqqueue_v1() :: #amqqueue{
@@ -105,7 +107,7 @@
                           recoverable_slaves :: [atom()] | none,
                           policy :: binary() | none | undefined,
                           operator_policy :: binary() | none | undefined,
-                          gm_pids :: [pid()] | none,
+                          gm_pids :: [{pid(), pid()}] | none,
                           decorators :: [atom()] | none | undefined,
                           state :: atom() | none,
                           policy_version :: non_neg_integer(),
@@ -184,7 +186,7 @@ new(#resource{kind = queue} = Name,
           rabbit_framing:amqp_table(),
           rabbit_types:vhost() | undefined,
           map(),
-          ?amqqueue_v1_type) -> amqqueue().
+          ?amqqueue_v1_type | classic) -> amqqueue().
 
 new(#resource{kind = queue} = Name,
     Pid,
@@ -194,14 +196,15 @@ new(#resource{kind = queue} = Name,
     Args,
     VHost,
     Options,
-    ?amqqueue_v1_type)
+    Type)
   when (is_pid(Pid) orelse Pid =:= none) andalso
        is_boolean(Durable) andalso
        is_boolean(AutoDelete) andalso
        (is_pid(Owner) orelse Owner =:= none) andalso
        is_list(Args) andalso
        (is_binary(VHost) orelse VHost =:= undefined) andalso
-       is_map(Options) ->
+       is_map(Options) andalso
+       ?is_backwards_compat_classic(Type) ->
     new(
       Name,
       Pid,
@@ -256,7 +259,7 @@ new_with_version(?record_version,
                        rabbit_framing:amqp_table(),
                        rabbit_types:vhost() | undefined,
                        map(),
-                       ?amqqueue_v1_type) -> amqqueue().
+                       ?amqqueue_v1_type | classic) -> amqqueue().
 
 new_with_version(?record_version,
                  #resource{kind = queue} = Name,
@@ -267,14 +270,15 @@ new_with_version(?record_version,
                  Args,
                  VHost,
                  Options,
-                 ?amqqueue_v1_type)
+                 Type)
   when (is_pid(Pid) orelse Pid =:= none) andalso
        is_boolean(Durable) andalso
        is_boolean(AutoDelete) andalso
        (is_pid(Owner) orelse Owner =:= none) andalso
        is_list(Args) andalso
        (is_binary(VHost) orelse VHost =:= undefined) andalso
-       is_map(Options) ->
+       is_map(Options) andalso
+       ?is_backwards_compat_classic(Type) ->
     new_with_version(
       ?record_version,
       Name,
@@ -333,11 +337,11 @@ get_exclusive_owner(#amqqueue{exclusive_owner = Owner}) -> Owner.
 
 % gm_pids
 
--spec get_gm_pids(amqqueue()) -> [{pid(), pid()} | pid()] | none.
+-spec get_gm_pids(amqqueue()) -> [{pid(), pid()}] | none.
 
 get_gm_pids(#amqqueue{gm_pids = GMPids}) -> GMPids.
 
--spec set_gm_pids(amqqueue(), [{pid(), pid()} | pid()] | none) -> amqqueue().
+-spec set_gm_pids(amqqueue(), [{pid(), pid()}] | none) -> amqqueue().
 
 set_gm_pids(#amqqueue{} = Queue, GMPids) ->
     Queue#amqqueue{gm_pids = GMPids}.
@@ -497,8 +501,8 @@ is_classic(Queue) ->
 
 -spec is_quorum(amqqueue()) -> boolean().
 
-is_quorum(Queue) ->
-    get_type(Queue) =:= quorum.
+is_quorum(Queue) when ?is_amqqueue(Queue) ->
+    false.
 
 fields() -> fields(?record_version).
 
