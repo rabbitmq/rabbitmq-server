@@ -35,7 +35,7 @@ mark_as_drained() ->
 unmark_as_drained() ->
     ok.
 
--spec suspend_all_client_listeners() -> [rabbit_types:ok_or_error(any())].
+-spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
  
  %% Pauses all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
@@ -43,28 +43,39 @@ unmark_as_drained() ->
  %% but previously established connections won't be interrupted.
 suspend_all_client_listeners() ->
     Listeners = rabbit_networking:node_client_listeners(node()),
-    lists:foldl(fun (#listener{node = Node, ip_address = Addr, port = Port}, Acc) when Node =:= node() ->
-                        Result = ranch:suspend_listener(rabbit_networking:ranch_ref(Addr, Port)),
-                        [Result | Acc];
-                    (_, Acc) ->
-                        Acc
-                end,
-                [], Listeners).
+    rabbit_log:info("Asked to suspend ~b client connection listeners. "
+                    "No new client connections will be accepted until these listeners are resumed!", [length(Listeners)]),
+    Results = lists:foldl(local_listener_fold_fun(fun ranch:suspend_listener/1), [], Listeners),
+    lists:foldl(fun ok_or_first_error/2, ok, Results).
 
- -spec resume_all_client_listeners() -> [rabbit_types:ok_or_error(any())].
+ -spec resume_all_client_listeners() -> rabbit_types:ok_or_error(any()).
 
  %% Resumes all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
  %% A resumed listener will accept new client connections.
 resume_all_client_listeners() ->
     Listeners = rabbit_networking:node_client_listeners(node()),
-    lists:foldl(fun (#listener{node = Node, ip_address = Addr, port = Port}, Acc) when Node =:= node() ->
-                        Result = ranch:resume_listener(rabbit_networking:ranch_ref(Addr, Port)),
-                        [Result | Acc];
-                    (_, Acc) ->
-                        Acc
-                end,
-                [], Listeners).
+    rabbit_log:info("Asked to resume ~b client connection listeners. "
+                    "New client connections will be accepted from now on", [length(Listeners)]),
+    Results = lists:foldl(local_listener_fold_fun(fun ranch:resume_listener/1), [], Listeners),
+    lists:foldl(fun ok_or_first_error/2, ok, Results).
 
 close_all_client_connections() ->
     ok.
+
+%%
+%% Implementation
+%%
+
+local_listener_fold_fun(Fun) ->
+    fun(#listener{node = Node, ip_address = Addr, port = Port}, Acc) when Node =:= node() ->
+            RanchRef = rabbit_networking:ranch_ref(Addr, Port),
+            [Fun(RanchRef) | Acc];
+        (_, Acc) ->
+            Acc
+    end.
+ 
+ok_or_first_error(ok, Acc) ->
+    Acc;
+ok_or_first_error({error, _} = Err, _Acc) ->
+    Err.
