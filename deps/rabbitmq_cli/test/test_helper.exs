@@ -269,8 +269,6 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit, :status, [])
   end
 
-
-
   def error_check(cmd_line, code) do
     assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
   end
@@ -331,6 +329,23 @@ defmodule TestHelper do
     end)
   end
 
+  def await_no_client_connections(node, timeout) do
+    iterations = timeout / 10
+    await_no_client_connections_with_iterations(node, iterations)
+  end
+
+  def await_no_client_connections_with_iterations(_node, n) when n <= 0 do
+    flunk "Ran out of retries, still have active client connections"
+  end
+  def await_no_client_connections_with_iterations(node, n) when n > 0 do
+    case :rpc.call(node, :rabbit_networking, :connections_local, []) do
+      [] -> :ok
+      _xs ->
+        :timer.sleep(10)
+        await_no_client_connections_with_iterations(node, n - 1)
+    end
+  end
+
   def close_all_connections(node) do
     # we intentionally use connections_local/0 here because connections/0,
     # the cluster-wide version, loads some bits around cluster membership
@@ -341,6 +356,15 @@ defmodule TestHelper do
     for pid <- :rpc.call(node, :rabbit_networking, :connections_local, []) do
       :rpc.call(node, :rabbit_networking, :close_connection, [pid, :force_closed])
     end
+    await_no_client_connections(node, 5000)
+  end
+
+  def expect_client_connection_failure() do
+    expect_client_connection_failure("/")
+  end
+  def expect_client_connection_failure(vhost) do
+    Application.ensure_all_started(:amqp)
+    assert {:error, :econnrefused} == AMQP.Connection.open(virtual_host: vhost)
   end
 
   def delete_all_queues() do
@@ -459,6 +483,14 @@ defmodule TestHelper do
 
   def clear_vhost_limits(vhost) do
     :rpc.call(get_rabbit_hostname(), :rabbit_vhost_limit, :clear, [vhost, <<"acting-user">>])
+  end
+
+  def resume_all_client_listeners() do
+    :rpc.call(get_rabbit_hostname(), :rabbit_maintenance, :resume_all_client_listeners, [])
+  end
+
+  def suspend_all_client_listeners() do
+    :rpc.call(get_rabbit_hostname(), :rabbit_maintenance, :suspend_all_client_listeners, [])
   end
 
   def set_scope(scope) do
