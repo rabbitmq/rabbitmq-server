@@ -130,20 +130,32 @@
           options = #{}}).    %% transient, recalculated in store/1 (i.e. recovery)
 
 -record(amqqueue, {
-          name, durable, auto_delete, exclusive_owner = none, %% immutable
-          arguments = [],                   %% immutable
-          pid,                         %% durable (just so we know home node)
-          slave_pids = [], sync_slave_pids, %% transient
-          recoverable_slaves,          %% durable
-          policy,                      %% durable, implicit update as above
-          operator_policy,             %% durable, implicit update as above
-          gm_pids,                     %% transient
-          decorators,                  %% transient, recalculated as above
-          state,                       %% durable (have we crashed?)
-          policy_version,
-          slave_pids_pending_shutdown,
-          vhost,                       %% secondary index
-          options = #{}}).
+          name :: rabbit_amqqueue:name() | '_', %% immutable
+          durable :: boolean() | '_',           %% immutable
+          auto_delete :: boolean() | '_',       %% immutable
+          exclusive_owner = none :: pid() | none | '_', %% immutable
+          arguments = [] :: rabbit_framing:amqp_table() | '_', %% immutable
+          pid :: pid() | none | '_',            %% durable (just so we
+                                                %% know home node)
+          slave_pids = [] :: [pid()] | none | '_',    %% transient
+          sync_slave_pids = [] :: [pid()] | none| '_',%% transient
+          recoverable_slaves = [] :: [atom()] | none | '_', %% durable
+          policy :: binary() | none | undefined | '_', %% durable, implicit
+                                                       %% update as above
+          operator_policy :: binary() | none | undefined | '_', %% durable,
+                                                                %% implicit
+                                                                %% update
+                                                                %% as above
+          gm_pids = [] :: [{pid(), pid()}] | none | '_', %% transient
+          decorators :: [atom()] | none | undefined | '_', %% transient,
+                                                          %% recalculated
+                                                          %% as above
+          state = live :: atom() | none | '_', %% durable (have we crashed?)
+          policy_version = 0 :: non_neg_integer() | '_',
+          slave_pids_pending_shutdown = [] :: [pid()] | '_',
+          vhost :: rabbit_types:vhost() | undefined | '_', %% secondary index
+          options = #{} :: map() | '_'
+         }).
 
 -record(exchange_serial, {name, next}).
 
