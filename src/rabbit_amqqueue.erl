@@ -1428,12 +1428,12 @@ stat(Q) when ?amqqueue_is_quorum(Q) -> rabbit_quorum_queue:stat(Q);
 stat(Q) -> delegate:invoke(amqqueue:get_pid(Q), {gen_server2, call, [stat, infinity]}).
 
 -spec pid_of(amqqueue:amqqueue()) ->
-          {'ok', pid()} | rabbit_types:error('not_found').
+          pid().
 
 pid_of(Q) -> amqqueue:get_pid(Q).
 
 -spec pid_of(rabbit_types:vhost(), rabbit_misc:resource_name()) ->
-          {'ok', pid()} | rabbit_types:error('not_found').
+          pid() | rabbit_types:error('not_found').
 
 pid_of(VHost, QueueName) ->
   case lookup(rabbit_misc:r(VHost, queue, QueueName)) of

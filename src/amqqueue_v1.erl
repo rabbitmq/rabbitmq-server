@@ -90,8 +90,6 @@
          qnode/1,
          macros/0]).
 
--dialyzer({nowarn_function, is_quorum/1}).
-
 -define(record_version, ?MODULE).
 -define(is_backwards_compat_classic(T),
         (T =:= classic orelse T =:= ?amqqueue_v1_type)).
@@ -113,7 +111,7 @@
                                                                 %% implicit
                                                                 %% update
                                                                 %% as above
-          gm_pids = [] :: [pid()] | none | '_', %% transient
+          gm_pids = [] :: [{pid(), pid()}] | none | '_', %% transient
           decorators :: [atom()] | none | undefined | '_', %% transient,
                                                           %% recalculated
                                                           %% as above
@@ -137,7 +135,7 @@
                           recoverable_slaves :: [atom()] | none,
                           policy :: binary() | none | undefined,
                           operator_policy :: binary() | none | undefined,
-                          gm_pids :: [pid()] | none,
+                          gm_pids :: [{pid(), pid()}] | none,
                           decorators :: [atom()] | none | undefined,
                           state :: atom() | none,
                           policy_version :: non_neg_integer(),
@@ -289,7 +287,7 @@ new_with_version(?record_version,
                        rabbit_framing:amqp_table(),
                        rabbit_types:vhost() | undefined,
                        map(),
-                       ?amqqueue_v1_type) -> amqqueue().
+                       ?amqqueue_v1_type | classic) -> amqqueue().
 
 new_with_version(?record_version,
                  #resource{kind = queue} = Name,
@@ -367,11 +365,11 @@ get_exclusive_owner(#amqqueue{exclusive_owner = Owner}) -> Owner.
 
 % gm_pids
 
--spec get_gm_pids(amqqueue()) -> [{pid(), pid()} | pid()] | none.
+-spec get_gm_pids(amqqueue()) -> [{pid(), pid()}] | none.
 
 get_gm_pids(#amqqueue{gm_pids = GMPids}) -> GMPids.
 
--spec set_gm_pids(amqqueue(), [{pid(), pid()} | pid()] | none) -> amqqueue().
+-spec set_gm_pids(amqqueue(), [{pid(), pid()}] | none) -> amqqueue().
 
 set_gm_pids(#amqqueue{} = Queue, GMPids) ->
     Queue#amqqueue{gm_pids = GMPids}.
