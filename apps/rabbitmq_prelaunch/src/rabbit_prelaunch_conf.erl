@@ -370,6 +370,9 @@ apply_app_env_vars(_, []) ->
     ok.
 
 set_credentials_obfuscation_secret() ->
+    rabbit_log_prelaunch:debug("Refreshing credentials obfuscation configuration from env: ~p",
+                               [application:get_all_env(credentials_obfuscation)]),
+    ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
     rabbit_log_prelaunch:debug(
       "Setting credentials obfuscation secret to erlang cookie: ~p", [CookieBin]),
