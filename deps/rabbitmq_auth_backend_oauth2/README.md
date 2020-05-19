@@ -35,7 +35,7 @@ of this plugin.
 
 To use this plugin
 
-1. A symmetrically encrypted JWT token containing a set of RabbitMQ permission scopes.
+1. UAA should be configured to produce encrypted JWT tokens containing a set of RabbitMQ permission scopes
 2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](https://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
 
