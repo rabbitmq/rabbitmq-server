@@ -111,7 +111,7 @@
                                                                 %% implicit
                                                                 %% update
                                                                 %% as above
-          gm_pids = [] :: [{pid(), pid()} | pid()] | none | '_', %% transient
+          gm_pids = [] :: [{pid(), pid()}] | none | '_', %% transient
           decorators :: [atom()] | none | undefined | '_', %% transient,
                                                           %% recalculated
                                                           %% as above
@@ -137,7 +137,7 @@
                           recoverable_slaves :: [atom()] | none,
                           policy :: binary() | none | undefined,
                           operator_policy :: binary() | none | undefined,
-                          gm_pids :: [pid()] | none,
+                          gm_pids :: [{pid(), pid()}] | none,
                           decorators :: [atom()] | none | undefined,
                           state :: atom() | none,
                           policy_version :: non_neg_integer(),
@@ -438,14 +438,14 @@ get_exclusive_owner(Queue) ->
 
 % gm_pids
 
--spec get_gm_pids(amqqueue()) -> [{pid(), pid()} | pid()] | none.
+-spec get_gm_pids(amqqueue()) -> [{pid(), pid()}] | none.
 
 get_gm_pids(#amqqueue{gm_pids = GMPids}) ->
     GMPids;
 get_gm_pids(Queue) ->
     amqqueue_v1:get_gm_pids(Queue).
 
--spec set_gm_pids(amqqueue(), [{pid(), pid()} | pid()] | none) -> amqqueue().
+-spec set_gm_pids(amqqueue(), [{pid(), pid()}] | none) -> amqqueue().
 
 set_gm_pids(#amqqueue{} = Queue, GMPids) ->
     Queue#amqqueue{gm_pids = GMPids};
