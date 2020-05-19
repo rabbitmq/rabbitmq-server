@@ -16,11 +16,13 @@
 
 -module(rabbit_maintenance).
 
+ -include("rabbit.hrl").
+ 
  -export([
      mark_as_drained/0,
      unmark_as_drained/0,
-     pause_all_listeners/0,
-     resume_all_listeners/0,
+     suspend_all_client_listeners/0,
+     resume_all_client_listeners/0,
      close_all_client_connections/0]).
 
 %%
@@ -33,11 +35,36 @@ mark_as_drained() ->
 unmark_as_drained() ->
     ok.
 
-pause_all_listeners() ->
-    ok.
+-spec suspend_all_client_listeners() -> [rabbit_types:ok_or_error(any())].
+ 
+ %% Pauses all listeners on the current node except for
+ %% Erlang distribution (clustering and CLI tools).
+ %% A respausedumed listener will not accept any new client connections
+ %% but previously established connections won't be interrupted.
+suspend_all_client_listeners() ->
+    Listeners = rabbit_networking:node_client_listeners(node()),
+    lists:foldl(fun (#listener{node = Node, ip_address = Addr, port = Port}, Acc) when Node =:= node() ->
+                        Result = ranch:suspend_listener(rabbit_networking:ranch_ref(Addr, Port)),
+                        [Result | Acc];
+                    (_, Acc) ->
+                        Acc
+                end,
+                [], Listeners).
 
-resume_all_listeners() ->
-    ok.
+ -spec resume_all_client_listeners() -> [rabbit_types:ok_or_error(any())].
+
+ %% Resumes all listeners on the current node except for
+ %% Erlang distribution (clustering and CLI tools).
+ %% A resumed listener will accept new client connections.
+resume_all_client_listeners() ->
+    Listeners = rabbit_networking:node_client_listeners(node()),
+    lists:foldl(fun (#listener{node = Node, ip_address = Addr, port = Port}, Acc) when Node =:= node() ->
+                        Result = ranch:resume_listener(rabbit_networking:ranch_ref(Addr, Port)),
+                        [Result | Acc];
+                    (_, Acc) ->
+                        Acc
+                end,
+                [], Listeners).
 
 close_all_client_connections() ->
     ok.
