@@ -501,8 +501,8 @@ start_it(StartFun) ->
                         true  -> ok;
                         false -> StartFun()
                     end
-                catch Class:Reason ->
-                    boot_error(Class, Reason)
+                catch Class:Reason:Stacktrace ->
+                    boot_error(Class, Reason, Stacktrace)
                 after
                     unlink(Marker),
                     Marker ! stop,
@@ -977,9 +977,9 @@ stop(_State) ->
          end,
     ok.
 
--spec boot_error(term(), not_available | [tuple()]) -> no_return().
+-spec boot_error(term(), not_available | [tuple()], [tuple()]) -> no_return().
 
-boot_error(_, {could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}}) ->
+boot_error(_, {could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}}, _) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     Suffix = "~nBACKGROUND~n==========~n~n"
         "This cluster node was shut down while other nodes were still running.~n"
@@ -999,31 +999,31 @@ boot_error(_, {could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}}) -
     log_boot_error_and_exit(
       timeout_waiting_for_tables,
       "~n" ++ Err ++ rabbit_nodes:diagnostics(Nodes), []);
-boot_error(_, {error, {cannot_log_to_file, unknown, Reason}}) ->
+boot_error(_, {error, {cannot_log_to_file, unknown, Reason}}, _) ->
     log_boot_error_and_exit(could_not_initialise_logger,
                             "failed to initialised logger: ~p~n",
                             [Reason]);
 boot_error(_, {error, {cannot_log_to_file, LogFile,
-                        {cannot_create_parent_dirs, _, Reason}}}) ->
+                        {cannot_create_parent_dirs, _, Reason}}}, _) ->
     log_boot_error_and_exit(could_not_initialise_logger,
                             "failed to create parent directory for log file at '~s', reason: ~p~n",
                             [LogFile, Reason]);
-boot_error(_, {error, {cannot_log_to_file, LogFile, Reason}}) ->
+boot_error(_, {error, {cannot_log_to_file, LogFile, Reason}}, _) ->
     log_boot_error_and_exit(could_not_initialise_logger,
                             "failed to open log file at '~s', reason: ~p~n",
                             [LogFile, Reason]);
-boot_error(_, {error, {generate_config_file, Error}}) ->
+boot_error(_, {error, {generate_config_file, Error}}, _) ->
     log_boot_error_and_exit(generate_config_file,
                             "~nConfig file generation failed:~n~s~n",
                             [Error]);
-boot_error(Class, Reason) ->
+boot_error(Class, Reason, Stacktrace) ->
     LogLocations = log_locations(),
     log_boot_error_and_exit(
       Reason,
       "~nError description:~s"
       "~nLog file(s) (may contain more information):~n" ++
       lists:flatten(["   ~s~n" || _ <- lists:seq(1, length(LogLocations))]),
-      [lager:pr_stacktrace(erlang:get_stacktrace(), {Class, Reason})] ++
+      [lager:pr_stacktrace(Stacktrace, {Class, Reason})] ++
       LogLocations).
 
 -spec log_boot_error_and_exit(_, _, _) -> no_return().
