@@ -375,7 +375,7 @@ set_credentials_obfuscation_secret() ->
     ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
     rabbit_log_prelaunch:debug(
-      "Setting credentials obfuscation secret to erlang cookie: ~p", [CookieBin]),
+      "Setting credentials obfuscation secret to '~s'", [CookieBin]),
     ok = credentials_obfuscation:set_secret(CookieBin).
 
 %% -------------------------------------------------------------------
