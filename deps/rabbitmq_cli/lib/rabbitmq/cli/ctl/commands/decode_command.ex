@@ -75,8 +75,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
 
       term_to_decrypt =
         case term_value do
-          {:encrypted, encrypted_term} -> encrypted_term
-          _ -> term_value
+          {:encrypted, _} = encrypted ->
+            encrypted
+          _ ->
+            {:encrypted, term_value}
         end
 
       result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)

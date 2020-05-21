@@ -86,8 +86,7 @@ defmodule DecodeCommandTest do
     cipher = :rabbit_pbe.default_cipher()
     hash = :rabbit_pbe.default_hash()
     iterations = :rabbit_pbe.default_iterations()
-    encrypted = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, secret)
-    output = {:encrypted, encrypted}
+    output = {:encrypted, encrypted} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, secret)
     opts = %{cipher:       cipher,
              hash:         hash,
              iterations:   iterations
