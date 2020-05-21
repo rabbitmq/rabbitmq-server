@@ -95,9 +95,9 @@ defmodule EncodeCommandTest do
     {:ok, output} = @command.run([secret_as_erlang_term, passphrase], opts)
     {:encrypted, encrypted} = output
     # decode plain value
-    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, encrypted)
+    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, {:plaintext, secret})
     # decode {encrypted, ...} tuple form
-    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, encrypted)
+    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, {:encrypted, encrypted})
   end
 
   defp format_as_erlang_term(value), do: to_string(:lists.flatten(:io_lib.format("~p", [value])))
