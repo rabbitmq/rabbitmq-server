@@ -415,15 +415,13 @@ decrypt_app(App, [{Key, Value} | Tail], Algo) ->
             end,
     decrypt_app(App, Tail, Algo2).
 
-decrypt({encrypted, EncValue},
-        {Cipher, Hash, Iterations, PassPhrase} = Algo) ->
-    {rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, PassPhrase, EncValue),
-     Algo};
-decrypt({encrypted, _} = Value,
+decrypt({encrypted, _}=EncValue, {Cipher, Hash, Iterations, PassPhrase} = Algo) ->
+    {rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, PassPhrase, EncValue), Algo};
+decrypt({encrypted, _}=EncValue,
         ConfigEntryDecoder)
   when is_list(ConfigEntryDecoder) ->
     Algo = config_entry_decoder_to_algo(ConfigEntryDecoder),
-    decrypt(Value, Algo);
+    decrypt(EncValue, Algo);
 decrypt(List, Algo) when is_list(List) ->
     decrypt_list(List, Algo, []);
 decrypt(Value, Algo) ->
