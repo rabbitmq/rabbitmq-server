@@ -18,7 +18,7 @@ endef
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
 DEPS = lager jsx ranch recon credentials_obfuscation
 
-dep_credentials_obfuscation = hex 1.1.0
+dep_credentials_obfuscation = hex 2.0.0
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.

@@ -41,8 +41,10 @@ default_iterations() ->
 encrypt_term(Cipher, Hash, Iterations, PassPhrase, Term) ->
     credentials_obfuscation_pbe:encrypt_term(Cipher, Hash, Iterations, PassPhrase, Term).
 
-decrypt_term(Cipher, Hash, Iterations, PassPhrase, Base64Binary) ->
-    credentials_obfuscation_pbe:decrypt_term(Cipher, Hash, Iterations, PassPhrase, Base64Binary).
+decrypt_term(_Cipher, _Hash, _Iterations, _PassPhrase, {plaintext, Term}) ->
+    Term;
+decrypt_term(Cipher, Hash, Iterations, PassPhrase, {encrypted, _Base64Binary}=Encrypted) ->
+    credentials_obfuscation_pbe:decrypt_term(Cipher, Hash, Iterations, PassPhrase, Encrypted).
 
 -spec encrypt(crypto:block_cipher(), crypto:hash_algorithms(),
     pos_integer(), iodata(), binary()) -> binary().
@@ -50,6 +52,8 @@ encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText) ->
     credentials_obfuscation_pbe:encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText).
 
 -spec decrypt(crypto:block_cipher(), crypto:hash_algorithms(),
-    pos_integer(), iodata(), binary()) -> binary().
-decrypt(Cipher, Hash, Iterations, PassPhrase, Base64Binary) ->
-    credentials_obfuscation_pbe:decrypt(Cipher, Hash, Iterations, PassPhrase, Base64Binary).
+    pos_integer(), iodata(), {'encrypted', binary() | [1..255]} | {'plaintext', _}) -> any().
+decrypt(_Cipher, _Hash, _Iterations, _PassPhrase, {plaintext, Term}) ->
+    Term;
+decrypt(Cipher, Hash, Iterations, PassPhrase, {encrypted, _Base64Binary}=Encrypted) ->
+    credentials_obfuscation_pbe:decrypt(Cipher, Hash, Iterations, PassPhrase, Encrypted).
