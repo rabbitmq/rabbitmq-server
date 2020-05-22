@@ -19,7 +19,7 @@
 
 -include("rabbit_peer_discovery.hrl").
 
--export([get/3, config_map/1]).
+-export([get/3, get_integer/3, config_map/1]).
 
 %%
 %% API
@@ -36,6 +36,19 @@ get(Key, Mapping, Config) ->
             throw({badkey, Key});
         true  ->
             get_with_entry_meta(Key, maps:get(Key, Mapping), Config)
+    end.
+
+-spec get_integer(Key :: atom(),
+                  Mapping :: #{atom() => peer_discovery_config_entry_meta()},
+                  Config  :: #{atom() => peer_discovery_config_value()}) -> integer().
+
+get_integer(Key, Mapping, Config) ->
+    case maps:is_key(Key, Mapping) of
+        false ->
+            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            throw({badkey, Key});
+        true  ->
+            get_integer_with_entry_meta(Key, maps:get(Key, Mapping), Config)
     end.
 
 -spec config_map(atom()) -> #{atom() => peer_discovery_config_value()}.
@@ -63,6 +76,15 @@ get_with_entry_meta(Key, #peer_discovery_config_entry_meta{env_variable = EV,
                                                            type    = Type}, Map) ->
     normalize(Type, get_from_env_variable_or_map(Map, EV, Key, Default)).
 
+-spec get_integer_with_entry_meta(Key       :: atom(),
+                                  EntryMeta :: #peer_discovery_config_entry_meta{},
+                                  Map       :: #{atom() => peer_discovery_config_value()}) -> integer().
+
+get_integer_with_entry_meta(Key, #peer_discovery_config_entry_meta{env_variable = EV,
+                                                                  default_value = Default,
+                                                                  type    = Type}, Map) ->
+    normalize(Type, get_integer_from_env_variable_or_map(Map, EV, Key, Default)).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -78,6 +100,17 @@ get_with_entry_meta(Key, #peer_discovery_config_entry_meta{env_variable = EV,
 get_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
   case rabbit_peer_discovery_util:getenv(OSKey) of
     false -> maps:get(AppKey, Map, Default);
+    Value -> Value
+  end.
+
+-spec get_integer_from_env_variable_or_map(Map :: map(), OSKey :: string(), AppKey :: atom(),
+                                           Default :: integer())
+                                          -> integer().
+get_integer_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
+  case rabbit_peer_discovery_util:getenv(OSKey) of
+    false -> maps:get(AppKey, Map, Default);
+    ""    -> Default;
+    []    -> Default;
     Value -> Value
   end.
 
