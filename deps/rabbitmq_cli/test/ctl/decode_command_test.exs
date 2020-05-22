@@ -17,96 +17,88 @@ defmodule DecodeCommandTest do
   use ExUnit.Case, async: false
   @command RabbitMQ.CLI.Ctl.Commands.DecodeCommand
 
-  test "validate: not providing exactly 2 arguments for decoding is reported as invalid", _context do
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate([], %{})
-    )
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value"], %{})
-    )
-    assert match?(
-      {:validation_failure, :too_many_args},
-      @command.validate(["value", "secret", "incorrect"], %{})
-    )
+  setup _context do
+    {:ok, opts: %{
+      cipher: :rabbit_pbe.default_cipher,
+      hash: :rabbit_pbe.default_hash,
+      iterations: :rabbit_pbe.default_iterations
+    }}
   end
 
-  test "validate: hash and cipher must be supported", _context do
-    opts = %{cipher: :rabbit_pbe.default_cipher,
-             hash: :rabbit_pbe.default_hash,
-             iterations: :rabbit_pbe.default_iterations}
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(opts, %{cipher: :funny_cipher}))
-    )
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(opts, %{hash: :funny_hash}))
-    )
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(opts, %{cipher: :funny_cipher, hash: :funny_hash}))
-    )
-    assert match?(
-      :ok,
-      @command.validate(["value", "secret"], opts)
-    )
+  test "validate: providing exactly 2 positional arguments passes", context do
+    assert :ok == @command.validate(["value", "secret"], context[:opts])
   end
 
-  test "validate: number of iterations must greather than 0", _context do
-    opts = %{cipher: :rabbit_pbe.default_cipher,
-             hash: :rabbit_pbe.default_hash,
-             iterations: :rabbit_pbe.default_iterations}
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(opts, %{iterations: 0}))
-    )
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["value", "secret"], Map.merge(opts, %{iterations: -1}))
-    )
-    assert match?(
-      :ok,
-      @command.validate(["value", "secret"], opts)
-    )
+  test "validate: providing zero or one positional argument fails", context do
+    assert match?({:validation_failure, {:not_enough_args, _}},
+                  @command.validate([], context[:opts]))
+    assert match?({:validation_failure, {:not_enough_args, _}},
+                  @command.validate(["value"], context[:opts]))
   end
 
-  test "run: encrypt/decrypt", _context do
-    # erlang list/string
-    encrypt_decrypt(to_charlist("foobar"))
-    # binary
-    encrypt_decrypt("foobar")
-    # tuple
-    encrypt_decrypt({:password, "secret"})
+  test "validate: providing three or more positional argument fails", context do
+    assert match?({:validation_failure, :too_many_args},
+                  @command.validate(["value", "secret", "incorrect"], context[:opts]))
   end
 
-  defp encrypt_decrypt(secret) do
+  test "validate: hash and cipher must be supported", context do
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate(["value", "secret"], Map.merge(context[:opts], %{cipher: :funny_cipher}))
+    )
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate(["value", "secret"], Map.merge(context[:opts], %{hash: :funny_hash}))
+    )
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate(["value", "secret"], Map.merge(context[:opts], %{cipher: :funny_cipher, hash: :funny_hash}))
+    )
+    assert :ok == @command.validate(["value", "secret"], context[:opts])
+  end
+
+  test "validate: number of iterations must greater than 0", context do
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate(["value", "secret"], Map.merge(context[:opts], %{iterations: 0}))
+    )
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate(["value", "secret"], Map.merge(context[:opts], %{iterations: -1}))
+    )
+    assert :ok == @command.validate(["value", "secret"], context[:opts])
+  end
+
+  test "run: encrypt/decrypt", context do
+    # an Erlang list/bitstring
+    encrypt_decrypt(to_charlist("foobar"), context)
+    # a binary
+    encrypt_decrypt("foobar", context)
+    # a tuple
+    encrypt_decrypt({:password, "secret"}, context)
+  end
+
+  defp encrypt_decrypt(secret, context) do
     passphrase = "passphrase"
-    cipher = :rabbit_pbe.default_cipher()
-    hash = :rabbit_pbe.default_hash()
-    iterations = :rabbit_pbe.default_iterations()
-    encrypted = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, secret)
-    output = {:encrypted, encrypted}
-    opts = %{cipher:       cipher,
-             hash:         hash,
-             iterations:   iterations
-    }
+    cipher = context[:opts][:cipher]
+    hash = context[:opts][:hash]
+    iterations = context[:opts][:iterations]
+    output = {:encrypted, _encrypted} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, secret)
+
+    {:encrypted, encrypted} = output
     # decode plain value
-    assert {:ok, secret} === @command.run([format_as_erlang_term(encrypted), passphrase], Map.merge(opts, %{}))
+    assert {:ok, secret} === @command.run([format_as_erlang_term(encrypted), passphrase], context[:opts])
     # decode {encrypted, ...} tuple form
-    assert {:ok, secret} === @command.run([format_as_erlang_term(output), passphrase], Map.merge(opts, %{}))
+    assert {:ok, secret} === @command.run([format_as_erlang_term(output), passphrase], context[:opts])
 
     # wrong passphrase
-    assert match?(
-        {:error, _},
-        @command.run([format_as_erlang_term(encrypted), "wrong passphrase"], Map.merge(opts, %{}))
-    )
-    assert match?(
-        {:error, _},
-        @command.run([format_as_erlang_term(output), "wrong passphrase"], Map.merge(opts, %{}))
-    )
+    assert match?({:error, _},
+                  @command.run([format_as_erlang_term(encrypted), "wrong/passphrase"], context[:opts]))
+    assert match?({:error, _},
+                  @command.run([format_as_erlang_term(output), "wrong passphrase"], context[:opts]))
   end
 
-  defp format_as_erlang_term(value), do: to_string(:lists.flatten(:io_lib.format("~p", [value])))
+  defp format_as_erlang_term(value) do
+    :io_lib.format("~p", [value]) |> :lists.flatten() |> to_string()
+  end
 end
