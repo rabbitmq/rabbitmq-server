@@ -83,14 +83,14 @@ do_decrypt_config(Algo = {C, H, I, P}) ->
         msg_store_credit_disc_bound]],
     %% Special case: encrypt a value in a list.
     {ok, [LoopbackUser]} = application:get_env(rabbit, loopback_users),
-    EncLoopbackUser = rabbit_pbe:encrypt_term(C, H, I, P, LoopbackUser),
+    {encrypted, EncLoopbackUser} = rabbit_pbe:encrypt_term(C, H, I, P, LoopbackUser),
     application:set_env(rabbit, loopback_users, [{encrypted, EncLoopbackUser}]),
     %% Special case: encrypt a value in a key/value list.
     {ok, TCPOpts} = application:get_env(rabbit, tcp_listen_options),
     {_, Backlog} = lists:keyfind(backlog, 1, TCPOpts),
     {_, Linger} = lists:keyfind(linger, 1, TCPOpts),
-    EncBacklog = rabbit_pbe:encrypt_term(C, H, I, P, Backlog),
-    EncLinger = rabbit_pbe:encrypt_term(C, H, I, P, Linger),
+    {encrypted, EncBacklog} = rabbit_pbe:encrypt_term(C, H, I, P, Backlog),
+    {encrypted, EncLinger} = rabbit_pbe:encrypt_term(C, H, I, P, Linger),
     TCPOpts1 = lists:keyreplace(backlog, 1, TCPOpts, {backlog, {encrypted, EncBacklog}}),
     TCPOpts2 = lists:keyreplace(linger, 1, TCPOpts1, {linger, {encrypted, EncLinger}}),
     application:set_env(rabbit, tcp_listen_options, TCPOpts2),
@@ -103,7 +103,7 @@ do_decrypt_config(Algo = {C, H, I, P}) ->
 
 encrypt_value(Key, {C, H, I, P}) ->
     {ok, Value} = application:get_env(rabbit, Key),
-    EncValue = rabbit_pbe:encrypt_term(C, H, I, P, Value),
+    {encrypted, EncValue} = rabbit_pbe:encrypt_term(C, H, I, P, Value),
     application:set_env(rabbit, Key, {encrypted, EncValue}).
 
 decrypt_start_app(Config) ->
