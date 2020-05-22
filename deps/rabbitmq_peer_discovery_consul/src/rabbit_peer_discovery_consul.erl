@@ -66,7 +66,7 @@ list_nodes() ->
                    M = maps:from_list(Proplist),
                    case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                                         get_config_key(consul_host, M),
-                                                        get_config_key(consul_port, M),
+                                                        get_integer_config_key(consul_port, M),
                                                         rabbit_peer_discovery_httpc:build_path([v1, health, service, get_config_key(consul_svc, M)]),
                                                         list_nodes_query_args(),
                                                         maybe_add_acl([]),
@@ -97,7 +97,7 @@ register() ->
       rabbit_log:debug("Consul registration body: ~s", [Body]),
       case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
-                                            get_config_key(consul_port, M),
+                                            get_integer_config_key(consul_port, M),
                                             rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
                                             [],
                                             maybe_add_acl([]),
@@ -116,7 +116,7 @@ unregister() ->
   rabbit_log:debug("Unregistering with Consul using service ID '~s'", [ID]),
   case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
-                                       get_config_key(consul_port, M),
+                                       get_integer_config_key(consul_port, M),
                                        rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
                                        [],
                                        maybe_add_acl([]),
@@ -142,7 +142,8 @@ post_registration() ->
 -spec lock(Node :: atom()) -> {ok, Data :: term()} | {error, Reason :: string()}.
 
 lock(Node) ->
-  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    rabbit_log:debug("Effective Consul peer discovery configuration: ~p", [M]),
     case create_session(Node, get_config_key(consul_svc_ttl, M)) of
         {ok, SessionId} ->
             TRef = start_session_ttl_updater(SessionId),
@@ -177,6 +178,13 @@ unlock({SessionId, TRef}) ->
 
 get_config_key(Key, Map) ->
     ?CONFIG_MODULE:get(Key, ?CONFIG_MAPPING, Map).
+
+-spec get_integer_config_key(Key :: atom(), Map :: #{atom() => peer_discovery_config_value()})
+                            -> integer().
+
+get_integer_config_key(Key, Map) ->
+    ?CONFIG_MODULE:get_integer(Key, ?CONFIG_MAPPING, Map).
+
 
 -spec filter_nodes(ConsulResult :: list(), AllowWarning :: atom()) -> list().
 filter_nodes(Nodes, Warn) ->
@@ -458,7 +466,7 @@ send_health_check_pass() ->
   rabbit_log:debug("Running Consul health check"),
   case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
-                                       get_config_key(consul_port, M),
+                                       get_integer_config_key(consul_port, M),
                                        rabbit_peer_discovery_httpc:build_path([v1, agent, check, pass, Service]),
                                        [],
                                        maybe_add_acl([]),
@@ -544,7 +552,7 @@ consul_session_create(Query, Headers, Body) ->
         {ok, Serialized} ->
             rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
-                                            get_config_key(consul_port, M),
+                                            get_integer_config_key(consul_port, M),
                                             "v1/session/create",
                                             Query,
                                             Headers,
@@ -663,7 +671,7 @@ consul_kv_write(Path, Query, Headers, Body) ->
         {ok, Serialized} ->
             rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
-                                            get_config_key(consul_port, M),
+                                            get_integer_config_key(consul_port, M),
                                             "v1/kv/" ++ Path,
                                             Query,
                                             Headers,
@@ -686,7 +694,7 @@ consul_kv_read(Path, Query, Headers) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
-                                    get_config_key(consul_port, M),
+                                    get_integer_config_key(consul_port, M),
                                     "v1/kv/" ++ Path,
                                     Query,
                                     Headers,
@@ -770,7 +778,7 @@ consul_session_renew(SessionId, Query, Headers) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
-                                    get_config_key(consul_port, M),
+                                    get_integer_config_key(consul_port, M),
                                     rabbit_peer_discovery_httpc:build_path([v1, session, renew, rabbit_data_coercion:to_atom(SessionId)]),
                                     Query,
                                     Headers,
