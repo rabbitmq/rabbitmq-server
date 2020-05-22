@@ -52,10 +52,9 @@ encode(Cipher, Hash, Iterations, Args) ->
             [Value, PassPhrase] = Args,
             try begin
                     TermValue = evaluate_input_as_term(Value),
-                    Result = rabbit_pbe:encrypt_term(Cipher, Hash, Iterations,
-                                                     list_to_binary(PassPhrase),
-                                                     TermValue),
-                    {ok, io_lib:format("~p", [{encrypted, Result}])}
+                    Result = {encrypted, _} = rabbit_pbe:encrypt_term(Cipher, Hash, Iterations,
+                                                                      list_to_binary(PassPhrase), TermValue),
+                    {ok, io_lib:format("~p", [Result])}
                 end
             catch
                 _:Msg -> {error, io_lib:format("Error during cipher operation: ~p", [Msg])}
@@ -70,10 +69,10 @@ decode(Cipher, Hash, Iterations, Args) ->
             try begin
                     TermValue = evaluate_input_as_term(Value),
                     TermToDecrypt = case TermValue of
-                        {encrypted, EncryptedTerm} ->
+                        {encrypted, _}=EncryptedTerm ->
                             EncryptedTerm;
                         _ ->
-                            TermValue
+                            {encrypted, TermValue}
                     end,
                     Result = rabbit_pbe:decrypt_term(Cipher, Hash, Iterations,
                                                      list_to_binary(PassPhrase),
