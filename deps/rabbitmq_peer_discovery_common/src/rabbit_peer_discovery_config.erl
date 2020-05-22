@@ -39,8 +39,8 @@ get(Key, Mapping, Config) ->
     end.
 
 -spec get_integer(Key :: atom(),
-          Mapping :: #{atom() => peer_discovery_config_entry_meta()},
-          Config  :: #{atom() => peer_discovery_config_value()}) -> peer_discovery_config_value().
+                  Mapping :: #{atom() => peer_discovery_config_entry_meta()},
+                  Config  :: #{atom() => peer_discovery_config_value()}) -> integer().
 
 get_integer(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
@@ -78,7 +78,7 @@ get_with_entry_meta(Key, #peer_discovery_config_entry_meta{env_variable = EV,
 
 -spec get_integer_with_entry_meta(Key       :: atom(),
                                   EntryMeta :: #peer_discovery_config_entry_meta{},
-                                  Map       :: #{atom() => peer_discovery_config_value()}) -> peer_discovery_config_value().
+                                  Map       :: #{atom() => peer_discovery_config_value()}) -> integer().
 
 get_integer_with_entry_meta(Key, #peer_discovery_config_entry_meta{env_variable = EV,
                                                                   default_value = Default,
@@ -104,8 +104,8 @@ get_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
   end.
 
 -spec get_integer_from_env_variable_or_map(Map :: map(), OSKey :: string(), AppKey :: atom(),
-                                           Default :: atom() | integer() | string())
-                                          -> atom() | integer() | string().
+                                           Default :: integer())
+                                          -> integer().
 get_integer_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
   case rabbit_peer_discovery_util:getenv(OSKey) of
     false -> maps:get(AppKey, Map, Default);
