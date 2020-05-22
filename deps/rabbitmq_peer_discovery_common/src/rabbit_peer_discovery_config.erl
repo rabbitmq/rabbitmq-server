@@ -110,7 +110,6 @@ get_integer_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
   case rabbit_peer_discovery_util:getenv(OSKey) of
     false -> maps:get(AppKey, Map, Default);
     ""    -> Default;
-    []    -> Default;
     Value -> Value
   end.
 
