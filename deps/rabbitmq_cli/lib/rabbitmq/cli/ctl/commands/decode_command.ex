@@ -32,19 +32,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   def distribution(_), do: :none
 
   def merge_defaults(args, opts) do
-    {args,
-     Map.merge(
-       %{
+    with_defaults = Map.merge(%{
          cipher: :rabbit_pbe.default_cipher(),
          hash: :rabbit_pbe.default_hash(),
          iterations: :rabbit_pbe.default_iterations()
-       },
-       opts
-     )}
+       }, opts)
+    {args, with_defaults}
   end
 
   def validate(args, _) when length(args) < 2 do
-    {:validation_failure, {:bad_argument, "Please provide a value to decode and a passphrase"}}
+    {:validation_failure, {:not_enough_args, "Please provide a value to decode and a passphrase"}}
   end
 
   def validate(args, _) when length(args) > 2 do
@@ -75,8 +72,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
 
       term_to_decrypt =
         case term_value do
-          {:encrypted, encrypted_term} -> encrypted_term
-          _ -> term_value
+          {:encrypted, _} = encrypted ->
+            encrypted
+          _ ->
+            {:encrypted, term_value}
         end
 
       result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
