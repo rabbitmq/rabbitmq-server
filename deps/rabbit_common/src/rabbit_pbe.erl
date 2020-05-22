@@ -20,6 +20,8 @@
 -export([encrypt_term/5, decrypt_term/5]).
 -export([encrypt/5, decrypt/5]).
 
+-export_type([encryption_result/0]).
+
 supported_ciphers() ->
     credentials_obfuscation_pbe:supported_ciphers().
 
@@ -46,13 +48,15 @@ decrypt_term(_Cipher, _Hash, _Iterations, _PassPhrase, {plaintext, Term}) ->
 decrypt_term(Cipher, Hash, Iterations, PassPhrase, {encrypted, _Base64Binary}=Encrypted) ->
     credentials_obfuscation_pbe:decrypt_term(Cipher, Hash, Iterations, PassPhrase, Encrypted).
 
+-type encryption_result() :: {'encrypted', binary()} | {'plaintext', binary()}.
+
 -spec encrypt(crypto:block_cipher(), crypto:hash_algorithms(),
-    pos_integer(), iodata(), binary()) -> binary().
+    pos_integer(), iodata() | '$pending-secret', binary()) -> encryption_result().
 encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText) ->
     credentials_obfuscation_pbe:encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText).
 
 -spec decrypt(crypto:block_cipher(), crypto:hash_algorithms(),
-    pos_integer(), iodata(), {'encrypted', binary() | [1..255]} | {'plaintext', _}) -> any().
+    pos_integer(), iodata(), encryption_result()) -> any().
 decrypt(_Cipher, _Hash, _Iterations, _PassPhrase, {plaintext, Term}) ->
     Term;
 decrypt(Cipher, Hash, Iterations, PassPhrase, {encrypted, _Base64Binary}=Encrypted) ->
