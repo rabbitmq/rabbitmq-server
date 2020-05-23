@@ -14,18 +14,23 @@
 ## Installation
 
  * [Installation guides](https://rabbitmq.com/download.html) for various platforms
+ * [Changelog](https://www.rabbitmq.com/changelog.html)
+ * [Releases](https://github.com/rabbitmq/rabbitmq-server/releases) on GitHub
  * [Supported and unsupported series](https://www.rabbitmq.com/versions.html)
  * [Supported Erlang versions](https://www.rabbitmq.com/which-erlang.html)
+
 
 ## Tutorials & Documentation
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
- * [Documentation source](https://github.com/rabbitmq/rabbitmq-website/)
+ * [CLI tools guide](https://rabbitmq.com/cli.html) 
+ * [Configuration guide](https://rabbitmq.com/configure.html) 
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
  * [Monitoring guide](https://rabbitmq.com/monitoring.html)
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
+ * [Documentation source](https://github.com/rabbitmq/rabbitmq-website/)
 
 
 ## Getting Help
