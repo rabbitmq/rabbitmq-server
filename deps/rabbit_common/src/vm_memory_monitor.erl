@@ -27,10 +27,6 @@
 
 -behaviour(gen_server).
 
-%% Transitional step until we can require Erlang/OTP 21 and
-%% use the now recommended try/catch syntax for obtaining the stack trace.
--compile(nowarn_deprecated_function).
-
 -export([start_link/1, start_link/3]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -313,10 +309,10 @@ get_process_memory_using_strategy(erlang, _State) ->
 get_total_memory_from_os() ->
     try
         get_total_memory(os:type())
-    catch _:Error ->
+    catch _:Error:Stacktrace ->
             rabbit_log:warning(
               "Failed to get total system memory: ~n~p~n~p~n",
-              [Error, erlang:get_stacktrace()]),
+              [Error, Stacktrace]),
             unknown
     end.
 
