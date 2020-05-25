@@ -364,3 +364,43 @@ Delete => Key Version CorrelationId Stream
   CorrelationId => int32
   Stream => string
 ```
+
+== Authentication
+
+Once a client is connected to the server, it initiates an authentication
+sequence. The next figure shows the steps of the sequence:
+
+[ditaa]
+.Authentication Sequence
+....
+Client                      Server
+  +                           +
+  |      SASL Handshake       |
+  |-------------------------->|
+  |<--------------------------|
+  |                           |
+  |     SASL Authenticate     |
+  |-------------------------->|
+  |<--------------------------|
+  |                           |
+  |           Tune            |
+  |<--------------------------|
+  |-------------------------->|
+  |                           |
+  |           Open            |
+  |-------------------------->|
+  |<--------------------------|
+  |                           |
+  +                           +
+....
+
+* SaslHandshake: the client asks about the SASL mechanisms the server supports. It
+can then pick one from the list the server returns.
+* SaslAuthenticate: the client answers to the server's challenge(s), using the
+SASL mechanism it picked. The server will send a `Tune` frame once it is satisfied
+with the client authentication response.
+* Tune: the server sends a `Tune` to suggest some settings (max frame size, heartbeat).
+The client answers with a `Tune` with the settings he agrees on, possibly adjusted
+from the server's suggestion.
+* Open: the client sends a `Open` frame to pick a virtual host to connect. The server
+answers whether it accepts the access or not.
