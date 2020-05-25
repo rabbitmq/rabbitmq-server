@@ -198,7 +198,7 @@ Credit => Key Version SubscriptionId Credit
   Credit => int16 // the number of chunks that can be sent
 ```
 
-=== Unsubcribe
+=== Unsubscribe
 
 ```
 Unsubscribe => Key Version CorrelationId SubscriptionId
