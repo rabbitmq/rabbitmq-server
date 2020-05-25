@@ -1,0 +1,79 @@
+= RabbitMQ Stream Protocol Reference
+
+== Types
+
+int8, int16, int32, int64 - Signed integers (big endian order)
+
+uint64 - Unsigned integer (big endian order)
+
+bytes - int32 for the length followed by the bytes of content, length of -1 indicates null.
+
+string - int16 for the length followed by the bytes of content, length of -1 indicates null.
+
+arrays - int32 for the length followed by the repetition of the structure, notation uses [], e.g.
+[int32] for an array of int32.
+
+== Frame Structure
+
+```
+Frame => Size (Request | Response | Command)
+  Size => int32 (size without the 4 bytes of the size element)
+
+Request => Key Version (CorrelationId) Content
+  Key => int16
+  Version => int16
+  CorrelationId => int32
+  Command => bytes // see command details below
+
+Response => Key Version CorrelationId ResponseCode
+  Key => int16
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+
+Command => Key Version Content
+  Key => int16
+  Version => int16
+  Content => bytes // see command details below
+```
+
+Most commands are request/reply, but some commands (e.g. `Deliver`) are one-direction only and thus
+doest not contain a correlation ID.
+
+== Commands
+
+.Stream Protocol Commands
+|===
+|Command |From |Key | Expects response?
+
+|<<_publish>>
+|Client
+|0
+|No
+
+|<<_publishconfirm>>
+|Server
+|1
+|No
+|===
+
+=== Publish
+
+```
+Publish => Key Version Target PublishedMessages
+  Key => int16 // 0
+  Version => int16
+  Target => string // the name of the queue/topic
+  PublishedMessages => [PublishedMessage]
+  PublishedMessage => PublishingId Message
+  Message => bytes
+```
+
+=== PublishConfirm
+
+```
+PublishConfirm => Key Version PublishingIds
+  Key => int16 // 1
+  Version => int16
+  PublishingIds => [int64] // to correlate with the messages sent
+```
