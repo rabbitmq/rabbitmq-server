@@ -14,11 +14,13 @@
           otp-version: $(ERLANG_VERSION)
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: $(ELIXIR_VERSION)
-      - name: CACHE DEPS
-        uses: actions/cache@v1
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
         with:
-          path: deps
-          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
       - name: RUN TESTS
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -29,51 +31,21 @@
             FULL= \
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
-      - name: CACHE SECONDARY UMBRELLAS
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
         if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
-        uses: actions/cache@v1
+        uses: actions/download-artifact@v2
         with:
-          path: umbrellas
-          key: $(SECONDARY_UMBRELLAS_CACHE_KEY)
-      - name: VERIFY SECONDARY UMBRELLA COPIES (in case of cache restore failure)
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
         if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
         run: |
-          set -x
-          for version in $(MIXED_VERSION_TESTING_WITH); do
-            umbrella="umbrellas/$version"
-            if ! test -d "$umbrella"  ||
-               ! make -C "$umbrella/deps/$(PROJECT)" test-dist; then
-              rm -rf "$umbrella"
-
-              # Fetch the master Umbrella; the final umbrellas are created from
-              # the master copy.
-              if ! test -d umbrellas/master; then
-                git config --global advice.detachedHead false
-                git clone \
-                  https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
-                  umbrellas/master
-                make -C umbrellas/master co # To get RabbitMQ components.
-              fi
-
-              # We copy the master Umbrella and checkout the appropriate tag.
-              cp -a umbrellas/master "$umbrella"
-              git -C "$umbrella" checkout "$(base_rmq_ref)"
-              make -C "$umbrella" up BRANCH="$version"
-              # To remove third-party deps which were checked out when the
-              # projects were on the `master` branch. Thus, possibly not the
-              # version pinning we expect. We update the Umbrella one last time
-              # to fetch the correct third-party deps.
-              make -C "$umbrella" clean-3rd-party-repos
-              make -C "$umbrella" up
-              make -C "$umbrella/deps/$(PROJECT)" test-dist
-              rm -fr "$umbrella"/deps/*/{.git,test} "$umbrella"/.git
-            fi
-          done
-          rm -fr umbrellas/master
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
         if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
         run: |
-          set -x
+          set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           for umbrella in umbrellas/*; do
             test -d "$umbrella"

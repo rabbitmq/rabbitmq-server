@@ -14,11 +14,14 @@
           otp-version: $(ERLANG_VERSION)
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: $(ELIXIR_VERSION)
-      - name: CACHE DEPS
-        uses: actions/cache@v1
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
         with:
-          path: deps
-          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+          rm deps.tar.xz
       - name: RUN TESTS
         run: |
           ! test -d ebin || touch ebin/*

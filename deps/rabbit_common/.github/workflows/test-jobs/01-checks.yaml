@@ -19,25 +19,26 @@
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
           make check-rabbitmq-components.mk base_rmq_ref=$(base_rmq_ref) current_rmq_ref=$branch_or_tag_name
-      # https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows
-      - name: CACHE DEPS
-        uses: actions/cache@v1
-        with:
-          path: deps
-          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
       - name: RESOLVE & COMPILE DEPS
         run: |
           make deps test-deps base_rmq_ref=$(base_rmq_ref) current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
           echo "Capture versions of the RabbitMQ components used in this workflow..."
           make $(PROJECT)-rabbitmq-deps.mk
-          mv $(PROJECT)-rabbitmq-deps.mk deps/
           echo "Remove directories not used in the subsequent jobs..."
           rm -fr deps/*/{.git,test}
       - name: UPLOAD DEPS VERSIONS
-        uses: actions/upload-artifact@v2-preview
+        uses: actions/upload-artifact@v2
         with:
           name: $(PROJECT)-rabbitmq-deps.mk
-          path: deps/$(PROJECT)-rabbitmq-deps.mk
+          path: $(PROJECT)-rabbitmq-deps.mk
+      - name: CREATE DEPS ARCHIVE
+        run: |
+          tar cf - deps | xz > deps.tar.xz
+      - name: UPLOAD DEPS ARCHIVE
+        uses: actions/upload-artifact@v2
+        with:
+          name: deps.tar.xz
+          path: deps.tar.xz
       - name: CHECK CROSS REFERENCES
         run: |
           make xref base_rmq_ref=$(base_rmq_ref) current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
@@ -53,12 +54,7 @@
       - name: PREPARE SECONDARY UMBRELLA COPIES
         if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
         run: |
-          # ----------------------------------------------------------
-          # CAUTION:
-          # The same script must be copied to `03-CT_SUITE.yaml`. It is used to
-          # recreate the umbrellas if the cache restore fails.
-          # ----------------------------------------------------------
-          set -x
+          set -ex
           for version in $(MIXED_VERSION_TESTING_WITH); do
             umbrella="umbrellas/$version"
             if ! test -d "$umbrella"  ||
@@ -86,7 +82,20 @@
               make -C "$umbrella" clean-3rd-party-repos
               make -C "$umbrella" up
               make -C "$umbrella/deps/$(PROJECT)" test-dist
-              rm -fr "$umbrella"/deps/*/{.git,test} "$umbrella"/.git
+              rm -rf "$umbrella"/deps/rabbitmq_website
+              rm -rf "$umbrella"/deps/rabbitmq_prometheus/docker
+              rm -rf "$umbrella"/deps/*/{.git,test} "$umbrella"/.git
             fi
           done
           rm -fr umbrellas/master
+      - name: CREATE SECONDARY UMBRELLAS ARCHIVE
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        run: |
+          set -ex
+          tar cf - umbrellas | xz > secondary-umbrellas.tar.xz
+      - name: UPLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+          path: secondary-umbrellas.tar.xz

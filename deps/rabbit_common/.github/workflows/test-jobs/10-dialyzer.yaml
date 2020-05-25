@@ -15,18 +15,16 @@
           otp-version: $(ERLANG_VERSION)
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: $(ELIXIR_VERSION)
-      - name: CACHE DEPS
+      - name: DOWNLOAD DEPS ARCHIVE
         if: success() && '$(ERLANG_VERSION_IS)' == 'latest'
-        uses: actions/cache@v1
+        uses: actions/download-artifact@v2
         with:
-          path: deps
-          key: otp-$(ERLANG_VERSION)_git-${{ github.sha }}_deps
-      - name: CACHE DIALYZER PLT
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
         if: success() && '$(ERLANG_VERSION_IS)' == 'latest'
-        uses: actions/cache@v1
-        with:
-          path: .$(PROJECT).plt
-          key: plt-$(PROJECT)-erlang-$(ERLANG_VERSION)-g${{ github.sha }}
+        run: |
+          tar Jxf deps.tar.xz
+          rm deps.tar.xz
       - name: RUN DIALYZER
         if: success() && '$(ERLANG_VERSION_IS)' == 'latest'
         run: |
