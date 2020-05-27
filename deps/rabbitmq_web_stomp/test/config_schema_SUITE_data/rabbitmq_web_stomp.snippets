@@ -157,6 +157,11 @@
   [{rabbitmq_web_stomp,[{ws_frame,binary}]}],
   [rabbitmq_web_stomp]},
 
+ {use_http_auth,
+  "web_stomp.use_http_auth = true",
+  [{rabbitmq_web_stomp,[{use_http_auth, true}]}],
+  [rabbitmq_web_stomp]},
+
  %%
  %% Cowboy options
  %%

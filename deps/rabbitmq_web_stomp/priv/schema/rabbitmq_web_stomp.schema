@@ -25,6 +25,9 @@
 {mapping, "web_stomp.ws_path", "rabbitmq_web_stomp.ws_path",
     [{datatype, string}]}.
 
+{mapping, "web_stomp.use_http_auth", "rabbitmq_web_stomp.use_http_auth",
+    [{datatype, {enum, [true, false]}}]}.
+
 {translation,
     "rabbitmq_web_stomp.tcp_config",
     fun(Conf) ->
