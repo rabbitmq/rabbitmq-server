@@ -56,7 +56,7 @@ defmodule RabbitMQ.CLI.Core.NodeName do
   def split_node(name) do
     case String.split(name, "@", parts: 2) do
       ["", host] ->
-        default_name = to_string(Config.get_option(:node))
+        default_name = to_string(Config.default(:node))
         [default_name, host]
 
       [_head, _host] = rslt ->
