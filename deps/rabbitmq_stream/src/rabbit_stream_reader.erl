@@ -544,7 +544,7 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = St
     end;
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
-    _ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
+        _ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
     Arguments = parse_arguments(ArgumentsBinary),
     case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
@@ -582,14 +582,26 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
             response(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
             {State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost} = State,
     <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, StreamCount:32, BinaryStreams/binary>>, Rest) ->
-    %% FIXME: rely only on rabbit_networking to discover the listeners
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Streams = extract_stream_list(BinaryStreams, []),
+
+    %% get the nodes involved in the streams
+    NodesMap = lists:foldl(fun(Stream, Acc) ->
+        case rabbit_stream_manager:topology(VirtualHost, Stream) of
+            {ok, #{leader_node := LeaderNode, replica_nodes := ReplicaNodes}} ->
+                Acc1 = maps:put(LeaderNode, ok, Acc),
+                lists:foldl(fun(ReplicaNode, NodesAcc) -> maps:put(ReplicaNode, ok, NodesAcc) end, Acc1, ReplicaNodes);
+            {error, _} ->
+                Acc
+        end
+                           end, #{}, Streams),
+
+    Nodes = maps:keys(NodesMap),
     {NodesInfo, _} = lists:foldl(fun(Node, {Acc, Index}) ->
-        {ok, Host} = rpc:call(Node, inet, gethostname, []),
+        Host = rpc:call(Node, rabbit_stream, host, []),
         Port = rpc:call(Node, rabbit_stream, port, []),
-        {Acc#{Node => {{index, Index}, {host, list_to_binary(Host)}, {port, Port}}}, Index + 1}
+        {Acc#{Node => {{index, Index}, {host, Host}, {port, Port}}}, Index + 1}
                                  end, {#{}, 0}, Nodes),
 
     BrokersCount = length(Nodes),
@@ -598,25 +610,22 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = State,
         <<Acc/binary, Index:16, HostLength:16, Host:HostLength/binary, Port:32>>
                            end, <<BrokersCount:32>>, NodesInfo),
 
-    Streams = extract_stream_list(BinaryStreams, []),
 
     MetadataBin = lists:foldl(fun(Stream, Acc) ->
         StreamLength = byte_size(Stream),
-        case lookup_cluster(Stream, State) of
-            cluster_not_found ->
+        case rabbit_stream_manager:topology(VirtualHost, Stream) of
+            {error, stream_not_found} ->
                 <<Acc/binary, StreamLength:16, Stream:StreamLength/binary, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST:16,
                     -1:16, 0:32>>;
-            {Cluster, _} ->
-                %% FIXME get replicas and leader from amqqueue record
-                LeaderNode = node(Cluster),
+            {ok, #{leader_node := LeaderNode, replica_nodes := Replicas}} ->
                 #{LeaderNode := NodeInfo} = NodesInfo,
                 {{index, LeaderIndex}, {host, _}, {port, _}} = NodeInfo,
-                Replicas = maps:without([LeaderNode], NodesInfo),
-                ReplicasBinary = lists:foldl(fun(NI, Bin) ->
+                ReplicasBinary = lists:foldl(fun(Replica, Bin) ->
+                    #{Replica := NI} = NodesInfo,
                     {{index, ReplicaIndex}, {host, _}, {port, _}} = NI,
                     <<Bin/binary, ReplicaIndex:16>>
-                                             end, <<>>, maps:values(Replicas)),
-                ReplicasCount = maps:size(Replicas),
+                                             end, <<>>, Replicas),
+                ReplicasCount = length(Replicas),
 
                 <<Acc/binary, StreamLength:16, Stream:StreamLength/binary, ?RESPONSE_CODE_OK:16,
                     LeaderIndex:16, ReplicasCount:32, ReplicasBinary/binary>>
@@ -653,7 +662,7 @@ parse_arguments(Arguments) ->
 
 parse_arguments(Acc, <<>>) ->
     Acc;
-parse_arguments(Acc, <<KeySize:16,Key:KeySize/binary,ValueSize:16,Value:ValueSize/binary, Rest/binary>>) ->
+parse_arguments(Acc, <<KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/binary, Rest/binary>>) ->
     parse_arguments(maps:put(Key, Value, Acc), Rest).
 
 
