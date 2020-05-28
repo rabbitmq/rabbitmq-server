@@ -17,7 +17,7 @@
 -module(rabbit_stream).
 -behaviour(application).
 
--export([start/2, port/0]).
+-export([start/2, host/0, port/0]).
 -export([stop/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -25,7 +25,24 @@
 start(_Type, _Args) ->
     rabbit_stream_sup:start_link().
 
+host() ->
+    case application:get_env(rabbitmq_stream, advertised_host, undefined) of
+        undefined ->
+            {ok, Host} = inet:gethostname(),
+            list_to_binary(Host);
+        Host ->
+            rabbit_data_coercion:to_binary(Host)
+    end.
+
 port() ->
+    case application:get_env(rabbitmq_stream, advertised_port, undefined) of
+        undefined ->
+            port_from_listener();
+        Port ->
+            Port
+    end.
+
+port_from_listener() ->
     Listeners = rabbit_networking:node_listeners(node()),
     Port = lists:foldl(fun(#listener{port = Port, protocol = stream}, _Acc) ->
         Port;
@@ -33,7 +50,6 @@ port() ->
             Acc
                        end, undefined, Listeners),
     Port.
-
 
 stop(_State) ->
     ok.

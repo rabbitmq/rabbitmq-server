@@ -21,7 +21,7 @@
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
--export([start_link/1, create/4, register/0, delete/3, lookup/2, unregister/0]).
+-export([start_link/1, create/4, register/0, delete/3, lookup/2, topology/2, unregister/0]).
 
 -record(state, {
     configuration, listeners, monitors
@@ -47,6 +47,9 @@ unregister() ->
 
 lookup(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup, VirtualHost, Stream}).
+
+topology(VirtualHost, Stream) ->
+    gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
 
 stream_queue_arguments(Arguments) ->
     stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}], Arguments).
@@ -134,6 +137,20 @@ handle_call({lookup, VirtualHost, Stream}, _From, State) ->
                   end;
               _ ->
                   cluster_not_found
+          end,
+    {reply, Res, State};
+handle_call({topology, VirtualHost, Stream}, _From, State) ->
+    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
+    Res = case rabbit_amqqueue:lookup(Name) of
+              {ok, Q} ->
+                  case is_stream_queue(Q) of
+                      true ->
+                          {ok, maps:with([leader_node, replica_nodes], amqqueue:get_type_state(Q))};
+                      _ ->
+                          {error, stream_not_found}
+                  end;
+              _ ->
+                  {error, stream_not_found}
           end,
     {reply, Res, State}.
 
