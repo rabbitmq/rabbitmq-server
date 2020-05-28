@@ -16,7 +16,7 @@
 }).
 
 -record(consumer, {
-    socket, leader, offset, subscription_id, segment, credit, stream
+    socket, member_pid, offset, subscription_id, segment, credit, stream
 }).
 
 -record(configuration, {
@@ -442,7 +442,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
     <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
         StreamSize:16, Stream:StreamSize/binary,
         MessageCount:32, Messages/binary>>, Rest) ->
-    case lookup_cluster(Stream, State) of
+    case lookup_leader(Stream, State) of
         cluster_not_found ->
             FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
             Details = generate_publishing_error_details(<<>>, Messages),
@@ -454,29 +454,30 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
             sub_credits(Credits, MessageCount),
             {State1, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers = Consumers, stream_subscriptions = StreamSubscriptions} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers = Consumers,
+                                                     stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost} = State,
     <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary, Offset:64/unsigned, Credit:16/signed>>, Rest) ->
-    case lookup_cluster(Stream, State) of
-        cluster_not_found ->
+    case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
+        {error, not_found} ->
             response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
             {State, Rest};
-        {ClusterLeader, State1} ->
+        {ok, LocalMemberPid} ->
             case subscription_exists(StreamSubscriptions, SubscriptionId) of
                 true ->
-                    response(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
-                    {State1, Rest};
+                    response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
+                    {State, Rest};
                 false ->
                     %% FIXME handle different type of offset (first, last, next, {abs, ...})
-                    {ok, Segment} = osiris:init_reader(ClusterLeader, Offset),
+                    {ok, Segment} = osiris:init_reader(LocalMemberPid, Offset),
                     ConsumerState = #consumer{
-                        leader = ClusterLeader, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
+                        member_pid = LocalMemberPid, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
                         segment = Segment,
                         credit = Credit,
                         stream = Stream
                     },
                     error_logger:info_msg("registering consumer ~p in ~p~n", [ConsumerState, self()]),
 
-                    response_ok(Transport, State1, ?COMMAND_SUBSCRIBE, CorrelationId),
+                    response_ok(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId),
 
                     {{segment, Segment1}, {credit, Credit1}} = send_chunks(
                         Transport,
@@ -491,7 +492,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
                             _ ->
                                 StreamSubscriptions#{Stream => [SubscriptionId]}
                         end,
-                    {State1#stream_connection{consumers = Consumers1, stream_subscriptions = StreamSubscriptions1}, Rest}
+                    {State#stream_connection{consumers = Consumers1, stream_subscriptions = StreamSubscriptions1}, Rest}
             end
     end;
 handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers, stream_subscriptions = StreamSubscriptions, clusters = Clusters} = State,
@@ -716,10 +717,10 @@ clean_state_after_stream_deletion(Stream, #stream_connection{clusters = Clusters
             {not_cleaned, State}
     end.
 
-lookup_cluster(Stream, #stream_connection{clusters = Clusters, virtual_host = VirtualHost} = State) ->
+lookup_leader(Stream, #stream_connection{clusters = Clusters, virtual_host = VirtualHost} = State) ->
     case maps:get(Stream, Clusters, undefined) of
         undefined ->
-            case lookup_cluster_from_manager(VirtualHost, Stream) of
+            case lookup_leader_from_manager(VirtualHost, Stream) of
                 cluster_not_found ->
                     cluster_not_found;
                 ClusterPid ->
@@ -729,8 +730,8 @@ lookup_cluster(Stream, #stream_connection{clusters = Clusters, virtual_host = Vi
             {ClusterPid, State}
     end.
 
-lookup_cluster_from_manager(VirtualHost, Stream) ->
-    rabbit_stream_manager:lookup(VirtualHost, Stream).
+lookup_leader_from_manager(VirtualHost, Stream) ->
+    rabbit_stream_manager:lookup_leader(VirtualHost, Stream).
 
 frame(Transport, #stream_connection{socket = S}, Frame) ->
     FrameSize = byte_size(Frame),
@@ -779,7 +780,7 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry) ->
                     timer:sleep(1),
                     send_chunks(Transport, State, Segment1, Credit, false);
                 false ->
-                    #consumer{leader = Leader} = State,
+                    #consumer{member_pid = Leader} = State,
                     osiris:register_offset_listener(Leader, osiris_log:next_offset(Segment1)),
                     {{segment, Segment1}, {credit, Credit}}
             end
