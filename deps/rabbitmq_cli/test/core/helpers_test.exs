@@ -53,7 +53,7 @@ defmodule HelpersTest do
   ## ------------------- Helpers.normalise_node_option tests --------------------
 
   test "longnames: 'rabbit' as node name, correct domain is used" do
-    default_name = Config.get_option(:node)
+    default_name = Config.default(:node)
     options = %{node: default_name, longnames: true}
     {:ok, options} = Helpers.normalise_node_option(options)
     assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"
@@ -90,7 +90,7 @@ defmodule HelpersTest do
   end
 
   test "shortnames: if input is a hostname without a node name, default node name is added" do
-    default_name = Config.get_option(:node)
+    default_name = Config.default(:node)
     want = String.to_atom("#{default_name}@#{hostname()}")
     got = Helpers.normalise_node("@#{hostname()}", :shortnames)
     assert want == got

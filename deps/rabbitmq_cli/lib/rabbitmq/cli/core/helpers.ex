@@ -39,8 +39,20 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     case NodeName.create(node_opt, longnames_opt) do
       {:error, _} = err ->
         err
-      {:ok, normalised_node_opt} ->
-        {:ok, Map.put(options, :node, normalised_node_opt)}
+      {:ok, val} ->
+        {:ok, Map.put(options, :node, val)}
+    end
+  end
+
+  def normalise_node_option(nil, _, _) do
+    nil
+  end
+  def normalise_node_option(node_opt, longnames_opt, options) do
+    case NodeName.create(node_opt, longnames_opt) do
+      {:error, _} = err ->
+        err
+      {:ok, val} ->
+        {:ok, Map.put(options, :node, val)}
     end
   end
 
