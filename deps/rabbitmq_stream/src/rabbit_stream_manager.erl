@@ -21,7 +21,7 @@
 
 %% API
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
--export([start_link/1, create/4, register/0, delete/3, lookup/2, topology/2, unregister/0]).
+-export([start_link/1, create/4, register/0, delete/3, lookup_leader/2, lookup_local_member/2, topology/2, unregister/0]).
 
 -record(state, {
     configuration, listeners, monitors
@@ -45,8 +45,11 @@ register() ->
 unregister() ->
     gen_server:call(?MODULE, {unregister, self()}).
 
-lookup(VirtualHost, Stream) ->
-    gen_server:call(?MODULE, {lookup, VirtualHost, Stream}).
+lookup_leader(VirtualHost, Stream) ->
+    gen_server:call(?MODULE, {lookup_leader, VirtualHost, Stream}).
+
+lookup_local_member(VirtualHost, Stream) ->
+    gen_server:call(?MODULE, {lookup_local_member, VirtualHost, Stream}).
 
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
@@ -124,7 +127,7 @@ handle_call({unregister, Pid}, _From, #state{listeners = Listeners, monitors = M
                         maps:remove(Pid, Monitors)
                 end,
     {reply, ok, State#state{listeners = lists:delete(Pid, Listeners), monitors = Monitors1}};
-handle_call({lookup, VirtualHost, Stream}, _From, State) ->
+handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
     Res = case rabbit_amqqueue:lookup(Name) of
               {ok, Q} ->
@@ -137,6 +140,34 @@ handle_call({lookup, VirtualHost, Stream}, _From, State) ->
                   end;
               _ ->
                   cluster_not_found
+          end,
+    {reply, Res, State};
+handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
+    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
+    Res = case rabbit_amqqueue:lookup(Name) of
+              {ok, Q} ->
+                  case is_stream_queue(Q) of
+                      true ->
+                          #{leader_pid := LeaderPid, replica_pids := ReplicaPids} = amqqueue:get_type_state(Q),
+                          LocalMember = lists:foldl(fun(Pid, Acc) ->
+                              case node(Pid) =:= node() of
+                                  true ->
+                                      Pid;
+                                  false ->
+                                      Acc
+                              end
+                                                    end, undefined, [LeaderPid] ++ ReplicaPids),
+                          case LocalMember of
+                              undefined ->
+                                  {error, not_found};
+                              Pid ->
+                                  {ok, Pid}
+                          end;
+                      _ ->
+                          {error, not_found}
+                  end;
+              _ ->
+                  {error, not_found}
           end,
     {reply, Res, State};
 handle_call({topology, VirtualHost, Stream}, _From, State) ->
