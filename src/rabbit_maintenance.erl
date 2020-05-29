@@ -21,6 +21,8 @@
  -export([
      mark_as_drained/0,
      unmark_as_drained/0,
+     is_drained_using_dirty_read/1,
+     is_drained_using_consistent_read/1,
      suspend_all_client_listeners/0,
      resume_all_client_listeners/0,
      close_all_client_connections/0]).
@@ -34,6 +36,14 @@ mark_as_drained() ->
 
 unmark_as_drained() ->
     ok.
+
+-spec is_drained_using_dirty_read(node()) -> boolean().
+is_drained_using_dirty_read(_Node) ->
+    false.
+
+-spec is_drained_using_consistent_read(node()) -> boolean().
+is_drained_using_consistent_read(_Node) ->
+    false.
 
 -spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
  
