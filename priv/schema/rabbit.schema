@@ -1666,6 +1666,18 @@ end}.
     end
 }.
 
+{mapping, "raft.data_dir", "ra.data_dir", [
+  {datatype, string}
+]}.
+
+{translation, "ra.data_dir",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.data_dir", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
 
 % ===============================
 % Validators
