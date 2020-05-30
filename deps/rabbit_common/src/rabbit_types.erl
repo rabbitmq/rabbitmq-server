@@ -27,7 +27,7 @@
               exchange/0,
               connection/0, protocol/0, auth_user/0, user/0, internal_user/0,
               username/0, password/0, password_hash/0,
-              ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
+              ok/1, error/1, error/2, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
               proc_type_and_name/0, timestamp/0,
               tracked_connection/0, node_type/0, topic_access_context/0,
@@ -170,6 +170,7 @@
 
 -type(ok(A) :: {'ok', A}).
 -type(error(A) :: {'error', A}).
+-type(error(A, B) :: {'error', A, B}).
 -type(ok_or_error(A) :: 'ok' | error(A)).
 -type(ok_or_error2(A, B) :: ok(A) | error(B)).
 -type(ok_pid_or_error() :: ok_or_error2(pid(), any())).
