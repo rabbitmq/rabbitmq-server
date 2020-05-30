@@ -115,7 +115,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
     data_directory_section = [
       "\n#{bright("Data directory")}\n",
-      "Node data directory: #{m[:data_directory]}"
+      "Node data directory: #{m[:data_directory]}",
+      "Raft data directory: #{m[:raft_data_directory]}"
     ]
 
     config_section = [
@@ -234,6 +235,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),
 
       data_directory: Keyword.get(result, :data_directory) |> to_string,
+      raft_data_directory: Keyword.get(result, :raft_data_directory) |> to_string,
+
       config_files: Keyword.get(result, :config_files) |> Enum.map(&to_string/1),
       log_files: Keyword.get(result, :log_files) |> Enum.map(&to_string/1),
 
