@@ -33,6 +33,8 @@
                     {enables, recovery}]}).
 
 register() ->
+    %% Note: there are more validators registered from other modules,
+    %% such as rabbit_mirror_queue_misc
     [rabbit_registry:register(Class, Name, ?MODULE) ||
         {Class, Name} <- [{policy_validator, <<"alternate-exchange">>},
                           {policy_validator, <<"dead-letter-exchange">>},
@@ -61,6 +63,8 @@ register() ->
                           {policy_merge_strategy, <<"max-in-memory-bytes">>},
                           {policy_merge_strategy, <<"delivery-limit">>}]],
     ok.
+
+-spec validate_policy([{binary(), term()}]) -> rabbit_policy_validator:validate_results().
 
 validate_policy(Terms) ->
     lists:foldl(fun ({Key, Value}, ok) -> validate_policy0(Key, Value);
