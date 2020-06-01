@@ -667,6 +667,13 @@ credential_validator.regexp = ^abc\\d+",
   %% Raft
   %%
 
+  {raft_data_dir,
+   "raft.data_dir = /data/rabbitmq/raft/log",
+   [{ra, [
+      {data_dir, "/data/rabbitmq/raft/log"}
+     ]}],
+   []},
+
   {raft_segment_max_entries,
    "raft.segment_max_entries = 65536",
    [{ra, [

@@ -708,7 +708,8 @@ status() ->
           {enabled_plugin_file, rabbit_plugins:enabled_plugins_file()}],
     S6 = [{config_files, config_files()},
            {log_files, log_locations()},
-           {data_directory, rabbit_mnesia:dir()}],
+           {data_directory, rabbit_mnesia:dir()},
+           {raft_data_directory, ra_env:data_dir()}],
     Totals = case rabbit:is_running() of
                  true ->
                      [{virtual_host_count, rabbit_vhost:count()},
