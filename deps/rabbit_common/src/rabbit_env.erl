@@ -1426,11 +1426,28 @@ load_conf_env_file(#{os_type := {win32, _},
     Context1 = update_context(Context, conf_env_file, ConfEnvFile, Origin),
     case loading_conf_env_file_enabled(Context1) of
         true ->
-            rabbit_log_prelaunch:notice(
-              "Loading of $RABBITMQ_CONF_ENV_FILE (~s) "
-              "is not implemented for Windows",
-              [ConfEnvFile]),
-            Context1;
+            case filelib:is_regular(ConfEnvFile) of
+                false ->
+                    rabbit_log_prelaunch:debug(
+                      "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile]),
+                    Context1;
+                true ->
+                    case os:find_executable("cmd.exe") of
+                        false ->
+                            Cmd = os:getenv("ComSpec"),
+                            CmdExists =
+                              Cmd =/= false andalso
+                              filelib:is_regular(Cmd),
+                            case CmdExists of
+                                false -> Context1;
+                                true  -> do_load_conf_env_file(Context1,
+                                                               Cmd,
+                                                               ConfEnvFile)
+                            end;
+                        Cmd ->
+                            do_load_conf_env_file(Context1, Cmd, ConfEnvFile)
+                    end
+            end;
         false ->
             rabbit_log_prelaunch:debug(
               "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
@@ -1455,7 +1472,7 @@ loading_conf_env_file_enabled(_) ->
     erlang:get({?MODULE, always_undefined}) =:= undefined.
 -endif.
 
-do_load_conf_env_file(Context, Sh, ConfEnvFile) ->
+do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
     rabbit_log_prelaunch:debug(
       "Sourcing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
     Marker = rabbit_misc:format(
@@ -1490,25 +1507,83 @@ do_load_conf_env_file(Context, Sh, ConfEnvFile) ->
               use_stdio,
               stderr_to_stdout,
               exit_status]),
-    collect_sh_output(Context, Port, Marker, <<>>).
+    collect_sh_output(Context, Port, Marker, <<>>);
+do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
+    %% rabbitmq/rabbitmq-common#392
+    rabbit_log_prelaunch:debug(
+      "Executing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
 
-collect_sh_output(Context, Port, Marker, Output) ->
+    %% The script below executes the `CONF_ENV_FILE` file, then it shows a
+    %% marker line and all environment variables.
+    %%
+    %% The marker line is useful to distinguish any output from the sourced
+    %% script from the variables we are interested in.
+    %%
+    %% Arguments are split into a list of strings to support a filename with
+    %% whitespaces in the path.
+    Marker = vars_list_marker(),
+    Script = [ConfEnvFile, "&&",
+              "echo", Marker, "&&",
+              "set"],
+
+    #{rabbitmq_base := RabbitmqBase,
+      rabbitmq_home := RabbitmqHome} = Context,
+    MainConfigFile = re:replace(
+                       get_default_main_config_file(Context),
+                       "\\.(conf|config)$", "", [{return, list}]),
+
+    %% The variables below are those the `CONF_ENV_FILE` file can expect.
+    Env = [
+           {"RABBITMQ_BASE", RabbitmqBase},
+           {"RABBITMQ_HOME", RabbitmqHome},
+           {"CONFIG_FILE", MainConfigFile},
+           {"ADVANCED_CONFIG_FILE", get_default_advanced_config_file(Context)},
+           {"MNESIA_BASE", get_default_mnesia_base_dir(Context)},
+           {"ENABLED_PLUGINS_FILE", get_default_enabled_plugins_file(Context)},
+           {"PLUGINS_DIR", get_default_plugins_path_from_env(Context)},
+           {"CONF_ENV_FILE_PHASE", "rabbtimq-prelaunch"}
+          ],
+
+    Args = ["/Q", "/C" | Script],
+    Opts = [{args, Args},
+            {env, Env},
+            hide,
+            binary,
+            stderr_to_stdout,
+            exit_status],
+    Port = erlang:open_port({spawn_executable, Cmd}, Opts),
+    collect_conf_env_file_output(Context, Port, "\"" ++ Marker ++ "\" ", <<>>).
+
+vars_list_marker() ->
+    rabbit_misc:format(
+      "-----BEGIN VARS LIST FOR PID ~s-----", [os:getpid()]).
+
+collect_conf_env_file_output(Context, Port, Marker, Output) ->
     receive
         {Port, {exit_status, ExitStatus}} ->
-            rabbit_log_prelaunch:debug(
-              "$RABBITMQ_CONF_ENV_FILE exit status: ~b", [ExitStatus]),
-            DecodedOutput = unicode:characters_to_list(Output),
-            Lines = string:split(string:trim(DecodedOutput), "\n", all),
-            rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
-            [rabbit_log_prelaunch:debug("  ~ts", [Line])
-             || Line <- Lines],
+            Lines = post_port_cmd_output(Context, Output, ExitStatus),
             case ExitStatus of
                 0 -> parse_conf_env_file_output(Context, Marker, Lines);
                 _ -> Context
             end;
         {Port, {data, Chunk}} ->
-            collect_sh_output(Context, Port, Marker, [Output, Chunk])
+            collect_conf_env_file_output(
+              Context, Port, Marker, [Output, Chunk])
     end.
+
+post_port_cmd_output(#{os_type := {OSType, _}}, Output, ExitStatus) ->
+    rabbit_log_prelaunch:debug(
+      "$RABBITMQ_CONF_ENV_FILE exit status: ~b",
+      [ExitStatus]),
+    DecodedOutput = unicode:characters_to_list(Output),
+    LineSep = case OSType of
+                  win32 -> "\r\n";
+                  _     -> "\n"
+              end,
+    Lines = string:split(string:trim(DecodedOutput), LineSep, all),
+    rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
+    [rabbit_log_prelaunch:debug("  ~ts", [Line]) || Line <- Lines],
+    Lines.
 
 parse_conf_env_file_output(Context, _, []) ->
     Context;
