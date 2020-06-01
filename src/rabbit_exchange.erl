@@ -71,7 +71,10 @@ callback(X = #exchange{type       = XType,
     [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
         M <- rabbit_exchange_decorator:select(all, Decorators)],
     Module = type_to_module(XType),
-    apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
+    apply(Module, Fun, [Serial(Module:serialise_events()) | Args]);
+
+callback(undefined, _, _, _) ->
+    rabbit_log:warning("ignore undefined exchange").
 
 -spec policy_changed
         (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
