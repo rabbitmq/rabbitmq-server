@@ -455,8 +455,9 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
             {State1, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers = Consumers,
-                                                     stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost} = State,
-    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary, Offset:64/unsigned, Credit:16/signed>>, Rest) ->
+    stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost} = State,
+    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary,
+        OffsetType:16/signed, OffsetAndCredit/binary>>, Rest) ->
     case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
         {error, not_found} ->
             response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
@@ -467,10 +468,26 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
                     response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
                     {State, Rest};
                 false ->
-                    %% FIXME handle different type of offset (first, last, next, {abs, ...})
-                    {ok, Segment} = osiris:init_reader(LocalMemberPid, Offset),
+                    {OffsetSpec, Credit} = case OffsetType of
+                                               ?OFFSET_TYPE_FIRST ->
+                                                   <<Crdt:16>> = OffsetAndCredit,
+                                                   {first, Crdt};
+                                               ?OFFSET_TYPE_LAST ->
+                                                   <<Crdt:16>> = OffsetAndCredit,
+                                                   {last, Crdt};
+                                               ?OFFSET_TYPE_NEXT ->
+                                                   <<Crdt:16>> = OffsetAndCredit,
+                                                   {next, Crdt};
+                                               ?OFFSET_TYPE_OFFSET ->
+                                                   <<Offset:64/unsigned, Crdt:16>> = OffsetAndCredit,
+                                                   {Offset, Crdt};
+                                               ?OFFSET_TYPE_TIMESTAMP ->
+                                                   <<Timestamp:64/signed, Crdt:16>> = OffsetAndCredit,
+                                                   {{timestamp, Timestamp}, Crdt}
+                                           end,
+                    {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec),
                     ConsumerState = #consumer{
-                        member_pid = LocalMemberPid, offset = Offset, subscription_id = SubscriptionId, socket = Socket,
+                        member_pid = LocalMemberPid, offset = OffsetSpec, subscription_id = SubscriptionId, socket = Socket,
                         segment = Segment,
                         credit = Credit,
                         stream = Stream
