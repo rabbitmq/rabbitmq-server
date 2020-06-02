@@ -1,4 +1,33 @@
 [
+    %% discovery mechanism
+    {etcd_discovery_mechanism_as_module,
+        "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_etcd
+         cluster_formation.etcd.host = etcd.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_etcd},
+                    {peer_discovery_etcd, [
+                        {etcd_host, "etcd.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    
+    {etcd_discovery_mechanism_shortcut,
+        "cluster_formation.peer_discovery_backend = etcd
+         cluster_formation.etcd.host = etcd.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_etcd},
+                    {peer_discovery_etcd, [
+                        {etcd_host, "etcd.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    
     %% etcd hostname
     {etcd_host, "cluster_formation.etcd.host = etcd.eng.megacorp.local", [
             {rabbit, [
