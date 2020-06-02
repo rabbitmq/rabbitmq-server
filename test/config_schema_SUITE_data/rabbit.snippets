@@ -102,7 +102,31 @@ cluster_formation.node_type = disc",
              {node_type,disc}]},
         {cluster_nodes,{[rabbit@hostname2,rabbit@hostname1],disc}}]}],
   []},
- {cluster_formation_disK,
+
+  {cluster_formation_module_classic_confog_alias,
+  "cluster_formation.peer_discovery_backend = classic_config
+cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
+cluster_formation.classic_config.nodes.peer2 = rabbit@hostname2",
+  [{rabbit,
+       [{cluster_formation,
+            [{peer_discovery_backend,rabbit_peer_discovery_classic_config}]},
+        {cluster_nodes,{[rabbit@hostname2,rabbit@hostname1],disc}}]}],
+  []},
+ 
+  {cluster_formation_module_dns_alias,
+  "cluster_formation.peer_discovery_backend = dns
+cluster_formation.dns.hostname = discovery.eng.example.local",
+  [{rabbit,
+       [
+         {cluster_formation,
+            [{peer_discovery_backend,rabbit_peer_discovery_dns},
+             {peer_discovery_dns, [
+               {hostname, <<"discovery.eng.example.local">>}
+             ]}]}
+        ]}],
+  []},
+ 
+ {cluster_formation_disk,
   "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
    cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
    cluster_formation.classic_config.nodes.peer2 = rabbit@hostname2
