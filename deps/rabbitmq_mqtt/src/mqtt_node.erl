@@ -20,6 +20,7 @@
 -define(ID_NAME, mqtt_node).
 -define(START_TIMEOUT, 100000).
 -define(RETRY_INTERVAL, 5000).
+-define(RA_OPERATION_TIMEOUT, 60000).
 
 node_id() ->
     server_id(node()).
@@ -68,7 +69,7 @@ start(Delay, AttemptsLeft) ->
                       rabbit_log:info("MQTT: discovered ~p cluster peers that support client ID tracking", [length(Peers)]),
                       start_server(),
                       join_peers(NodeId, Peers),
-                      ra:trigger_election(NodeId)
+                      ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
               end;
           _ ->
               join_peers(NodeId, Nodes),
