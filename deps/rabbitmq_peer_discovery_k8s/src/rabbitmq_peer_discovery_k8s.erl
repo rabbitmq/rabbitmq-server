@@ -23,7 +23,7 @@
          post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
          send_event/3, generate_v1_event/4, generate_v1_event/7]).
 
--define(DELEGATE, rabbit_peer_discovery_aws).
+-define(DELEGATE, rabbit_peer_discovery_k8s).
 
 %%
 %% API
