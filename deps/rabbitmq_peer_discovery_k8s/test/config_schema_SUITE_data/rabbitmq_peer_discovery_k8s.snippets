@@ -1,4 +1,46 @@
 [
+  {k8s_discovery_mechanism_as_module,
+      "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+       cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+  
+  {k8s_discovery_mechanism_as_alias1,
+      "cluster_formation.peer_discovery_backend = k8s
+       cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+  
+  {k8s_discovery_mechanism_as_alias2,
+      "cluster_formation.peer_discovery_backend = kubernetes
+       cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+  
   {k8s_host, "cluster_formation.k8s.host = k8s.eng.megacorp.local", [
           {rabbit, [
               {cluster_formation, [
