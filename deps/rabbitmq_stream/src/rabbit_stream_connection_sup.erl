@@ -21,7 +21,7 @@ start_link(Ref, _Sock, Transport, Opts) ->
         SupPid,
         {rabbit_stream_reader,
             {rabbit_stream_reader, start_link, [KeepaliveSup, Transport, Ref, Opts]},
-            intrinsic, ?WORKER_WAIT, worker, [rabbit_mqtt_reader]}),
+            intrinsic, ?WORKER_WAIT, worker, [rabbit_stream_reader]}),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
