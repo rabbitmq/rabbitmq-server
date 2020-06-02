@@ -156,13 +156,16 @@ PublishConfirm => Key Version PublishingIds
 === Subscribe
 
 ```
-Subscribe => Key Version CorrelationId SubscriptionId Stream Offset
+Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit
   Key => int16 // 2
   Version => int16
   CorrelationId => int32 // correlation id to correlate the response
   SubscriptionId => int32 // client-supplied id to identify the subscription
   Stream => string // the name of the stream
-  Offset => uint64 // the offset to start consuming from
+  OffsetSpecification => OffsetType Offset
+  OffsetType => int16 // 0 (first), 1 (last), 2 (next), 3 (offset), 4 (timestamp)
+  Offset => uint64 (for offset) | int64 (for timestamp)
+  Credit => int16
 ```
 
 === Deliver
