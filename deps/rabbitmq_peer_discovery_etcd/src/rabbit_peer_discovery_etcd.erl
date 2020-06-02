@@ -105,7 +105,7 @@ post_registration() ->
 
 lock(Node) when is_atom(Node) ->
     case rabbitmq_peer_discovery_etcd_v3_client:lock(Node) of
-        {ok, GeneratedKey} -> GeneratedKey;
+        {ok, GeneratedKey} -> {ok, GeneratedKey};
         {error, _} = Error -> Error
     end.
 
