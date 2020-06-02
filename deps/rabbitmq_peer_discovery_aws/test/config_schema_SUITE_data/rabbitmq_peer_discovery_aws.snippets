@@ -1,4 +1,33 @@
 [
+    %% discovery mechanism
+    {aws_ec2_discovery_mechanism_as_module,
+            "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_aws
+             cluster_formation.aws.region = us-west-1", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_aws},
+                    {peer_discovery_aws, [
+                        {aws_ec2_region, "us-west-1"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_ec2_discovery_mechanism_as_alias,
+            "cluster_formation.peer_discovery_backend = aws
+             cluster_formation.aws.region = us-west-1", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_aws},
+                    {peer_discovery_aws, [
+                        {aws_ec2_region, "us-west-1"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    
+    %% region
     {aws_ec2_region, "cluster_formation.aws.region = us-west-1", [
             {rabbit, [
                 {cluster_formation, [
