@@ -24,7 +24,7 @@
 
 -export([start_link/0]).
 -export([running_nodes_filename/0,
-         cluster_status_filename/0, quorum_filename/0,
+         cluster_status_filename/0, quorum_filename/0, default_quorum_filename/0,
          prepare_cluster_status_files/0,
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
@@ -82,6 +82,9 @@ cluster_status_filename() ->
     filename:join(rabbit_mnesia:dir(), "cluster_nodes.config").
 
 quorum_filename() ->
+    ra_env:data_dir().
+
+default_quorum_filename() ->
     filename:join(rabbit_mnesia:dir(), "quorum").
 
 -spec prepare_cluster_status_files() -> 'ok' | no_return().

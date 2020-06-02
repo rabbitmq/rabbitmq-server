@@ -558,6 +558,7 @@ dir() -> mnesia:system_info(directory).
 %% file.
 init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     NodeIsVirgin = is_virgin_node(),
+    rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~p", [NodeIsVirgin]),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -1008,8 +1009,8 @@ check_rabbit_consistency(RemoteNode, RemoteVersion) ->
 %% mnesia tables aren't there because restarted RAM nodes won't have
 %% tables while still being non-virgin.  What we do instead is to
 %% check if the mnesia directory is non existent or empty, with the
-%% exception of the cluster status files, which will be there thanks to
-%% `rabbit_node_monitor:prepare_cluster_status_file/0'.
+%% exception of certain files and directories, which can be there very early
+%% on node boot.
 is_virgin_node() ->
     case rabbit_file:list_dir(dir()) of
         {error, enoent} ->
@@ -1020,10 +1021,14 @@ is_virgin_node() ->
             IgnoredFiles0 =
             [rabbit_node_monitor:cluster_status_filename(),
              rabbit_node_monitor:running_nodes_filename(),
+             rabbit_node_monitor:default_quorum_filename(),
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file()],
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
+            rabbit_log:debug("Files and directories found in node's data directory: ~s, of them to be ignored: ~s",
+                            [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
             List = List0 -- IgnoredFiles,
+            rabbit_log:debug("Files and directories found in node's data directory sans ignored ones: ~s", [string:join(lists:usort(List), ", ")]),
             List =:= []
     end.
 
