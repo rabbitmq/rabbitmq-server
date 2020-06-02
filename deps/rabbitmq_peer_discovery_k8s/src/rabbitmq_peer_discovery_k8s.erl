@@ -21,7 +21,7 @@
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
-         send_event/3, generate_v1_event/4, generate_v1_event/7]).
+         send_event/3, generate_v1_event/7]).
 
 -define(DELEGATE, rabbit_peer_discovery_k8s).
 
@@ -64,9 +64,6 @@ unlock(Data) ->
 -spec randomized_startup_delay_range() -> {integer(), integer()}.
 randomized_startup_delay_range() ->
     ?DELEGATE:randomized_startup_delay_range().
-
-generate_v1_event(Namespace, Type, Message, Reason) ->
-    ?DELEGATE:generate_v1_event(Namespace, Type, Message, Reason).
 
 generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) ->
     ?DELEGATE:generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName).
