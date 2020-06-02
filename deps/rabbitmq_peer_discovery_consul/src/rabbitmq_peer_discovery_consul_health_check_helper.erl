@@ -44,33 +44,9 @@ start_link() ->
 init([]) ->
     case rabbit_peer_discovery:backend() of
         rabbit_peer_discovery_consul ->
-            M = rabbit_peer_discovery_config:config_map(peer_discover_consul),
-            case rabbit_peer_discovery_config:get(consul_svc_ttl, ?CONFIG_MAPPING, M) of
-                undefined ->
-                    {ok, #state{}};
-                %% in seconds
-                Interval  ->
-                    %% We cannot use timer:apply_interval/4 in rabbit_peer_discovery_consul
-                    %% because this function is executed in a short live process and when it
-                    %% exits, the timer module will automatically cancel the
-                    %% timer.
-                    %%
-                    %% Instead we delegate to a locally registered gen_server,
-                    %% `rabbitmq_peer_discovery_consul_health_check_helper`.
-                    %%
-                    %% The register step cannot call this gen_server either because when mnesia is
-                    %% started the plugins are not yet loaded.
-                    %%
-                    %% The value is 1/2 of what's configured to avoid a race
-                    %% condition between check TTL expiration and in flight
-                    %% notifications
-
-                    IntervalInMs = Interval * 500, % note this is 1/2
-                    rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [IntervalInMs]),
-                    {ok, TRef} = timer:apply_interval(IntervalInMs, rabbit_peer_discovery_consul,
-                                                      send_health_check_pass, []),
-                    {ok, #state{timer_ref = TRef}}
-            end;
+            set_up_periodic_health_check();
+        rabbitmq_peer_discovery_consul ->
+            set_up_periodic_health_check();
         _ ->
             {ok, #state{}}
     end.
@@ -93,3 +69,36 @@ terminate(_Arg, #state{timer_ref = TRef}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%
+%% Implementation
+%%
+
+set_up_periodic_health_check() ->
+    M = rabbit_peer_discovery_config:config_map(peer_discover_consul),
+    case rabbit_peer_discovery_config:get(consul_svc_ttl, ?CONFIG_MAPPING, M) of
+        undefined ->
+            {ok, #state{}};
+        %% in seconds
+        Interval  ->
+            %% We cannot use timer:apply_interval/4 in rabbit_peer_discovery_consul
+            %% because this function is executed in a short live process and when it
+            %% exits, the timer module will automatically cancel the
+            %% timer.
+            %%
+            %% Instead we delegate to a locally registered gen_server,
+            %% `rabbitmq_peer_discovery_consul_health_check_helper`.
+            %%
+            %% The register step cannot call this gen_server either because when mnesia is
+            %% started the plugins are not yet loaded.
+            %%
+            %% The value is 1/2 of what's configured to avoid a race
+            %% condition between check TTL expiration and in flight
+            %% notifications
+
+            IntervalInMs = Interval * 500, % note this is 1/2
+            rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [IntervalInMs]),
+            {ok, TRef} = timer:apply_interval(IntervalInMs, rabbit_peer_discovery_consul,
+                                              send_health_check_pass, []),
+            {ok, #state{timer_ref = TRef}}
+    end.
