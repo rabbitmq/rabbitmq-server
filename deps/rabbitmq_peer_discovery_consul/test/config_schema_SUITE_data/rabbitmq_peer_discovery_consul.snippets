@@ -1,14 +1,25 @@
 [
- {consul_host,
-  "cluster_formation.consul.host = consul.eng.megacorp.local",
+ {consul_discovery_mechanism_as_module,
+  "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_consul
+   cluster_formation.consul.host = consul.eng.megacorp.local",
   [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_backend, rabbit_peer_discovery_consul},
+                                  {peer_discovery_consul, [
+                                                           {consul_host, "consul.eng.megacorp.local"}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]},
+
+ {consul_host,
+  "cluster_formation.peer_discovery_backend = consul
+   cluster_formation.consul.host = consul.eng.megacorp.local",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_backend, rabbit_peer_discovery_consul},
                                   {peer_discovery_consul, [
                                                            {consul_host, "consul.eng.megacorp.local"}
                                                           ]}
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
-
-
 
  , {consul_port,
   "cluster_formation.consul.port = 9700",
@@ -29,7 +40,6 @@
                                                           ]}
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
-
 
  , {consul_scheme,
   "cluster_formation.consul.scheme = https",
