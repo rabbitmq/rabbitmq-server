@@ -392,6 +392,7 @@ start-brokers start-cluster: $(DIST_TARGET)
 		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
 		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
+		  -rabbitmq_stream tcp_listeners [$$((5555 + $$n - 1))] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
 			ERL_LIBS="$(DIST_ERL_LIBS)" \
