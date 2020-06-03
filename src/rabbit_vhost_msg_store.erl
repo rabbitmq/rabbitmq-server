@@ -29,7 +29,7 @@ start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
             supervisor2:start_child(VHostSup,
                                     {Type, {rabbit_msg_store, start_link,
                                             [Type, VHostDir, ClientRefs, StartupFunState]},
-                                     transient, ?WORKER_WAIT, worker, [rabbit_msg_store]});
+                                     transient, ?MSG_STORE_WORKER_WAIT, worker, [rabbit_msg_store]});
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} = E ->
