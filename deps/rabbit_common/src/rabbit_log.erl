@@ -108,6 +108,7 @@ make_internal_sink_name(feature_flags) -> rabbit_log_feature_flags_lager_event;
 make_internal_sink_name(federation) -> rabbit_log_federation_lager_event;
 make_internal_sink_name(ldap)       -> rabbit_log_ldap_lager_event;
 make_internal_sink_name(mirroring)  -> rabbit_log_mirroring_lager_event;
+make_internal_sink_name(osiris)     -> rabbit_log_osiris_lager_event;
 make_internal_sink_name(prelaunch)  -> rabbit_log_prelaunch_lager_event;
 make_internal_sink_name(queue)      -> rabbit_log_queue_lager_event;
 make_internal_sink_name(ra)         -> rabbit_log_ra_lager_event;
