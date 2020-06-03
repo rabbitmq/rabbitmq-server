@@ -210,6 +210,8 @@
         rabbit_misc:get_env(rabbit, supervisor_shutdown_timeout, infinity)).
 -define(WORKER_WAIT,
         rabbit_misc:get_env(rabbit, worker_shutdown_timeout, 30000)).
+-define(MSG_STORE_WORKER_WAIT,
+        rabbit_misc:get_env(rabbit, msg_store_shutdown_timeout, 600000)).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
