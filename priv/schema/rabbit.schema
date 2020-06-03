@@ -1090,7 +1090,7 @@ end}.
 {mapping, "mnesia_table_loading_retry_limit", "rabbit.mnesia_table_loading_retry_limit",
     [{datatype, integer}]}.
 
-{mapping, "message_store_shutdown_timeout", "rabbit.message_store_shutdown_timeout",
+{mapping, "message_store_shutdown_timeout", "rabbit.msg_store_shutdown_timeout",
     [
         {datatype, integer},
         {validators, ["non_zero_positive_integer"]}
