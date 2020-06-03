@@ -602,6 +602,20 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {rabbit_message_store_shutdown_timeout,
+   "message_store_shutdown_timeout = 600000",
+   [{rabbit, [
+      {message_store_shutdown_timeout, 600000}
+     ]}],
+   []},
+
+  {rabbit_mnesia_table_loading_retry_timeout,
+   "mnesia_table_loading_retry_timeout = 45000",
+   [{rabbit, [
+      {mnesia_table_loading_retry_timeout, 45000}
+     ]}],
+   []},
+
   {log_syslog_settings,
    "log.syslog = true
     log.syslog.identity = rabbitmq
