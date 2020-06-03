@@ -29,6 +29,7 @@ define PROJECT_ENV
 	    {connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
+	    {msg_store_shutdown_timeout, 600000},
 	    {fhc_write_buffering, true},
 	    {fhc_read_buffering, false},
 	    {queue_index_max_journal_entries, 32768},
