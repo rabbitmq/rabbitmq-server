@@ -48,7 +48,7 @@ See the entire list of [metrics](metrics.md) exposed via the default port.
 
 This exporter supports the following options via a set of `prometheus.*` configuration keys:
 
- * `prometheus.return_per_object_metrics` returns all metrics per object, unaggregated (default is `false`). See #26 for more details.
+ * `prometheus.return_per_object_metrics` returns [individual (per object) metrics that are not aggregated](https://www.rabbitmq.com/prometheus.html#metric-aggregation) (default is `false`).
  * `prometheus.path` defines a scrape endpoint (default is `"/metrics"`).
  * `prometheus.tcp.*` controls HTTP listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#configuration)
  * `prometheus.ssl.*` controls TLS (HTTPS) listener settings that match [those used by the RabbitMQ HTTP API](https://www.rabbitmq.com/management.html#single-listener-https)
