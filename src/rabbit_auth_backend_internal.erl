@@ -211,7 +211,7 @@ add_user(Username, Password, ActingUser) ->
                                        fun add_user_sans_validation/3).
 
 add_user_sans_validation(Username, Password, ActingUser) ->
-    rabbit_log:info("Creating user '~s'~n", [Username]),
+    rabbit_log:debug("Asked to create a new user '~s', password length in bytes: ~p", [Username, bit_size(Password)]),
     %% hash_password will pick the hashing function configured for us
     %% but we also need to store a hint as part of the record, so we
     %% retrieve it here one more time
@@ -220,7 +220,8 @@ add_user_sans_validation(Username, Password, ActingUser) ->
                           password_hash     = hash_password(HashingMod, Password),
                           tags              = [],
                           hashing_algorithm = HashingMod},
-    R = rabbit_misc:execute_mnesia_transaction(
+    try
+        R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_user, Username}) of
                       [] ->
@@ -229,15 +230,28 @@ add_user_sans_validation(Username, Password, ActingUser) ->
                           mnesia:abort({user_already_exists, Username})
                   end
           end),
-    rabbit_event:notify(user_created, [{name, Username},
-                                       {user_who_performed_action, ActingUser}]),
-    R.
+        rabbit_log:info("Created user '~s'", [Username]),
+        rabbit_event:notify(user_created, [{name, Username},
+                                           {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {user_already_exists, _}} = Error ->
+            rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
+            exit(Error)
+    end .
 
 -spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
 
 delete_user(Username, ActingUser) ->
-    rabbit_log:info("Deleting user '~s'~n", [Username]),
-    R = rabbit_misc:execute_mnesia_transaction(
+    rabbit_log:debug("Asked to delete user '~s'", [Username]),
+    try
+        R = rabbit_misc:execute_mnesia_transaction(
           rabbit_misc:with_user(
             Username,
             fun () ->
@@ -256,10 +270,22 @@ delete_user(Username, ActingUser) ->
                     [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
                     ok
             end)),
-    rabbit_event:notify(user_deleted,
-                        [{name, Username},
-                         {user_who_performed_action, ActingUser}]),
-    R.
+        rabbit_log:info("Deleted user '~s'", [Username]),
+        rabbit_event:notify(user_deleted,
+                            [{name, Username},
+                             {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {no_such_user, _}} = Error ->
+            rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
+            exit(Error)
+    end .
 
 -spec lookup_user
         (rabbit_types:username()) ->
