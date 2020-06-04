@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -31,6 +31,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
     )
   end
 
+  def output({:error, {:no_such_user, username}}, %{node: node_name, formatter: "json"}) do
+    {:error, %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exists"}}
+  end
+  def output({:error, {:no_such_user, username}}, _) do
+    {:error, ExitCodes.exit_software(), "User \"#{username}\" does not exist"}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "delete_user <username>"
@@ -43,7 +49,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
 
   def usage_doc_guides() do
     [
-      DocGuide.queues()
+      DocGuide.access_control()
     ]
   end
 
