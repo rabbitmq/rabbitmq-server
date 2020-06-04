@@ -1440,9 +1440,11 @@ is located on the current node.
 .\" ------------------------------------------------------------------
 .It Cm node_health_check
 .Pp
-Performs several health checks of the target node.
+DEPRECATED. Performs intrusive, opinionated health checks on a fully booted node.
+To learn more, see the
+.Lk https://www.rabbitmq.com/monitoring.html#health-checks "Health Checks documentation"
 .Pp
-Verifies the rabbit application is running and alarms are not set,
+Verifies the RabbitMQ application is running and alarms are not set,
 then checks that every queue and channel on the node can emit basic stats.
 .sp
 Example:
