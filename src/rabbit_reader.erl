@@ -909,17 +909,26 @@ create_channel(Channel,
                        #connection{name         = Name,
                                    protocol     = Protocol,
                                    frame_max    = FrameMax,
-                                   user         = User,
                                    vhost        = VHost,
-                                   capabilities = Capabilities}} = State) ->
-    {ok, _ChSupPid, {ChPid, AState}} =
-        rabbit_channel_sup_sup:start_channel(
-          ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                       Protocol, User, VHost, Capabilities, Collector}),
-    MRef = erlang:monitor(process, ChPid),
-    put({ch_pid, ChPid}, {Channel, MRef}),
-    put({channel, Channel}, {ChPid, AState}),
-    {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}}.
+                                   capabilities = Capabilities,
+                                   user = #user{username = Username} = User}
+                   } = State) ->
+    case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
+        false ->
+            {ok, _ChSupPid, {ChPid, AState}} =
+                rabbit_channel_sup_sup:start_channel(
+                  ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
+                               Protocol, User, VHost, Capabilities,
+                               Collector}),
+            MRef = erlang:monitor(process, ChPid),
+            put({ch_pid, ChPid}, {Channel, MRef}),
+            put({channel, Channel}, {ChPid, AState}),
+            {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
+        {true, Limit} -> {error, rabbit_misc:amqp_error(not_allowed,
+                          "number of channels opened for user (~w) has reached "
+                          "the maximum allowed limit of (~w)",
+                          [Username, Limit], 'none')}
+    end.
 
 channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
     case get({ch_pid, ChPid}) of
@@ -1330,13 +1339,13 @@ is_over_vhost_connection_limit(VHostPath, User) ->
             rabbit_misc:protocol_error(not_allowed, "vhost ~s not found", [VHostPath])
     end.
 
-is_over_user_connection_limit(User) ->
-    case rabbit_auth_backend_internal:is_over_connection_limit(User#user.username) of
+is_over_user_connection_limit(#user{username = Username}) ->
+    case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
         false -> ok;
         {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
                             "Connection refused for user '~s': "
                             "User connection limit (~p) is reached",
-                            [User#user.username, Limit])
+                            [Username, Limit])
     end.
 
 validate_negotiated_integer_value(Field, Min, ClientValue) ->
