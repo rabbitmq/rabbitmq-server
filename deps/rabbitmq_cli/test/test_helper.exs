@@ -506,6 +506,25 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_maintenance, :suspend_all_client_listeners, [])
   end
 
+  def set_user_limits(user, limits) do
+    :rpc.call(get_rabbit_hostname(),
+              :rabbit_auth_backend_internal, :set_user_limits, [user, limits])
+  end
+
+  def get_user_limits(user) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :get_user_limits, [user])
+    |> Map.new
+  end
+
+  def clear_user_limits(user) do
+    clear_user_limits user, "max-connections"
+    clear_user_limits user, "max-channels"
+  end
+
+  def clear_user_limits(user, limittype) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :clear_user_limits, [user, limittype])
+  end
+
   def set_scope(scope) do
     script_name = Config.get_option(:script_name, %{})
     scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
