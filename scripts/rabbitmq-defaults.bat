@@ -14,4 +14,8 @@ if not exist "!RABBITMQ_BASE!" (
     mkdir "!RABBITMQ_BASE!"
 )
 
-set CONF_ENV_FILE=!RABBITMQ_BASE!\rabbitmq-env-conf.bat
+if "!RABBITMQ_CONF_ENV_FILE!"=="" (
+    if "!CONF_ENV_FILE!"=="" (
+        set CONF_ENV_FILE=!RABBITMQ_BASE!\rabbitmq-env-conf.bat
+    )
+)
