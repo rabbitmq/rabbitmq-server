@@ -303,16 +303,29 @@ change_password(Username, Password, ActingUser) ->
                                        fun change_password_sans_validation/3).
 
 change_password_sans_validation(Username, Password, ActingUser) ->
-    rabbit_log:info("Changing password for '~s'~n", [Username]),
-    HashingAlgorithm = rabbit_password:hashing_mod(),
-    R = change_password_hash(Username,
-                             hash_password(rabbit_password:hashing_mod(),
-                                           Password),
-                             HashingAlgorithm),
-    rabbit_event:notify(user_password_changed,
-                        [{name, Username},
-                         {user_who_performed_action, ActingUser}]),
-    R.
+    try
+        rabbit_log:debug("Asked to change password of user '~s', new password length in bytes: ~p", [Username, bit_size(Password)]),
+        HashingAlgorithm = rabbit_password:hashing_mod(),
+        R = change_password_hash(Username,
+                                 hash_password(rabbit_password:hashing_mod(),
+                                               Password),
+                                 HashingAlgorithm),
+        rabbit_log:info("Successfully changed password for user '~s'", [Username]),
+        rabbit_event:notify(user_password_changed,
+                            [{name, Username},
+                             {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {no_such_user, _}} = Error ->
+            rabbit_log:warning("Failed to change password for user '~s': the user does not exist", [Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
+            exit(Error)
+    end.
 
 -spec clear_password(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
 
