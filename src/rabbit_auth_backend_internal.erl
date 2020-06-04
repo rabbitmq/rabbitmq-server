@@ -514,7 +514,10 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
     end .
 
 clear_topic_permissions(Username, VirtualHost, ActingUser) ->
-    R = rabbit_misc:execute_mnesia_transaction(
+    rabbit_log:debug("Asked to clear topic permissions for '~s' in virtual host '~s'",
+                     [Username, VirtualHost]),
+    try
+        R = rabbit_misc:execute_mnesia_transaction(
         rabbit_vhost:with_user_and_vhost(
             Username, VirtualHost,
             fun () ->
@@ -524,13 +527,36 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
                                 ok = mnesia:delete_object(rabbit_topic_permission, X, write)
                               end, List)
             end)),
-    rabbit_event:notify(topic_permission_deleted, [{user,  Username},
-        {vhost, VirtualHost},
-        {user_who_performed_action, ActingUser}]),
-    R.
+        rabbit_log:info("Successfully cleared topic permissions for '~s' in virtual host '~s'",
+                        [Username, VirtualHost]),
+        rabbit_event:notify(topic_permission_deleted, [{user,  Username},
+            {vhost, VirtualHost},
+            {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {no_such_vhost, _}} = Error ->
+            rabbit_log:warning("Failed to clear topic permissions for '~s': virtual host '~s' does not exist",
+                               [Username, VirtualHost]),
+            throw(Error);
+        throw:{error, {no_such_user, _}} = Error ->
+            rabbit_log:warning("Failed to clear topic permissions for '~s': the user does not exist",
+                               [Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to clear topic permissions for '~s' in virtual host '~s': ~p",
+                               [Username, VirtualHost, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to clear topic permissions for '~s' in virtual host '~s': ~p",
+                               [Username, VirtualHost, Error]),
+            exit(Error)
+    end.
 
 clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
-    R = rabbit_misc:execute_mnesia_transaction(
+    rabbit_log:debug("Asked to clear topic permissions on exchange '~s' for '~s' in virtual host '~s'",
+                     [Exchange, Username, VirtualHost]),
+    try
+        R = rabbit_misc:execute_mnesia_transaction(
         rabbit_vhost:with_user_and_vhost(
             Username, VirtualHost,
             fun () ->
@@ -542,10 +568,30 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
                         exchange = Exchange
                     }, write)
             end)),
-    rabbit_event:notify(permission_deleted, [{user,  Username},
-        {vhost, VirtualHost},
-        {user_who_performed_action, ActingUser}]),
-    R.
+        rabbit_log:info("Successfully cleared topic permissions on exchange '~s' for '~s' in virtual host '~s'",
+                        [Exchange, Username, VirtualHost]),
+        rabbit_event:notify(permission_deleted, [{user,  Username},
+                                                 {vhost, VirtualHost},
+                                                 {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {no_such_vhost, _}} = Error ->
+            rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s': virtual host '~s' does not exist",
+                               [Exchange, Username, VirtualHost]),
+            throw(Error);
+        throw:{error, {no_such_user, _}} = Error ->
+            rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s': the user does not exist",
+                               [Exchange, Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p",
+                               [Exchange, Username, VirtualHost, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p",
+                               [Exchange, Username, VirtualHost, Error]),
+            exit(Error)
+    end.
 
 put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
 
