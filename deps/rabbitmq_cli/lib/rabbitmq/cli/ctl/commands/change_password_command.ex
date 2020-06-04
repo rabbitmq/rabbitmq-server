@@ -54,6 +54,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
   def output({:error, :not_enough_args}, _) do
     {:error, ExitCodes.exit_software(), "Password is not provided via argument or stdin"}
   end
+  def output({:error, {:no_such_user, username}}, %{node: node_name, formatter: "json"}) do
+    {:error, %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exists"}}
+  end
+  def output({:error, {:no_such_user, username}}, _) do
+    {:error, ExitCodes.exit_software(), "User \"#{username}\" does not exist"}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "change_password <username> <password>"
