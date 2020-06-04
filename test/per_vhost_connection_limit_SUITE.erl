@@ -137,7 +137,7 @@ clear_all_connection_tracking_tables(Config) ->
     [rabbit_ct_broker_helpers:rpc(Config,
         N,
         rabbit_connection_tracking,
-        clear_tracked_connection_tables_for_this_node,
+        clear_tracking_tables,
         []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
 
 %% -------------------------------------------------------------------
