@@ -336,10 +336,10 @@ set_tags(Username, Tags, ActingUser) ->
          regexp(), rabbit_types:username()) ->
             'ok'.
 
-set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
+set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:debug("Asked to set permissions for "
                      "'~s' in '~s' to '~s', '~s', '~s'~n",
-                     [Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm]),
+                     [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
     lists:map(
       fun (RegexpBin) ->
               Regexp = binary_to_list(RegexpBin),
@@ -348,19 +348,19 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, ActingU
                   {error, Reason} ->
                       rabbit_log:warning("Failed to set permissions for "
                                          "'~s' in '~s': regular expression '~s' is invalid",
-                                         [Username, VHostPath, RegexpBin]),
+                                         [Username, VirtualHost, RegexpBin]),
                       throw({error, {invalid_regexp, Regexp, Reason}})
               end
       end, [ConfigurePerm, WritePerm, ReadPerm]),
     try
         R = rabbit_misc:execute_mnesia_transaction(
              rabbit_vhost:with_user_and_vhost(
-                Username, VHostPath,
+                Username, VirtualHost,
                 fun () -> ok = mnesia:write(
                                  rabbit_user_permission,
                                  #user_permission{user_vhost = #user_vhost{
                                                     username     = Username,
-                                                    virtual_host = VHostPath},
+                                                    virtual_host = VirtualHost},
                                                   permission = #permission{
                                                     configure = ConfigurePerm,
                                                     write     = WritePerm,
@@ -369,9 +369,9 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, ActingU
                 end)),
             rabbit_log:info("Successfully set permissions for "
                             "'~s' in '~s' to '~s', '~s', '~s'~n",
-                            [Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm]),
+                            [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
             rabbit_event:notify(permission_created, [{user,      Username},
-                                                     {vhost,     VHostPath},
+                                                     {vhost, VirtualHost},
                                                      {configure, ConfigurePerm},
                                                      {write,     WritePerm},
                                                      {read,      ReadPerm},
@@ -380,18 +380,18 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, ActingU
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
             rabbit_log:warning("Failed to set permissions for '~s': virtual host '~s' does not exist",
-                               [Username, VHostPath]),
+                               [Username, VirtualHost]),
             throw(Error);
         throw:{error, {no_such_user, _}} = Error ->
             rabbit_log:warning("Failed to set permissions for '~s': the user does not exist", [Username]),
             throw(Error);
         throw:Error ->
             rabbit_log:warning("Failed to set permissions for '~s' in '~s': ~p",
-                               [Username, VHostPath, Error]),
+                               [Username, VirtualHost, Error]),
             throw(Error);
         exit:Error ->
             rabbit_log:warning("Failed to set permissions for '~s' in '~s': ~p",
-                               [Username, VHostPath, Error]),
+                               [Username, VirtualHost, Error]),
             exit(Error)
     end.
 
@@ -422,27 +422,34 @@ update_user(Username, Fun) ->
                 ok = mnesia:write(rabbit_user, Fun(User), write)
         end)).
 
-set_topic_permissions(Username, VHostPath, Exchange, WritePerm, ReadPerm, ActingUser) ->
+set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, ActingUser) ->
+    rabbit_log:debug("Asked to set topic permissions on exchange '~s' for "
+                     "user '~s' in '~s' to '~s', '~s'~n",
+                     [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
     WritePermRegex = rabbit_data_coercion:to_binary(WritePerm),
     ReadPermRegex = rabbit_data_coercion:to_binary(ReadPerm),
     lists:map(
         fun (RegexpBin) ->
             case re:compile(RegexpBin) of
                 {ok, _}         -> ok;
-                {error, Reason} -> throw({error, {invalid_regexp,
-                    RegexpBin, Reason}})
+                {error, Reason} ->
+                    rabbit_log:warning("Failed to set topic permissions on exchange '~s' for "
+                                       "'~s' in '~s': regular expression '~s' is invalid",
+                                       [Exchange, Username, VirtualHost, RegexpBin]),
+                    throw({error, {invalid_regexp, RegexpBin, Reason}})
             end
         end, [WritePerm, ReadPerm]),
-    R = rabbit_misc:execute_mnesia_transaction(
+    try
+        R = rabbit_misc:execute_mnesia_transaction(
         rabbit_vhost:with_user_and_vhost(
-            Username, VHostPath,
+            Username, VirtualHost,
             fun () -> ok = mnesia:write(
                 rabbit_topic_permission,
                 #topic_permission{
                     topic_permission_key = #topic_permission_key{
                         user_vhost = #user_vhost{
                             username     = Username,
-                            virtual_host = VHostPath},
+                            virtual_host = VirtualHost},
                         exchange = Exchange
                     },
                     permission = #permission{
@@ -452,46 +459,67 @@ set_topic_permissions(Username, VHostPath, Exchange, WritePerm, ReadPerm, Acting
                 },
                 write)
             end)),
-    rabbit_event:notify(topic_permission_created, [
-        {user,      Username},
-        {vhost,     VHostPath},
-        {exchange,  Exchange},
-        {write,     WritePermRegex},
-        {read,      ReadPermRegex},
-        {user_who_performed_action, ActingUser}]),
-    R.
+        rabbit_log:info("Successfully set topic permissions on exchange '~s' for "
+                         "'~s' in '~s' to '~s', '~s'~n",
+                         [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
+        rabbit_event:notify(topic_permission_created, [
+            {user,      Username},
+            {vhost,     VirtualHost},
+            {exchange,  Exchange},
+            {write,     WritePermRegex},
+            {read,      ReadPermRegex},
+            {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {no_such_vhost, _}} = Error ->
+            rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s': virtual host '~s' does not exist",
+                               [Exchange, Username, VirtualHost]),
+            throw(Error);
+        throw:{error, {no_such_user, _}} = Error ->
+            rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s': the user does not exist",
+                               [Exchange, Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s' in '~s': ~p",
+                               [Exchange, Username, VirtualHost, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s' in '~s': ~p",
+                               [Exchange, Username, VirtualHost, Error]),
+            exit(Error)
+    end .
 
-clear_topic_permissions(Username, VHostPath, ActingUser) ->
+clear_topic_permissions(Username, VirtualHost, ActingUser) ->
     R = rabbit_misc:execute_mnesia_transaction(
         rabbit_vhost:with_user_and_vhost(
-            Username, VHostPath,
+            Username, VirtualHost,
             fun () ->
-                ListFunction = match_user_vhost_topic_permission(Username, VHostPath),
+                ListFunction = match_user_vhost_topic_permission(Username, VirtualHost),
                 List = ListFunction(),
                 lists:foreach(fun(X) ->
                                 ok = mnesia:delete_object(rabbit_topic_permission, X, write)
                               end, List)
             end)),
     rabbit_event:notify(topic_permission_deleted, [{user,  Username},
-        {vhost, VHostPath},
+        {vhost, VirtualHost},
         {user_who_performed_action, ActingUser}]),
     R.
 
-clear_topic_permissions(Username, VHostPath, Exchange, ActingUser) ->
+clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
     R = rabbit_misc:execute_mnesia_transaction(
         rabbit_vhost:with_user_and_vhost(
-            Username, VHostPath,
+            Username, VirtualHost,
             fun () ->
                 ok = mnesia:delete(rabbit_topic_permission,
                     #topic_permission_key{
                         user_vhost = #user_vhost{
                             username     = Username,
-                            virtual_host = VHostPath},
+                            virtual_host = VirtualHost},
                         exchange = Exchange
                     }, write)
             end)),
     rabbit_event:notify(permission_deleted, [{user,  Username},
-        {vhost, VHostPath},
+        {vhost, VirtualHost},
         {user_who_performed_action, ActingUser}]),
     R.
 
