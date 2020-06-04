@@ -246,12 +246,15 @@ parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser)
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
     case rabbit_json:try_decode(Defn) of
         {ok, Term} ->
-            set0(Type, VHost, Name,
-                 [{<<"pattern">>,    Pattern},
-                  {<<"definition">>, maps:to_list(Term)},
-                  {<<"priority">>,   Priority},
-                  {<<"apply-to">>,   ApplyTo}],
-                 ActingUser);
+            R = set0(Type, VHost, Name,
+                     [{<<"pattern">>,    Pattern},
+                      {<<"definition">>, maps:to_list(Term)},
+                      {<<"priority">>,   Priority},
+                      {<<"apply-to">>,   ApplyTo}],
+                     ActingUser),
+            rabbit_log:info("Successfully set policy '~s' matching ~s names in virtual host '~s' using pattern '~s'",
+                            [Name, ApplyTo, VHost, Pattern]),
+            R;
         {error, Reason} ->
             {error_string,
                 rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}

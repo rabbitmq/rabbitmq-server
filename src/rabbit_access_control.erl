@@ -67,6 +67,7 @@ check_user_login(Username, AuthProps) ->
                           rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
                           user(ModNUser, {ok, [{Mod, Impl}], []});
                       Else ->
+                          rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
                           Else
                   end;
               (_, {ok, User}) ->
