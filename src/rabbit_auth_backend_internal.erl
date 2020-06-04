@@ -367,16 +367,16 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
                                                       read       = ReadPerm}},
                                  write)
                 end)),
-            rabbit_log:info("Successfully set permissions for "
-                            "'~s' in virtual host '~s' to '~s', '~s', '~s'",
-                            [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
-            rabbit_event:notify(permission_created, [{user,      Username},
-                                                     {vhost,     VirtualHost},
-                                                     {configure, ConfigurePerm},
-                                                     {write,     WritePerm},
-                                                     {read,      ReadPerm},
-                                                     {user_who_performed_action, ActingUser}]),
-            R
+        rabbit_log:info("Successfully set permissions for "
+                        "'~s' in virtual host '~s' to '~s', '~s', '~s'",
+                        [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
+        rabbit_event:notify(permission_created, [{user,      Username},
+                                                 {vhost,     VirtualHost},
+                                                 {configure, ConfigurePerm},
+                                                 {write,     WritePerm},
+                                                 {read,      ReadPerm},
+                                                 {user_who_performed_action, ActingUser}]),
+        R
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
             rabbit_log:warning("Failed to set permissions for '~s': virtual host '~s' does not exist",
