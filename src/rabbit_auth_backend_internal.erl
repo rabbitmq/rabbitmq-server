@@ -348,14 +348,26 @@ change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
 
 set_tags(Username, Tags, ActingUser) ->
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
-    rabbit_log:info("Setting user tags for user '~s' to ~p~n",
-                    [Username, ConvertedTags]),
-    R = update_user(Username, fun(User) ->
-                                      User#internal_user{tags = ConvertedTags}
-                              end),
-    rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags},
-                                        {user_who_performed_action, ActingUser}]),
-    R.
+    rabbit_log:debug("Asked to set user tags for user '~s' to ~p", [Username, ConvertedTags]),
+    try
+        R = update_user(Username, fun(User) ->
+                                          User#internal_user{tags = ConvertedTags}
+                                  end),
+        rabbit_log:info("Successfully set user tags for user '~s' to ~p", [Username, ConvertedTags]),
+        rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags},
+                                            {user_who_performed_action, ActingUser}]),
+        R
+    catch
+        throw:{error, {no_such_user, _}} = Error ->
+            rabbit_log:warning("Failed to set tags for user '~s': the user does not exist", [Username]),
+            throw(Error);
+        throw:Error ->
+            rabbit_log:warning("Failed to set tags for user '~s': ~p", [Username, Error]),
+            throw(Error);
+        exit:Error ->
+            rabbit_log:warning("Failed to set tags for user '~s': ~p", [Username, Error]),
+            exit(Error)
+    end .
 
 -spec set_permissions
         (rabbit_types:username(), rabbit_types:vhost(), regexp(), regexp(),
