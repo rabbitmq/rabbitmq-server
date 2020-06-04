@@ -65,7 +65,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def output({:healthcheck_failed, message}, _) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     "Error: healthcheck failed. Message: #{message}"}
+     "Error: health check failed. Message: #{message}"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
@@ -78,10 +78,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
     ]
   end
 
-  def help_section(), do: :observability_and_health_checks
-  def description(), do: "Performs several opinionated health checks of the target node"
+  def help_section(), do: :deprecated
+  def description() do
+    "DEPRECATED. Performs intrusive, opinionated health checks on a fully booted node. " <>
+    "See https://www.rabbitmq.com/monitoring.html#health-checks instead"
+  end
 
   def banner(_, %{node: node_name, timeout: timeout}) do
-    ["Timeout: #{trunc(timeout / 1000)} seconds ...", "Checking health of node #{node_name} ..."]
+    [
+      "This command is DEPRECATED and will be removed in a future version.",
+      "It performs intrusive, opinionated health checks and requires a fully booted node.",
+      "Use one of the options covered in https://www.rabbitmq.com/monitoring.html#health-checks instead.",
+      "Timeout: #{trunc(timeout / 1000)} seconds ...",
+      "Checking health of node #{node_name} ..."
+    ]
   end
 end
