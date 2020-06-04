@@ -21,6 +21,9 @@
          set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
          add_user_sans_validation/3, put_user/2, put_user/3]).
 
+-export([set_user_limits/2, clear_user_limits/2, is_over_connection_limit/1,
+         is_over_channel_limit/1, get_user_limits/1]).
+
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
@@ -763,6 +766,38 @@ preconfigure_permissions(Username, Map, ActingUser) when is_map(Map) ->
              Map),
     ok.
 
+set_user_limits(Username, Defn) ->
+    Definition = rabbit_data_coercion:to_binary(Defn),
+    case rabbit_json:try_decode(Definition) of
+        {ok, Term} ->
+            validate_parameters_and_update_limit(Username, Term);
+        {error, Reason} ->
+            {error_string, rabbit_misc:format(
+                             "JSON decoding error. Reason: ~ts", [Reason])}
+    end.
+
+validate_parameters_and_update_limit(Username, Term) ->
+    case rabbit_parameter_validation:proplist(<<"user-limits">>,
+                                              user_limit_validation(), Term) of
+        [ok] ->
+            update_user(Username, fun(User = #internal_user{limits = Limits}) ->
+                                      User#internal_user{
+                                           limits = maps:merge(Limits, Term)}
+                                  end);
+        [{error, Reason, Arguments}] ->
+            {error_string, rabbit_misc:format(Reason, Arguments)}
+    end.
+
+user_limit_validation() ->
+    [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},
+     {<<"max-channels">>, fun rabbit_parameter_validation:integer/2, optional}].
+
+clear_user_limits(Username, LimitType) ->
+    update_user(Username, fun(User = #internal_user{limits = Limits}) ->
+                              User#internal_user{
+                                    limits = maps:remove(LimitType, Limits)}
+                          end).
+
 %%----------------------------------------------------------------------------
 %% Listing
 
@@ -958,4 +993,45 @@ hashing_algorithm(User, Version) ->
                 _                    -> rabbit_password:hashing_mod()
             end;
         Alg       -> rabbit_data_coercion:to_atom(Alg, utf8)
+    end.
+
+is_over_connection_limit(Username) ->
+    Fun = fun() ->
+              rabbit_connection_tracking:count_tracked_items_in({user, Username})
+          end,
+    is_over_limit(Username, <<"max-connections">>, Fun).
+ 
+is_over_channel_limit(Username) ->
+    Fun = fun() ->
+              rabbit_channel_tracking:count_tracked_items_in({user, Username})
+          end,
+    is_over_limit(Username, <<"max-channels">>, Fun).
+
+is_over_limit(Username, LimitType, Fun) ->
+    case get_user_limit(Username, LimitType) of
+        undefined -> false;
+        {ok, 0} -> {true, 0};
+        {ok, Limit} ->
+            case Fun() >= Limit of
+                false -> false;
+                true -> {true, Limit}
+            end
+    end.
+
+get_user_limit(Username, LimitType) ->
+    case lookup_user(Username) of
+        {ok, User} ->
+            case rabbit_misc:pget(LimitType, User#internal_user.limits) of
+                undefined -> undefined;
+                N when N < 0  -> undefined;
+                N when N >= 0 -> {ok, N}
+            end;
+        _ ->
+            undefined
+    end.
+
+get_user_limits(Username) ->
+    case lookup_user(Username) of
+        {ok, User} -> User#internal_user.limits;
+        _ -> undefined
     end.
