@@ -22,7 +22,6 @@
 -export([close_connections/3]).
 
 -include_lib("rabbit.hrl").
--import(rabbit_misc, [pget/2]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "connection tracking event handler"},
