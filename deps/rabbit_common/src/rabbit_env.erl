@@ -1475,19 +1475,25 @@ loading_conf_env_file_enabled(_) ->
 do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
     rabbit_log_prelaunch:debug(
       "Sourcing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
-    Marker = rabbit_misc:format(
-               "-----BEGIN VARS LIST FOR PID ~s-----", [os:getpid()]),
+
+    %% The script below sources the `CONF_ENV_FILE` file, then it shows a
+    %% marker line and all environment variables.
+    %%
+    %% The marker line is useful to distinguish any output from the sourced
+    %% script from the variables we are interested in.
+    Marker = vars_list_marker(),
     Script = rabbit_misc:format(
                ". \"~ts\" && "
                "echo \"~s\" && "
                "set", [ConfEnvFile, Marker]),
-    Args = ["-ex", "-c", Script],
 
     #{sys_prefix := SysPrefix,
       rabbitmq_home := RabbitmqHome} = Context,
     MainConfigFile = re:replace(
                        get_default_main_config_file(Context),
                        "\\.(conf|config)$", "", [{return, list}]),
+
+    %% The variables below are those the `CONF_ENV_FILE` file can expect.
     Env = [
            {"SYS_PREFIX", SysPrefix},
            {"RABBITMQ_HOME", RabbitmqHome},
@@ -1499,15 +1505,15 @@ do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
            {"CONF_ENV_FILE_PHASE", "rabbtimq-prelaunch"}
           ],
 
-    Port = erlang:open_port(
-             {spawn_executable, Sh},
-             [{args, Args},
-              {env, Env},
-              binary,
-              use_stdio,
-              stderr_to_stdout,
-              exit_status]),
-    collect_sh_output(Context, Port, Marker, <<>>);
+    Args = ["-ex", "-c", Script],
+    Opts = [{args, Args},
+            {env, Env},
+            binary,
+            use_stdio,
+            stderr_to_stdout,
+            exit_status],
+    Port = erlang:open_port({spawn_executable, Sh}, Opts),
+    collect_conf_env_file_output(Context, Port, Marker, <<>>);
 do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
     %% rabbitmq/rabbitmq-common#392
     rabbit_log_prelaunch:debug(
