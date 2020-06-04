@@ -14,7 +14,7 @@
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
--export([add_user/3, delete_user/2, lookup_user/1,
+-export([add_user/3, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
          set_tags/3, set_permissions/6, clear_permissions/3,
@@ -288,6 +288,14 @@ delete_user(Username, ActingUser) ->
 
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
+
+-spec exists(rabbit_types:username()) -> boolean().
+
+exists(Username) ->
+    case lookup_user(Username) of
+        {error, not_found} -> false;
+        _                  -> true
+    end.
 
 -spec change_password
         (rabbit_types:username(), rabbit_types:password(), rabbit_types:username()) -> 'ok'.
@@ -660,11 +668,6 @@ put_user(User, Version, ActingUser) ->
                                   T <- string:tokens(binary_to_list(TagsS), ",")]
                       end,
 
-    UserExists      = case rabbit_auth_backend_internal:lookup_user(Username) of
-                          {error, not_found} -> false;
-                          _                  -> true
-                      end,
-
     %% pre-configured, only applies to newly created users
     Permissions     = maps:get(permissions, User, undefined),
 
@@ -677,7 +680,7 @@ put_user(User, Version, ActingUser) ->
                 rabbit_credential_validation:validate(Username, Password) =:= ok
         end,
 
-    case UserExists of
+    case exists(Username) of
         true  ->
             case {HasPassword, HasPasswordHash} of
                 {true, false} ->
@@ -1000,7 +1003,7 @@ is_over_connection_limit(Username) ->
               rabbit_connection_tracking:count_tracked_items_in({user, Username})
           end,
     is_over_limit(Username, <<"max-connections">>, Fun).
- 
+
 is_over_channel_limit(Username) ->
     Fun = fun() ->
               rabbit_channel_tracking:count_tracked_items_in({user, Username})
