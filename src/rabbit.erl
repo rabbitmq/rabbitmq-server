@@ -1335,7 +1335,7 @@ product_info() ->
                       otp_release => rabbit_misc:otp_release()},
 
             {NameFromEnv, VersionFromEnv} =
-            case rabbit_env:get_context() of
+            case rabbit_prelaunch:get_context() of
                 #{product_name := NFE,
                   product_version := VFE} -> {NFE, VFE};
                 _                         -> {undefined, undefined}
@@ -1410,7 +1410,7 @@ motd_file() ->
     %%   1. The environment variable;
     %%   2. The `motd_file` configuration parameter;
     %%   3. The default value.
-    Context = rabbit_env:get_context(),
+    Context = rabbit_prelaunch:get_context(),
     case Context of
         #{motd_file := File,
           var_origins := #{motd_file := environment}}
