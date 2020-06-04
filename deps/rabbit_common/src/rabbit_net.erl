@@ -20,11 +20,11 @@
 -include_lib("kernel/include/inet.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-         recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
-         setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
-         peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
-         hostname/0]).
+    recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
+    setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
+    peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
+    tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
+    hostname/0, getifaddrs/0]).
 
 %%---------------------------------------------------------------------------
 
@@ -272,6 +272,29 @@ hostname() ->
         {ok,    #hostent{h_name = Name}} -> Name;
         {error, _Reason}                 -> Hostname
     end.
+
+format_nic_attribute({Key, undefined}) ->
+    {Key, undefined};
+format_nic_attribute({Key = flags, List}) when is_list(List) ->
+    Val = string:join(lists:map(fun rabbit_data_coercion:to_list/1, List), ", "),
+    {Key, rabbit_data_coercion:to_binary(Val)};
+format_nic_attribute({Key, Tuple}) when is_tuple(Tuple) and (Key =:= addr orelse
+                                                             Key =:= broadaddr orelse
+                                                             Key =:= netmask orelse
+                                                             Key =:= dstaddr) ->
+    Val = inet_parse:ntoa(Tuple),
+    {Key, rabbit_data_coercion:to_binary(Val)};
+format_nic_attribute({Key = hwaddr, List}) when is_list(List) ->
+    %% [140, 133, 144, 28, 241, 121] => 8C:85:90:1C:F1:79
+    Val = string:join(lists:map(fun(N) -> integer_to_list(N, 16) end, List), ":"),
+    {Key, rabbit_data_coercion:to_binary(Val)}.
+
+getifaddrs() ->
+    {ok, AddrList} = inet:getifaddrs(),
+    Addrs0 = maps:from_list(AddrList),
+    maps:map(fun (_Key, Proplist) ->
+                lists:map(fun format_nic_attribute/1, Proplist)
+             end, Addrs0).
 
 rdns(Addr) ->
     case application:get_env(rabbit, reverse_dns_lookups) of
