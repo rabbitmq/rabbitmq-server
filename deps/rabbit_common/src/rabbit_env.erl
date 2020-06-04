@@ -299,8 +299,8 @@ context_to_app_env_vars1(
     end,
     ok.
 
-context_to_code_path(#{plugins_path := PluginsPath}) ->
-    Dirs = get_user_lib_dirs(PluginsPath),
+context_to_code_path(#{os_type := OSType, plugins_path := PluginsPath}) ->
+    Dirs = get_user_lib_dirs(OSType, PluginsPath),
     code:add_pathsa(lists:reverse(Dirs)).
 
 %% -------------------------------------------------------------------
@@ -309,8 +309,8 @@ context_to_code_path(#{plugins_path := PluginsPath}) ->
 %% The goal is to mimic the behavior of the `$ERL_LIBS` environment
 %% variable.
 
-get_user_lib_dirs(Path) ->
-    Sep = case os:type() of
+get_user_lib_dirs(OSType, Path) ->
+    Sep = case OSType of
               {win32, _} -> ";";
               _          -> ":"
           end,
