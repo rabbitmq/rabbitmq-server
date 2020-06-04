@@ -272,12 +272,22 @@ rejects_survive(Config, DeathFun) ->
                                                     durable     = true,
                                                     arguments = [{<<"x-max-length">>, long, 1},
                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>}]}),
-    Payload = <<"there can be only one">>,
-    amqp_channel:call(Node1Channel,
-                      #'basic.publish'{routing_key = Queue},
-                      #amqp_msg{payload = Payload}),
 
-    %% send a bunch of messages from the producer. Tolerating nacks.
+    amqp_channel:register_confirm_handler(Node1Channel, self()),
+    #'confirm.select_ok'{} = amqp_channel:call(Node1Channel, #'confirm.select'{}),
+    Payload = <<"there can be only one">>,
+    ok = amqp_channel:call(Node1Channel,
+                           #'basic.publish'{routing_key = Queue},
+                           #amqp_msg{payload = Payload}),
+
+    ok = receive
+             #'basic.ack'{multiple = false} -> ok;
+             #'basic.nack'{multiple = false} -> message_nacked
+         after
+             5000 -> confirm_not_received
+         end,
+
+    %% send a bunch of messages from the producer. They should all be nacked, as the queue is full.
     ProducerPid = rabbit_ha_test_producer:create(Node2Channel, Queue,
                                                  self(), true, Msgs, nacks),
     DeathFun(Config, A),
