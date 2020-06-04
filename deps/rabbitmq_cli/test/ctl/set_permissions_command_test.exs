@@ -102,7 +102,7 @@ defmodule SetPermissionsCommandTest do
   end
 
   @tag user: @user, vhost: @root
-  test "run: invalid regex patterns return error", context do
+  test "run: invalid regex patterns returns an error", context do
     assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", "*"],
       context[:opts]

@@ -54,6 +54,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
     )
   end
 
+  def output({:error, :not_enough_args}, _) do
+    {:error, ExitCodes.exit_software(), "Password is not provided via argument or stdin"}
+  end
+  def output({:error, {:user_already_exists, username}}, %{node: node_name, formatter: "json"}) do
+    {:error, %{"result" => "error", "node" => node_name, "message" => "User #{username} already exists"}}
+  end
+  def output({:error, {:user_already_exists, username}}, _) do
+    {:error, ExitCodes.exit_software(), "User \"#{username}\" already exists"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
+
   def usage, do: "add_user <username> <password>"
 
   def usage_additional() do
@@ -74,13 +85,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   def description(), do: "Creates a new user in the internal database"
 
   def banner([username | _], _), do: "Adding user \"#{username}\" ..."
-
-  def output({:error, :not_enough_args}, _) do
-    {:error, ExitCodes.exit_software(), "Password is not provided via argument or stdin"}
-  end
-  def output({:error, {:user_already_exists, username}}, _) do
-    {:error, ExitCodes.exit_software(), "User \"#{username}\" already exists"}
-  end
-
-  use RabbitMQ.CLI.DefaultOutput
 end
