@@ -346,8 +346,8 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
               case re:compile(Regexp) of
                   {ok, _}         -> ok;
                   {error, Reason} ->
-                      rabbit_log:warning("Failed to set permissions for "
-                                         "'~s' in virtual host '~s': regular expression '~s' is invalid",
+                      rabbit_log:warning("Failed to set permissions for '~s' in virtual host '~s': "
+                                         "regular expression '~s' is invalid",
                                          [Username, VirtualHost, RegexpBin]),
                       throw({error, {invalid_regexp, Regexp, Reason}})
               end
