@@ -28,7 +28,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand do
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
-  def run([], %{node: node_name, offline: true}) do
+  def run([], %{offline: true}) do
     :rabbit_net.getifaddrs()
   end
   def run([], %{node: node_name, timeout: timeout}) do
