@@ -22,6 +22,8 @@
 -export([all/0,
          suite/0,
          groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
          init_per_group/2,
          end_per_group/2,
          init_per_testcase/2,
@@ -110,6 +112,14 @@ groups() ->
      {parallel_tests, [parallel], all()}
     ].
 
+init_per_suite(Config) ->
+    persistent_term:put({rabbit_env, load_conf_env_file}, false),
+    Config.
+
+end_per_suite(Config) ->
+    persistent_term:erase({rabbit_env, load_conf_env_file}),
+    Config.
+
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
@@ -138,7 +148,6 @@ check_data_dir(_) ->
 check_default_values(_) ->
     %% When `rabbit_env` is built with `TEST` defined, we can override
     %% the OS type.
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
     UnixContext = rabbit_env:get_context(),
 
@@ -152,7 +161,6 @@ check_default_values(_) ->
     end,
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
 
     {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
 
@@ -359,12 +367,10 @@ check_values_from_reachable_remote_node(Config) ->
     wait_for_remote_node(Node),
 
     try
-        persistent_term:put({rabbit_env, load_conf_env_file}, false),
         persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
         UnixContext = rabbit_env:get_context(Node),
 
         persistent_term:erase({rabbit_env, os_type}),
-        persistent_term:erase({rabbit_env, load_conf_env_file}),
 
         {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
 
@@ -475,12 +481,10 @@ check_values_from_offline_remote_node(_) ->
     NodeS = atom_to_list(Node),
     true = os:putenv("RABBITMQ_NODENAME", NodeS),
 
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
     UnixContext = rabbit_env:get_context(offline),
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
     os:unsetenv("RABBITMQ_NODENAME"),
 
     {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
@@ -568,12 +572,10 @@ check_values_from_offline_remote_node(_) ->
 check_context_to_app_env_vars(_) ->
     %% When `rabbit_env` is built with `TEST` defined, we can override
     %% the OS type.
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
     UnixContext = rabbit_env:get_context(),
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
 
     Vars = [{mnesia, dir, maps:get(mnesia_dir, UnixContext)},
             {ra, data_dir, maps:get(quorum_queue_dir, UnixContext)},
@@ -630,36 +632,76 @@ check_context_to_code_path(Config) ->
     ok = file:make_dir(MyPlugin2Dir),
     ok = file:make_dir(MyPlugin2EbinDir),
 
-    %% When `rabbit_env` is built with `TEST` defined, we can override
-    %% the OS type.
-    PluginsPath = PluginsDir1 ++ ":" ++ PluginsDir2,
-    true = os:putenv("RABBITMQ_PLUGINS_DIR", PluginsPath),
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
-    persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
-    UnixContext = rabbit_env:get_context(),
+    %% On Unix.
+    %%
+    %% We can't test the Unix codepath on Windows because the drive letter
+    %% separator conflicts with the path separator (they are both ':').
+    %% However, the Windows codepath can be tested on both Unix and Windows.
+    case os:type() of
+        {unix, _} ->
+            UnixPluginsPath = PluginsDir1 ++ ":" ++ PluginsDir2,
+            true = os:putenv("RABBITMQ_PLUGINS_DIR", UnixPluginsPath),
+            persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
+            UnixContext = rabbit_env:get_context(),
+
+            persistent_term:erase({rabbit_env, os_type}),
+            os:unsetenv("RABBITMQ_PLUGINS_DIR"),
+
+            ?assertEqual(UnixPluginsPath, maps:get(plugins_path, UnixContext)),
+
+            OldCodePath1 = code:get_path(),
+            ?assertNot(lists:member(MyPlugin1EbinDir, OldCodePath1)),
+            ?assertNot(lists:member(MyPlugin2EbinDir, OldCodePath1)),
+
+            rabbit_env:context_to_code_path(UnixContext),
+
+            NewCodePath1 = code:get_path(),
+            ?assert(lists:member(MyPlugin1EbinDir, NewCodePath1)),
+            ?assert(lists:member(MyPlugin2EbinDir, NewCodePath1)),
+            ?assertEqual(
+               [MyPlugin1EbinDir, MyPlugin2EbinDir],
+               lists:filter(
+                 fun(Dir) ->
+                         Dir =:= MyPlugin1EbinDir orelse
+                         Dir =:= MyPlugin2EbinDir
+                 end, NewCodePath1)),
+
+            true = code:del_path(MyPlugin1EbinDir),
+            true = code:del_path(MyPlugin2EbinDir);
+        _ ->
+            ok
+    end,
+
+    %% On Windows.
+    Win32PluginsPath = PluginsDir1 ++ ";" ++ PluginsDir2,
+    true = os:putenv("RABBITMQ_PLUGINS_DIR", Win32PluginsPath),
+    persistent_term:put({rabbit_env, os_type}, {win32, undefined}),
+    Win32Context = rabbit_env:get_context(),
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
     os:unsetenv("RABBITMQ_PLUGINS_DIR"),
 
-    ?assertEqual(PluginsPath, maps:get(plugins_path, UnixContext)),
+    ?assertEqual(Win32PluginsPath, maps:get(plugins_path, Win32Context)),
 
-    OldCodePath = code:get_path(),
-    ?assertNot(lists:member(MyPlugin1EbinDir, OldCodePath)),
-    ?assertNot(lists:member(MyPlugin2EbinDir, OldCodePath)),
+    OldCodePath2 = code:get_path(),
+    ?assertNot(lists:member(MyPlugin1EbinDir, OldCodePath2)),
+    ?assertNot(lists:member(MyPlugin2EbinDir, OldCodePath2)),
 
-    rabbit_env:context_to_code_path(UnixContext),
+    rabbit_env:context_to_code_path(Win32Context),
 
-    NewCodePath = code:get_path(),
-    ?assert(lists:member(MyPlugin1EbinDir, NewCodePath)),
-    ?assert(lists:member(MyPlugin2EbinDir, NewCodePath)),
+    NewCodePath2 = code:get_path(),
+    ?assert(lists:member(MyPlugin1EbinDir, NewCodePath2)),
+    ?assert(lists:member(MyPlugin2EbinDir, NewCodePath2)),
     ?assertEqual(
        [MyPlugin1EbinDir, MyPlugin2EbinDir],
        lists:filter(
          fun(Dir) ->
                  Dir =:= MyPlugin1EbinDir orelse
                  Dir =:= MyPlugin2EbinDir
-         end, NewCodePath)).
+         end, NewCodePath2)),
+
+    true = code:del_path(MyPlugin1EbinDir),
+    true = code:del_path(MyPlugin2EbinDir).
 
 check_RABBITMQ_ADVANCED_CONFIG_FILE(_) ->
     Value1 = random_string(),
