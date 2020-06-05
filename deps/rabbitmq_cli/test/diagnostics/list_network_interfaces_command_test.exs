@@ -11,13 +11,13 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule DiscoverPeersCommandTest do
+defmodule ListNetworkInterfacesCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     :ok
@@ -36,13 +36,13 @@ defmodule DiscoverPeersCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  @tag test_timeout: 3000
+    @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
   end
 
   @tag test_timeout: 15000
-  test "run: returns a list of nodes when the backend isn't configured", context do
-    assert match?({:ok, {[], _}}, @command.run([], context[:opts]))
+  test "run: returns a map of interfaces", context do
+    assert match?(%{}, @command.run([], context[:opts]))
   end
 end
