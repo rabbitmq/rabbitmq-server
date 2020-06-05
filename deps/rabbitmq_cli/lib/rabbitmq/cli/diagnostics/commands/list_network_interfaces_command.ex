@@ -22,22 +22,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNetworkInterfacesCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  def switches(), do: [timeout: :integer, offline: :boolean]
+  def aliases(), do: [t: :timeout]
+
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
+  def run([], %{node: node_name, offline: true}) do
+    :rabbit_net.getifaddrs()
+  end
   def run([], %{node: node_name, timeout: timeout}) do
-    # Example response when there are alarms:
-    #
-    # [
-    #  file_descriptor_limit,
-    #  {{resource_limit,disk,hare@warp10},[]},
-    #  {{resource_limit,memory,hare@warp10},[]},
-    #  {{resource_limit,disk,rabbit@warp10},[]},
-    #  {{resource_limit,memory,rabbit@warp10},[]}
-    # ]
-    #
-    # The topmost file_descriptor_limit alarm is node-local.
     :rabbit_misc.rpc_call(node_name, :rabbit_net, :getifaddrs, [], timeout)
   end
 
