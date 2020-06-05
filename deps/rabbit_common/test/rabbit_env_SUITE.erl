@@ -22,6 +22,8 @@
 -export([all/0,
          suite/0,
          groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
          init_per_group/2,
          end_per_group/2,
          init_per_testcase/2,
@@ -110,6 +112,14 @@ groups() ->
      {parallel_tests, [parallel], all()}
     ].
 
+init_per_suite(Config) ->
+    persistent_term:put({rabbit_env, load_conf_env_file}, false),
+    Config.
+
+end_per_suite(Config) ->
+    persistent_term:erase({rabbit_env, load_conf_env_file}),
+    Config.
+
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
@@ -138,7 +148,6 @@ check_data_dir(_) ->
 check_default_values(_) ->
     %% When `rabbit_env` is built with `TEST` defined, we can override
     %% the OS type.
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
     UnixContext = rabbit_env:get_context(),
 
@@ -152,7 +161,6 @@ check_default_values(_) ->
     end,
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
 
     {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
 
@@ -359,12 +367,10 @@ check_values_from_reachable_remote_node(Config) ->
     wait_for_remote_node(Node),
 
     try
-        persistent_term:put({rabbit_env, load_conf_env_file}, false),
         persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
         UnixContext = rabbit_env:get_context(Node),
 
         persistent_term:erase({rabbit_env, os_type}),
-        persistent_term:erase({rabbit_env, load_conf_env_file}),
 
         {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
 
@@ -475,12 +481,10 @@ check_values_from_offline_remote_node(_) ->
     NodeS = atom_to_list(Node),
     true = os:putenv("RABBITMQ_NODENAME", NodeS),
 
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
     UnixContext = rabbit_env:get_context(offline),
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
     os:unsetenv("RABBITMQ_NODENAME"),
 
     {RFFValue, RFFOrigin} = forced_feature_flags_on_init_expect(),
@@ -568,12 +572,10 @@ check_values_from_offline_remote_node(_) ->
 check_context_to_app_env_vars(_) ->
     %% When `rabbit_env` is built with `TEST` defined, we can override
     %% the OS type.
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
     UnixContext = rabbit_env:get_context(),
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
 
     Vars = [{mnesia, dir, maps:get(mnesia_dir, UnixContext)},
             {ra, data_dir, maps:get(quorum_queue_dir, UnixContext)},
@@ -674,11 +676,9 @@ check_context_to_code_path(Config) ->
     Win32PluginsPath = PluginsDir1 ++ ";" ++ PluginsDir2,
     true = os:putenv("RABBITMQ_PLUGINS_DIR", Win32PluginsPath),
     persistent_term:put({rabbit_env, os_type}, {win32, undefined}),
-    persistent_term:put({rabbit_env, load_conf_env_file}, false),
     Win32Context = rabbit_env:get_context(),
 
     persistent_term:erase({rabbit_env, os_type}),
-    persistent_term:erase({rabbit_env, load_conf_env_file}),
     os:unsetenv("RABBITMQ_PLUGINS_DIR"),
 
     ?assertEqual(Win32PluginsPath, maps:get(plugins_path, Win32Context)),
