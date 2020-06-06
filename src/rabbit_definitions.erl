@@ -76,7 +76,12 @@ maybe_load_core_definitions() ->
     maybe_load_definitions(rabbit, load_definitions).
 
 maybe_load_management_definitions() ->
-    maybe_load_definitions(rabbitmq_management, load_definitions).
+    case application:load(rabbitmq_management) of
+        ok ->
+            maybe_load_definitions(rabbitmq_management, load_definitions);
+        _ ->
+            ok
+    end.
 
 -spec import_raw(Body :: binary() | iolist()) -> ok | {error, term()}.
 import_raw(Body) ->
