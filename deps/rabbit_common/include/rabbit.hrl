@@ -185,7 +185,7 @@
 %% Indicates maintenance state of a node
 -record(node_maintenance_state, {
           node,
-          status,
+          status = regular,
           context = #{}
         }).
 %%----------------------------------------------------------------------------
