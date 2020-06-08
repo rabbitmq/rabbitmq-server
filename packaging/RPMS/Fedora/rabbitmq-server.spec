@@ -106,7 +106,7 @@ install -p -D -m 0755 scripts/zsh_autocomplete.sh %{buildroot}%{_datarootdir}/zs
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
 mkdir -p %{buildroot}%{_sbindir}
-sed -e 's|@STDOUT_STDERR_REDIRECTION@||' \
+sed \
 	-e 's|@RABBITMQ_USER@|%{_rabbitmq_user}|' -e 's|@RABBITMQ_GROUP@|%{_rabbitmq_group}|' \
 	< scripts/rabbitmq-script-wrapper \
 	> %{buildroot}%{_sbindir}/rabbitmqctl
