@@ -15,9 +15,9 @@ set SCRIPT_NAME=%1
 for /f "delims=" %%F in ("%SCRIPT_DIR%..") do set RABBITMQ_HOME=%%~dpF%%~nF%%~xF
 
 if defined ERL_LIBS (
-    set ERL_LIBS=%RABBITMQ_HOME%\plugins;%ERL_LIBS%
+    set "ERL_LIBS=%RABBITMQ_HOME%\plugins;%ERL_LIBS%"
 ) else (
-    set ERL_LIBS=%RABBITMQ_HOME%\plugins
+    set "ERL_LIBS=%RABBITMQ_HOME%\plugins"
 )
 
 REM If ERLANG_HOME is not defined, check if "erl.exe" is available in
