@@ -23,7 +23,7 @@ CONTROL=/usr/sbin/rabbitmqctl
 DESC="message broker"
 USER=rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
-RABBITMQ_LOG_BASE=/var/log/rabbitmq
+RABBITMQ_STARTUP_TIMEOUT=600
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0
@@ -32,6 +32,18 @@ RETVAL=0
 set -e
 
 [ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+# $RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR is a directory where rabbitmq-server(8)
+# console output (both stdout and sterr) is redirected. It defaults to
+# /var/log/rabbitmq which is configured by the package already (i.e. the
+# directory is created and its ownership is set).
+#
+# We still look at the value of $RABBITMQ_LOG_BASE, possibly set in
+# /etc/default/rabbitmq-server for backward compatibility. But we use a
+# specific variable name here (instead of $RABBITMQ_LOG_BASE) to avoid any
+# confusion with RabbitMQ's own logging configuration. Indeed, the console
+# output redirection is a responsibility of the package, not RabbitMQ itself.
+: ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR:=${RABBITMQ_LOG_BASE:-/var/log/rabbitmq}}
 
 . /lib/lsb/init-functions
 . /lib/init/vars.sh
@@ -57,9 +69,16 @@ start_rabbitmq () {
         ensure_pid_dir
         set +e
         RABBITMQ_PID_FILE=$PID_FILE start-stop-daemon --quiet \
+<<<<<<< HEAD
             --chuid rabbitmq --start --exec $DAEMON \
             --pidfile "$PID_FILE" --background
         $CONTROL wait $PID_FILE >/dev/null 2>&1
+=======
+            --chuid rabbitmq --start \
+            --pidfile "$PID_FILE" --background \
+            --startas /bin/sh -- -c "exec $DAEMON >'${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_log' 2>'${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_err'"
+        $CONTROL wait --timeout $RABBITMQ_STARTUP_TIMEOUT $PID_FILE >/dev/null 2>&1
+>>>>>>> 8d38a9a... Merge pull request #132 from rabbitmq/fix-console-redirection
         RETVAL=$?
         set -e
         if [ $RETVAL != 0 ] ; then
@@ -75,8 +94,8 @@ stop_rabbitmq () {
     if [ $RETVAL = 0 ] ; then
         set +e
         $CONTROL stop ${PID_FILE} \
-            > ${RABBITMQ_LOG_BASE}/shutdown_log \
-            2> ${RABBITMQ_LOG_BASE}/shutdown_err
+            > ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/shutdown_log \
+            2> ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/shutdown_err
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
@@ -143,7 +162,7 @@ start_stop_end() {
             RETVAL=0
             ;;
         *)
-            log_warning_msg "FAILED - check ${RABBITMQ_LOG_BASE}/startup_\{log, _err\}"
+            log_warning_msg "FAILED - check ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_\{log, _err\}"
             log_end_msg 1
             ;;
     esac

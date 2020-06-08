@@ -33,7 +33,7 @@ override_dh_auto_install:
 
 	$(MAKE) install-bin DESTDIR=$(DEB_DESTDIR)
 
-	sed -e 's|@STDOUT_STDERR_REDIRECTION@|> "$$RABBITMQ_LOG_BASE/startup_log" 2> "$$RABBITMQ_LOG_BASE/startup_err"|' \
+	sed \
 		-e 's|@RABBITMQ_USER@|$(RABBITMQ_USER)|' -e 's|@RABBITMQ_GROUP@|$(RABBITMQ_GROUP)|' \
 		< scripts/rabbitmq-script-wrapper \
 		> $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl

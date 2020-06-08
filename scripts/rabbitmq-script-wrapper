@@ -16,7 +16,6 @@
 ##
 
 SCRIPT="$(basename "$0")"
-RABBITMQ_LOG_BASE=/var/log/rabbitmq
 
 main() {
   ensure_we_are_in_a_readable_dir
@@ -71,7 +70,7 @@ calling_rabbitmq_plugins() {
 }
 
 exec_rabbitmq_server() {
-  exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
+  exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@"
 }
 
 run_script_as_rabbitmq() {
