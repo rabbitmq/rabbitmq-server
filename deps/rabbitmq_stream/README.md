@@ -17,7 +17,7 @@ Then follow the instructions to [build the client and the performance tool](http
 
 ## Licensing
 
-RabbitMQ server is [licensed under the MPL 1.1](LICENSE-MPL-RabbitMQ).
+Released under the [MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
