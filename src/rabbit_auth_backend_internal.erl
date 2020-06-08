@@ -780,14 +780,14 @@ set_user_limits(Username, Defn) ->
     end.
 
 validate_parameters_and_update_limit(Username, Term) ->
-    case rabbit_parameter_validation:proplist(<<"user-limits">>,
-                                              user_limit_validation(), Term) of
-        [ok] ->
+    case flatten_errors(rabbit_parameter_validation:proplist(
+                        <<"user-limits">>, user_limit_validation(), Term)) of
+        ok ->
             update_user(Username, fun(User = #internal_user{limits = Limits}) ->
                                       User#internal_user{
                                            limits = maps:merge(Limits, Term)}
                                   end);
-        [{error, Reason, Arguments}] ->
+        {errors, [{Reason, Arguments}]} ->
             {error_string, rabbit_misc:format(Reason, Arguments)}
     end.
 
@@ -800,6 +800,12 @@ clear_user_limits(Username, LimitType) ->
                               User#internal_user{
                                     limits = maps:remove(LimitType, Limits)}
                           end).
+
+flatten_errors(L) ->
+    case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
+        [] -> ok;
+        E  -> {errors, E}
+    end.
 
 %%----------------------------------------------------------------------------
 %% Listing
