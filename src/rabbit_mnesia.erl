@@ -824,10 +824,17 @@ schema_ok_or_move() ->
 %% up only
 create_schema() ->
     stop_mnesia(),
+    rabbit_log:debug("Will bootstrap a schema database..."),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
+    rabbit_log:debug("Bootstraped a schema database successfully"),
     start_mnesia(),
+    
+    rabbit_log:debug("Will create schema database tables"),
     ok = rabbit_table:create(),
+    rabbit_log:debug("Created schema database tables successfully"),
+    rabbit_log:debug("Will check schema database integrity..."),
     ensure_schema_integrity(),
+    rabbit_log:debug("Schema database schema integrity check passed"),
     ok = rabbit_version:record_desired().
 
 move_db() ->

@@ -19,34 +19,71 @@
  -include("rabbit.hrl").
  
  -export([
-     mark_as_drained/0,
-     unmark_as_drained/0,
-     is_drained_using_dirty_read/1,
-     is_drained_using_consistent_read/1,
+     mark_as_being_drained/0,
+     unmark_as_being_drained/0,
+     is_being_drained_local_read/1,
+     is_being_drained_consistent_read/1,
      suspend_all_client_listeners/0,
      resume_all_client_listeners/0,
      close_all_client_connections/0]).
 
+ -define(TABLE, rabbit_node_maintenance_states).
+ -define(DEFAULT_STATUS,  regular).
+ -define(DRAINING_STATUS, draining).
+ 
 %%
 %% API
 %%
 
-mark_as_drained() ->
-    ok.
+-spec mark_as_being_drained() -> boolean().
+mark_as_being_drained() ->
+    set_maintenance_state_status(?DRAINING_STATUS).
+ 
+-spec unmark_as_being_drained() -> boolean().
+unmark_as_being_drained() ->
+    set_maintenance_state_status(?DEFAULT_STATUS).
 
-unmark_as_drained() ->
-    ok.
+set_maintenance_state_status(Status) ->
+    Res = mnesia:transaction(fun () ->
+        case mnesia:wread({?TABLE, node()}) of
+           [] ->
+                Row = #node_maintenance_state{
+                        node   = node(),
+                        status = Status
+                     },
+                mnesia:write(?TABLE, Row, write);
+            [Row0] ->
+                Row = Row0#node_maintenance_state{
+                        node   = node(),
+                        status = Status
+                      },
+                mnesia:write(?TABLE, Row, write)
+        end
+    end),
+    case Res of
+        {atomic, ok} -> true;
+        _            -> false
+    end.
+ 
+ 
+-spec is_being_drained_local_read(node()) -> boolean().
+is_being_drained_local_read(Node) ->
+    case mnesia:dirty_read(?TABLE, Node) of
+        []  -> false;
+        [#node_maintenance_state{node = Node, status = Status}] ->
+            Status =:= ?DRAINING_STATUS
+    end.
 
--spec is_drained_using_dirty_read(node()) -> boolean().
-is_drained_using_dirty_read(_Node) ->
-    false.
-
--spec is_drained_using_consistent_read(node()) -> boolean().
-is_drained_using_consistent_read(_Node) ->
-    false.
+-spec is_being_drained_consistent_read(node()) -> boolean().
+is_being_drained_consistent_read(Node) ->
+    case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
+        {atomic, []}  -> false;
+        {atomic, [#node_maintenance_state{node = Node, status = Status}]} ->
+            Status =:= ?DRAINING_STATUS;
+        {aborted, _Reason} -> false
+    end.
 
 -spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
- 
  %% Pauses all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
  %% A respausedumed listener will not accept any new client connections

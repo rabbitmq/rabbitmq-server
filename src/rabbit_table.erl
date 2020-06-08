@@ -30,6 +30,7 @@
 create() ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
+                          rabbit_log:debug("Will create a schema database table named '~s'", [Tab]),
                           case mnesia:create_table(Tab, TabDef1) of
                               {atomic, ok} -> ok;
                               {aborted, Reason} ->
@@ -363,7 +364,12 @@ definitions() ->
      {rabbit_queue,
       [{record_name, amqqueue},
        {attributes, amqqueue:fields()},
-       {match, amqqueue:pattern_match_on_name(queue_name_match())}]}]
+       {match, amqqueue:pattern_match_on_name(queue_name_match())}]},
+     {rabbit_node_maintenance_states,
+      [{record_name, node_maintenance_state},
+       {attributes, record_info(fields, node_maintenance_state)},
+       {match, #node_maintenance_state{_='_'}}]}
+    ]
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions().
 

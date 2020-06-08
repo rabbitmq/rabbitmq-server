@@ -656,6 +656,7 @@ transform(TableName, Fun, FieldList, NewRecordName) ->
     ok.
 
 create(Tab, TabDef) ->
+    rabbit_log:debug("Will create a schema table named '~s'", [Tab]),
     {atomic, ok} = mnesia:create_table(Tab, TabDef),
     ok.
 
