@@ -15,13 +15,14 @@
 
 # Lists predefined error exit codes used by RabbitMQ CLI tools.
 # The codes are adopted from [1], which (according to our team's research)
-# is possibly the most standardized set of codes there is.
+# is possibly the most standardized set of command line tool exit codes there is.
 #
 # 1. https://www.freebsd.org/cgi/man.cgi?query=sysexits&apropos=0&sektion=0&manpath=FreeBSD+12.0-RELEASE&arch=default&format=html
 defmodule RabbitMQ.CLI.Core.ExitCodes do
   @exit_ok 0
   @exit_usage 64
   @exit_dataerr 65
+  @exit_nouser 67
   @exit_unavailable 69
   @exit_software 70
   @exit_tempfail 75
@@ -32,6 +33,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_ok, do: @exit_ok
   def exit_usage, do: @exit_usage
   def exit_dataerr, do: @exit_dataerr
+  def exit_nouser, do: @exit_nouser
   def exit_unavailable, do: @exit_unavailable
   def exit_software, do: @exit_software
   def exit_tempfail, do: @exit_tempfail
@@ -48,6 +50,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_code_for({:validation_failure, _}), do: exit_usage()
   # a special case of bad_argument
   def exit_code_for({:no_such_vhost, _}), do: exit_dataerr()
+  def exit_code_for({:no_such_user, _}), do: exit_nouser()
   def exit_code_for({:badrpc_multi, :timeout, _}), do: exit_tempfail()
   def exit_code_for({:badrpc, :timeout}), do: exit_tempfail()
   def exit_code_for({:badrpc, {:timeout, _}}), do: exit_tempfail()
