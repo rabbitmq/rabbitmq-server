@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
     {:error, %{"result" => "error", "node" => node_name, "message" => "Virtual host #{vhost} does not exist"}}
   end
   def output({:error, {:no_such_user, username}}, _) do
-    {:error, "User #{username} does not exist"}
+    {:error, ExitCodes.exit_nouser(), "User #{username} does not exist"}
   end
   def output({:error, {:no_such_vhost, vhost}}, _) do
     {:error, "Virtual host #{vhost} does not exist"}

@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
     {:error, %{"result" => "error", "node" => node_name, "message" => "User #{username} does not exists"}}
   end
   def output({:error, {:no_such_user, username}}, _) do
-    {:error, ExitCodes.exit_software(), "User \"#{username}\" does not exist"}
+    {:error, ExitCodes.exit_nouser(), "User \"#{username}\" does not exist"}
   end
   use RabbitMQ.CLI.DefaultOutput
 

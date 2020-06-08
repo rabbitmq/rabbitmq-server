@@ -131,7 +131,7 @@ defmodule RabbitMQCtlTest do
 
   test "An errored command returns an error code" do
     command = ["delete_user", "voldemort"]
-    capture_io(:stderr, fn -> error_check(command, exit_software()) end)
+    capture_io(:stderr, fn -> error_check(command, exit_nouser()) end)
   end
 
   test "A malformed command with an option as the first command-line arg fails gracefully" do
