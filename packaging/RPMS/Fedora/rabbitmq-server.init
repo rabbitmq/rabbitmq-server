@@ -25,7 +25,6 @@ CONTROL=/usr/sbin/rabbitmqctl
 DESC=rabbitmq-server
 USER=rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
-RABBITMQ_LOG_BASE=/var/log/rabbitmq
 RABBITMQ_STARTUP_TIMEOUT=600
 
 START_PROG= # Set when building package
@@ -38,6 +37,18 @@ RETVAL=0
 set -e
 
 [ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+# $RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR is a directory where rabbitmq-server(8)
+# console output (both stdout and sterr) is redirected. It defaults to
+# /var/log/rabbitmq which is configured by the package already (i.e. the
+# directory is created and its ownership is set).
+#
+# We still look at the value of $RABBITMQ_LOG_BASE, possibly set in
+# /etc/default/rabbitmq-server for backward compatibility. But we use a
+# specific variable name here (instead of $RABBITMQ_LOG_BASE) to avoid any
+# confusion with RabbitMQ's own logging configuration. Indeed, the console
+# output redirection is a responsibility of the package, not RabbitMQ itself.
+: ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR:=${RABBITMQ_LOG_BASE:-/var/log/rabbitmq}}
 
 ensure_pid_dir () {
     PID_DIR=`dirname ${PID_FILE}`
@@ -62,8 +73,8 @@ start_rabbitmq () {
         ensure_pid_dir
         set +e
         RABBITMQ_PID_FILE=$PID_FILE $START_PROG $DAEMON \
-            > "${RABBITMQ_LOG_BASE}/startup_log" \
-            2> "${RABBITMQ_LOG_BASE}/startup_err" \
+            > "${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_log" \
+            2> "${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_err" \
             0<&- &
         $CONTROL wait --timeout $RABBITMQ_STARTUP_TIMEOUT $PID_FILE >/dev/null 2>&1
         RETVAL=$?
@@ -77,7 +88,7 @@ start_rabbitmq () {
                 ;;
             *)
                 remove_pid
-                echo FAILED - check ${RABBITMQ_LOG_BASE}/startup_\{log, _err\}
+                echo FAILED - check ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_\{log, _err\}
                 RETVAL=1
                 ;;
         esac
@@ -89,8 +100,8 @@ stop_rabbitmq () {
     if [ $RETVAL = 0 ] ; then
         set +e
         $CONTROL stop ${PID_FILE} \
-            > ${RABBITMQ_LOG_BASE}/shutdown_log \
-            2> ${RABBITMQ_LOG_BASE}/shutdown_err
+            > ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/shutdown_log \
+            2> ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/shutdown_err
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
@@ -99,7 +110,7 @@ stop_rabbitmq () {
                 rm -f $LOCK_FILE
             fi
         else
-            echo FAILED - check ${RABBITMQ_LOG_BASE}/shutdown_log, _err
+            echo FAILED - check ${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/shutdown_\{log, _err\}
         fi
     else
         echo RabbitMQ is not running
