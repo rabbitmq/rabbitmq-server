@@ -1,5 +1,11 @@
 = RabbitMQ Stream Protocol Reference
 
+This is the reference of the RabbitMQ stream protocol. Note the protocol
+is still under development and is subject to change.
+
+The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ stream Java client]
+is currently the reference implementation.
+
 == Types
 
 int8, int16, int32, int64 - Signed integers (big endian order)
