@@ -118,8 +118,8 @@ dep_lager = hex 3.8.0
 dep_prometheus = hex 4.6.0
 dep_ra = hex 1.1.2
 dep_ranch = hex 1.7.1
-dep_recon = hex 2.5.0
-dep_observer_cli = hex 1.5.3
+dep_recon = hex 2.5.1
+dep_observer_cli = hex 1.5.4
 dep_stdout_formatter = hex 0.2.2
 dep_sysmon_handler = hex 1.2.0
 
