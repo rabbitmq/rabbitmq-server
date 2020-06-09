@@ -18,7 +18,14 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([maybe_load_definitions/0, maybe_load_definitions_from/2]).
+-export([boot/0, maybe_load_definitions/0, maybe_load_definitions_from/2]).
+
+%% This module exists for backwards compatibility only.
+%% Definition import functionality is now a core server feature.
+
+boot() ->
+    rabbit_log:debug("Will import definitions file from management.load_definitions"),
+    rabbit_definitions:maybe_load_definitions(rabbitmq_management, load_definitions).
 
 maybe_load_definitions() ->
     rabbit_definitions:maybe_load_definitions().
