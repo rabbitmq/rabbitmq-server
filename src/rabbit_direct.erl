@@ -80,7 +80,7 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
                 undefined ->
                     {error, broker_is_booting};
                 _ ->
-                    case is_over_connection_limit(VHost, Creds, Pid) of
+                    case is_over_vhost_connection_limit(VHost, Creds, Pid) of
                         true  ->
                             {error, not_allowed};
                         false ->
@@ -100,7 +100,7 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
                                             {error, {auth_failure, "Refused"}}
                                     end %% AuthFun()
                             end %% is_vhost_alive
-                    end %% is_over_connection_limit
+                    end %% is_over_vhost_connection_limit
             end;
         false -> {error, broker_not_found_on_node}
     end.
@@ -146,7 +146,7 @@ is_vhost_alive(VHost, {Username, _Password}, Pid) ->
             false
     end.
 
-is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
+is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
     PrintedUsername = case Username of
         none -> "";
         _    -> Username
@@ -157,7 +157,7 @@ is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
             rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
                 "access to vhost '~s' refused for user '~s': "
-                "connection limit (~p) is reached",
+                "vhost connection limit (~p) is reached",
                 [Pid, VHost, PrintedUsername, Limit]),
             true
     catch
@@ -192,9 +192,13 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
                     {error, Reason}
             end;
         {true, Limit} ->
-            {error, rabbit_misc:format("Connection refused for user ~s. User "
-                         "connection limit (~p) is reached", [Username, Limit])} 
-    end. 
+            rabbit_log_connection:error(
+                "Error on Direct connection ~p~n"
+                "access refused for user '~s': "
+                "user connection limit (~p) is reached",
+                [Pid, Username, Limit]),
+            {error, not_allowed}
+    end.
 
 -spec start_channel
         (rabbit_channel:channel_number(), pid(), pid(), string(),
@@ -213,9 +217,13 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
                   [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
                     User, VHost, Capabilities, Collector, AmqpParams}]),
             {ok, ChannelPid};
-        {true, Limit} -> {error, rabbit_misc:format("Not allowed. Number of "
-                          "channels opened for user (~w) has reached the "
-                          "maximum allowed limit of (~w)", [Username, Limit])}
+        {true, Limit} ->
+            rabbit_log_connection:error(
+                "Error on Direct connection ~p~n"
+                "number of channels opened for user (~w) has reached the "
+                "maximum allowed limit of (~w)",
+                [ConnPid, Username, Limit]),
+            {error, not_allowed}
     end.
 
 -spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
