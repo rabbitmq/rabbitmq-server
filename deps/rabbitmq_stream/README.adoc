@@ -1,0 +1,53 @@
+= RabbitMQ Stream Plugin
+
+This is a RabbitMQ plugin that exposes streams - append-only, FIFO structures -
+in a RabbitMQ broker/cluster, through a link:docs/PROTOCOL.adoc[custom binary protocol].
+
+== How to Use
+
+See the https://rabbitmq.github.io/rabbitmq-stream-java-client/snapshot/htmlsingle/#setting-up-rabbitmq[stream
+Java client] documentation to set up a node with the stream plugin.
+
+The https://rabbitmq.github.io/rabbitmq-stream-java-client/snapshot/htmlsingle/[stream Java client]
+is currently the best way to experiment with the plugin.
+
+== Stream Protocol
+
+The plugin uses a link:docs/PROTOCOL.adoc[custom binary protocol].
+
+== Project Maturity
+
+The project is in early stages of development and is considered experimental.
+It is not ready for production use.
+
+== Support
+
+* For questions: https://groups.google.com/forum/#!forum/rabbitmq-users[RabbitMQ Users]
+* For bugs and feature requests: https://github.com/rabbitmq/rabbitmq-stream/issues[GitHub Issues]
+
+The project is currently under development, there is no guarantee yet that it will be maintained and supported
+in the future (read: you are welcome to experiment with it and give feedback, but please do not base
+your whole business on it).
+
+== Build Instructions
+
+----
+git clone git@github.com:rabbitmq/rabbitmq-public-umbrella.git
+cd rabbitmq-public-umbrella
+make co
+make up BRANCH="stream-queue" -j 32
+cd deps
+git clone git@github.com:rabbitmq/rabbitmq-stream.git rabbitmq_stream
+cd rabbitmq_stream
+make run-broker
+----
+
+Then follow the instructions to https://github.com/rabbitmq/rabbitmq-stream-java-client[build the client and the performance tool].
+
+== Licensing
+
+Released under the link:LICENSE-MPL-RabbitMQ[MPL 2.0].
+
+== Copyright
+
+(c) 2020 VMware, Inc. or its affiliates.
