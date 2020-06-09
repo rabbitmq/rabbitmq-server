@@ -28,7 +28,8 @@
     authentication_state, user, virtual_host,
     connection_step, % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max,
-    heartbeater
+    heartbeater,
+    client_properties
 }).
 
 -record(consumer, {
@@ -344,10 +345,15 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
 
     Transport:send(S, [<<FrameSize:32>>, <<Frame/binary>>]),
     {State, Rest};
-handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State,
+handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State0,
     <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32,
-        MechanismLength:16, Mechanism:MechanismLength/binary,
-        SaslFragment/binary>>, Rest) ->
+        PeerPropertiesCount:32, RestOfFrame/binary>>, Rest) ->
+
+    {PeerProperties, MechanismSaslFragment} = parse_map(RestOfFrame, PeerPropertiesCount),
+
+    State1 = State0#stream_connection{client_properties = PeerProperties},
+
+    <<MechanismLength:16, Mechanism:MechanismLength/binary, SaslFragment/binary>> = MechanismSaslFragment,
 
     SaslBin = case SaslFragment of
                   <<-1:32/signed>> ->
@@ -356,7 +362,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                       SaslBinary
               end,
 
-    {State1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
+    {State2, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
                           {ok, AuthMechanism} ->
                               AuthState = case AuthState0 of
                                               none ->
@@ -367,24 +373,24 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                               {S1, FrameFragment} = case AuthMechanism:handle_response(SaslBin, AuthState) of
                                                         {refused, _Username, Msg, Args} ->
                                                             error_logger:warning_msg(Msg, Args),
-                                                            {State#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
+                                                            {State1#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
                                                         {protocol_error, Msg, Args} ->
                                                             error_logger:warning_msg(Msg, Args),
-                                                            {State#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
+                                                            {State1#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
                                                         {challenge, Challenge, AuthState1} ->
                                                             ChallengeSize = byte_size(Challenge),
-                                                            {State#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
+                                                            {State1#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
                                                                 <<?RESPONSE_SASL_CHALLENGE:16, ChallengeSize:32, Challenge/binary>>
                                                             };
                                                         {ok, User = #user{username = Username}} ->
                                                             case rabbit_access_control:check_user_loopback(Username, S) of
                                                                 ok ->
-                                                                    {State#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
+                                                                    {State1#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
                                                                         <<?RESPONSE_CODE_OK:16>>
                                                                     };
                                                                 not_allowed ->
                                                                     error_logger:warning_msg("User '~s' can only connect via localhost~n", [Username]),
-                                                                    {State#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
+                                                                    {State1#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
                                                             end
                                                     end,
                               Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, FrameFragment/binary>>,
@@ -392,15 +398,14 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                               {S1, Rest};
                           {error, _} ->
                               Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_SASL_MECHANISM_NOT_SUPPORTED:16>>,
-                              frame(Transport, State, Frame),
-                              {State#stream_connection{connection_step = failure}, Rest}
+                              frame(Transport, State1, Frame),
+                              {State1#stream_connection{connection_step = failure}, Rest}
                       end,
 
-    {State1, Rest1};
+    {State2, Rest1};
 handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = State,
     <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
-
 
     Frame = <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>,
     Parent = self(),
@@ -578,8 +583,8 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = St
     end;
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
-        _ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
-    Arguments = parse_arguments(ArgumentsBinary),
+        ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
+    {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
     case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
             error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
@@ -689,15 +694,19 @@ handle_frame_post_auth(Transport, State, Frame, Rest) ->
     frame(Transport, State, CloseFrame),
     {State#stream_connection{connection_step = close_sent}, Rest}.
 
-parse_arguments(<<>>) ->
-    #{};
-parse_arguments(Arguments) ->
-    parse_arguments(#{}, Arguments).
+parse_map(<<>>, _Count) ->
+    {#{}, <<>>};
+parse_map(Content, 0) ->
+    {#{}, Content};
+parse_map(Arguments, Count) ->
+    parse_map(#{}, Arguments, Count).
 
-parse_arguments(Acc, <<>>) ->
-    Acc;
-parse_arguments(Acc, <<KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/binary, Rest/binary>>) ->
-    parse_arguments(maps:put(Key, Value, Acc), Rest).
+parse_map(Acc, <<>>, _Count) ->
+    {Acc, <<>>};
+parse_map(Acc, Content, 0) ->
+    {Acc, Content};
+parse_map(Acc, <<KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/binary, Rest/binary>>, Count) ->
+    parse_map(maps:put(Key, Value, Acc), Rest, Count - 1).
 
 
 handle_frame_post_close(_Transport, State,

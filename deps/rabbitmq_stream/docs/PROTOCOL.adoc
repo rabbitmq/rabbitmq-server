@@ -282,10 +282,14 @@ SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
 === SaslAuthenticate
 
 ```
-SaslAuthenticateRequest => Key Version CorrelationId Mechanism SaslOpaqueData
+SaslAuthenticateRequest => Key Version CorrelationId PeerProperties Mechanism SaslOpaqueData
   Key => int16 // 10
   Version => int16
   CorrelationId => int32
+  PeerProperties => [PeerProperty]
+  PeerProperty => Key Value
+  Key => string
+  Value => string
   Mechanism => string
   SaslOpaqueData => bytes
 

@@ -114,7 +114,7 @@ test_authenticate(S) ->
     PlainSaslSize = byte_size(PlainSasl),
 
     SaslAuthenticateFrame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, 2:32,
-        5:16, Plain/binary, PlainSaslSize:32, PlainSasl/binary>>,
+        0:32, 5:16, Plain/binary, PlainSaslSize:32, PlainSasl/binary>>,
 
     SaslAuthenticateFrameSize = byte_size(SaslAuthenticateFrame),
 
