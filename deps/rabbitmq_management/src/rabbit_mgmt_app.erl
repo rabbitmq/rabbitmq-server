@@ -31,6 +31,11 @@
 -define(DEFAULT_PORT, 15672).
 -define(DEFAULT_TLS_PORT, 15671).
 
+-rabbit_boot_step({rabbit_management_load_definitions,
+                   [{description, "Imports definition file at management.load_definitions"},
+                    {mfa,         {rabbit_mgmt_load_definitions, boot, []}},
+                    {enables,     empty_db_check}]}).
+
 start(_Type, _StartArgs) ->
     case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
         false ->
