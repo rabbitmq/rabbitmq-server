@@ -66,6 +66,7 @@ boot() ->
     rabbit_sup:start_supervisor_child(definition_import_pool_sup, worker_pool_sup, [PoolSize, ?IMPORT_WORK_POOL]).
 
 maybe_load_definitions() ->
+    rabbit_log:debug("Will import definitions file from load_definitions"),
     %% Note that management.load_definitions is handled in the plugin for backwards compatibility.
     %% This executes the "core" version of load_definitions.
     maybe_load_definitions(rabbit, load_definitions).
