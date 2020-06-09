@@ -259,6 +259,22 @@ confirms_survive(Config, DeathFun) ->
                                                     auto_delete = false,
                                                     durable     = true}),
 
+    %% send one message to ensure the channel is flowing
+    amqp_channel:register_confirm_handler(Node1Channel, self()),
+    #'confirm.select_ok'{} = amqp_channel:call(Node1Channel, #'confirm.select'{}),
+
+    Payload = <<"initial message">>,
+    ok = amqp_channel:call(Node1Channel,
+                           #'basic.publish'{routing_key = Queue},
+                           #amqp_msg{payload = Payload}),
+
+    ok = receive
+             #'basic.ack'{multiple = false} -> ok;
+             #'basic.nack'{multiple = false} -> message_nacked
+         after
+             5000 -> confirm_not_received
+         end,
+
     %% send a bunch of messages from the producer
     ProducerPid = rabbit_ha_test_producer:create(Node2Channel, Queue,
                                                  self(), true, Msgs),
