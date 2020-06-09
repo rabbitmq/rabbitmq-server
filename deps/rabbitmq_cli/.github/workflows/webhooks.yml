@@ -6,13 +6,11 @@ on:
   push:
     branches:
       - master
-      - v3.8.x
-      - v3.7.x
 jobs:
   rabbitmq-server:
     runs-on: ubuntu-latest
     steps:
-      - name: New commit to rabbitmq-cli release branch
+      - name: New commit to rabbitmq-cli master branch
         run: |
           curl --silent --fail --url https://api.github.com/repos/rabbitmq/rabbitmq-server/dispatches \
             --header "Authorization: Bearer ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
