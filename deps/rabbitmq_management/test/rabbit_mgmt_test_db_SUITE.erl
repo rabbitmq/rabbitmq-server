@@ -66,13 +66,11 @@ init_per_group(_, Config) ->
         rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
             {rabbitmq_management_agent, [{rates_mode, detailed}]}),
     rabbit_ct_helpers:run_setup_steps(Config2,
-                      rabbit_ct_broker_helpers:setup_steps() ++
-                      rabbit_ct_client_helpers:setup_steps() ++
-                      [fun rabbit_mgmt_test_util:reset_management_settings/1]).
+                                      rabbit_ct_broker_helpers:setup_steps() ++
+                                          rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
-                                         [fun rabbit_mgmt_test_util:reset_management_settings/1] ++
                                          rabbit_ct_client_helpers:teardown_steps() ++
                                              rabbit_ct_broker_helpers:teardown_steps()).
 
