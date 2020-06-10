@@ -20,9 +20,9 @@
 -include("rabbit_stream.hrl").
 
 -record(stream_connection_state, {
-    data, %% likely to change a lot
-    blocked, %% likely to change a lot for publishers
-    consumers %% changes a lot (at least on every credit)
+    data,
+    blocked,
+    consumers
 }).
 
 -record(stream_connection, {
@@ -30,12 +30,12 @@
     helper_sup,
     listen_socket,
     socket,
-    clusters, %% changes a bit
-    stream_subscriptions, %% changes when subscribing/unsubcribing
-    credits, %% just a reference to the atomic, does not change
-    authentication_state, %% changes at the beginning, then not much
-    user, %% does not change
-    virtual_host, %% does not change
+    clusters,
+    stream_subscriptions,
+    credits,
+    authentication_state,
+    user,
+    virtual_host,
     connection_step, % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max,
     heartbeater,
