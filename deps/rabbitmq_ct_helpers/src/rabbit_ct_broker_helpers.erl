@@ -52,6 +52,9 @@
     reset_node/2,
     force_reset_node/2,
 
+    forget_cluster_node/3,
+    forget_cluster_node/4,
+
     cluster_members_online/2,
 
     is_feature_flag_supported/2,
@@ -1524,6 +1527,14 @@ reset_node(Config, Node) ->
 force_reset_node(Config, Node) ->
     Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
     rabbit_control_helper:command(force_reset, Name).
+
+forget_cluster_node(Config, Node, NodeToForget) ->
+    forget_cluster_node(Config, Node, NodeToForget, []).
+forget_cluster_node(Config, Node, NodeToForget, Opts) ->
+    Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
+    NameToForget =
+        rabbit_ct_broker_helpers:get_node_config(Config, NodeToForget, nodename),
+    rabbit_control_helper:command(forget_cluster_node, Name, [NameToForget], Opts).
 
 is_feature_flag_supported(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
