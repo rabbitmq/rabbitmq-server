@@ -26,7 +26,7 @@
     stream_subscriptions, credits,
     blocked,
     authentication_state, user, virtual_host,
-    connection_step, % tcp_connected, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
+    connection_step, % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max,
     heartbeater,
     client_properties
@@ -331,6 +331,48 @@ generate_publishing_error_details(Acc, <<PublishingId:64, MessageSize:32, _Messa
         Rest).
 
 handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
+    <<?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, CorrelationId:32,
+        ClientPropertiesCount:32, ClientPropertiesFrame/binary>>, Rest) ->
+
+    {ClientProperties, _} = parse_map(ClientPropertiesFrame, ClientPropertiesCount),
+
+    {ok, Product} = application:get_key(rabbit, description),
+    {ok, Version} = application:get_key(rabbit, vsn),
+
+    %% Get any configuration-specified server properties
+    RawConfigServerProps = application:get_env(rabbit,
+        server_properties, []),
+
+    ConfigServerProperties = lists:foldl(fun({K, V}, Acc) ->
+        maps:put(rabbit_data_coercion:to_binary(K), V, Acc)
+                                         end, #{}, RawConfigServerProps),
+
+    ServerProperties = maps:merge(ConfigServerProperties, #{
+        <<"product">> => Product,
+        <<"version">> => Version,
+        <<"cluster_name">> => rabbit_nodes:cluster_name(),
+        <<"platform">> => rabbit_misc:platform_and_version(),
+        <<"copyright">> => ?COPYRIGHT_MESSAGE,
+        <<"information">> => ?INFORMATION_MESSAGE
+    }),
+
+    ServerPropertiesCount = map_size(ServerProperties),
+
+    ServerPropertiesFragment = maps:fold(fun(K, V, Acc) ->
+        Key = rabbit_data_coercion:to_binary(K),
+        Value = rabbit_data_coercion:to_binary(V),
+        KeySize = byte_size(Key),
+        ValueSize = byte_size(Value),
+        <<Acc/binary, KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/binary>>
+                                         end, <<>>, ServerProperties),
+
+    Frame = <<?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16,
+        ServerPropertiesCount:32, ServerPropertiesFragment/binary>>,
+    FrameSize = byte_size(Frame),
+
+    Transport:send(S, [<<FrameSize:32>>, <<Frame/binary>>]),
+    {State#stream_connection{client_properties = ClientProperties, authentication_state = peer_properties_exchanged}, Rest};
+handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
     <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, CorrelationId:32>>, Rest) ->
 
     Mechanisms = auth_mechanisms(S),
@@ -347,13 +389,8 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
     {State, Rest};
 handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State0,
     <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32,
-        PeerPropertiesCount:32, RestOfFrame/binary>>, Rest) ->
-
-    {PeerProperties, MechanismSaslFragment} = parse_map(RestOfFrame, PeerPropertiesCount),
-
-    State1 = State0#stream_connection{client_properties = PeerProperties},
-
-    <<MechanismLength:16, Mechanism:MechanismLength/binary, SaslFragment/binary>> = MechanismSaslFragment,
+        MechanismLength:16, Mechanism:MechanismLength/binary,
+        SaslFragment/binary>>, Rest) ->
 
     SaslBin = case SaslFragment of
                   <<-1:32/signed>> ->
@@ -362,7 +399,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                       SaslBinary
               end,
 
-    {State2, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
+    {State1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
                           {ok, AuthMechanism} ->
                               AuthState = case AuthState0 of
                                               none ->
@@ -373,24 +410,24 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                               {S1, FrameFragment} = case AuthMechanism:handle_response(SaslBin, AuthState) of
                                                         {refused, _Username, Msg, Args} ->
                                                             error_logger:warning_msg(Msg, Args),
-                                                            {State1#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
+                                                            {State0#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
                                                         {protocol_error, Msg, Args} ->
                                                             error_logger:warning_msg(Msg, Args),
-                                                            {State1#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
+                                                            {State0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
                                                         {challenge, Challenge, AuthState1} ->
                                                             ChallengeSize = byte_size(Challenge),
-                                                            {State1#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
+                                                            {State0#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
                                                                 <<?RESPONSE_SASL_CHALLENGE:16, ChallengeSize:32, Challenge/binary>>
                                                             };
                                                         {ok, User = #user{username = Username}} ->
                                                             case rabbit_access_control:check_user_loopback(Username, S) of
                                                                 ok ->
-                                                                    {State1#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
+                                                                    {State0#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
                                                                         <<?RESPONSE_CODE_OK:16>>
                                                                     };
                                                                 not_allowed ->
                                                                     error_logger:warning_msg("User '~s' can only connect via localhost~n", [Username]),
-                                                                    {State1#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
+                                                                    {State0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
                                                             end
                                                     end,
                               Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, FrameFragment/binary>>,
@@ -398,11 +435,11 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                               {S1, Rest};
                           {error, _} ->
                               Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_SASL_MECHANISM_NOT_SUPPORTED:16>>,
-                              frame(Transport, State1, Frame),
-                              {State1#stream_connection{connection_step = failure}, Rest}
+                              frame(Transport, State0, Frame),
+                              {State0#stream_connection{connection_step = failure}, Rest}
                       end,
 
-    {State2, Rest1};
+    {State1, Rest1};
 handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = State,
     <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
