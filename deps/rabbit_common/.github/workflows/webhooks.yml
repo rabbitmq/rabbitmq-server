@@ -1,0 +1,18 @@
+# https://help.github.com/en/actions/reference/events-that-trigger-workflows#external-events-repository_dispatch
+# https://help.github.com/en/actions/configuring-and-managing-workflows/authenticating-with-the-github_token#example-calling-the-rest-api
+# https://developer.github.com/v3/repos/#create-a-repository-dispatch-event
+name: Webhook triggers
+on:
+  push:
+    branches:
+      - master
+jobs:
+  rabbitmq-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: New commit to rabbitmq-cli master branch
+        run: |
+          curl --silent --fail --url https://api.github.com/repos/rabbitmq/rabbitmq-server/dispatches \
+            --header "Authorization: Bearer ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data '{ "event_type": "new-commit-to-dep-release-branch", "client_payload": { "dep": "rabbitmq-cli" } }'
