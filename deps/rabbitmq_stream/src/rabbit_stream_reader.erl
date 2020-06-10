@@ -19,13 +19,23 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_stream.hrl").
 
+-record(stream_connection_state, {
+    data, %% likely to change a lot
+    blocked, %% likely to change a lot for publishers
+    consumers %% changes a lot (at least on every credit)
+}).
+
 -record(stream_connection, {
     name,
     helper_sup,
-    listen_socket, socket, clusters, data, consumers,
-    stream_subscriptions, credits,
-    blocked,
-    authentication_state, user, virtual_host,
+    listen_socket,
+    socket,
+    clusters, %% changes a bit
+    stream_subscriptions, %% changes when subscribing/unsubcribing
+    credits, %% just a reference to the atomic, does not change
+    authentication_state, %% changes at the beginning, then not much
+    user, %% does not change
+    virtual_host, %% does not change
     connection_step, % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max,
     heartbeater,
@@ -65,19 +75,22 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
             rabbit_stream_manager:register(),
             Credits = atomics:new(1, [{signed, true}]),
             init_credit(Credits, InitialCredits),
-            State = #stream_connection{
+            Connection = #stream_connection{
                 name = ConnStr,
                 helper_sup = KeepaliveSup,
-                socket = RealSocket, data = none,
+                socket = RealSocket,
                 clusters = #{},
-                consumers = #{}, stream_subscriptions = #{},
-                blocked = false, credits = Credits,
+                stream_subscriptions = #{},
+                credits = Credits,
                 authentication_state = none, user = none,
                 connection_step = tcp_connected,
                 frame_max = FrameMax},
+            State = #stream_connection_state{
+                consumers = #{}, blocked = false, data = none
+            },
             Transport:setopts(RealSocket, [{active, once}]),
 
-            listen_loop_pre_auth(Transport, State, #configuration{
+            listen_loop_pre_auth(Transport, Connection, State, #configuration{
                 initial_credits = InitialCredits,
                 credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
                 frame_max = FrameMax,
@@ -95,7 +108,6 @@ sub_credits(CreditReference, Credits) ->
     atomics:sub(CreditReference, 1, Credits).
 
 add_credits(CreditReference, Credits) ->
-
     atomics:add(CreditReference, 1, Credits).
 
 has_credits(CreditReference) ->
@@ -104,28 +116,28 @@ has_credits(CreditReference) ->
 has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
-listen_loop_pre_auth(Transport, #stream_connection{socket = S} = State,
+listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, State,
     #configuration{frame_max = FrameMax, heartbeat = Heartbeat} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
     %% FIXME introduce timeout to complete the connection opening (after block should be enough)
     receive
         {OK, S, Data} ->
-            #stream_connection{connection_step = ConnectionStep0} = State,
-            State1 = handle_inbound_data_pre_auth(Transport, State, Data),
+            #stream_connection{connection_step = ConnectionStep0} = Connection,
+            {Connection1, State1} = handle_inbound_data_pre_auth(Transport, Connection, State, Data),
             Transport:setopts(S, [{active, once}]),
-            #stream_connection{connection_step = ConnectionStep} = State1,
+            #stream_connection{connection_step = ConnectionStep} = Connection1,
             error_logger:info_msg("Transitioned from ~p to ~p~n", [ConnectionStep0, ConnectionStep]),
             case ConnectionStep of
                 authenticated ->
                     TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>,
-                    frame(Transport, State1, TuneFrame),
-                    listen_loop_pre_auth(Transport, State1#stream_connection{connection_step = tuning}, Configuration);
+                    frame(Transport, Connection1, TuneFrame),
+                    listen_loop_pre_auth(Transport, Connection1#stream_connection{connection_step = tuning}, State1, Configuration);
                 opened ->
-                    listen_loop_post_auth(Transport, State1, Configuration);
+                    listen_loop_post_auth(Transport, Connection1, State1, Configuration);
                 failure ->
                     close(Transport, S);
                 _ ->
-                    listen_loop_pre_auth(Transport, State1, Configuration)
+                    listen_loop_pre_auth(Transport, Connection1, State1, Configuration)
             end;
         {Closed, S} ->
             error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
@@ -141,18 +153,20 @@ close(Transport, S) ->
     Transport:shutdown(S, write),
     Transport:close(S).
 
-listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Consumers,
-    stream_subscriptions = StreamSubscriptions, credits = Credits, blocked = Blocked, heartbeater = Heartbeater} = State,
+listen_loop_post_auth(Transport, #stream_connection{socket = S,
+    stream_subscriptions = StreamSubscriptions, credits = Credits, heartbeater = Heartbeater} = Connection,
+    #stream_connection_state{consumers = Consumers, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
     receive
         {OK, S, Data} ->
-            #stream_connection{connection_step = Step} = State1 = handle_inbound_data_post_auth(Transport, State, Data),
+            {Connection1, State1} = handle_inbound_data_post_auth(Transport, Connection, State, Data),
+            #stream_connection{connection_step = Step} = Connection1,
             case Step of
                 closing ->
                     close(Transport, S);
                 close_sent ->
-                    listen_loop_post_close(Transport, State1, Configuration);
+                    listen_loop_post_close(Transport, Connection1, State1, Configuration);
                 _ ->
                     State2 = case Blocked of
                                  true ->
@@ -160,7 +174,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                                          true ->
                                              Transport:setopts(S, [{active, once}]),
                                              ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-                                             State1#stream_connection{blocked = false};
+                                             State1#stream_connection_state{blocked = false};
                                          false ->
                                              State1
                                      end;
@@ -171,23 +185,23 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                                              State1;
                                          false ->
                                              ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-                                             State1#stream_connection{blocked = true}
+                                             State1#stream_connection_state{blocked = true}
                                      end
                              end,
-                    listen_loop_post_auth(Transport, State2, Configuration)
+                    listen_loop_post_auth(Transport, Connection1, State2, Configuration)
             end;
         {stream_manager, cluster_deleted, ClusterReference} ->
-            State1 = case clean_state_after_stream_deletion(ClusterReference, State) of
-                         {cleaned, NewState} ->
-                             StreamSize = byte_size(ClusterReference),
-                             FrameSize = 2 + 2 + 2 + 2 + StreamSize,
-                             Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                 ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, ClusterReference/binary>>]),
-                             NewState;
-                         {not_cleaned, SameState} ->
-                             SameState
-                     end,
-            listen_loop_post_auth(Transport, State1, Configuration);
+            {Connection1, State1} = case clean_state_after_stream_deletion(ClusterReference, Connection, State) of
+                                        {cleaned, NewConnection, NewState} ->
+                                            StreamSize = byte_size(ClusterReference),
+                                            FrameSize = 2 + 2 + 2 + 2 + StreamSize,
+                                            Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
+                                                ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, ClusterReference/binary>>]),
+                                            {NewConnection, NewState};
+                                        {not_cleaned, SameConnection, SameState} ->
+                                            {SameConnection, SameState}
+                                    end,
+            listen_loop_post_auth(Transport, Connection1, State1, Configuration);
         {'$gen_cast', {queue_event, _QueueResource, {osiris_written, _QueueResource, CorrelationIdList}}} ->
             CorrelationIdBinaries = [<<CorrelationId:64>> || CorrelationId <- CorrelationIdList],
             CorrelationIdCount = length(CorrelationIdList),
@@ -202,46 +216,46 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
                                  true ->
                                      Transport:setopts(S, [{active, once}]),
                                      ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-                                     State#stream_connection{blocked = false};
+                                     State#stream_connection_state{blocked = false};
                                  false ->
                                      State
                              end;
                          false ->
                              State
                      end,
-            listen_loop_post_auth(Transport, State1, Configuration);
+            listen_loop_post_auth(Transport, Connection, State1, Configuration);
         {'$gen_cast', {queue_event, #resource{name = StreamName}, {osiris_offset, _QueueResource, -1}}} ->
             error_logger:info_msg("received osiris offset event for ~p with offset ~p~n", [StreamName, -1]),
-            listen_loop_post_auth(Transport, State, Configuration);
+            listen_loop_post_auth(Transport, Connection, State, Configuration);
         {'$gen_cast', {queue_event, #resource{name = StreamName}, {osiris_offset, _QueueResource, Offset}}} when Offset > -1 ->
-            State1 = case maps:get(StreamName, StreamSubscriptions, undefined) of
-                         undefined ->
-                             error_logger:info_msg("osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)", [StreamName]),
-                             State;
-                         [] ->
-                             error_logger:info_msg("osiris offset event for ~p, but no registered consumers!", [StreamName]),
-                             State#stream_connection{stream_subscriptions = maps:remove(StreamName, StreamSubscriptions)};
-                         CorrelationIds when is_list(CorrelationIds) ->
-                             Consumers1 = lists:foldl(fun(CorrelationId, ConsumersAcc) ->
-                                 #{CorrelationId := Consumer} = ConsumersAcc,
-                                 #consumer{credit = Credit} = Consumer,
-                                 Consumer1 = case Credit of
-                                                 0 ->
-                                                     Consumer;
-                                                 _ ->
-                                                     {{segment, Segment1}, {credit, Credit1}} = send_chunks(
-                                                         Transport,
-                                                         Consumer
-                                                     ),
-                                                     Consumer#consumer{segment = Segment1, credit = Credit1}
-                                             end,
-                                 ConsumersAcc#{CorrelationId => Consumer1}
-                                                      end,
-                                 Consumers,
-                                 CorrelationIds),
-                             State#stream_connection{consumers = Consumers1}
-                     end,
-            listen_loop_post_auth(Transport, State1, Configuration);
+            {Connection1, State1} = case maps:get(StreamName, StreamSubscriptions, undefined) of
+                                        undefined ->
+                                            error_logger:info_msg("osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)", [StreamName]),
+                                            {Connection, State};
+                                        [] ->
+                                            error_logger:info_msg("osiris offset event for ~p, but no registered consumers!", [StreamName]),
+                                            {Connection#stream_connection{stream_subscriptions = maps:remove(StreamName, StreamSubscriptions)}, State};
+                                        CorrelationIds when is_list(CorrelationIds) ->
+                                            Consumers1 = lists:foldl(fun(CorrelationId, ConsumersAcc) ->
+                                                #{CorrelationId := Consumer} = ConsumersAcc,
+                                                #consumer{credit = Credit} = Consumer,
+                                                Consumer1 = case Credit of
+                                                                0 ->
+                                                                    Consumer;
+                                                                _ ->
+                                                                    {{segment, Segment1}, {credit, Credit1}} = send_chunks(
+                                                                        Transport,
+                                                                        Consumer
+                                                                    ),
+                                                                    Consumer#consumer{segment = Segment1, credit = Credit1}
+                                                            end,
+                                                ConsumersAcc#{CorrelationId => Consumer1}
+                                                                     end,
+                                                Consumers,
+                                                CorrelationIds),
+                                            {Connection, State#stream_connection_state{consumers = Consumers1}}
+                                    end,
+            listen_loop_post_auth(Transport, Connection1, State1, Configuration);
         {heartbeat_send_error, Reason} ->
             error_logger:info_msg("Heartbeat send error ~p, closing connection~n", [Reason]),
             rabbit_stream_manager:unregister(),
@@ -260,22 +274,23 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S, consumers = Cons
         M ->
             error_logger:warning_msg("Unknown message ~p~n", [M]),
             %% FIXME send close
-            listen_loop_post_auth(Transport, State, Configuration)
+            listen_loop_post_auth(Transport, Connection, State, Configuration)
     end.
 
-listen_loop_post_close(Transport, #stream_connection{socket = S} = State, Configuration) ->
+listen_loop_post_close(Transport, #stream_connection{socket = S} = Connection, State, Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
     %% FIXME introduce timeout to complete the connection closing (after block should be enough)
     receive
         {OK, S, Data} ->
-            #stream_connection{connection_step = Step} = State1 = handle_inbound_data_post_close(Transport, State, Data),
+            {Connection1, State1} = handle_inbound_data_post_close(Transport, Connection, State, Data),
+            #stream_connection{connection_step = Step} = Connection1,
             case Step of
                 closing_done ->
                     error_logger:info_msg("Received close confirmation from client"),
                     close(Transport, S);
                 _ ->
                     Transport:setopts(S, [{active, once}]),
-                    listen_loop_post_close(Transport, State1, Configuration)
+                    listen_loop_post_close(Transport, Connection1, State1, Configuration)
             end;
         {Closed, S} ->
             error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
@@ -286,35 +301,37 @@ listen_loop_post_close(Transport, #stream_connection{socket = S} = State, Config
             error_logger:warning_msg("Ignored message on closing ~p~n", [M])
     end.
 
-handle_inbound_data_pre_auth(Transport, State, Rest) ->
-    handle_inbound_data(Transport, State, Rest, fun handle_frame_pre_auth/4).
+handle_inbound_data_pre_auth(Transport, Connection, State, Rest) ->
+    handle_inbound_data(Transport, Connection, State, Rest, fun handle_frame_pre_auth/5).
 
-handle_inbound_data_post_auth(Transport, State, Rest) ->
-    handle_inbound_data(Transport, State, Rest, fun handle_frame_post_auth/4).
+handle_inbound_data_post_auth(Transport, Connection, State, Rest) ->
+    handle_inbound_data(Transport, Connection, State, Rest, fun handle_frame_post_auth/5).
 
-handle_inbound_data_post_close(Transport, State, Rest) ->
-    handle_inbound_data(Transport, State, Rest, fun handle_frame_post_close/4).
+handle_inbound_data_post_close(Transport, Connection, State, Rest) ->
+    handle_inbound_data(Transport, Connection, State, Rest, fun handle_frame_post_close/5).
 
-handle_inbound_data(_Transport, State, <<>>, _HandleFrameFun) ->
-    State;
-handle_inbound_data(Transport, #stream_connection{data = none, frame_max = FrameMax} = State, <<Size:32, _Frame:Size/binary, _Rest/bits>>, _HandleFrameFun)
+handle_inbound_data(_Transport, Connection, State, <<>>, _HandleFrameFun) ->
+    {Connection, State};
+handle_inbound_data(Transport, #stream_connection{frame_max = FrameMax} = Connection,
+    #stream_connection_state{data = none} = State, <<Size:32, _Frame:Size/binary, _Rest/bits>>, _HandleFrameFun)
     when FrameMax /= 0 andalso Size > FrameMax - 4 ->
     CloseReason = <<"frame too large">>,
     CloseReasonLength = byte_size(CloseReason),
     CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_FRAME_TOO_LARGE:16,
         CloseReasonLength:16, CloseReason:CloseReasonLength/binary>>,
-    frame(Transport, State, CloseFrame),
-    State#stream_connection{connection_step = close_sent};
-handle_inbound_data(Transport, #stream_connection{data = none} = State, <<Size:32, Frame:Size/binary, Rest/bits>>, HandleFrameFun) ->
-    {State1, Rest1} = HandleFrameFun(Transport, State, Frame, Rest),
-    handle_inbound_data(Transport, State1, Rest1, HandleFrameFun);
-handle_inbound_data(_Transport, #stream_connection{data = none} = State, Data, _HandleFrameFun) ->
-    State#stream_connection{data = Data};
-handle_inbound_data(Transport, #stream_connection{data = Leftover} = State, Data, HandleFrameFun) ->
-    State1 = State#stream_connection{data = none},
+    frame(Transport, Connection, CloseFrame),
+    {Connection#stream_connection{connection_step = close_sent}, State};
+handle_inbound_data(Transport, Connection,
+    #stream_connection_state{data = none} = State, <<Size:32, Frame:Size/binary, Rest/bits>>, HandleFrameFun) ->
+    {Connection1, State1, Rest1} = HandleFrameFun(Transport, Connection, State, Frame, Rest),
+    handle_inbound_data(Transport, Connection1, State1, Rest1, HandleFrameFun);
+handle_inbound_data(_Transport, Connection, #stream_connection_state{data = none} = State, Data, _HandleFrameFun) ->
+    {Connection, State#stream_connection_state{data = Data}};
+handle_inbound_data(Transport, Connection, #stream_connection_state{data = Leftover} = State, Data, HandleFrameFun) ->
+    State1 = State#stream_connection_state{data = none},
     %% FIXME avoid concatenation to avoid a new binary allocation
     %% see osiris_replica:parse_chunk/3
-    handle_inbound_data(Transport, State1, <<Leftover/binary, Data/binary>>, HandleFrameFun).
+    handle_inbound_data(Transport, Connection, State1, <<Leftover/binary, Data/binary>>, HandleFrameFun).
 
 write_messages(_ClusterLeader, <<>>) ->
     ok;
@@ -330,7 +347,7 @@ generate_publishing_error_details(Acc, <<PublishingId:64, MessageSize:32, _Messa
         <<Acc/binary, PublishingId:64, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST:16>>,
         Rest).
 
-handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
+handle_frame_pre_auth(Transport, #stream_connection{socket = S} = Connection, State,
     <<?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, CorrelationId:32,
         ClientPropertiesCount:32, ClientPropertiesFrame/binary>>, Rest) ->
 
@@ -371,8 +388,8 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
     FrameSize = byte_size(Frame),
 
     Transport:send(S, [<<FrameSize:32>>, <<Frame/binary>>]),
-    {State#stream_connection{client_properties = ClientProperties, authentication_state = peer_properties_exchanged}, Rest};
-handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
+    {Connection#stream_connection{client_properties = ClientProperties, authentication_state = peer_properties_exchanged}, State, Rest};
+handle_frame_pre_auth(Transport, #stream_connection{socket = S} = Connection, State,
     <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, CorrelationId:32>>, Rest) ->
 
     Mechanisms = auth_mechanisms(S),
@@ -386,8 +403,8 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S} = State,
     FrameSize = byte_size(Frame),
 
     Transport:send(S, [<<FrameSize:32>>, <<Frame/binary>>]),
-    {State, Rest};
-handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = State0,
+    {Connection, State, Rest};
+handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_state = AuthState0} = Connection0, State,
     <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32,
         MechanismLength:16, Mechanism:MechanismLength/binary,
         SaslFragment/binary>>, Rest) ->
@@ -399,48 +416,48 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                       SaslBinary
               end,
 
-    {State1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
-                          {ok, AuthMechanism} ->
-                              AuthState = case AuthState0 of
-                                              none ->
-                                                  AuthMechanism:init(S);
-                                              AS ->
-                                                  AS
-                                          end,
-                              {S1, FrameFragment} = case AuthMechanism:handle_response(SaslBin, AuthState) of
-                                                        {refused, _Username, Msg, Args} ->
-                                                            error_logger:warning_msg(Msg, Args),
-                                                            {State0#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
-                                                        {protocol_error, Msg, Args} ->
-                                                            error_logger:warning_msg(Msg, Args),
-                                                            {State0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
-                                                        {challenge, Challenge, AuthState1} ->
-                                                            ChallengeSize = byte_size(Challenge),
-                                                            {State0#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
-                                                                <<?RESPONSE_SASL_CHALLENGE:16, ChallengeSize:32, Challenge/binary>>
-                                                            };
-                                                        {ok, User = #user{username = Username}} ->
-                                                            case rabbit_access_control:check_user_loopback(Username, S) of
-                                                                ok ->
-                                                                    {State0#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
-                                                                        <<?RESPONSE_CODE_OK:16>>
-                                                                    };
-                                                                not_allowed ->
-                                                                    error_logger:warning_msg("User '~s' can only connect via localhost~n", [Username]),
-                                                                    {State0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
-                                                            end
-                                                    end,
-                              Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, FrameFragment/binary>>,
-                              frame(Transport, S1, Frame),
-                              {S1, Rest};
-                          {error, _} ->
-                              Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_SASL_MECHANISM_NOT_SUPPORTED:16>>,
-                              frame(Transport, State0, Frame),
-                              {State0#stream_connection{connection_step = failure}, Rest}
-                      end,
+    {Connection1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
+                               {ok, AuthMechanism} ->
+                                   AuthState = case AuthState0 of
+                                                   none ->
+                                                       AuthMechanism:init(S);
+                                                   AS ->
+                                                       AS
+                                               end,
+                                   {S1, FrameFragment} = case AuthMechanism:handle_response(SaslBin, AuthState) of
+                                                             {refused, _Username, Msg, Args} ->
+                                                                 error_logger:warning_msg(Msg, Args),
+                                                                 {Connection0#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
+                                                             {protocol_error, Msg, Args} ->
+                                                                 error_logger:warning_msg(Msg, Args),
+                                                                 {Connection0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
+                                                             {challenge, Challenge, AuthState1} ->
+                                                                 ChallengeSize = byte_size(Challenge),
+                                                                 {Connection0#stream_connection{authentication_state = AuthState1, connection_step = authenticating},
+                                                                     <<?RESPONSE_SASL_CHALLENGE:16, ChallengeSize:32, Challenge/binary>>
+                                                                 };
+                                                             {ok, User = #user{username = Username}} ->
+                                                                 case rabbit_access_control:check_user_loopback(Username, S) of
+                                                                     ok ->
+                                                                         {Connection0#stream_connection{authentication_state = done, user = User, connection_step = authenticated},
+                                                                             <<?RESPONSE_CODE_OK:16>>
+                                                                         };
+                                                                     not_allowed ->
+                                                                         error_logger:warning_msg("User '~s' can only connect via localhost~n", [Username]),
+                                                                         {Connection0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
+                                                                 end
+                                                         end,
+                                   Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, FrameFragment/binary>>,
+                                   frame(Transport, S1, Frame),
+                                   {S1, Rest};
+                               {error, _} ->
+                                   Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_SASL_MECHANISM_NOT_SUPPORTED:16>>,
+                                   frame(Transport, Connection0, Frame),
+                                   {Connection0#stream_connection{connection_step = failure}, Rest}
+                           end,
 
-    {State1, Rest1};
-handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = State,
+    {Connection1, State, Rest1};
+handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = Connection, State,
     <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
 
@@ -448,7 +465,7 @@ handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket 
     Parent = self(),
     SendFun =
         fun() ->
-            case catch frame(Transport, State, Frame) of
+            case catch frame(Transport, Connection, Frame) of
                 ok ->
                     ok;
                 {error, Reason} ->
@@ -464,67 +481,69 @@ handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket 
         Heartbeat, SendFun, Heartbeat, ReceiveFun),
 
 
-    {State#stream_connection{connection_step = tuned, frame_max = FrameMax, heartbeater = Heartbeater}, Rest};
-handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = State, <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
-    VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
+    {Connection#stream_connection{connection_step = tuned, frame_max = FrameMax, heartbeater = Heartbeater}, State, Rest};
+handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = Connection, State,
+    <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
+        VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
 
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
 
-    {State1, Frame} = try
-                          case rabbit_access_control:check_vhost_access(User, VirtualHost, {socket, S}, #{}) of
-                              ok ->
-                                  F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
-                                  %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
-                                  {State#stream_connection{connection_step = opened, virtual_host = VirtualHost}, F};
-                              _ ->
-                                  F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
-                                  {State#stream_connection{connection_step = failure}, F}
-                          end
-                      catch
-                          exit:_ ->
-                              Fr = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
-                              {State#stream_connection{connection_step = failure}, Fr}
-                      end,
+    {Connection1, Frame} = try
+                               case rabbit_access_control:check_vhost_access(User, VirtualHost, {socket, S}, #{}) of
+                                   ok ->
+                                       F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
+                                       %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
+                                       {Connection#stream_connection{connection_step = opened, virtual_host = VirtualHost}, F};
+                                   _ ->
+                                       F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
+                                       {Connection#stream_connection{connection_step = failure}, F}
+                               end
+                           catch
+                               exit:_ ->
+                                   Fr = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
+                                   {Connection#stream_connection{connection_step = failure}, Fr}
+                           end,
 
-    frame(Transport, State, Frame),
+    frame(Transport, Connection1, Frame),
 
-    {State1, Rest};
-handle_frame_pre_auth(_Transport, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
+    {Connection1, State, Rest};
+handle_frame_pre_auth(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
     error_logger:info_msg("Received heartbeat frame pre auth~n"),
-    {State, Rest};
-handle_frame_pre_auth(_Transport, State, Frame, Rest) ->
+    {Connection, State, Rest};
+handle_frame_pre_auth(_Transport, Connection, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
-    {State#stream_connection{connection_step = failure}, Rest}.
+    {Connection#stream_connection{connection_step = failure}, State, Rest}.
 
-handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits} = Connection, State,
     <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
         StreamSize:16, Stream:StreamSize/binary,
         MessageCount:32, Messages/binary>>, Rest) ->
-    case lookup_leader(Stream, State) of
+    case lookup_leader(Stream, Connection) of
         cluster_not_found ->
             FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
             Details = generate_publishing_error_details(<<>>, Messages),
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
                 MessageCount:32, Details/binary>>]),
-            {State, Rest};
-        {ClusterLeader, State1} ->
+            {Connection, State, Rest};
+        {ClusterLeader, Connection1} ->
             write_messages(ClusterLeader, Messages),
             sub_credits(Credits, MessageCount),
-            {State1, Rest}
+            {Connection1, State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers = Consumers,
-    stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
+    stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost} = Connection,
+    #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary,
         OffsetType:16/signed, OffsetAndCredit/binary>>, Rest) ->
     case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
         {error, not_found} ->
-            response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-            {State, Rest};
+            response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+            {Connection, State, Rest};
         {ok, LocalMemberPid} ->
             case subscription_exists(StreamSubscriptions, SubscriptionId) of
                 true ->
-                    response(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
-                    {State, Rest};
+                    response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
+                    {Connection, State, Rest};
                 false ->
                     {OffsetSpec, Credit} = case OffsetType of
                                                ?OFFSET_TYPE_FIRST ->
@@ -552,7 +571,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
                     },
                     error_logger:info_msg("registering consumer ~p in ~p~n", [ConsumerState, self()]),
 
-                    response_ok(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId),
+                    response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
 
                     {{segment, Segment1}, {credit, Credit1}} = send_chunks(
                         Transport,
@@ -567,15 +586,16 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket, consumers 
                             _ ->
                                 StreamSubscriptions#{Stream => [SubscriptionId]}
                         end,
-                    {State#stream_connection{consumers = Consumers1, stream_subscriptions = StreamSubscriptions1}, Rest}
+                    {Connection#stream_connection{stream_subscriptions = StreamSubscriptions1}, State#stream_connection_state{consumers = Consumers1}, Rest}
             end
     end;
-handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers, stream_subscriptions = StreamSubscriptions, clusters = Clusters} = State,
+handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = StreamSubscriptions, clusters = Clusters} = Connection,
+    #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32>>, Rest) ->
     case subscription_exists(StreamSubscriptions, SubscriptionId) of
         false ->
-            response(Transport, State, ?COMMAND_UNSUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
-            {State, Rest};
+            response(Transport, Connection, ?COMMAND_UNSUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
+            {Connection, State, Rest};
         true ->
             #{SubscriptionId := Consumer} = Consumers,
             Stream = Consumer#consumer.stream,
@@ -592,13 +612,13 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers, stre
                         {StreamSubscriptions#{Stream => SubscriptionsForThisStream1}, Clusters}
                 end,
             Consumers1 = maps:remove(SubscriptionId, Consumers),
-            response_ok(Transport, State, ?COMMAND_SUBSCRIBE, CorrelationId),
-            {State#stream_connection{consumers = Consumers1,
+            response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
+            {Connection#stream_connection{
                 stream_subscriptions = StreamSubscriptions1,
                 clusters = Clusters1
-            }, Rest}
+            }, State#stream_connection_state{consumers = Consumers1}, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = State,
+handle_frame_post_auth(Transport, Connection, #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16/signed>>, Rest) ->
 
     case Consumers of
@@ -612,53 +632,55 @@ handle_frame_post_auth(Transport, #stream_connection{consumers = Consumers} = St
             ),
 
             Consumer1 = Consumer#consumer{segment = Segment1, credit = Credit1},
-            {State#stream_connection{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
+            {Connection, State#stream_connection_state{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
         _ ->
             %% FIXME find a way to tell the client it's crediting an unknown subscription
             error_logger:warning_msg("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
-            {State, Rest}
+            {Connection, State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = State,
+handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = Connection,
+    State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
         ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
     {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
     case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
             error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
-            response_ok(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId),
-            {State, Rest};
+            response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
+            {Connection, State, Rest};
         {error, reference_already_exists} ->
-            response(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
-            {State, Rest};
+            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
+            {Connection, State, Rest};
         {error, _} ->
-            response(Transport, State, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
-            {State, Rest}
+            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
+            {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost,
-    user = #user{username = Username}} = State,
+    user = #user{username = Username}} = Connection, State,
     <<?COMMAND_DELETE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
     case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
         {ok, deleted} ->
-            response_ok(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId),
-            State1 = case clean_state_after_stream_deletion(Stream, State) of
-                         {cleaned, NewState} ->
-                             StreamSize = byte_size(Stream),
-                             FrameSize = 2 + 2 + 2 + 2 + StreamSize,
-                             Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                 ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
-                             NewState;
-                         {not_cleaned, SameState} ->
-                             SameState
-                     end,
-            {State1, Rest};
+            response_ok(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId),
+            %% FIXME add connection and state parameters (and change return type)
+            {Connection1, State1} = case clean_state_after_stream_deletion(Stream, Connection, State) of
+                                        {cleaned, NewConnection, NewState} ->
+                                            StreamSize = byte_size(Stream),
+                                            FrameSize = 2 + 2 + 2 + 2 + StreamSize,
+                                            Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
+                                                ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
+                                            {NewConnection, NewState};
+                                        {not_cleaned, SameConnection, SameState} ->
+                                            {SameConnection, SameState}
+                                    end,
+            {Connection1, State1, Rest};
         {error, reference_not_found} ->
-            response(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-            {State, Rest};
+            response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+            {Connection, State, Rest};
         {error, internal_error} ->
-            response(Transport, State, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
-            {State, Rest}
+            response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
+            {Connection, State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost} = Connection, State,
     <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, StreamCount:32, BinaryStreams/binary>>, Rest) ->
     Streams = extract_stream_list(BinaryStreams, []),
 
@@ -711,25 +733,25 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
     Frame = <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, BrokersBin/binary, MetadataBin/binary>>,
     FrameSize = byte_size(Frame),
     Transport:send(S, <<FrameSize:32, Frame/binary>>),
-    {State, Rest};
-handle_frame_post_auth(Transport, State,
+    {Connection, State, Rest};
+handle_frame_post_auth(Transport, Connection, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32,
         ClosingCode:16, ClosingReasonLength:16, ClosingReason:ClosingReasonLength/binary>>, _Rest) ->
     error_logger:info_msg("Received close command ~p ~p~n", [ClosingCode, ClosingReason]),
     Frame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
-    frame(Transport, State, Frame),
-    {State#stream_connection{connection_step = closing}, <<>>}; %% we ignore any subsequent frames
-handle_frame_post_auth(_Transport, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
+    frame(Transport, Connection, Frame),
+    {Connection#stream_connection{connection_step = closing}, State, <<>>}; %% we ignore any subsequent frames
+handle_frame_post_auth(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
     error_logger:info_msg("Received heartbeat frame post auth~n"),
-    {State, Rest};
-handle_frame_post_auth(Transport, State, Frame, Rest) ->
+    {Connection, State, Rest};
+handle_frame_post_auth(Transport, Connection, State, Frame, Rest) ->
     error_logger:warning_msg("unknown frame ~p ~p, sending close command.~n", [Frame, Rest]),
     CloseReason = <<"unknown frame">>,
     CloseReasonLength = byte_size(CloseReason),
     CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_UNKNOWN_FRAME:16,
         CloseReasonLength:16, CloseReason:CloseReasonLength/binary>>,
     frame(Transport, State, CloseFrame),
-    {State#stream_connection{connection_step = close_sent}, Rest}.
+    {Connection#stream_connection{connection_step = close_sent}, State, Rest}.
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
@@ -746,15 +768,15 @@ parse_map(Acc, <<KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/b
     parse_map(maps:put(Key, Value, Acc), Rest, Count - 1).
 
 
-handle_frame_post_close(_Transport, State,
+handle_frame_post_close(_Transport, Connection, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
-    {State#stream_connection{connection_step = closing_done}, Rest};
-handle_frame_post_close(_Transport, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
+    {Connection#stream_connection{connection_step = closing_done}, State, Rest};
+handle_frame_post_close(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
     error_logger:info_msg("Received heartbeat frame post close~n"),
-    {State, Rest};
-handle_frame_post_close(_Transport, State, Frame, Rest) ->
+    {Connection, State, Rest};
+handle_frame_post_close(_Transport, Connection, State, Frame, Rest) ->
     error_logger:warning_msg("ignored frame on close ~p ~p.~n", [Frame, Rest]),
-    {State, Rest}.
+    {Connection, State, Rest}.
 
 auth_mechanisms(Sock) ->
     {ok, Configured} = application:get_env(rabbit, auth_mechanisms),
@@ -782,18 +804,17 @@ extract_stream_list(<<>>, Streams) ->
 extract_stream_list(<<Length:16, Stream:Length/binary, Rest/binary>>, Streams) ->
     extract_stream_list(Rest, [Stream | Streams]).
 
-clean_state_after_stream_deletion(Stream, #stream_connection{clusters = Clusters, stream_subscriptions = StreamSubscriptions,
-    consumers = Consumers} = State) ->
+clean_state_after_stream_deletion(Stream, #stream_connection{clusters = Clusters, stream_subscriptions = StreamSubscriptions} = Connection,
+    #stream_connection_state{consumers = Consumers} = State) ->
     case maps:is_key(Stream, StreamSubscriptions) of
         true ->
             #{Stream := SubscriptionIds} = StreamSubscriptions,
-            {cleaned, State#stream_connection{
+            {cleaned, Connection#stream_connection{
                 clusters = maps:remove(Stream, Clusters),
-                stream_subscriptions = maps:remove(Stream, StreamSubscriptions),
-                consumers = maps:without(SubscriptionIds, Consumers)
-            }};
+                stream_subscriptions = maps:remove(Stream, StreamSubscriptions)
+            }, State#stream_connection_state{consumers = maps:without(SubscriptionIds, Consumers)}};
         false ->
-            {not_cleaned, State}
+            {not_cleaned, Connection, State}
     end.
 
 lookup_leader(Stream, #stream_connection{clusters = Clusters, virtual_host = VirtualHost} = State) ->
