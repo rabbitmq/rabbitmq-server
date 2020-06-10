@@ -19,36 +19,43 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_stream.hrl").
 
+-record(consumer, {
+    socket :: any(), %% ranch_transport:socket(),
+    member_pid :: pid(),
+    offset :: osiris:offset(),
+    subscription_id :: integer(),
+    segment :: osiris_log:state(),
+    credit :: integer(),
+    stream :: binary()
+}).
+
 -record(stream_connection_state, {
-    data,
-    blocked,
-    consumers
+    data :: binary(),
+    blocked :: boolean(),
+    consumers :: #{integer() => #consumer{}}
 }).
 
 -record(stream_connection, {
-    name,
-    helper_sup,
-    listen_socket,
-    socket,
-    clusters,
-    stream_subscriptions,
-    credits,
-    authentication_state,
-    user,
-    virtual_host,
-    connection_step, % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
-    frame_max,
-    heartbeater,
-    client_properties
-}).
-
--record(consumer, {
-    socket, member_pid, offset, subscription_id, segment, credit, stream
+    name :: string(),
+    helper_sup :: supervisor2:startchild_ret(),
+    socket :: any(), %% ranch_transport:socket()
+    clusters :: #{binary() => pid()},
+    stream_subscriptions :: #{binary() => [integer()]},
+    credits :: atomics:atomics_ref(),
+    authentication_state :: atom(),
+    user :: #user{},
+    virtual_host :: binary(),
+    connection_step :: atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
+    frame_max :: integer(),
+    heartbeater :: any(),
+    client_properties :: #{binary() => binary()}
 }).
 
 -record(configuration, {
-    initial_credits, credits_required_for_unblocking,
-    frame_max, heartbeat
+    initial_credits :: integer(),
+    credits_required_for_unblocking :: integer(),
+    frame_max :: integer(),
+    heartbeat :: integer()
 }).
 
 -define(RESPONSE_FRAME_SIZE, 10). % 2 (key) + 2 (version) + 4 (correlation ID) + 2 (response code)
@@ -880,8 +887,8 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry) ->
                     timer:sleep(1),
                     send_chunks(Transport, State, Segment1, Credit, false);
                 false ->
-                    #consumer{member_pid = Leader} = State,
-                    osiris:register_offset_listener(Leader, osiris_log:next_offset(Segment1)),
+                    #consumer{member_pid = LocalMember} = State,
+                    osiris:register_offset_listener(LocalMember, osiris_log:next_offset(Segment1)),
                     {{segment, Segment1}, {credit, Credit}}
             end
     end.
