@@ -199,6 +199,11 @@
                     {mfa,         {rabbit_connection_tracking, boot, []}},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({channel_tracking,
+                   [{description, "channel tracking infrastructure"},
+                    {mfa,         {rabbit_channel_tracking, boot, []}},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({background_gc,
                    [{description, "background garbage collection"},
                     {mfa,         {rabbit_sup, start_restartable_child,

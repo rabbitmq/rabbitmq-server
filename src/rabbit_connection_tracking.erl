@@ -37,6 +37,7 @@
          tracked_connection_table_name_for/1,
          tracked_connection_per_vhost_table_name_for/1,
          tracked_connection_per_user_table_name_for/1,
+         get_all_tracked_connection_table_names_for_node/1,
 
          delete_tracked_connections_table_for_node/1,
          delete_per_vhost_tracked_connections_table_for_node/1,
@@ -128,7 +129,7 @@ handle_cast({connection_closed, Details}) ->
 handle_cast({vhost_deleted, Details}) ->
     VHost = pget(name, Details),
     %% Schedule vhost entry deletion, allowing time for connections to close
-    _ = timer:apply_after(?SCHEDULED_TRACKING_EXECUTION_TIMEOUT, ?MODULE,
+    _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_vhost_entry, [VHost]),
     rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
     shutdown_tracked_items(
@@ -149,7 +150,7 @@ handle_cast({vhost_down, Details}) ->
 handle_cast({user_deleted, Details}) ->
     Username = pget(name, Details),
     %% Schedule user entry deletion, allowing time for connections to close
-    _ = timer:apply_after(?SCHEDULED_TRACKING_EXECUTION_TIMEOUT, ?MODULE,
+    _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_user_entry, [Username]),
     rabbit_log_connection:info("Closing all connections from user '~s' because it's being deleted", [Username]),
     shutdown_tracked_items(
