@@ -10,9 +10,9 @@ jobs:
   rabbitmq-server:
     runs-on: ubuntu-latest
     steps:
-      - name: New commit to rabbitmq-cli master branch
+      - name: New commit to rabbitmq-common master branch
         run: |
           curl --silent --fail --url https://api.github.com/repos/rabbitmq/rabbitmq-server/dispatches \
             --header "Authorization: Bearer ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
             --header "Content-Type: application/json" \
-            --data '{ "event_type": "new-commit-to-dep-release-branch", "client_payload": { "dep": "rabbitmq-cli" } }'
+            --data '{ "event_type": "new-commit-to-dep-release-branch", "client_payload": { "dep": "rabbitmq-common" } }'
