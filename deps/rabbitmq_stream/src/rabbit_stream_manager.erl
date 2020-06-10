@@ -83,7 +83,7 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
         case rabbit_stream_queue:declare(Q0, node()) of
             {new, Q} ->
                 {reply, {ok, amqqueue:get_type_state(Q)}, State};
-            _ ->
+            {existing, _} ->
                 {reply, {error, reference_already_exists}, State}
         end
     catch
@@ -104,11 +104,7 @@ handle_call({delete, VirtualHost, Reference, Username}, _From, #state{listeners 
                     {reply, {error, reference_not_found}, State}
             end;
         {error, not_found} ->
-            {reply, {error, reference_not_found}, State};
-        Other ->
-            error_logger:info_msg("Unexpected result when trying to look up stream ~p for deletion, ~p~n",
-                [Reference, Other]),
-            {reply, {error, internal_error}, State}
+            {reply, {error, reference_not_found}, State}
     end;
 handle_call({register, Pid}, _From, #state{listeners = Listeners, monitors = Monitors} = State) ->
     case lists:member(Pid, Listeners) of

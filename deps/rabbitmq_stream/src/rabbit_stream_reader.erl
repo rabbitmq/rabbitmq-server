@@ -20,7 +20,7 @@
 -include("rabbit_stream.hrl").
 
 -record(consumer, {
-    socket :: any(), %% ranch_transport:socket(),
+    socket :: rabbit_net:socket(), %% ranch_transport:socket(),
     member_pid :: pid(),
     offset :: osiris:offset(),
     subscription_id :: integer(),
@@ -30,25 +30,25 @@
 }).
 
 -record(stream_connection_state, {
-    data :: binary(),
+    data :: 'none' | binary(),
     blocked :: boolean(),
     consumers :: #{integer() => #consumer{}}
 }).
 
 -record(stream_connection, {
     name :: string(),
-    helper_sup :: supervisor2:startchild_ret(),
-    socket :: any(), %% ranch_transport:socket()
+    helper_sup :: pid(),
+    socket :: rabbit_net:socket(),
     clusters :: #{binary() => pid()},
     stream_subscriptions :: #{binary() => [integer()]},
     credits :: atomics:atomics_ref(),
     authentication_state :: atom(),
-    user :: #user{},
-    virtual_host :: binary(),
+    user :: 'undefined' | #user{},
+    virtual_host :: 'undefined' | binary(),
     connection_step :: atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max :: integer(),
     heartbeater :: any(),
-    client_properties :: #{binary() => binary()}
+    client_properties = #{} :: #{binary() => binary()}
 }).
 
 -record(configuration, {
@@ -89,7 +89,7 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
                 clusters = #{},
                 stream_subscriptions = #{},
                 credits = Credits,
-                authentication_state = none, user = none,
+                authentication_state = none,
                 connection_step = tcp_connected,
                 frame_max = FrameMax},
             State = #stream_connection_state{
@@ -496,15 +496,10 @@ handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = C
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
 
     {Connection1, Frame} = try
-                               case rabbit_access_control:check_vhost_access(User, VirtualHost, {socket, S}, #{}) of
-                                   ok ->
-                                       F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
-                                       %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
-                                       {Connection#stream_connection{connection_step = opened, virtual_host = VirtualHost}, F};
-                                   _ ->
-                                       F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
-                                       {Connection#stream_connection{connection_step = failure}, F}
-                               end
+                               rabbit_access_control:check_vhost_access(User, VirtualHost, {socket, S}, #{}),
+                               F = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
+                               %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
+                               {Connection#stream_connection{connection_step = opened, virtual_host = VirtualHost}, F}
                            catch
                                exit:_ ->
                                    Fr = <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_VHOST_ACCESS_FAILURE:16>>,
