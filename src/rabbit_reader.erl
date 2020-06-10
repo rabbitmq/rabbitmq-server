@@ -924,10 +924,11 @@ create_channel(Channel,
             put({ch_pid, ChPid}, {Channel, MRef}),
             put({channel, Channel}, {ChPid, AState}),
             {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
-        {true, Limit} -> {error, rabbit_misc:amqp_error(not_allowed,
-                          "number of channels opened for user (~w) has reached "
-                          "the maximum allowed limit of (~w)",
-                          [Username, Limit], 'none')}
+        {true, Limit} ->
+            {error, rabbit_misc:amqp_error(not_allowed,
+                        "number of channels opened for user (~s) has reached "
+                        "the maximum allowed user limit of (~w)",
+                        [Username, Limit], 'none')}
     end.
 
 channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
@@ -1344,7 +1345,7 @@ is_over_user_connection_limit(#user{username = Username}) ->
         false -> ok;
         {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
                             "Connection refused for user '~s': "
-                            "User connection limit (~p) is reached",
+                            "user connection limit (~p) is reached",
                             [Username, Limit])
     end.
 
