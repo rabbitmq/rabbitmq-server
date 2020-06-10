@@ -74,19 +74,26 @@ get_stream_port(Config) ->
 test_server(Port) ->
     {ok, S} = gen_tcp:connect("localhost", Port, [{active, false},
         {mode, binary}]),
+    test_peer_properties(S),
     test_authenticate(S),
     Stream = <<"stream1">>,
     test_create_stream(S, Stream),
     Body = <<"hello">>,
     test_publish_confirm(S, Stream, Body),
     SubscriptionId = 42,
-    test_subscribe(S, SubscriptionId, Stream),
-    test_deliver(S, SubscriptionId, Body),
+    Rest = test_subscribe(S, SubscriptionId, Stream),
+    test_deliver(S, Rest, SubscriptionId, Body),
     test_delete_stream(S, Stream),
     test_metadata_update_stream_deleted(S, Stream),
     test_close(S),
     closed = wait_for_socket_close(S, 10),
     ok.
+
+test_peer_properties(S) ->
+    PeerPropertiesFrame = <<?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, 1:32, 0:32>>,
+    PeerPropertiesFrameSize = byte_size(PeerPropertiesFrame),
+    gen_tcp:send(S, <<PeerPropertiesFrameSize:32, PeerPropertiesFrame/binary>>),
+    {ok, <<_Size:32, ?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16, _Rest/binary>>} = gen_tcp:recv(S, 0, 5000).
 
 test_authenticate(S) ->
     SaslHandshakeFrame = <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32>>,
@@ -114,7 +121,7 @@ test_authenticate(S) ->
     PlainSaslSize = byte_size(PlainSasl),
 
     SaslAuthenticateFrame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, 2:32,
-        0:32, 5:16, Plain/binary, PlainSaslSize:32, PlainSasl/binary>>,
+        5:16, Plain/binary, PlainSaslSize:32, PlainSasl/binary>>,
 
     SaslAuthenticateFrameSize = byte_size(SaslAuthenticateFrame),
 
@@ -172,11 +179,12 @@ test_subscribe(S, SubscriptionId, Stream) ->
     FrameSize = byte_size(SubscribeFrame),
     gen_tcp:send(S, <<FrameSize:32, SubscribeFrame/binary>>),
     Res = gen_tcp:recv(S, 0, 5000),
-    {ok, <<_Size:32, ?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16>>} = Res.
+    {ok, <<_Size:32, ?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16, Rest/binary>>} = Res,
+    Rest.
 
-test_deliver(S, SubscriptionId, Body) ->
+test_deliver(S, Rest, SubscriptionId, Body) ->
     BodySize = byte_size(Body),
-    Frame = read_frame(S, <<>>),
+    Frame = read_frame(S, Rest),
     <<56:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:32, 5:4/unsigned, 0:4/unsigned, 1:16, 1:32,
         _Timestamp:64, _Epoch:64, 0:64, _Crc:32, _DataLength:32,
         0:1, BodySize:31/unsigned, Body/binary>> = Frame.
