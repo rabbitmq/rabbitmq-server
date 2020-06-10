@@ -159,13 +159,21 @@
 
 %% used to track connections across virtual hosts
 %% so that limits can be enforced
--record(tracked_connection_per_vhost,
-    {vhost, connection_count}).
+-record(tracked_connection_per_vhost, {
+    vhost,
+    connection_count}).
+
+%% Used to track connections per user
+%% so that limits can be enforced
+-record(tracked_connection_per_user, {
+    user,
+    connection_count
+    }).
 
 %% Used to track detailed information
 %% about connections.
 -record(tracked_connection, {
-          %% {Node, Name}
+          %% {Node, ConnectionName}
           id,
           node,
           vhost,
@@ -182,6 +190,25 @@
           %% time of connection
           connected_at
          }).
+
+%% Used to track channels per user
+%% so that limits can be enforced
+-record(tracked_channel_per_user, {
+    user,
+    channel_count
+    }).
+
+%% Used to track detailed information
+%% about channels.
+-record(tracked_channel, {
+            %% {Node, ChannelName}
+            id,
+            node,
+            vhost,
+            name,
+            pid,
+            username,
+            connection}).
 
 %% Indicates maintenance state of a node
 -record(node_maintenance_state, {
@@ -244,3 +271,7 @@
 %% Store metadata in the trace files when message tracing is enabled.
 -define(LG_INFO(Info), is_pid(whereis(lg)) andalso (lg ! Info)).
 -define(LG_PROCESS_TYPE(Type), ?LG_INFO(#{process_type => Type})).
+
+%% Execution timeout of connection and channel tracking operations
+-define(TRACKING_EXECUTION_TIMEOUT,
+        rabbit_misc:get_env(rabbit, tracking_execution_timeout, 5000)).
