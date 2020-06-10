@@ -795,6 +795,10 @@ user_limit_validation() ->
     [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},
      {<<"max-channels">>, fun rabbit_parameter_validation:integer/2, optional}].
 
+clear_user_limits(Username, <<"all">>) ->
+    update_user(Username, fun(User) ->
+                              User#internal_user{limits = #{}}
+                          end);
 clear_user_limits(Username, LimitType) ->
     update_user(Username, fun(User = #internal_user{limits = Limits}) ->
                               User#internal_user{
