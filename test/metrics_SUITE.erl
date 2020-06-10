@@ -103,7 +103,9 @@ queue_metric_count_channel_per_queue_test(Config) ->
                                      [Config], 5).
 
 connection_metric_idemp_test(Config) ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_connection_metric_idemp/1, [Config], 25).
+    connection_metric_idemp(Config, {1, 1}),
+    connection_metric_idemp(Config, {1, 2}),
+    connection_metric_idemp(Config, {2, 2}).
 
 channel_metric_idemp_test(Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_channel_metric_idemp/1, [Config], 25).
@@ -150,8 +152,10 @@ connection_metric_idemp(Config, {N, R}) ->
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
     TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
     [rabbit_ct_client_helpers:close_connection(Conn) || Conn <- Conns],
-    (Table2 == TableAfter2) and (Table == TableAfter) and
-    (N == length(Table)) and (N == length(TableAfter)).
+    ?assertEqual(Table, TableAfter),
+    ?assertEqual(Table2, TableAfter2),
+    ?assertEqual(N, length(Table)),
+    ?assertEqual(N, length(TableAfter)).
 
 channel_metric_idemp(Config, {N, R}) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
