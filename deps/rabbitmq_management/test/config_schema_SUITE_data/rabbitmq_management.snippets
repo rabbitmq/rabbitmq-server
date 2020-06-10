@@ -309,6 +309,19 @@
  },
 
  %%
+ %% Inter-node query result caching
+ %%
+ 
+ {db_cache_multiplier,
+  "management.db_cache_multiplier = 7",
+  [
+   {rabbitmq_management, [
+                          {management_db_cache_multiplier, 7}
+                         ]}
+  ], [rabbitmq_management]
+ },
+ 
+ %%
  %% CORS
  %%
 

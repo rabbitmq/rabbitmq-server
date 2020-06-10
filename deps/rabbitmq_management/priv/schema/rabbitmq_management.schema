@@ -297,7 +297,18 @@ end}.
     {datatype, integer}, {validators, ["non_negative_integer"]}
 ]}.
 
+%%
+%% Inter-node query result caching
+%%
+
+{mapping, "management.db_cache_multiplier", "rabbitmq_management.management_db_cache_multiplier", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+
+%%
 %% CORS
+%%
 
 {mapping, "management.cors.allow_origins", "rabbitmq_management.cors_allow_origins", [
     {datatype, {enum, [none]}}
