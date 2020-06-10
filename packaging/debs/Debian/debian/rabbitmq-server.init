@@ -69,16 +69,10 @@ start_rabbitmq () {
         ensure_pid_dir
         set +e
         RABBITMQ_PID_FILE=$PID_FILE start-stop-daemon --quiet \
-<<<<<<< HEAD
-            --chuid rabbitmq --start --exec $DAEMON \
-            --pidfile "$PID_FILE" --background
-        $CONTROL wait $PID_FILE >/dev/null 2>&1
-=======
             --chuid rabbitmq --start \
             --pidfile "$PID_FILE" --background \
             --startas /bin/sh -- -c "exec $DAEMON >'${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_log' 2>'${RABBITMQ_SERVER_CONSOLE_OUTPUT_DIR}/startup_err'"
-        $CONTROL wait --timeout $RABBITMQ_STARTUP_TIMEOUT $PID_FILE >/dev/null 2>&1
->>>>>>> 8d38a9a... Merge pull request #132 from rabbitmq/fix-console-redirection
+        $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
         if [ $RETVAL != 0 ] ; then
