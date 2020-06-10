@@ -104,11 +104,11 @@ do_run() ->
     %% 1. Erlang/OTP compatibility check.
     ok = rabbit_prelaunch_erlang_compat:check(Context),
 
-    %% 2. Erlang distribution check + start.
-    ok = rabbit_prelaunch_dist:setup(Context),
-
-    %% 3. Configuration check + loading.
+    %% 2. Configuration check + loading.
     ok = rabbit_prelaunch_conf:setup(Context),
+
+    %% 3. Erlang distribution check + start.
+    ok = rabbit_prelaunch_dist:setup(Context),
 
     %% 4. Write PID file.
     rabbit_log_prelaunch:debug(""),
