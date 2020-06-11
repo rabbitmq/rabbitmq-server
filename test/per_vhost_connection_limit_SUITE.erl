@@ -692,7 +692,7 @@ count_connections_in(Config, VHost, NodeIndex) ->
     timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
-                                 count_connections_in, [VHost]).
+                                 count_tracked_items_in, [{vhost, VHost}]).
 
 connections_in(Config, VHost) ->
     connections_in(Config, 0, VHost).
