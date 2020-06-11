@@ -2,4 +2,4 @@
 
 source "https://rubygems.org"
 
-gem "bunny", ">= 2.11.0", "< 3.0"
+gem "bunny", ">= 2.15.0", "< 3.0"
