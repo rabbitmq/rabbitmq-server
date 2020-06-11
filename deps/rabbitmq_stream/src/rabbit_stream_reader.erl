@@ -677,9 +677,6 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
             {Connection1, State1, Rest};
         {error, reference_not_found} ->
             response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-            {Connection, State, Rest};
-        {error, internal_error} ->
-            response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost} = Connection, State,
