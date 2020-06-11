@@ -30,7 +30,8 @@ all() ->
 groups() ->
     [
         {single_node, [], [test_stream]},
-        {cluster, [], [test_stream]}
+        {cluster, [], [test_stream, java]}
+%%        {java, [], [java]}
     ].
 
 init_per_suite(Config) ->
@@ -51,8 +52,12 @@ init_per_group(cluster = Group, Config) ->
             {rmq_nodename_suffix, Group},
             {tcp_ports_base}]),
     rabbit_ct_helpers:run_setup_steps(Config2,
-        rabbit_ct_broker_helpers:setup_steps()).
+        rabbit_ct_broker_helpers:setup_steps());
+init_per_group(_, Config) ->
+    rabbit_ct_helpers:run_setup_steps(Config).
 
+end_per_group(java, Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config);
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
         rabbit_ct_broker_helpers:teardown_steps()).
@@ -67,6 +72,13 @@ test_stream(Config) ->
     Port = get_stream_port(Config),
     test_server(Port),
     ok.
+
+java(Config) ->
+    StreamPort = get_stream_port(Config),
+    os:putenv("STREAM_PORT", erlang:integer_to_list(StreamPort)),
+    DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
+    MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests"]),
+    {ok, _} = MakeResult.
 
 get_stream_port(Config) ->
     rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream).
