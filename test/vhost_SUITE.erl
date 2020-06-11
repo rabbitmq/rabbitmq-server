@@ -351,7 +351,7 @@ count_connections_in(Config, VHost, NodeIndex) ->
     timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
-                                 count_connections_in, [VHost]).
+                                 count_tracked_items_in, [{vhost, VHost}]).
 
 set_up_vhost(Config, VHost) ->
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
