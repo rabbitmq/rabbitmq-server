@@ -33,24 +33,34 @@ start_link(Conf) ->
 init([Conf]) ->
     {ok, #state{configuration = Conf, listeners = [], monitors = #{}}}.
 
+-spec create(binary(), binary(), #{binary() => binary()}, binary()) ->
+    {ok, map()} | {error, reference_already_exists} | {error, internal_error}.
 create(VirtualHost, Reference, Arguments, Username) ->
     gen_server:call(?MODULE, {create, VirtualHost, Reference, Arguments, Username}).
 
+-spec delete(binary(), binary(), binary()) ->
+    {ok, deleted} | {error, reference_not_found}.
 delete(VirtualHost, Reference, Username) ->
     gen_server:call(?MODULE, {delete, VirtualHost, Reference, Username}).
 
+-spec register() -> ok.
 register() ->
     gen_server:call(?MODULE, {register, self()}).
 
+-spec unregister() -> ok.
 unregister() ->
     gen_server:call(?MODULE, {unregister, self()}).
 
+-spec lookup_leader(binary(), binary()) -> pid() | cluster_not_found.
 lookup_leader(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_leader, VirtualHost, Stream}).
 
+-spec lookup_local_member(binary(), binary()) -> {ok, pid()} | {error, not_found}.
 lookup_local_member(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_local_member, VirtualHost, Stream}).
 
+-spec topology(binary(), binary()) ->
+    {ok, #{leader_node => pid(), replica_nodes => [pid()]}} | {error, stream_not_found}.
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
 
