@@ -11,7 +11,7 @@ define PROJECT_ENV
                           {nodelay,   true}]},
 	{initial_credits, 50000},
 	{credits_required_for_unblocking, 12500},
-	{frame_max, 131072},
+	{frame_max, 1048576},
 	{heartbeat, 600},
 	{advertised_host, undefined},
 	{advertised_port, undefined}
