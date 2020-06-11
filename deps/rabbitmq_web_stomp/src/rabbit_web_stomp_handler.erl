@@ -234,6 +234,8 @@ handle_data(Data, State0) ->
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}} ->
             {[{active, false}], State1};
+        {error, _}=Error ->
+            {stop, State0};
         Other ->
             Other
     end.
@@ -257,7 +259,9 @@ handle_data1(Bytes, State = #state{proc_state  = ProcState,
                                      connection  = ConnPid });
                 {stop, _Reason, ProcState1} ->
                     stop(State#state{ proc_state = ProcState1 })
-            end
+            end;
+        Other ->
+            Other
     end.
 
 maybe_block(State = #state{state = blocking, heartbeat = Heartbeat},
