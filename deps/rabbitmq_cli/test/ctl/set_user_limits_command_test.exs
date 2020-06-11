@@ -25,6 +25,7 @@ defmodule SetUserLimitsCommandTest do
   @password "password"
   @conn_definition "{\"max-connections\":100}"
   @channel_definition "{\"max-channels\":200}"
+  @definition "{\"max-connections\":50, \"max-channels\":500}"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -84,6 +85,16 @@ defmodule SetUserLimitsCommandTest do
     ) == :ok
 
     assert_limits(context, @channel_definition)
+  end
+
+  test "run: a well-formed command to set both max-connections and max-channels returns okay", context do
+    assert @command.run(
+      [context[:user],
+      @definition],
+      context[:opts]
+    ) == :ok
+
+    assert_limits(context, @definition)
   end
 
   test "run: an unreachable node throws a badrpc" do

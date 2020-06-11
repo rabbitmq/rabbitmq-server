@@ -39,6 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
     ]
   end
 
+  def help_section(), do: :user_management
+
   def description(), do: "Sets user limits"
 
   def banner([username, definition], %{}) do

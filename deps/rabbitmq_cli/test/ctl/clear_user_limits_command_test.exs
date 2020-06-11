@@ -24,7 +24,8 @@ defmodule ClearUserLimitsCommandTest do
   @user "someone"
   @password "password"
   @limittype "max-channels"
-  @definition "{\"max-channels\":100}"
+  @channel_definition "{\"max-channels\":100}"
+  @definition "{\"max-channels\":500, \"max-connections\":100}"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -80,6 +81,19 @@ defmodule ClearUserLimitsCommandTest do
     assert get_user_limits(@user) == %{}
   end
 
+  test "run: if limit exists, returns ok and clears all limits for the given user", context do
+    :ok = set_user_limits(@user, @definition)
+
+    assert get_user_limits(@user) != []
+
+    assert @command.run(
+      [@user, "all"],
+      context[:opts]
+    ) == :ok
+
+    assert get_user_limits(@user) == %{}
+  end
+
   @tag user: "bad-user"
   test "run: a non-existent user returns an error", context do
 
@@ -89,7 +103,7 @@ defmodule ClearUserLimitsCommandTest do
     ) == {:error, {:no_such_user, "bad-user"}}
   end
 
-  test "banner", context do
+  test "banner: for a limit type", context do
 
     s = @command.banner(
       [@user, @limittype],
@@ -97,6 +111,16 @@ defmodule ClearUserLimitsCommandTest do
     )
 
     assert s == "Clearing \"#{@limittype}\" limit for user \"#{@user}\" ..."
+  end
+
+  test "banner: for all", context do
+
+    s = @command.banner(
+      [@user, "all"],
+      context[:opts]
+    )
+
+    assert s == "Clearing all limits for user \"#{@user}\" ..."
   end
 
 end

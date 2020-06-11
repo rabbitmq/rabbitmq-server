@@ -17,32 +17,35 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  
+
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
 
-  def run([username, limittype], %{node: node_name}) do
+  def run([username, limit_type], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :clear_user_limits, [
       username,
-      limittype
+      limit_type
     ])
   end
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def usage, do: "clear_user_limits username limittype"
+  def usage, do: "clear_user_limits username <limit_type> | all"
 
-##ToDo  def usage_doc_guides() do
-##ToDo    [
-##ToDo      DocGuide.virtual_hosts()
-##ToDo    ]
-##ToDo  end
+  def usage_additional() do
+    [
+      ["<limit_type>", "Limit type, must be max-connections or max-channels"]
+    ]
+  end
 
-##ToDo  def help_section(), do: :virtual_hosts
+  def help_section(), do: :user_management
 
   def description(), do: "Clears user connection/channel limits"
 
-  def banner([username, limittype], %{}) do
-    "Clearing \"#{limittype}\" limit for user \"#{username}\" ..."
+  def banner([username, "all"], %{}) do
+    "Clearing all limits for user \"#{username}\" ..."
+  end
+  def banner([username, limit_type], %{}) do
+    "Clearing \"#{limit_type}\" limit for user \"#{username}\" ..."
   end
 end
