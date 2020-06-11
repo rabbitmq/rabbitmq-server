@@ -61,15 +61,15 @@ public class StreamTest {
     @MethodSource
     void shouldBePossibleToPublishFromAnyNodeAndConsumeFromAnyMember(Function<Client.StreamMetadata, Client.Broker> publisherBroker,
                                                                      Function<Client.StreamMetadata, Client.Broker> consumerBroker) throws Exception {
+
         int messageCount = 10_000;
-        Client client = cf.get();
+        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPort()));
         Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
         assertThat(metadata).hasSize(1).containsKey(stream);
         Client.StreamMetadata streamMetadata = metadata.get(stream);
 
         CountDownLatch publishingLatch = new CountDownLatch(messageCount);
         Client publisher = cf.get(new Client.ClientParameters()
-                .host(publisherBroker.apply(streamMetadata).getHost())
                 .port(publisherBroker.apply(streamMetadata).getPort())
                 .confirmListener(publishingId -> publishingLatch.countDown()));
 
@@ -80,7 +80,6 @@ public class StreamTest {
         CountDownLatch consumingLatch = new CountDownLatch(messageCount);
         Set<String> bodies = ConcurrentHashMap.newKeySet(messageCount);
         Client consumer = cf.get(new Client.ClientParameters()
-                .host(consumerBroker.apply(streamMetadata).getHost())
                 .port(consumerBroker.apply(streamMetadata).getPort())
                 .chunkListener((client1, subscriptionId, offset, messageCount1, dataSize) -> client1.credit(subscriptionId, 10))
                 .messageListener((subscriptionId, offset, message) -> {
@@ -98,7 +97,7 @@ public class StreamTest {
 
     @Test
     void metadataOnClusterShouldReturnLeaderAndReplicas() {
-        Client client = cf.get();
+        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPort()));
         Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
         assertThat(metadata).hasSize(1).containsKey(stream);
         Client.StreamMetadata streamMetadata = metadata.get(stream);

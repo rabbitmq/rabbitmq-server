@@ -135,7 +135,8 @@ public class TestUtils {
         }
 
         public Client get(Client.ClientParameters parameters) {
-            Client client = new Client(parameters.eventLoopGroup(eventLoopGroup).port(streamPort()));
+            // don't set the port, it would override the caller's port setting
+            Client client = new Client(parameters.eventLoopGroup(eventLoopGroup));
             clients.add(client);
             return client;
         }
