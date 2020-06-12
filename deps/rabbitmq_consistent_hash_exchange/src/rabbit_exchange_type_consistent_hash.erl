@@ -159,8 +159,11 @@ recover() ->
     end.
 
 list_exchanges() ->
-    case mnesia:transaction(fun () ->
-            mnesia:match_object(rabbit_exchange, #exchange{durable = true, type = 'x-consistent-hash', _ = '_'}, write) end) of
+    case mnesia:transaction(
+        fun () ->
+            mnesia:match_object(rabbit_exchange,
+                #exchange{durable = true, type = 'x-consistent-hash', _ = '_'}, write)
+        end) of
         {atomic, Xs} ->
             {ok, Xs};
         {aborted, Reason} ->
