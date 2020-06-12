@@ -145,12 +145,13 @@ maybe_initialise_hash_ring_state(_, X) ->
       fun() -> maybe_initialise_hash_ring_state(transaction, X) end).
 
 recover() ->
-    %% topology recovery has already happened, recover state for any durable
-    %% consistent hash exchanges
+    %% topology recovery has already happened, we have to recover state for any durable
+    %% consistent hash exchanges since plugin activation was moved later in boot process
+    %% starting with RabbitMQ 3.8.4
     case list_exchanges() of
         {ok, Xs} ->
             rabbit_log:debug("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
-                [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)];
+            [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)];
         {aborted, Reason} ->
             rabbit_log:error(
                 "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~p",
