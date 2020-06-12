@@ -234,7 +234,7 @@ handle_data(Data, State0) ->
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}} ->
             {[{active, false}], State1};
-        {error, _}=Error ->
+        {error, _} ->
             {stop, State0};
         Other ->
             Other
