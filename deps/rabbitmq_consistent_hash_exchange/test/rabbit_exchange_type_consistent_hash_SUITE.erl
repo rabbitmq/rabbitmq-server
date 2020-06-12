@@ -40,6 +40,7 @@ groups() ->
                                 other_routing_test
                                ]},
       {hash_ring_management_tests, [], [
+                                test_durable_exchange_hash_ring_recovery_between_node_restarts,
                                 test_hash_ring_updates_when_queue_is_deleted,
                                 test_hash_ring_updates_when_multiple_queues_are_deleted,
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure,
@@ -307,6 +308,41 @@ test_binding_with_non_numeric_routing_key(Config) ->
 %%
 %% Hash Ring management
 %%
+
+test_durable_exchange_hash_ring_recovery_between_node_restarts(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_hash_ring_recovery_between_node_restarts">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  durable = true,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"d-q1">>, <<"d-q2">>, <<"d-q3">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q, durable = true, exclusive = false}) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                               exchange = X,
+                                               routing_key = <<"3">>})
+     || Q <- Queues],
+
+    ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    rabbit_ct_broker_helpers:restart_node(Config, 0),
+    rabbit_ct_helpers:await_condition(
+        fun () -> count_buckets_of_exchange(Config, X) > 0 end, 15000),
+    
+    ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    clean_up_test_topology(Config, X, Queues),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
 
 test_hash_ring_updates_when_queue_is_deleted(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
