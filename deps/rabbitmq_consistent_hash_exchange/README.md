@@ -56,6 +56,9 @@ This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](https://www.r
 rabbitmq-plugins enable rabbitmq_consistent_hash_exchange
 ```
 
+## Exchange Type
+
+The exchange type is `"x-consistent-hash"`.
 
 ## How It Works
 
@@ -88,14 +91,22 @@ other queues have higher values in their binding key.  With a larger
 set of routing keys used, the statistical distribution of routing
 keys approaches the ratios of the binding keys.
 
-Each message gets delivered to at most one queue. Normally, each
-message gets delivered to exactly one queue, but there is a race
-between the determination of which queue to send a message to, and the
-deletion/death of that queue that does permit the possibility of the
-message being sent to a queue which then disappears before the message
-is processed. Hence in general, at most one queue.
+Each message gets delivered to at most one queue. On average, a
+message gets delivered to exactly one queue. Concurrent binding changes
+and queue primary replica failures can affect this but on average.
 
-The exchange type is `"x-consistent-hash"`.
+### Node Restart Effects
+
+Consistent hashing ring is stored in memory and will be re-populated
+from exchange bindings when the node boots. Relative positioning of queues
+on the ring is not guaranteed to be the same between restarts. In practice
+this means that after a restart, all queues will still receive roughly
+the same number of messages routed to them (assuming routing key distribution
+does not change) but a given routing key now **may route to a different queue**.
+
+In other words, this exchange type provides consistent message distribution
+between queues but cannot guarantee stable routing [queue] locality for a message
+with a fixed routing key.
 
 
 ## Usage Example
