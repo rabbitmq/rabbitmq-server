@@ -234,7 +234,8 @@ remove_bindings(none, X, Bindings) ->
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     Weight = rabbit_data_coercion:to_integer(RK),
     rabbit_log:debug("Consistent hashing exchange: removing binding "
-                     "from exchange '~p' to destination '~p' with routing key '~s'", [S, D, RK]),
+                     "from exchange '~p' to destination '~p' with routing key '~s'",
+                     [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
         [State0 = #chx_hash_ring{bucket_map = BM0,
