@@ -279,7 +279,7 @@ stop(State = #state{proc_state = ProcState}, CloseCode, Error) ->
     maybe_emit_stats(State),
     ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(ProcState),
-    {reply, {close, CloseCode, Error}, State}.
+    {[{close, CloseCode, Error}], State}.
 
 %%----------------------------------------------------------------------------
 
