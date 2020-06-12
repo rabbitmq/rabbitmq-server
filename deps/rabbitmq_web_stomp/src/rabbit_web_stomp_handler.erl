@@ -234,8 +234,9 @@ handle_data(Data, State0) ->
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}} ->
             {[{active, false}], State1};
-        {error, _} ->
-            {stop, State0};
+        {error, Error0} ->
+            Error1 = rabbit_misc:format("~p", [Error0]),
+            stop(State0, 1007, Error1);
         Other ->
             Other
     end.
@@ -271,11 +272,14 @@ maybe_block(State = #state{state = blocking, heartbeat = Heartbeat},
 maybe_block(State, _) ->
     State.
 
-stop(State = #state{proc_state = ProcState}) ->
+stop(State) ->
+    stop(State, 1000, "STOMP died").
+
+stop(State = #state{proc_state = ProcState}, CloseCode, Error) ->
     maybe_emit_stats(State),
     ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(ProcState),
-    {reply, {close, 1000, "STOMP died"}, State}.
+    {reply, {close, CloseCode, Error}, State}.
 
 %%----------------------------------------------------------------------------
 
