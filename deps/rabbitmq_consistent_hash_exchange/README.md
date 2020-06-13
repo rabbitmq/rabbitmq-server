@@ -48,15 +48,16 @@ This plugin ships with RabbitMQ.
 
 This plugin supports the same [Erlang versions](https://rabbitmq.com/which-erlang.html) as RabbitMQ core.
 
-## Installation
+## Enabling the Plugin
 
-This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](https://www.rabbitmq.com/plugins.html), it has to be enabled before it can be used:
+This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](https://www.rabbitmq.com/plugins.html),
+it has to be enabled before it can be used:
 
 ``` sh
 rabbitmq-plugins enable rabbitmq_consistent_hash_exchange
 ```
 
-## Exchange Type
+## Provided Exchange Type
 
 The exchange type is `"x-consistent-hash"`.
 
@@ -64,9 +65,18 @@ The exchange type is `"x-consistent-hash"`.
 
 In the case of Consistent Hashing as an exchange type, the hash is
 calculated from a message property (most commonly the routing key).
-Thus messages that have the same routing key will have the
-same hash value computed for them, and thus will be routed to the same queue,
-assuming no bindings have changed.
+
+When a queue is bound to this exchange, it is assigned one or more
+partitions on the consistent hashing ring depending on its binding weight
+(covered below).
+
+For every property hash (e.g. routing key), a hash position computed
+and a corresponding hash ring partition is picked. That partition corresponds
+to a bound queue, and the message is routed to that queue.
+
+Assuming a reasonably even routing key distribution of inbound messages,
+routed messages should be reasonably evenly distributed across all
+ring partitions, and thus queues according to their binding weights.
 
 ### Binding Weights
 
