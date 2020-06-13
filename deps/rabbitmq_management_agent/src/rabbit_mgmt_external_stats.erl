@@ -97,9 +97,9 @@ get_used_fd({unix, BSD}, State0)
             end,
         UsedFd = length(lists:filter(F, string:tokens(Output, "\n"))),
         {State0, UsedFd}
-    catch _:Error ->
+    catch _:Error:Stacktrace ->
               State1 = log_fd_error("Could not parse fstat output:~n~s~n~p~n",
-                                    [Output, {Error, erlang:get_stacktrace()}], State0),
+                                    [Output, {Error, Stacktrace}], State0),
               {State1, 0}
     end;
 
