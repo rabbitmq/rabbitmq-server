@@ -28,6 +28,7 @@
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
 -export([info/1, info/2]).
+-export([ring_state/2]).
 
 -rabbit_boot_step(
    {rabbit_exchange_type_consistent_hash_registry,
@@ -274,6 +275,12 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
             ok
     end.
 
+ring_state(VirtualHost, Exchange) ->
+    Resource = rabbit_misc:r(VirtualHost, exchange, Exchange),
+    case mnesia:dirty_read(?HASH_RING_STATE_TABLE, Resource) of
+        []    -> {error, not_found};
+        [Row] -> {ok, Row}
+    end.
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
