@@ -198,8 +198,8 @@ handle_cast({frame, Frame, FlowPid},
             {stop, normal, State};
           exit:normal ->
             {stop, normal, State};
-          _:Reason ->
-            {stop, {Reason, erlang:get_stacktrace()}, State}
+          _:Reason:Stacktrace ->
+            {stop, {Reason, Stacktrace}, State}
     end.
 
 %% TODO rabbit_channel returns {noreply, State, hibernate}, but that
