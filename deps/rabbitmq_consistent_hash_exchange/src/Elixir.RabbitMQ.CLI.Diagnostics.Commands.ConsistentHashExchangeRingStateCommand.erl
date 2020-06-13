@@ -108,7 +108,7 @@ output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
 
 usage() ->
-    <<"consistent_hash_exchange_ring_state [exchange]">>.
+    <<"consistent_hash_exchange_ring_state <exchange>">>.
 
 usage_additional() ->
     [].
