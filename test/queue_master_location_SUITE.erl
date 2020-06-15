@@ -245,7 +245,7 @@ declare_with_random_and_some_nodes_under_maintenance(Config) ->
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
     
-    QName = <<"qm.tests.min_masters.maintenance.case1">>,
+    QName = <<"qm.tests.random.maintenance.case1">>,
     Resource = rabbit_misc:r(<<"/">>, queue, QName),
     Record = declare(Config, Resource, false, false, _Args = [], none),
     %% the only node that's not being drained
@@ -264,7 +264,8 @@ declare_with_all_nodes_under_maintenance(Config, Locator) ->
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 1),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
     
-    QName = <<"qm.tests.min_masters.maintenance.case2">>,
+    QName = rabbit_data_coercion:to_binary(
+        rabbit_misc:format("qm.tests.~s.maintenance.case2", [Locator])),
     Resource = rabbit_misc:r(<<"/">>, queue, QName),
     Record = declare(Config, Resource, false, false, _Args = [], none),
     %% when queue master locator returns no node, the node that handles
