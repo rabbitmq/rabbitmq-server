@@ -67,6 +67,9 @@
     enable_feature_flag/2,
     enable_feature_flag/3,
 
+    mark_as_being_drained/2,
+    unmark_as_being_drained/2,
+    
     set_partition_handling_mode/3,
     set_partition_handling_mode_globally/2,
     configure_dist_proxy/1,
@@ -1541,6 +1544,11 @@ enable_feature_flag(Config, [Node1 | _] = Nodes, FeatureName) ->
                io_lib:format("'~s' feature flag is unsupported",
                              [FeatureName]))}
     end.
+
+mark_as_being_drained(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
+unmark_as_being_drained(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
 
 %% From a given list of gen_tcp client connections, return the list of
 %% connection handler PID in RabbitMQ.
