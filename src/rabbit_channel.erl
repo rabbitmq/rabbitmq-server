@@ -744,7 +744,27 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     end;
 
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
-    noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
+    noreply_coalesce(confirm(MsgSeqNos, QPid, State));
+
+handle_cast({queue_event, _, {{_, _} = From, {applied, _} = Evt}}, State) ->
+    %% Forward compatibility with queue types, it might be needed during
+    %% upgrades in mixed-version clusters
+    handle_info({ra_event, From, Evt}, State);
+
+handle_cast({queue_event, _, {{_, _} = From, {rejected, _} = Evt}}, State) ->
+    %% Forward compatibility with queue types, it might be needed during
+    %% upgrades in mixed-version clusters
+    handle_info({ra_event, From, Evt}, State);
+
+handle_cast({queue_event, _, {{_, _} = From, {machine, _} = Evt}}, State) ->
+    %% Forward compatibility with queue types, it might be needed during
+    %% upgrades in mixed-version clusters
+    handle_info({ra_event, From, Evt}, State);
+
+handle_cast({queue_event, _, Evt}, State) ->
+    %% Forward compatibility with queue types, it might be needed during
+    %% upgrades in mixed-version clusters
+    handle_cast(Evt, State).
 
 handle_info({ra_event, {Name, _} = From, _} = Evt,
             #ch{queue_states = QueueStates,
