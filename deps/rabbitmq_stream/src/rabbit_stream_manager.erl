@@ -98,7 +98,7 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
         end
     catch
         exit:Error ->
-            error_logger:info_msg("Error while creating ~p stream, ~p~n", [Reference, Error]),
+            rabbit_log:info("Error while creating ~p stream, ~p~n", [Reference, Error]),
             {reply, {error, internal_error}, State}
     end;
 handle_call({delete, VirtualHost, Reference, Username}, _From, #state{listeners = Listeners} = State) ->
@@ -197,7 +197,7 @@ handle_cast(_, State) ->
 handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, #state{listeners = Listeners, monitors = Monitors} = State) ->
     {noreply, State#state{listeners = lists:delete(Pid, Listeners), monitors = maps:remove(Pid, Monitors)}};
 handle_info(Info, State) ->
-    error_logger:info_msg("Received info ~p~n", [Info]),
+    rabbit_log:info("Received info ~p~n", [Info]),
     {noreply, State}.
 
 is_stream_queue(Q) ->

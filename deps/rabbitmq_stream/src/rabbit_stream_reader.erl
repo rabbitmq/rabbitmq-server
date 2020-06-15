@@ -105,7 +105,7 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
             });
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
-            error_logger:warning_msg("Closing connection because of ~p ~p~n", [Error, Reason])
+            rabbit_log:warning("Closing connection because of ~p ~p~n", [Error, Reason])
     end.
 
 init_credit(CreditReference, Credits) ->
@@ -133,7 +133,7 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, Sta
             {Connection1, State1} = handle_inbound_data_pre_auth(Transport, Connection, State, Data),
             Transport:setopts(S, [{active, once}]),
             #stream_connection{connection_step = ConnectionStep} = Connection1,
-            error_logger:info_msg("Transitioned from ~p to ~p~n", [ConnectionStep0, ConnectionStep]),
+            rabbit_log:info("Transitioned from ~p to ~p~n", [ConnectionStep0, ConnectionStep]),
             case ConnectionStep of
                 authenticated ->
                     TuneFrame = <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>,
@@ -147,12 +147,12 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, Sta
                     listen_loop_pre_auth(Transport, Connection1, State1, Configuration)
             end;
         {Closed, S} ->
-            error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
+            rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
+            rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
-            error_logger:warning_msg("Unknown message ~p~n", [M]),
+            rabbit_log:warning("Unknown message ~p~n", [M]),
             close(Transport, S)
     end.
 
@@ -232,15 +232,15 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                      end,
             listen_loop_post_auth(Transport, Connection, State1, Configuration);
         {'$gen_cast', {queue_event, #resource{name = StreamName}, {osiris_offset, _QueueResource, -1}}} ->
-            error_logger:info_msg("received osiris offset event for ~p with offset ~p~n", [StreamName, -1]),
+            rabbit_log:info("received osiris offset event for ~p with offset ~p~n", [StreamName, -1]),
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         {'$gen_cast', {queue_event, #resource{name = StreamName}, {osiris_offset, _QueueResource, Offset}}} when Offset > -1 ->
             {Connection1, State1} = case maps:get(StreamName, StreamSubscriptions, undefined) of
                                         undefined ->
-                                            error_logger:info_msg("osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)", [StreamName]),
+                                            rabbit_log:info("osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)", [StreamName]),
                                             {Connection, State};
                                         [] ->
-                                            error_logger:info_msg("osiris offset event for ~p, but no registered consumers!", [StreamName]),
+                                            rabbit_log:info("osiris offset event for ~p, but no registered consumers!", [StreamName]),
                                             {Connection#stream_connection{stream_subscriptions = maps:remove(StreamName, StreamSubscriptions)}, State};
                                         CorrelationIds when is_list(CorrelationIds) ->
                                             Consumers1 = lists:foldl(fun(CorrelationId, ConsumersAcc) ->
@@ -264,22 +264,22 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                                     end,
             listen_loop_post_auth(Transport, Connection1, State1, Configuration);
         {heartbeat_send_error, Reason} ->
-            error_logger:info_msg("Heartbeat send error ~p, closing connection~n", [Reason]),
+            rabbit_log:info("Heartbeat send error ~p, closing connection~n", [Reason]),
             rabbit_stream_manager:unregister(),
             close(Transport, S);
         heartbeat_timeout ->
-            error_logger:info_msg("Heartbeat timeout, closing connection~n"),
+            rabbit_log:info("Heartbeat timeout, closing connection~n"),
             rabbit_stream_manager:unregister(),
             close(Transport, S);
         {Closed, S} ->
             rabbit_stream_manager:unregister(),
-            error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
+            rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
             rabbit_stream_manager:unregister(),
-            error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
+            rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
-            error_logger:warning_msg("Unknown message ~p~n", [M]),
+            rabbit_log:warning("Unknown message ~p~n", [M]),
             %% FIXME send close
             listen_loop_post_auth(Transport, Connection, State, Configuration)
     end.
@@ -293,19 +293,19 @@ listen_loop_post_close(Transport, #stream_connection{socket = S} = Connection, S
             #stream_connection{connection_step = Step} = Connection1,
             case Step of
                 closing_done ->
-                    error_logger:info_msg("Received close confirmation from client"),
+                    rabbit_log:info("Received close confirmation from client"),
                     close(Transport, S);
                 _ ->
                     Transport:setopts(S, [{active, once}]),
                     listen_loop_post_close(Transport, Connection1, State1, Configuration)
             end;
         {Closed, S} ->
-            error_logger:info_msg("Socket ~w closed [~w]~n", [S, self()]),
+            rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            error_logger:info_msg("Socket error ~p [~w]~n", [Reason, S, self()]);
+            rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
-            error_logger:warning_msg("Ignored message on closing ~p~n", [M])
+            rabbit_log:warning("Ignored message on closing ~p~n", [M])
     end.
 
 handle_inbound_data_pre_auth(Transport, Connection, State, Rest) ->
@@ -433,10 +433,10 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                                                end,
                                    {S1, FrameFragment} = case AuthMechanism:handle_response(SaslBin, AuthState) of
                                                              {refused, _Username, Msg, Args} ->
-                                                                 error_logger:warning_msg(Msg, Args),
+                                                                 rabbit_log:warning(Msg, Args),
                                                                  {Connection0#stream_connection{connection_step = failure}, <<?RESPONSE_AUTHENTICATION_FAILURE:16>>};
                                                              {protocol_error, Msg, Args} ->
-                                                                 error_logger:warning_msg(Msg, Args),
+                                                                 rabbit_log:warning(Msg, Args),
                                                                  {Connection0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_ERROR:16>>};
                                                              {challenge, Challenge, AuthState1} ->
                                                                  ChallengeSize = byte_size(Challenge),
@@ -450,7 +450,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                                                                              <<?RESPONSE_CODE_OK:16>>
                                                                          };
                                                                      not_allowed ->
-                                                                         error_logger:warning_msg("User '~s' can only connect via localhost~n", [Username]),
+                                                                         rabbit_log:warning("User '~s' can only connect via localhost~n", [Username]),
                                                                          {Connection0#stream_connection{connection_step = failure}, <<?RESPONSE_SASL_AUTHENTICATION_FAILURE_LOOPBACK:16>>}
                                                                  end
                                                          end,
@@ -466,7 +466,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
     {Connection1, State, Rest1};
 handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = Connection, State,
     <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
-    error_logger:info_msg("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
+    rabbit_log:info("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
 
     Frame = <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>,
     Parent = self(),
@@ -510,10 +510,10 @@ handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = C
 
     {Connection1, State, Rest};
 handle_frame_pre_auth(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
-    error_logger:info_msg("Received heartbeat frame pre auth~n"),
+    rabbit_log:info("Received heartbeat frame pre auth~n"),
     {Connection, State, Rest};
 handle_frame_pre_auth(_Transport, Connection, State, Frame, Rest) ->
-    error_logger:warning_msg("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
+    rabbit_log:warning("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
     {Connection#stream_connection{connection_step = failure}, State, Rest}.
 
 handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits} = Connection, State,
@@ -571,7 +571,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
                         credit = Credit,
                         stream = Stream
                     },
-                    error_logger:info_msg("registering consumer ~p in ~p~n", [ConsumerState, self()]),
+                    rabbit_log:info("registering consumer ~p in ~p~n", [ConsumerState, self()]),
 
                     response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
 
@@ -637,7 +637,7 @@ handle_frame_post_auth(Transport, Connection, #stream_connection_state{consumers
             {Connection, State#stream_connection_state{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
         _ ->
             %% FIXME find a way to tell the client it's crediting an unknown subscription
-            error_logger:warning_msg("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
+            rabbit_log:warning("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = Connection,
@@ -647,7 +647,7 @@ handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost,
     {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
     case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
-            error_logger:info_msg("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
+            rabbit_log:info("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
             response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
             {Connection, State, Rest};
         {error, reference_already_exists} ->
@@ -736,15 +736,15 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
 handle_frame_post_auth(Transport, Connection, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32,
         ClosingCode:16, ClosingReasonLength:16, ClosingReason:ClosingReasonLength/binary>>, _Rest) ->
-    error_logger:info_msg("Received close command ~p ~p~n", [ClosingCode, ClosingReason]),
+    rabbit_log:info("Received close command ~p ~p~n", [ClosingCode, ClosingReason]),
     Frame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_CODE_OK:16>>,
     frame(Transport, Connection, Frame),
     {Connection#stream_connection{connection_step = closing}, State, <<>>}; %% we ignore any subsequent frames
 handle_frame_post_auth(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
-    error_logger:info_msg("Received heartbeat frame post auth~n"),
+    rabbit_log:info("Received heartbeat frame post auth~n"),
     {Connection, State, Rest};
 handle_frame_post_auth(Transport, Connection, State, Frame, Rest) ->
-    error_logger:warning_msg("unknown frame ~p ~p, sending close command.~n", [Frame, Rest]),
+    rabbit_log:warning("unknown frame ~p ~p, sending close command.~n", [Frame, Rest]),
     CloseReason = <<"unknown frame">>,
     CloseReasonLength = byte_size(CloseReason),
     CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_UNKNOWN_FRAME:16,
@@ -771,10 +771,10 @@ handle_frame_post_close(_Transport, Connection, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
     {Connection#stream_connection{connection_step = closing_done}, State, Rest};
 handle_frame_post_close(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
-    error_logger:info_msg("Received heartbeat frame post close~n"),
+    rabbit_log:info("Received heartbeat frame post close~n"),
     {Connection, State, Rest};
 handle_frame_post_close(_Transport, Connection, State, Frame, Rest) ->
-    error_logger:warning_msg("ignored frame on close ~p ~p.~n", [Frame, Rest]),
+    rabbit_log:warning("ignored frame on close ~p ~p.~n", [Frame, Rest]),
     {Connection, State, Rest}.
 
 auth_mechanisms(Sock) ->
@@ -785,7 +785,7 @@ auth_mechanisms(Sock) ->
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
-            error_logger:warning_msg("Unknown authentication mechanism '~p'~n", [TypeBin]),
+            rabbit_log:warning("Unknown authentication mechanism '~p'~n", [TypeBin]),
             {error, not_found};
         T ->
             case {lists:member(TypeBin, auth_mechanisms(Sock)),
@@ -793,7 +793,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
                 {true, {ok, Module}} ->
                     {ok, Module};
                 _ ->
-                    error_logger:warning_msg("Invalid authentication mechanism '~p'~n", [T]),
+                    rabbit_log:warning("Invalid authentication mechanism '~p'~n", [T]),
                     {error, invalid}
             end
     end.
