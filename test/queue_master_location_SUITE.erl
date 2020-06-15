@@ -34,7 +34,8 @@
 
 all() ->
     [
-      {group, cluster_size_3}
+      {group, cluster_size_3},
+      {group, maintenance_mode}
     ].
 
 groups() ->
@@ -51,11 +52,19 @@ groups() ->
           calculate_min_master_with_bindings,
           calculate_random,
           calculate_client_local
-        ]}
+        ]},
+        
+      {maintenance_mode, [], [
+          declare_with_min_masters_and_some_nodes_under_maintenance,
+          declare_with_min_masters_and_all_nodes_under_maintenance,
+          
+          declare_with_random_and_some_nodes_under_maintenance,
+          declare_with_random_and_all_nodes_under_maintenance
+      ]}
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Test suite setup/teardown
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -67,7 +76,12 @@ end_per_suite(Config) ->
 
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 3} %% Replaced with a list of node names later.
+        %% Replaced with a list of node names later
+        {rmq_nodes_count, 3}
+      ]);
+init_per_group(maintenance_mode, Config) ->
+    rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_count, 3}
       ]).
 
 end_per_group(_, Config) ->
@@ -98,7 +112,7 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases
 %% -------------------------------------------------------------------
 
 %%
@@ -199,10 +213,68 @@ declare_config(Config) ->
     setup_test_environment(Config),
     set_location_config(Config, <<"min-masters">>),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
-    declare(Config, QueueName, false, false, _Args=[], none),
+    declare(Config, QueueName, false, false, _Args = [], none),
     verify_min_master(Config, Q),
     unset_location_config(Config),
     ok.
+
+%%
+%% Maintenance mode effects
+%%
+
+declare_with_min_masters_and_some_nodes_under_maintenance(Config) ->
+    set_location_policy(Config, ?POLICY, <<"min-masters">>),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 1),
+    
+    QName = <<"qm.tests.min_masters.maintenance.case1">>,
+    Resource = rabbit_misc:r(<<"/">>, queue, QName),
+    Record = declare(Config, Resource, false, false, _Args = [], none),
+    %% the only node that's not being drained
+    ?assertEqual(rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+                 node(amqqueue:get_pid(Record))),
+
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 0),
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 1).
+
+declare_with_min_masters_and_all_nodes_under_maintenance(Config) ->
+    declare_with_all_nodes_under_maintenance(Config, <<"min-masters">>).
+
+declare_with_random_and_some_nodes_under_maintenance(Config) ->
+    set_location_policy(Config, ?POLICY, <<"random">>),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
+    
+    QName = <<"qm.tests.min_masters.maintenance.case1">>,
+    Resource = rabbit_misc:r(<<"/">>, queue, QName),
+    Record = declare(Config, Resource, false, false, _Args = [], none),
+    %% the only node that's not being drained
+    ?assertEqual(rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+                 node(amqqueue:get_pid(Record))),
+
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 0),
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 2).
+
+declare_with_random_and_all_nodes_under_maintenance(Config) ->
+    declare_with_all_nodes_under_maintenance(Config, <<"random">>).
+
+declare_with_all_nodes_under_maintenance(Config, Locator) ->
+    set_location_policy(Config, ?POLICY, Locator),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 1),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
+    
+    QName = <<"qm.tests.min_masters.maintenance.case2">>,
+    Resource = rabbit_misc:r(<<"/">>, queue, QName),
+    Record = declare(Config, Resource, false, false, _Args = [], none),
+    %% when queue master locator returns no node, the node that handles
+    %% the declaration method will be used as a fallback
+    ?assertEqual(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+                 node(amqqueue:get_pid(Record))),
+
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 0),
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 1),
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 2).
 
 %%
 %% Test 'calculations'
@@ -333,8 +405,10 @@ unset_location_config(Config) ->
 
 declare(Config, QueueName, Durable, AutoDelete, Args0, Owner) ->
     Args1 = [QueueName, Durable, AutoDelete, Args0, Owner, <<"acting-user">>],
-    {new, Queue} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, declare, Args1),
-    Queue.
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, declare, Args1) of
+        {new, Queue} -> Queue;
+        Other        -> Other
+    end.
 
 bind(Config, QueueName, RoutingKey) ->
     ExchangeName = rabbit_misc:r(QueueName, exchange, <<"amq.direct">>),

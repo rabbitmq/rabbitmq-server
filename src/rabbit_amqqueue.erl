@@ -313,6 +313,7 @@ declare_classic_queue(Q, Node) ->
                 _ ->
                     case rabbit_queue_master_location_misc:get_location(Q)  of
                         {ok, Node0}  -> Node0;
+                        undefined    -> Node;
                         {error, _}   -> Node
                     end
             end,

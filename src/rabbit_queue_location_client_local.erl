@@ -30,4 +30,10 @@ description() ->
     [{description, <<"Locate queue master node as the client local node">>}].
 
 queue_master_location(Q) when ?is_amqqueue(Q) ->
+    %% unlike with other locator strategies we do not check node maintenance
+    %% status for two reasons:
+    %%
+    %% * nodes in maintenance mode will drop their client connections
+    %% * with other strategies, if no nodes are available, the current node
+    %%   is returned but this strategy already does just that
     {ok, node()}.

@@ -18,6 +18,7 @@
          get_location_mod_by_policy/1,
          all_nodes/1]).
 
+-spec lookup_master(binary(), binary()) -> {ok, node()} | {error, not_found}.
 lookup_master(QueueNameBin, VHostPath) when is_binary(QueueNameBin),
                                             is_binary(VHostPath) ->
     QueueR = rabbit_misc:r(VHostPath, queue, QueueNameBin),

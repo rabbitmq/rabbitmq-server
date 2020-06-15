@@ -23,6 +23,7 @@
      unmark_as_being_drained/0,
      is_being_drained_local_read/1,
      is_being_drained_consistent_read/1,
+     filter_out_drained_nodes/1,
      suspend_all_client_listeners/0,
      resume_all_client_listeners/0,
      close_all_client_connections/0]).
@@ -71,18 +72,24 @@ is_being_drained_local_read(Node) ->
     case mnesia:dirty_read(?TABLE, Node) of
         []  -> false;
         [#node_maintenance_state{node = Node, status = Status}] ->
-            Status =:= ?DRAINING_STATUS
+            Status =:= ?DRAINING_STATUS;
+        _   -> false
     end.
 
 -spec is_being_drained_consistent_read(node()) -> boolean().
 is_being_drained_consistent_read(Node) ->
     case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
-        {atomic, []}  -> false;
+        {atomic, []} -> false;
         {atomic, [#node_maintenance_state{node = Node, status = Status}]} ->
             Status =:= ?DRAINING_STATUS;
+        {atomic, _}  -> false;
         {aborted, _Reason} -> false
     end.
 
+ -spec filter_out_drained_nodes([node()]) -> [node()].
+filter_out_drained_nodes(Nodes) ->
+    lists:filter(fun(N) -> not is_being_drained_local_read(N) end, Nodes).
+ 
 -spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
  %% Pauses all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
