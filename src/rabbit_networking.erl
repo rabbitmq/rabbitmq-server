@@ -27,8 +27,8 @@
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, force_connection_event_refresh/1,
-         handshake/2, tcp_host/1, ranch_ref/2]).
+         close_connection/2, close_connections/2,
+         force_connection_event_refresh/1, handshake/2, tcp_host/1, ranch_ref/2]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -38,8 +38,11 @@
 
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
-%% Internal
--export([connections_local/0]).
+-export([
+    local_connections/0,
+    %% prefer local_connections/0
+    connections_local/0
+]).
 
 -include("rabbit.hrl").
 
@@ -348,8 +351,13 @@ connections() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
--spec connections_local() -> [rabbit_types:connection()].
+-spec local_connections() -> [rabbit_types:connection()].
+%% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.
+local_connections() ->
+    connections_local().
 
+-spec connections_local() -> [rabbit_types:connection()].
+%% @deprecated Prefer {@link local_connections}
 connections_local() -> pg_local:get_members(rabbit_connections).
 
 -spec connection_info_keys() -> rabbit_types:info_keys().
@@ -399,8 +407,12 @@ close_connection(Pid, Explanation) ->
             ok
     end.
 
--spec force_connection_event_refresh(reference()) -> 'ok'.
+-spec close_connections([pid()], string()) -> 'ok'.
+close_connections(Pids, Explanation) ->
+    [close_connection(Pid, Explanation) || Pid <- Pids],
+    ok.
 
+-spec force_connection_event_refresh(reference()) -> 'ok'.
 force_connection_event_refresh(Ref) ->
     [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.

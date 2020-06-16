@@ -31,7 +31,7 @@ description() ->
 
 queue_master_location(Q) when ?is_amqqueue(Q) ->
     Cluster0   = rabbit_queue_master_location_misc:all_nodes(Q),
-    Cluster    = rabbit_maintenance:filter_out_drained_nodes(Cluster0),
+    Cluster    = rabbit_maintenance:filter_out_drained_nodes_local_read(Cluster0),
     case Cluster of
         [] ->
             undefined;

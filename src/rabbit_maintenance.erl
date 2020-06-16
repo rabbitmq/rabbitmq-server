@@ -19,14 +19,18 @@
  -include("rabbit.hrl").
  
  -export([
+     drain/0,
+     revive/0,
      mark_as_being_drained/0,
      unmark_as_being_drained/0,
      is_being_drained_local_read/1,
      is_being_drained_consistent_read/1,
-     filter_out_drained_nodes/1,
+     filter_out_drained_nodes_local_read/1,
+     filter_out_drained_nodes_consistent_read/1,
      suspend_all_client_listeners/0,
      resume_all_client_listeners/0,
-     close_all_client_connections/0]).
+     close_all_client_connections/0,
+     primary_replica_transfer_candidate_nodes/0]).
 
  -define(TABLE, rabbit_node_maintenance_states).
  -define(DEFAULT_STATUS,  regular).
@@ -35,6 +39,31 @@
 %%
 %% API
 %%
+
+drain() ->
+    rabbit_log:alert("This node is being put into maintenance (drain) mode"),
+    mark_as_being_drained(),
+    rabbit_log:info("Marked this node as undergoing maintenance"),
+    suspend_all_client_listeners(),
+    rabbit_log:alert("Suspended all listeners and will no longer accept client connections"),
+    {ok, NConnections} = close_all_client_connections(),
+    rabbit_log:alert("Closed ~b local client connections", [NConnections]),
+
+    TransferCandidates = primary_replica_transfer_candidate_nodes(),
+    rabbit_log:info("Node will transfer primary replicas of its queues to ~b peers: ~s",
+                    [length(TransferCandidates), string:join(TransferCandidates, ",")]),
+    %% TODO: transfer leadership of all queues hosted on this node
+    %% TODO: shut all Ra instances on this node down
+
+    rabbit_log:alert("Node is ready to be shut down for maintenance or upgrade"),
+
+    ok.
+
+revive() ->
+    resume_all_client_listeners(),
+    unmark_as_being_drained(),
+
+    ok.
 
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
@@ -86,9 +115,18 @@ is_being_drained_consistent_read(Node) ->
         {aborted, _Reason} -> false
     end.
 
- -spec filter_out_drained_nodes([node()]) -> [node()].
-filter_out_drained_nodes(Nodes) ->
+ -spec filter_out_drained_nodes_local_read([node()]) -> [node()].
+filter_out_drained_nodes_local_read(Nodes) ->
     lists:filter(fun(N) -> not is_being_drained_local_read(N) end, Nodes).
+ 
+-spec filter_out_drained_nodes_consistent_read([node()]) -> [node()].
+filter_out_drained_nodes_consistent_read(Nodes) ->
+    lists:filter(fun(N) -> not is_being_drained_consistent_read(N) end, Nodes).
+
+-spec primary_replica_transfer_candidate_nodes() -> [node()].
+primary_replica_transfer_candidate_nodes() ->
+    filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()).
+ 
  
 -spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
  %% Pauses all listeners on the current node except for
@@ -103,7 +141,6 @@ suspend_all_client_listeners() ->
     lists:foldl(fun ok_or_first_error/2, ok, Results).
 
  -spec resume_all_client_listeners() -> rabbit_types:ok_or_error(any()).
-
  %% Resumes all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
  %% A resumed listener will accept new client connections.
@@ -114,8 +151,11 @@ resume_all_client_listeners() ->
     Results = lists:foldl(local_listener_fold_fun(fun ranch:resume_listener/1), [], Listeners),
     lists:foldl(fun ok_or_first_error/2, ok, Results).
 
+ -spec close_all_client_connections() -> {'ok', non_neg_integer()}.
 close_all_client_connections() ->
-    ok.
+    Pids = rabbit_networking:local_connections(),
+    rabbit_networking:close_connections(Pids, "Node was put into maintenance mode"),
+    {ok, length(Pids)}.
 
 %%
 %% Implementation
