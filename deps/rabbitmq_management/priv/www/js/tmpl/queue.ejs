@@ -273,6 +273,7 @@
 
 <%= format('publish', {'mode': 'queue', 'queue': queue}) %>
 
+<% if (!is_stream(queue)) { %>
 <div class="section-hidden">
   <h2>Get messages</h2>
   <div class="hider">
@@ -316,6 +317,7 @@
     <div id="msg-wrapper"></div>
   </div>
 </div>
+<% } %>
 
 <% if (is_user_policymaker) { %>
 <div class="section-hidden">
