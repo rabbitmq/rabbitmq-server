@@ -36,7 +36,12 @@ init([{Listeners, SslListeners0}, Configuration]) ->
                          danger -> []
                      end}
           end,
-    {ok, {{one_for_all, 10, 10},
+    Flags = #{
+        strategy => one_for_all,
+        period => 10,
+        intensity => 10
+    },
+    {ok, {Flags,
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts, Configuration, NumTcpAcceptors], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
