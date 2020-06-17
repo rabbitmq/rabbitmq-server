@@ -119,7 +119,7 @@ Mozilla Public License, V1.1 is applicable to the following component(s).
 //  The Original Code is RabbitMQ.
 //
 //  The Initial Developer of the Original Code is GoPivotal, Inc.
-//  Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
+//  Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 ADDITIONAL LICENSE INFORMATION:
 
@@ -129,7 +129,7 @@ amqp-client-3.5.6-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
 
 /*
    Copyright (c) 2006-2007 Frank Carver
-   Copyright (c) 2007-2020 Pivotal Software, Inc. All Rights Reserved
+   Copyright (c) 2007-2020 VMware, Inc. or its affiliates. All Rights Reserved
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.

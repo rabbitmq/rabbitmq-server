@@ -59,6 +59,6 @@ TL;DR:
     
 ## Copyright and License
 
-(c) Pivotal Software Inc., 2007-2020.
+(c) 2007-2020 VMware, Inc. or its affiliates.
 
 See [LICENSE](./LICENSE) for license information.
