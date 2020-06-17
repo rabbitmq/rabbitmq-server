@@ -1,6 +1,6 @@
 @title AMQP Client for Erlang
 @author GoPivotal Inc. <support@rabbitmq.com>
-@copyright 2007-2013 GoPivotal, Inc.
+@copyright 2007-2020 VMware, Inc. or its affiliates.
 
 @version %%VERSION%%
 
