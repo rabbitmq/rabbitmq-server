@@ -8,7 +8,7 @@
 %% License for the specific language governing rights and limitations
 %% under the License.
 %%
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(exometer_slide_SUITE).
