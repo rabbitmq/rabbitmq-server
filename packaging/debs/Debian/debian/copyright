@@ -4,7 +4,7 @@ Upstream-Contact: Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
 Source: https://github.com/rabbitmq/rabbitmq-server
 
 Files: *
-Copyright: 2007-2020 Pivotal Software, Inc.
+Copyright: 2007-2020 VMware, Inc. or its affiliates.
 License: MPL-1.1
 
 Files: deps/rabbit_common/src/rabbit_numerical.erl deps/rabbit_common/src/rabbit_http_util.erl
@@ -25,7 +25,7 @@ License: MPL-1.1
  The Original Code is RabbitMQ
  .
  The Initial Developer of the Original Code is Pivotal Software, Inc.
- Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
+ Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 License: MIT
  This is the MIT license
