@@ -478,6 +478,8 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  unacked               = Unacked,
                                  internal_exchange_interval = Interval}),
                         Bindings),
+              rabbit_log_federation:info("Federation link for ~s (upstream: ~s) will perform internal exchange checks "
+                                         "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
