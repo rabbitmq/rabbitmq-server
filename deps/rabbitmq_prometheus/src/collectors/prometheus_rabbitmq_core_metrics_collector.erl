@@ -233,19 +233,34 @@ collect_mf(_Registry, Callback) ->
     ok.
 
 build_info() ->
+    ProductInfo = rabbit:product_info(),
+    #{product_base_version := BaseVersion} = ProductInfo,
     {ok, PrometheusPluginVersion} = application:get_key(rabbitmq_prometheus, vsn),
     {ok, PrometheusClientVersion} = application:get_key(prometheus, vsn),
+    Properties0 = [
+                   {rabbitmq_version, BaseVersion},
+                   {prometheus_plugin_version, PrometheusPluginVersion},
+                   {prometheus_client_version, PrometheusClientVersion},
+                   {erlang_version, rabbit_misc:otp_release()}
+                  ],
+    Properties1 = case ProductInfo of
+                      #{product_version := ProductVersion} ->
+                          [{product_version, ProductVersion} | Properties0];
+                      _ ->
+                          Properties0
+                  end,
+    Properties = case ProductInfo of
+                     #{product_name := ProductName} ->
+                         [{product_name, ProductName} | Properties1];
+                     _ ->
+                         Properties1
+                 end,
     {
         build_info,
         untyped,
         "RabbitMQ & Erlang/OTP version info",
         [{
-            [
-                {rabbitmq_version, rabbit_misc:version()},
-                {prometheus_plugin_version, PrometheusPluginVersion},
-                {prometheus_client_version, PrometheusClientVersion},
-                {erlang_version, rabbit_misc:otp_release()}
-            ],
+            Properties,
             1
         }]
     }.
