@@ -185,12 +185,14 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
                 {Upstream, UParams, XName}, State);
 
 handle_info(check_internal_exchange, State = #state{internal_exchange = IntXNameBin,
-                                                    internal_exchange_interval = Int}) ->
+                                                    internal_exchange_interval = Interval}) ->
     case check_internal_exchange(IntXNameBin, State) of
         upstream_not_found ->
+            rabbit_log_federation:warning("Federation link could not find upstream exchange '~s' and will restart",
+                                          [IntXNameBin]),
             {stop, {shutdown, restart}, State};
         _ ->
-            TRef = erlang:send_after(Int, self(), check_internal_exchange),
+            TRef = erlang:send_after(Interval, self(), check_internal_exchange),
             {noreply, State#state{internal_exchange_timer = TRef}}
     end;
 
