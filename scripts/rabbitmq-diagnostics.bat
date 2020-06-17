@@ -12,7 +12,7 @@ REM
 REM  The Original Code is RabbitMQ.
 REM
 REM  The Initial Developer of the Original Code is GoPivotal, Inc.
-REM  Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
+REM  Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 REM
 
 REM Scopes the variables to the current batch file

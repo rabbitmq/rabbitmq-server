@@ -11,11 +11,11 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2018-2020 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @author The RabbitMQ team
-%% @copyright 2018-2019 Pivotal Software, Inc.
+%% @copyright 2018-2020 VMware, Inc. or its affiliates.
 %%
 %% @doc
 %% This module provides extra functions unused by the feature flags

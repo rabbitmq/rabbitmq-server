@@ -10,7 +10,7 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% Copyright (c) 2020 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(signal_handling_SUITE).

@@ -13,7 +13,7 @@
 #   The Original Code is RabbitMQ Management Plugin.
 #
 #   The Initial Developer of the Original Code is GoPivotal, Inc.
-#   Copyright (c) 2010-2019 Pivotal Software, Inc.  All rights reserved.
+#   Copyright (c) 2010-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 import sys
 if sys.version_info[0] < 2 or sys.version_info[1] < 6:
