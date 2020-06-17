@@ -107,7 +107,6 @@ get_connection_name(_, _) ->
 
 connection_name(Upstream, Policy) when is_binary(Upstream), is_binary(Policy) ->
     <<<<"Federation link (upstream: ">>/binary, Upstream/binary, <<", policy: ">>/binary, Policy/binary, <<")">>/binary>>;
-
 connection_name(_, _) ->
     <<"Federation link">>.
 
@@ -133,10 +132,21 @@ ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
 ensure_connection_closed(Conn) ->
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT).
 
+connection_error(remote_start, {{shutdown, {server_initiated_close, Code, Message}}, _} = E,
+                               Upstream, UParams, XorQName, State) ->
+    rabbit_federation_status:report(
+      Upstream, UParams, XorQName, clean_reason(E)),
+    log_warning(XorQName,
+                "did not connect to ~s. Server has closed the connection due to an error, code: ~p, "
+                "message: ~s",
+                [rabbit_federation_upstream:params_to_string(UParams),
+                 Code, Message]),
+    {stop, {shutdown, restart}, State};
+
 connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning(XorQName, "did not connect to ~s. Reason: ~p~n",
+    log_warning(XorQName, "did not connect to ~s. Reason: ~p",
                 [rabbit_federation_upstream:params_to_string(UParams),
                  E]),
     {stop, {shutdown, restart}, State};
@@ -144,27 +154,27 @@ connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
 connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_info(XorQName, "disconnected from ~s~n~p~n",
+    log_info(XorQName, "disconnected from ~s~n~p",
              [rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(command_channel, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_info(XorQName, "failed to open a command channel for upstream ~s~n~p~n",
+    log_info(XorQName, "failed to open a command channel for upstream ~s~n~p",
              [rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local, basic_cancel, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, {error, basic_cancel}),
-    log_info(XorQName, "received 'basic.cancel'~n", []),
+    log_info(XorQName, "received a 'basic.cancel'", []),
     {stop, {shutdown, restart}, State};
 
 connection_error(local_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning(XorQName, "did not connect locally~n~p~n", [E]),
+    log_warning(XorQName, "did not connect locally~n~p", [E]),
     {stop, {shutdown, restart}, State}.
 
 %% If we terminate due to a gen_server call exploding (almost
@@ -313,8 +323,8 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         {ok, Ch} = amqp_connection:open_channel(Conn),
         try
             amqp_channel:call(Ch, Method)
-        catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
-                ErrFun(Code, Text)
+        catch exit:{{shutdown, {server_initiated_close, Code, Message}}, _} ->
+                ErrFun(Code, Message)
         after
             ensure_channel_closed(Ch)
         end
@@ -324,18 +334,29 @@ disposable_channel_call(Conn, Method, ErrFun) ->
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
-    case open(Params, undefined) of
-        {ok, Conn, Ch} ->
-            try
-                amqp_channel:call(Ch, Method)
-            catch exit:{{shutdown, {connection_closing,
-                                    {server_initiated_close, Code, Txt}}}, _} ->
-                    ErrFun(Code, Txt);
-                    exit:{{shutdown, {server_initiated_close, Code, Txt}}, _} ->
-                    ErrFun(Code, Txt)
-            after
-                ensure_connection_closed(Conn)
-            end;
-        E ->
-            E
+    try
+        rabbit_log_federation:debug("Disposable connection parameters: ~p", [Params]),
+        case open(Params, <<"Disposable exchange federation link connection">>) of
+            {ok, Conn, Ch} ->
+                try
+                    amqp_channel:call(Ch, Method)
+                catch exit:{{shutdown, {connection_closing, {server_initiated_close, Code, Message}}}, _} ->
+                          ErrFun(Code, Message);
+                      exit:{{shutdown, {server_initiated_close, Code, Message}}, _} ->
+                          ErrFun(Code, Message)
+                after
+                    ensure_connection_closed(Conn)
+                end;
+            {error, {auth_failure, Message}} ->
+                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection "
+                                            "due to an authentication failure: ~s~n", [Message]);
+            Error ->
+                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection, "
+                                            "reason: ~p~n", [Error]),
+                Error
+        end
+    catch
+        Exception:Reason ->
+            rabbit_log_federation:error("Federation link could not create a disposable (one-off) connection "
+                                        "due to an error ~p: ~p~n", [Exception, Reason])
     end.

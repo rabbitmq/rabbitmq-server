@@ -5,7 +5,7 @@ PROJECT_MOD = rabbit_federation_app
 define PROJECT_ENV
 [
 	    {pgroup_name_cluster_id, false},
-	    {internal_exchange_check_interval, 30000}
+	    {internal_exchange_check_interval, 90000}
 	  ]
 endef
 
