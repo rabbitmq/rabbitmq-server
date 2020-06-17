@@ -8,7 +8,7 @@
 %% license for the specific language governing rights and limitations
 %% under the license.
 %%
-%% copyright (c) 2016 pivotal software, inc.  all rights reserved.
+%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(listener_config_SUITE).
