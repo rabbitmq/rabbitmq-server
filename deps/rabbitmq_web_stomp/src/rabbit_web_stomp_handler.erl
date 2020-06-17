@@ -210,6 +210,8 @@ websocket_info(Msg, State) ->
                     [Msg]),
     {ok, State}.
 
+terminate(_Reason, _Req, #state{proc_state = undefined}) ->
+    ok;
 terminate(_Reason, _Req, #state{proc_state = ProcState}) ->
     rabbit_stomp_processor:flush_and_die(ProcState),
     ok.
@@ -236,6 +238,7 @@ handle_data(Data, State0) ->
             {[{active, false}], State1};
         {error, Error0} ->
             Error1 = rabbit_misc:format("~p", [Error0]),
+            rabbit_log_connection:error("STOMP detected framing error '~s'~n", [Error1]),
             stop(State0, 1007, Error1);
         Other ->
             Other
@@ -244,7 +247,7 @@ handle_data(Data, State0) ->
 handle_data1(<<>>, State) ->
     {ok, ensure_stats_timer(State)};
 handle_data1(Bytes, State = #state{proc_state  = ProcState,
-                                  parse_state = ParseState}) ->
+                                   parse_state = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             {ok, ensure_stats_timer(State#state{ parse_state = ParseState1 })};
@@ -275,11 +278,12 @@ maybe_block(State, _) ->
 stop(State) ->
     stop(State, 1000, "STOMP died").
 
-stop(State = #state{proc_state = ProcState}, CloseCode, Error) ->
+stop(State = #state{proc_state = ProcState}, CloseCode, Error0) ->
     maybe_emit_stats(State),
     ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(ProcState),
-    {[{close, CloseCode, Error}], State}.
+    Error1 = rabbit_data_coercion:to_binary(Error0),
+    {[{close, CloseCode, Error1}], State}.
 
 %%----------------------------------------------------------------------------
 
