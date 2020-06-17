@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Management Plugin.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2010-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% Alias for cowboy_static that accepts a list of directories

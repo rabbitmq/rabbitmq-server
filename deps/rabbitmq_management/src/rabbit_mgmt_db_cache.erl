@@ -8,7 +8,7 @@
 %% license for the specific language governing rights and limitations
 %% under the license.
 %%
-%% Copyright (c) 2016-2018 Pivotal Software, Inc. All rights reserved.
+%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
 
 -module(rabbit_mgmt_db_cache).
 
