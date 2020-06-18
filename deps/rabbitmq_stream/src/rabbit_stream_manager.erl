@@ -25,14 +25,14 @@
 -export([subscribe/2, unsubscribe/2]).
 
 -record(state, {
-    configuration, listeners, monitors
+    configuration
 }).
 
 start_link(Conf) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Conf], []).
 
 init([Conf]) ->
-    {ok, #state{configuration = Conf, listeners = [], monitors = #{}}}.
+    {ok, #state{configuration = Conf}}.
 
 -spec create(binary(), binary(), #{binary() => binary()}, binary()) ->
     {ok, map()} | {error, reference_already_exists} | {error, internal_error}.
@@ -102,14 +102,13 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
             rabbit_log:info("Error while creating ~p stream, ~p~n", [Reference, Error]),
             {reply, {error, internal_error}, State}
     end;
-handle_call({delete, VirtualHost, Reference, Username}, _From, #state{listeners = Listeners} = State) ->
+handle_call({delete, VirtualHost, Reference, Username}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
             case is_stream_queue(Q) of
                 true ->
                     {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
-                    [Pid ! {stream_manager, cluster_deleted, Reference} || Pid <- Listeners],
                     {reply, {ok, deleted}, State};
                 _ ->
                     {reply, {error, reference_not_found}, State}
@@ -117,23 +116,6 @@ handle_call({delete, VirtualHost, Reference, Username}, _From, #state{listeners 
         {error, not_found} ->
             {reply, {error, reference_not_found}, State}
     end;
-handle_call({register, Pid}, _From, #state{listeners = Listeners, monitors = Monitors} = State) ->
-    case lists:member(Pid, Listeners) of
-        false ->
-            MonitorRef = erlang:monitor(process, Pid),
-            {reply, ok, State#state{listeners = [Pid | Listeners], monitors = Monitors#{Pid => MonitorRef}}};
-        true ->
-            {reply, ok, State}
-    end;
-handle_call({unregister, Pid}, _From, #state{listeners = Listeners, monitors = Monitors} = State) ->
-    Monitors1 = case maps:get(Pid, Monitors, undefined) of
-                    undefined ->
-                        Monitors;
-                    MonitorRef ->
-                        erlang:demonitor(MonitorRef, [flush]),
-                        maps:remove(Pid, Monitors)
-                end,
-    {reply, ok, State#state{listeners = lists:delete(Pid, Listeners), monitors = Monitors1}};
 handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
     Res = case rabbit_amqqueue:lookup(Name) of
@@ -233,8 +215,6 @@ handle_call({unsubscribe, VirtualHost, Stream, SubscriberPid}, _From, State) ->
 handle_cast(_, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, #state{listeners = Listeners, monitors = Monitors} = State) ->
-    {noreply, State#state{listeners = lists:delete(Pid, Listeners), monitors = maps:remove(Pid, Monitors)}};
 handle_info(Info, State) ->
     rabbit_log:info("Received info ~p~n", [Info]),
     {noreply, State}.
