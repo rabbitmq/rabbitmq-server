@@ -350,11 +350,12 @@ write_messages(ClusterLeader, <<PublishingId:64, MessageSize:32, Message:Message
     ok = osiris:write(ClusterLeader, PublishingId, Message),
     write_messages(ClusterLeader, Rest).
 
-generate_publishing_error_details(Acc, <<>>) ->
+generate_publishing_error_details(Acc, _Code, <<>>) ->
     Acc;
-generate_publishing_error_details(Acc, <<PublishingId:64, MessageSize:32, _Message:MessageSize/binary, Rest/binary>>) ->
+generate_publishing_error_details(Acc, Code, <<PublishingId:64, MessageSize:32, _Message:MessageSize/binary, Rest/binary>>) ->
     generate_publishing_error_details(
-        <<Acc/binary, PublishingId:64, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST:16>>,
+        <<Acc/binary, PublishingId:64, Code:16>>,
+        Code,
         Rest).
 
 handle_frame_pre_auth(Transport, #stream_connection{socket = S} = Connection, State,
@@ -518,21 +519,31 @@ handle_frame_pre_auth(_Transport, Connection, State, Frame, Rest) ->
     rabbit_log:warning("unknown frame ~p ~p, closing connection.~n", [Frame, Rest]),
     {Connection#stream_connection{connection_step = failure}, State, Rest}.
 
-handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits} = Connection, State,
+handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits,
+    virtual_host = VirtualHost, user = User} = Connection, State,
     <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
         StreamSize:16, Stream:StreamSize/binary,
         MessageCount:32, Messages/binary>>, Rest) ->
-    case lookup_leader(Stream, Connection) of
-        cluster_not_found ->
+    case check_write_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+        ok ->
+            case lookup_leader(Stream, Connection) of
+                cluster_not_found ->
+                    FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
+                    Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, Messages),
+                    Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
+                        MessageCount:32, Details/binary>>]),
+                    {Connection, State, Rest};
+                {ClusterLeader, Connection1} ->
+                    write_messages(ClusterLeader, Messages),
+                    sub_credits(Credits, MessageCount),
+                    {Connection1, State, Rest}
+            end;
+        error ->
             FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
-            Details = generate_publishing_error_details(<<>>, Messages),
+            Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_ACCESS_REFUSED, Messages),
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
                 MessageCount:32, Details/binary>>]),
-            {Connection, State, Rest};
-        {ClusterLeader, Connection1} ->
-            write_messages(ClusterLeader, Messages),
-            sub_credits(Credits, MessageCount),
-            {Connection1, State, Rest}
+            {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
     stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost, user = User} = Connection,
@@ -966,9 +977,9 @@ check_resource_access(User, Resource, Perm, Context) ->
 check_configure_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, configure, Context).
 
-%%check_write_permitted(Resource, User, Context) ->
-%%    check_resource_access(User, Resource, write, Context).
-%%
+check_write_permitted(Resource, User, Context) ->
+    check_resource_access(User, Resource, write, Context).
+
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
