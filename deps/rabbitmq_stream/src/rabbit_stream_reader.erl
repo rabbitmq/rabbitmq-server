@@ -535,64 +535,70 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
             {Connection1, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
-    stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost} = Connection,
+    stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost, user = User} = Connection,
     #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary,
         OffsetType:16/signed, OffsetAndCredit/binary>>, Rest) ->
-    case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
-        {error, not_found} ->
-            response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-            {Connection, State, Rest};
-        {ok, LocalMemberPid} ->
-            case subscription_exists(StreamSubscriptions, SubscriptionId) of
-                true ->
-                    response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
+    case check_read_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+        ok ->
+            case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
+                {error, not_found} ->
+                    response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
                     {Connection, State, Rest};
-                false ->
-                    {OffsetSpec, Credit} = case OffsetType of
-                                               ?OFFSET_TYPE_FIRST ->
-                                                   <<Crdt:16>> = OffsetAndCredit,
-                                                   {first, Crdt};
-                                               ?OFFSET_TYPE_LAST ->
-                                                   <<Crdt:16>> = OffsetAndCredit,
-                                                   {last, Crdt};
-                                               ?OFFSET_TYPE_NEXT ->
-                                                   <<Crdt:16>> = OffsetAndCredit,
-                                                   {next, Crdt};
-                                               ?OFFSET_TYPE_OFFSET ->
-                                                   <<Offset:64/unsigned, Crdt:16>> = OffsetAndCredit,
-                                                   {Offset, Crdt};
-                                               ?OFFSET_TYPE_TIMESTAMP ->
-                                                   <<Timestamp:64/signed, Crdt:16>> = OffsetAndCredit,
-                                                   {{timestamp, Timestamp}, Crdt}
-                                           end,
-                    {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec),
-                    ConsumerState = #consumer{
-                        member_pid = LocalMemberPid, offset = OffsetSpec, subscription_id = SubscriptionId, socket = Socket,
-                        segment = Segment,
-                        credit = Credit,
-                        stream = Stream
-                    },
+                {ok, LocalMemberPid} ->
+                    case subscription_exists(StreamSubscriptions, SubscriptionId) of
+                        true ->
+                            response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
+                            {Connection, State, Rest};
+                        false ->
+                            {OffsetSpec, Credit} = case OffsetType of
+                                                       ?OFFSET_TYPE_FIRST ->
+                                                           <<Crdt:16>> = OffsetAndCredit,
+                                                           {first, Crdt};
+                                                       ?OFFSET_TYPE_LAST ->
+                                                           <<Crdt:16>> = OffsetAndCredit,
+                                                           {last, Crdt};
+                                                       ?OFFSET_TYPE_NEXT ->
+                                                           <<Crdt:16>> = OffsetAndCredit,
+                                                           {next, Crdt};
+                                                       ?OFFSET_TYPE_OFFSET ->
+                                                           <<Offset:64/unsigned, Crdt:16>> = OffsetAndCredit,
+                                                           {Offset, Crdt};
+                                                       ?OFFSET_TYPE_TIMESTAMP ->
+                                                           <<Timestamp:64/signed, Crdt:16>> = OffsetAndCredit,
+                                                           {{timestamp, Timestamp}, Crdt}
+                                                   end,
+                            {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec),
+                            ConsumerState = #consumer{
+                                member_pid = LocalMemberPid, offset = OffsetSpec, subscription_id = SubscriptionId, socket = Socket,
+                                segment = Segment,
+                                credit = Credit,
+                                stream = Stream
+                            },
 
-                    Connection1 = subscribe_to_stream(Stream, Connection),
+                            Connection1 = subscribe_to_stream(Stream, Connection),
 
-                    response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
+                            response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
 
-                    {{segment, Segment1}, {credit, Credit1}} = send_chunks(
-                        Transport,
-                        ConsumerState
-                    ),
-                    Consumers1 = Consumers#{SubscriptionId => ConsumerState#consumer{segment = Segment1, credit = Credit1}},
+                            {{segment, Segment1}, {credit, Credit1}} = send_chunks(
+                                Transport,
+                                ConsumerState
+                            ),
+                            Consumers1 = Consumers#{SubscriptionId => ConsumerState#consumer{segment = Segment1, credit = Credit1}},
 
-                    StreamSubscriptions1 =
-                        case StreamSubscriptions of
-                            #{Stream := SubscriptionIds} ->
-                                StreamSubscriptions#{Stream => [SubscriptionId] ++ SubscriptionIds};
-                            _ ->
-                                StreamSubscriptions#{Stream => [SubscriptionId]}
-                        end,
-                    {Connection1#stream_connection{stream_subscriptions = StreamSubscriptions1}, State#stream_connection_state{consumers = Consumers1}, Rest}
-            end
+                            StreamSubscriptions1 =
+                                case StreamSubscriptions of
+                                    #{Stream := SubscriptionIds} ->
+                                        StreamSubscriptions#{Stream => [SubscriptionId] ++ SubscriptionIds};
+                                    _ ->
+                                        StreamSubscriptions#{Stream => [SubscriptionId]}
+                                end,
+                            {Connection1#stream_connection{stream_subscriptions = StreamSubscriptions1}, State#stream_connection_state{consumers = Consumers1}, Rest}
+                    end
+            end;
+        error ->
+            response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
+            {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = StreamSubscriptions,
     stream_leaders = StreamLeaders} = Connection,
@@ -963,8 +969,8 @@ check_configure_permitted(Resource, User, Context) ->
 %%check_write_permitted(Resource, User, Context) ->
 %%    check_resource_access(User, Resource, write, Context).
 %%
-%%check_read_permitted(Resource, User, Context) ->
-%%    check_resource_access(User, Resource, read, Context).
+check_read_permitted(Resource, User, Context) ->
+    check_resource_access(User, Resource, read, Context).
 
 %%clear_permission_cache() -> erase(permission_cache),
 %%    erase(topic_permission_cache),
