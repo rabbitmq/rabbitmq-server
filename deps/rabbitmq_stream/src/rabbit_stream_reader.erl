@@ -60,6 +60,7 @@
 }).
 
 -define(RESPONSE_FRAME_SIZE, 10). % 2 (key) + 2 (version) + 4 (correlation ID) + 2 (response code)
+-define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 %% API
 -export([start_link/4, init/1]).
@@ -649,43 +650,55 @@ handle_frame_post_auth(Transport, Connection, #stream_connection_state{consumers
             rabbit_log:warning("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
             {Connection, State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username}} = Connection,
+handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username} = User} = Connection,
     State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
         ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
     {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
-    case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
-        {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
-            rabbit_log:info("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
-            response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
-            {Connection, State, Rest};
-        {error, reference_already_exists} ->
-            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
-            {Connection, State, Rest};
-        {error, _} ->
-            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
+    case check_configure_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+        ok ->
+            case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
+                {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
+                    rabbit_log:info("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
+                    response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
+                    {Connection, State, Rest};
+                {error, reference_already_exists} ->
+                    response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
+                    {Connection, State, Rest};
+                {error, _} ->
+                    response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
+                    {Connection, State, Rest}
+            end;
+        error ->
+            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost,
-    user = #user{username = Username}} = Connection, State,
+    user = #user{username = Username} = User} = Connection, State,
     <<?COMMAND_DELETE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
-    case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
-        {ok, deleted} ->
-            response_ok(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId),
-            C = unsubscribe_from_stream(Stream, Connection),
-            {Connection1, State1} = case clean_state_after_stream_deletion(Stream, C, State) of
-                                        {cleaned, NewConnection, NewState} ->
-                                            StreamSize = byte_size(Stream),
-                                            FrameSize = 2 + 2 + 2 + 2 + StreamSize,
-                                            Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                                ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
-                                            {NewConnection, NewState};
-                                        {not_cleaned, SameConnection, SameState} ->
-                                            {SameConnection, SameState}
-                                    end,
-            {Connection1, State1, Rest};
-        {error, reference_not_found} ->
-            response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+    case check_configure_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+        ok ->
+            case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
+                {ok, deleted} ->
+                    response_ok(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId),
+                    C = unsubscribe_from_stream(Stream, Connection),
+                    {Connection1, State1} = case clean_state_after_stream_deletion(Stream, C, State) of
+                                                {cleaned, NewConnection, NewState} ->
+                                                    StreamSize = byte_size(Stream),
+                                                    FrameSize = 2 + 2 + 2 + 2 + StreamSize,
+                                                    Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
+                                                        ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
+                                                    {NewConnection, NewState};
+                                                {not_cleaned, SameConnection, SameState} ->
+                                                    {SameConnection, SameState}
+                                            end,
+                    {Connection1, State1, Rest};
+                {error, reference_not_found} ->
+                    response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                    {Connection, State, Rest}
+            end;
+        error ->
+            response(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost} = Connection, State,
@@ -922,3 +935,37 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry) ->
             end
     end.
 
+check_resource_access(User, Resource, Perm, Context) ->
+    V = {Resource, Context, Perm},
+
+    Cache = case get(permission_cache) of
+                undefined -> [];
+                Other -> Other
+            end,
+    case lists:member(V, Cache) of
+        true -> ok;
+        false ->
+            try
+                rabbit_access_control:check_resource_access(
+                    User, Resource, Perm, Context),
+                CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
+                put(permission_cache, [V | CacheTail]),
+                ok
+            catch
+                exit:_ ->
+                    error
+            end
+    end.
+
+check_configure_permitted(Resource, User, Context) ->
+    check_resource_access(User, Resource, configure, Context).
+
+%%check_write_permitted(Resource, User, Context) ->
+%%    check_resource_access(User, Resource, write, Context).
+%%
+%%check_read_permitted(Resource, User, Context) ->
+%%    check_resource_access(User, Resource, read, Context).
+
+%%clear_permission_cache() -> erase(permission_cache),
+%%    erase(topic_permission_cache),
+%%    ok.
