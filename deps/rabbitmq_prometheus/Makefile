@@ -1,15 +1,15 @@
 TODAY := $(shell date -u +'%Y.%m.%d')
 # Use the latest alpha RabbitMQ 3.9 release - https://ci.rabbitmq.com/teams/main/pipelines/server-release:v3.9.x/jobs/build-test-package-generic-unix-latest-toolchain
-BASED_ON_RABBITMQ_VERSION := 3.9.0-alpha.314
+BASED_ON_RABBITMQ_VERSION := 3.9.0-alpha.349
 DOCKER_IMAGE_NAME := pivotalrabbitmq/rabbitmq-prometheus
 DOCKER_IMAGE_VERSION := $(BASED_ON_RABBITMQ_VERSION)-$(TODAY)
 # RABBITMQ_VERSION is used in rabbitmq-components.mk to set PROJECT_VERSION
 RABBITMQ_VERSION ?= $(DOCKER_IMAGE_VERSION)
 # This is taken from the CI job above
-RABBITMQ_BUILD_NUMBER := 335
+RABBITMQ_BUILD_NUMBER := 375
 # make find-latest-otp
-OTP_VERSION := 22.3.2
-OTP_SHA256 := 4a3719c71a7998e4f57e73920439b4b1606f7c045e437a0f0f9f1613594d3eaa
+OTP_VERSION := 23.0.2
+OTP_SHA256 := 6bab92d1a1b20cc319cd845c23db3611cc99f8c99a610d117578262e3c108af3
 
 define PROJECT_ENV
 [
@@ -161,7 +161,7 @@ JQ := /usr/local/bin/jq
 $(JQ):
 	@brew install jq
 
-OTP_CURRENT_STABLE_MAJOR := 22
+OTP_CURRENT_STABLE_MAJOR := 23
 define LATEST_STABLE_OTP_VERSION
 curl --silent --fail https://api.github.com/repos/erlang/otp/git/refs/tags | \
   $(JQ) -r '.[].ref | sub("refs/tags/OTP.{1}";"") | match("^$(OTP_CURRENT_STABLE_MAJOR)[0-9.]+$$") | .string' | \
