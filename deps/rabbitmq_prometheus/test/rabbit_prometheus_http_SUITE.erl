@@ -29,32 +29,34 @@ all() ->
         {group, config_path},
         {group, config_port},
         {group, aggregated_metrics},
-        {group, per_object_metrics}
+        {group, per_object_metrics},
+        {group, commercial}
     ].
 
 groups() ->
     [
-        {default_config, [], all_tests()},
-        {config_path, [], all_tests()},
-        {config_port, [], all_tests()},
+        {default_config, [], generic_tests()},
+        {config_path, [], generic_tests()},
+        {config_port, [], generic_tests()},
         {aggregated_metrics, [], [
-            aggregated_metrics_test,
-            build_info_test,
-            identity_info_test
+            aggregated_metrics_test
         ]},
         {per_object_metrics, [], [
-            per_object_metrics_test,
-            build_info_test,
-            identity_info_test
+            per_object_metrics_test
+        ]},
+        {commercial, [], [
+            build_info_product_test
         ]}
     ].
 
-all_tests() ->
+generic_tests() ->
     [
-     get_test,
-     content_type_test,
-     encoding_test,
-     gzip_encoding_test
+        get_test,
+        content_type_test,
+        encoding_test,
+        gzip_encoding_test,
+        build_info_test,
+        identity_info_test
     ].
 
 %% -------------------------------------------------------------------
@@ -104,7 +106,11 @@ init_per_group(aggregated_metrics, Config0) ->
       amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q}, ConsumerPid),
     timer:sleep(10000),
 
-    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}].
+    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}];
+init_per_group(commercial, Config0) ->
+    ProductConfig = {rabbit, [{product_name, "WolfMQ"}, {product_version, "2020"}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, ProductConfig),
+    init_per_group(commercial, Config1, []).
 
 init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:log_environment(),
@@ -249,6 +255,13 @@ build_info_test(Config) ->
     ?assertEqual(match, re:run(Body, "prometheus_plugin_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_client_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "erlang_version=\"", [{capture, none}])).
+
+build_info_product_test(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    ?assertEqual(match, re:run(Body, "product_name=\"WolfMQ\"", [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "product_version=\"2020\"", [{capture, none}])),
+    %% Check that RabbitMQ version is still displayed
+    ?assertEqual(match, re:run(Body, "rabbitmq_version=\"", [{capture, none}])).
 
 identity_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
