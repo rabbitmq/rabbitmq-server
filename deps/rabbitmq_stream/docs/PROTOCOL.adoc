@@ -210,7 +210,15 @@ Credit => Key Version SubscriptionId Credit
   Version => int16
   SubscriptionId => int32
   Credit => int16 // the number of chunks that can be sent
+
+CreditResponse => Key Version ResponseCode SubscriptionId
+  Key => int16 // 4
+  Version => int16
+  ResponseCode => int16
+  SubscriptionId => int32
 ```
+
+NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
 
 === Unsubscribe
 
