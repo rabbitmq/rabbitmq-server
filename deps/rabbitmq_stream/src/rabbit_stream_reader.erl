@@ -200,7 +200,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                     listen_loop_post_auth(Transport, Connection1, State2, Configuration)
             end;
         {queue_deleted, #resource{name = Stream}} ->
-            C = unsubscribe_from_stream(Stream, Connection),
+            C = clear_stream_subscription(Stream, Connection),
             {Connection1, State1} = case clean_state_after_stream_deletion(Stream, C, State) of
                                         {cleaned, NewConnection, NewState} ->
                                             StreamSize = byte_size(Stream),
@@ -647,7 +647,8 @@ handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = Stre
                 stream_leaders = StreamLeaders1
             }, State#stream_connection_state{consumers = Consumers1}, Rest}
     end;
-handle_frame_post_auth(Transport, Connection, #stream_connection_state{consumers = Consumers} = State,
+handle_frame_post_auth(Transport, #stream_connection{socket = S} = Connection,
+    #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16/signed>>, Rest) ->
 
     case Consumers of
@@ -663,8 +664,10 @@ handle_frame_post_auth(Transport, Connection, #stream_connection_state{consumers
             Consumer1 = Consumer#consumer{segment = Segment1, credit = Credit1},
             {Connection, State#stream_connection_state{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
         _ ->
-            %% FIXME find a way to tell the client it's crediting an unknown subscription
             rabbit_log:warning("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
+            Frame = <<?COMMAND_CREDIT:16, ?VERSION_0:16, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST:16, SubscriptionId:32>>,
+            FrameSize = byte_size(Frame),
+            Transport:send(S, [<<FrameSize:32>>, Frame]),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username} = User} = Connection,
@@ -698,7 +701,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
             case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
                 {ok, deleted} ->
                     response_ok(Transport, Connection, ?COMMAND_DELETE_STREAM, CorrelationId),
-                    C = unsubscribe_from_stream(Stream, Connection),
+                    C = clear_stream_subscription(Stream, Connection),
                     {Connection1, State1} = case clean_state_after_stream_deletion(Stream, C, State) of
                                                 {cleaned, NewConnection, NewState} ->
                                                     StreamSize = byte_size(Stream),
@@ -884,6 +887,9 @@ subscribe_to_stream(Stream, #stream_connection{virtual_host = VirtualHost, subsc
             rabbit_log:warning("Could not subscribe to ~p stream: ~p~n", [Stream, M]),
             Connection
     end.
+
+clear_stream_subscription(Stream, #stream_connection{subscribed_streams = SubscribedStreams} = Connection) ->
+    Connection#stream_connection{subscribed_streams = sets:del_element(Stream, SubscribedStreams)}.
 
 unsubscribe_from_stream(Stream, #stream_connection{virtual_host = VirtualHost, subscribed_streams = SubscribedStreams} = Connection) ->
     case rabbit_stream_manager:unsubscribe(VirtualHost, Stream) of
