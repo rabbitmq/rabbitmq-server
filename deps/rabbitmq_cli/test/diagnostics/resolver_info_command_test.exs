@@ -13,11 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule OsEnvCommandTest do
+defmodule ResolverInfoCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.OsEnvCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -37,12 +37,12 @@ defmodule OsEnvCommandTest do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 30000,
-        all: false
+        offline: false
       }}
   end
 
-  test "merge_defaults: merges no defaults" do
-    assert @command.merge_defaults([], %{}) == {[], %{}}
+  test "merge_defaults: defaults to offline mode" do
+    assert @command.merge_defaults([], %{}) == {[], %{offline: false}}
   end
 
   test "validate: treats positional arguments as a failure" do
@@ -58,14 +58,17 @@ defmodule OsEnvCommandTest do
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
   end
 
-  test "run: returns defined RabbitMQ-specific environment variable", context do
-    vars = @command.run([], context[:opts])
+  test "run: returns host resolver (inetrc) information", context do
+    result = @command.run([], context[:opts])
 
-    # Only variables that are used by RABBITMQ are returned.
-    # They can be prefixed with RABBITMQ_ or not, rabbit_env tries both
-    # when filtering env variables down.
-    assert Enum.any?(vars, fn({k, _v}) ->
-      String.starts_with?(k, "RABBITMQ_") or String.starts_with?(k, "rabbitmq_")
-    end)
+    assert result["lookup"] != nil
+    assert result["hosts_file"] != nil
+  end
+
+  test "run: returns host resolver (inetrc) information with --offline", context do
+    result = @command.run([], Map.merge(context[:opts], %{offline: true}))
+
+    assert result["lookup"] != nil
+    assert result["hosts_file"] != nil
   end
 end
