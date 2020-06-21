@@ -52,4 +52,31 @@ defmodule RabbitMQ.CLI.Core.Networking do
   def format_addresses(addrs) do
     Enum.map(addrs, &format_address/1)
   end
+
+  @spec inetrc_map(nonempty_list()) :: map()
+  def inetrc_map(list) do
+    Enum.reduce(list, %{},
+      fn hosts, acc when is_list(hosts) ->
+           Map.put(acc, "hosts", host_resolution_map(hosts))
+         {k, v}, acc when k == :domain or k == :resolv_conf or k == :hosts_file ->
+           Map.put(acc, to_string(k), to_string(v))
+         {k, v}, acc when is_list(v) when k == :search or k == :lookup ->
+           Map.put(acc, to_string(k), Enum.join(Enum.map(v, &to_string/1), ", "))
+         {k, v}, acc when is_integer(v) ->
+           Map.put(acc, to_string(k), v)
+         {k, v, v2}, acc when is_tuple(v) when k == :nameserver or k == :nameservers or k == :alt_nameserver ->
+           Map.put(acc, to_string(k), "#{:inet.ntoa(v)}:#{v2}")
+         {k, v}, acc when is_tuple(v) when k == :nameserver or k == :nameservers or k == :alt_nameserver ->
+           Map.put(acc, to_string(k), to_string(:inet.ntoa(v)))
+         {k, v}, acc ->
+           Map.put(acc, to_string(k), to_string(v))
+      end)
+  end
+
+  def host_resolution_map(hosts) do
+    Enum.reduce(hosts, %{},
+        fn {:host, address, hosts}, acc ->
+          Map.put(acc, to_string(:inet.ntoa(address)), Enum.map(hosts, &to_string/1))
+        end)
+  end
 end

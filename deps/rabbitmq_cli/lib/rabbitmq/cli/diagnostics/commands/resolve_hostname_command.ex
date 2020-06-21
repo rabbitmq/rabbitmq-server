@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolveHostnameCommand do
   """
 
   import RabbitCommon.Records
-  alias RabbitMQ.CLI.Core.Networking, as: Networking
+  alias RabbitMQ.CLI.Core.Networking
   alias RabbitMQ.CLI.Core.ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour

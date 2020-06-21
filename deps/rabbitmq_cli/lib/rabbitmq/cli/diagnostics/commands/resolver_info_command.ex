@@ -15,11 +15,12 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
   @moduledoc """
-  Lists RabbitMQ-specific environment variables defined on target node
+  Displays effective hostname resolver (inetrc) configuration on target node
   """
 
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
   import RabbitMQ.CLI.Core.ANSI, only: [bright: 1]
+  alias RabbitMQ.CLI.Core.Networking
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -36,13 +37,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
   def validate([], _), do: :ok
 
   def run([], %{offline: true}) do
-    inetrc_map(:inet.get_rc())
+    Networking.inetrc_map(:inet.get_rc())
   end
   def run([], %{node: node_name, timeout: timeout, offline: false}) do
     case :rabbit_misc.rpc_call(node_name, :inet, :get_rc, [], timeout) do
       {:error, _} = err -> err
       {:error, _, _} = err -> err
-      xs when is_list(xs) -> inetrc_map(xs)
+      xs when is_list(xs) -> Networking.inetrc_map(xs)
       other -> other
     end
   end
@@ -88,36 +89,5 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
   end
   def banner(_, %{offline: true}) do
     "Displaying effective hostname resolver (inetrc) configuration used by CLI tools..."
-  end
-
-  ##
-  ## Implementation
-  ##
-
-  @spec inetrc_map(nonempty_list()) :: map()
-  def inetrc_map(list) do
-    Enum.reduce(list, %{},
-      fn hosts, acc when is_list(hosts) ->
-           Map.put(acc, "hosts", host_resolution_map(hosts))
-         {k, v}, acc when k == :domain or k == :resolv_conf or k == :hosts_file ->
-           Map.put(acc, to_string(k), to_string(v))
-         {k, v}, acc when is_list(v) when k == :search or k == :lookup ->
-           Map.put(acc, to_string(k), Enum.join(Enum.map(v, &to_string/1), ", "))
-         {k, v}, acc when is_integer(v) ->
-           Map.put(acc, to_string(k), v)
-         {k, v, v2}, acc when is_tuple(v) when k == :nameserver or k == :nameservers or k == :alt_nameserver ->
-           Map.put(acc, to_string(k), "#{:inet.aton(v)}:#{v2}")
-         {k, v}, acc when is_tuple(v) when k == :nameserver or k == :nameservers or k == :alt_nameserver ->
-           Map.put(acc, to_string(k), to_string(:inet.ntoa(v)))
-         {k, v}, acc ->
-           Map.put(acc, to_string(k), to_string(v))
-      end)
-  end
-
-  def host_resolution_map(hosts) do
-    Enum.reduce(hosts, %{},
-        fn {:host, address, hosts}, acc ->
-          Map.put(acc, to_string(:inet.ntoa(address)), Enum.map(hosts, &to_string/1))
-        end)
   end
 end
