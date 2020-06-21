@@ -23,4 +23,6 @@ defmodule RabbitCommon.Records do
   defrecord :listener, extract(:listener, from_lib: "rabbit_common/include/rabbit.hrl")
   defrecord :plugin, extract(:plugin, from_lib: "rabbit_common/include/rabbit.hrl")
   defrecord :resource, extract(:resource, from_lib: "rabbit_common/include/rabbit.hrl")
+
+  defrecord :hostent, extract(:hostent, from_lib: "kernel/include/inet.hrl")
 end
