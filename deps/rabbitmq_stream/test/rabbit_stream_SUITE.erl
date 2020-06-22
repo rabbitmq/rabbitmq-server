@@ -31,7 +31,6 @@ groups() ->
     [
         {single_node, [], [test_stream]},
         {cluster, [], [test_stream, java]}
-%%        {java, [], [java]}
     ].
 
 init_per_suite(Config) ->
@@ -75,13 +74,30 @@ test_stream(Config) ->
 
 java(Config) ->
     StreamPort = get_stream_port(Config),
-    os:putenv("STREAM_PORT", erlang:integer_to_list(StreamPort)),
+    NodeName = get_node_name(Config),
+    RabbitMqCtl = get_rabbitmqctl(Config),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
-    MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests"]),
+    MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests",
+        {"NODE1_STREAM_PORT=~b", [StreamPort]},
+        {"NODE1_NAME=~p", [NodeName]},
+        {"RABBITMQCTL=~p", [RabbitMqCtl]}
+    ]),
     {ok, _} = MakeResult.
 
+get_rabbitmqctl(Config) ->
+    rabbit_ct_helpers:get_config(Config, rabbitmqctl_cmd).
+
 get_stream_port(Config) ->
-    rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream).
+    get_stream_port(Config, 0).
+
+get_stream_port(Config, Node) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_stream).
+
+get_node_name(Config) ->
+    get_node_name(Config, 0).
+
+get_node_name(Config, Node) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename).
 
 test_server(Port) ->
     {ok, S} = gen_tcp:connect("localhost", Port, [{active, false},

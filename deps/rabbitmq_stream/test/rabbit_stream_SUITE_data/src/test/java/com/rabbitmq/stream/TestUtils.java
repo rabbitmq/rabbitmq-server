@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class TestUtils {
 
     static int streamPort() {
-        String port = System.getProperty("stream.port", "5555");
+        String port = System.getProperty("node1.stream.port", "5555");
         return Integer.valueOf(port);
     }
 

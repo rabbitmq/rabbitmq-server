@@ -268,18 +268,18 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             listen_loop_post_auth(Transport, Connection1, State1, Configuration);
         {heartbeat_send_error, Reason} ->
             rabbit_log:info("Heartbeat send error ~p, closing connection~n", [Reason]),
-            S1 = unsubscribe_from_all_streams(S),
+            S1 = unsubscribe_from_all_streams(Connection),
             close(Transport, S1);
         heartbeat_timeout ->
             rabbit_log:info("Heartbeat timeout, closing connection~n"),
-            S1 = unsubscribe_from_all_streams(S),
+            S1 = unsubscribe_from_all_streams(Connection),
             close(Transport, S1);
         {Closed, S} ->
-            unsubscribe_from_all_streams(S),
+            unsubscribe_from_all_streams(Connection),
             rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            unsubscribe_from_all_streams(S),
+            unsubscribe_from_all_streams(Connection),
             rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
             rabbit_log:warning("Unknown message ~p~n", [M]),

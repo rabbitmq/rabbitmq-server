@@ -1,7 +1,9 @@
 export PATH :=$(CURDIR):$(PATH)
 HOSTNAME := $(shell hostname)
 MVN_FLAGS += -Dhostname=$(HOSTNAME) \
-			 -Dstream.port=$(STREAM_PORT)
+			 -Dnode1.stream.port=$(NODE1_STREAM_PORT) \
+			 -Dnode1.name=$(NODE1_NAME) \
+			 -Drabbitmqctl.bin=$(RABBITMQCTL)
 
 .PHONY: tests clean
 
