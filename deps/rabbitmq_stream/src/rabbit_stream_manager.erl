@@ -22,7 +22,6 @@
 %% API
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 -export([start_link/1, create/4, delete/3, lookup_leader/2, lookup_local_member/2, topology/2]).
--export([subscribe/2, unsubscribe/2]).
 
 -record(state, {
     configuration
@@ -56,14 +55,6 @@ lookup_local_member(VirtualHost, Stream) ->
     {ok, #{leader_node => pid(), replica_nodes => [pid()]}} | {error, stream_not_found}.
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
-
--spec subscribe(binary(), binary()) -> ok | {error, stream_not_found} | {error, internal_error}.
-subscribe(VirtualHost, Stream) ->
-    gen_server:call(?MODULE, {subscribe, VirtualHost, Stream, self()}).
-
--spec unsubscribe(binary(), binary()) -> ok | {error, stream_not_found}.
-unsubscribe(VirtualHost, Stream) ->
-    gen_server:call(?MODULE, {unsubscribe, VirtualHost, Stream, self()}).
 
 stream_queue_arguments(Arguments) ->
     stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}], Arguments).
@@ -166,44 +157,6 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                   case is_stream_queue(Q) of
                       true ->
                           {ok, maps:with([leader_node, replica_nodes], amqqueue:get_type_state(Q))};
-                      _ ->
-                          {error, stream_not_found}
-                  end;
-              _ ->
-                  {error, stream_not_found}
-          end,
-    {reply, Res, State};
-handle_call({subscribe, VirtualHost, Stream, SubscriberPid}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
-    Res = case rabbit_amqqueue:lookup(Name) of
-              {ok, Q} ->
-                  case is_stream_queue(Q) of
-                      true ->
-                          #{name := StreamInternalName} = amqqueue:get_type_state(Q),
-                          case rabbit_stream_coordinator:subscribe(StreamInternalName, SubscriberPid) of
-                              {ok, ok, _} ->
-                                  ok;
-                              {ok, {error, not_found}, _} ->
-                                  {error, stream_not_found};
-                              _ ->
-                                  {error, internal_error}
-                          end;
-                      _ ->
-                          {error, stream_not_found}
-                  end;
-              _ ->
-                  {error, stream_not_found}
-          end,
-    {reply, Res, State};
-handle_call({unsubscribe, VirtualHost, Stream, SubscriberPid}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
-    Res = case rabbit_amqqueue:lookup(Name) of
-              {ok, Q} ->
-                  case is_stream_queue(Q) of
-                      true ->
-                          #{name := StreamInternalName} = amqqueue:get_type_state(Q),
-                          rabbit_stream_coordinator:unsubscribe(StreamInternalName, SubscriberPid),
-                          ok;
                       _ ->
                           {error, stream_not_found}
                   end;
