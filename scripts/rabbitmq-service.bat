@@ -67,6 +67,33 @@ if "!RABBITMQ_NODENAME!"=="" (
 )
 set NAMETYPE=
 
+REM Set Erlang distribution port, based on the AMQP TCP port.
+REM
+REM We do this only for the Windows service because in this case, the node has
+REM to start with the distribution enabled on the command lind. For all other
+REM cases, distribution is configured at runtime.
+if "!RABBITMQ_NODE_PORT!"=="" (
+    if not "!NODE_PORT!"=="" (
+        set RABBITMQ_NODE_PORT=!NODE_PORT!
+    ) else (
+        set RABBITMQ_NODE_PORT=5672
+    )
+)
+
+if "!RABBITMQ_DIST_PORT!"=="" (
+    if "!DIST_PORT!"=="" (
+        if "!RABBITMQ_NODE_PORT!"=="" (
+            set RABBITMQ_DIST_PORT=25672
+        ) else (
+            set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
+        )
+    ) else (
+        set RABBITMQ_DIST_PORT=!DIST_PORT!
+    )
+)
+
+set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
+
 set STARVAR=
 shift
 :loop1
@@ -184,6 +211,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 !RABBITMQ_SERVER_START_ARGS! ^
+!RABBITMQ_DIST_ARG! ^
 -lager crash_log false ^
 -lager handlers "[]" ^
 !STARVAR!
