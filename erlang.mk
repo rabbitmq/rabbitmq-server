@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 2019.07.01-32-g89f2eca
+ERLANG_MK_VERSION = 2019.07.01-38-g764f9a2
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -4834,7 +4834,7 @@ define dep_autopatch_rebar.erl
 			Write("\npre-app::\n\t@$$\(MAKE) --no-print-directory -f c_src/Makefile.erlang.mk\n"),
 			PortSpecWrite(io_lib:format("ERL_CFLAGS ?= -finline-functions -Wall -fPIC -I \\"~s/erts-~s/include\\" -I \\"~s\\"\n",
 				[code:root_dir(), erlang:system_info(version), code:lib_dir(erl_interface, include)])),
-			PortSpecWrite(io_lib:format("ERL_LDFLAGS ?= -L \\"~s\\" -lerl_interface -lei\n",
+			PortSpecWrite(io_lib:format("ERL_LDFLAGS ?= -L \\"~s\\" -lei\n",
 				[code:lib_dir(erl_interface, lib)])),
 			[PortSpecWrite(["\n", E, "\n"]) || E <- OsEnv],
 			FilterEnv = fun(Env) ->
@@ -5567,7 +5567,7 @@ endef
 ERL_TEST_FILES = $(call core_find,$(TEST_DIR)/,*.erl)
 $(ERLANG_MK_TMP)/$(PROJECT).last-testdir-build: $(ERL_TEST_FILES) $(MAKEFILE_LIST)
 	$(eval FILES_TO_COMPILE := $(if $(filter $(MAKEFILE_LIST),$?),$(filter $(ERL_TEST_FILES),$^),$?))
-	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_test_erl,$(FILES_TO_COMPILE)); touch $@)
+	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_test_erl,$(FILES_TO_COMPILE)) && touch $@)
 endif
 
 test-build:: IS_TEST=1
@@ -6538,6 +6538,74 @@ help::
 		"" \
 		"The CI_OTP variable must be defined with the Erlang versions" \
 		"that must be tested. For example: CI_OTP = OTP-17.3.4 OTP-17.5.3"
+
+endif
+
+# Copyright (c) 2020, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifdef CONCUERROR_TESTS
+
+.PHONY: concuerror distclean-concuerror
+
+# Configuration
+
+CONCUERROR_LOGS_DIR ?= $(CURDIR)/logs
+CONCUERROR_OPTS ?=
+
+# Core targets.
+
+check:: concuerror
+
+ifndef KEEP_LOGS
+distclean:: distclean-concuerror
+endif
+
+# Plugin-specific targets.
+
+$(ERLANG_MK_TMP)/Concuerror/bin/concuerror: | $(ERLANG_MK_TMP)
+	$(verbose) git clone https://github.com/parapluu/Concuerror $(ERLANG_MK_TMP)/Concuerror
+	$(verbose) $(MAKE) -C $(ERLANG_MK_TMP)/Concuerror
+
+$(CONCUERROR_LOGS_DIR):
+	$(verbose) mkdir -p $(CONCUERROR_LOGS_DIR)
+
+define concuerror_html_report
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Concuerror HTML report</title>
+</head>
+<body>
+<h1>Concuerror HTML report</h1>
+<p>Generated on $(concuerror_date)</p>
+<ul>
+$(foreach t,$(concuerror_targets),<li><a href="$(t).txt">$(t)</a></li>)
+</ul>
+</body>
+</html>
+endef
+
+concuerror: $(addprefix concuerror-,$(subst :,-,$(CONCUERROR_TESTS)))
+	$(eval concuerror_date := $(shell date))
+	$(eval concuerror_targets := $^)
+	$(verbose) $(call core_render,concuerror_html_report,$(CONCUERROR_LOGS_DIR)/concuerror.html)
+
+define concuerror_target
+.PHONY: concuerror-$1-$2
+
+concuerror-$1-$2: test-build | $(ERLANG_MK_TMP)/Concuerror/bin/concuerror $(CONCUERROR_LOGS_DIR)
+	$(ERLANG_MK_TMP)/Concuerror/bin/concuerror \
+		--pa $(CURDIR)/ebin --pa $(TEST_DIR) \
+		-o $(CONCUERROR_LOGS_DIR)/concuerror-$1-$2.txt \
+		$$(CONCUERROR_OPTS) -m $1 -t $2
+endef
+
+$(foreach test,$(CONCUERROR_TESTS),$(eval $(call concuerror_target,$(firstword $(subst :, ,$(test))),$(lastword $(subst :, ,$(test))))))
+
+distclean-concuerror:
+	$(gen_verbose) rm -rf $(CONCUERROR_LOGS_DIR)
 
 endif
 
