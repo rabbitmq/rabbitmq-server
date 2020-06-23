@@ -219,7 +219,7 @@ test_deliver(S, Rest, SubscriptionId, Body) ->
 
 test_metadata_update_stream_deleted(S, Stream) ->
     StreamSize = byte_size(Stream),
-    {ok, <<15:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16, ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>} = gen_tcp:recv(S, 0, 5000).
+    {ok, <<15:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16, StreamSize:16, Stream/binary>>} = gen_tcp:recv(S, 0, 5000).
 
 test_close(S) ->
     CloseReason = <<"OK">>,
