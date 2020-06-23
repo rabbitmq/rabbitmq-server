@@ -209,7 +209,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                                                     StreamSize = byte_size(Stream),
                                                     FrameSize = 2 + 2 + 2 + 2 + StreamSize,
                                                     Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                                        ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
+                                                        ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16, StreamSize:16, Stream/binary>>]),
                                                     {NewConnection, NewState};
                                                 {not_cleaned, SameConnection, SameState} ->
                                                     {SameConnection, SameState}
@@ -712,7 +712,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
                                                     StreamSize = byte_size(Stream),
                                                     FrameSize = 2 + 2 + 2 + 2 + StreamSize,
                                                     Transport:send(S, [<<FrameSize:32, ?COMMAND_METADATA_UPDATE:16, ?VERSION_0:16,
-                                                        ?RESPONSE_CODE_STREAM_DELETED:16, StreamSize:16, Stream/binary>>]),
+                                                        ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16, StreamSize:16, Stream/binary>>]),
                                                     {NewConnection, NewState};
                                                 {not_cleaned, SameConnection, SameState} ->
                                                     {SameConnection, SameState}
