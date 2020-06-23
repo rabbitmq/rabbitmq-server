@@ -26,6 +26,8 @@
 %% supervisor callbacks
 -export([init/1]).
 
+-import(rabbit_misc, [pget/2]).
+
 %% @spec start_link() -> ServerRet
 %% @doc API for starting the supervisor.
 start_link() ->
@@ -77,8 +79,9 @@ init([]) ->
 %% ----------------------------------------------------------------------
 
 name(Listener) ->
-    Port = proplists:get_value(port, Listener),
-    list_to_atom(atom_to_list(?MODULE) ++ "_" ++ integer_to_list(Port)).
+    Port = pget(port, Listener),
+    [{IPAddress, Port, _Family} | _] = rabbit_networking:tcp_listener_addresses(Port),
+    {acceptor, IPAddress, Port}.
 
 preprocess_config(Options) ->
     case proplists:get_value(ssl, Options) of
