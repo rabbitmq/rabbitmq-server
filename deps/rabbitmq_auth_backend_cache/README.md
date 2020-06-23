@@ -21,15 +21,18 @@ use network requests.
 
 ## RabbitMQ Version Requirements
 
-As with all authentication plugins, this plugin requires 2.3.1 or later.
+As of 3.7.0, this plugin is distributed with RabbitMQ. Like any other plugin, it must
+be [enabled](https://www.rabbitmq.com/plugins.html#ways-to-enable-plugins) before it can be used.
 
-As of 3.7.0, this plugin is distributed with RabbitMQ. Enable it like any other plugin.
 
-To use this plugin with RabbitMQ 3.6.x, download a [3.6.x version from Bintray](https://bintray.com/rabbitmq/community-plugins/rabbitmq_auth_backend_cache) or see the `3.6.x` branch.
+## Installation
 
-## Erlang Version Requirements
+This plugin ships with reasonably recent RabbitMQ versions
+(e.g. `3.7.0` or later). Enable it with
 
-This plugin requires Erlang `19.3` or a later version.
+``` shell
+rabbitmq-plugins enable rabbitmq_auth_backend_cache
+```
 
 ## Binary Builds
 
@@ -49,7 +52,9 @@ for the `rabbit` application to include `rabbit_auth_backend_cache`.
 
 So a configuration fragment that enables this plugin *only* (this example is **intentionally incomplete**) would look like:
 
-    auth_backends.1 = cache
+``` ini
+auth_backends.1 = cache
+```
 
 In the [classic config format](https://www.rabbitmq.com/configure.html#config-file-formats):
 
