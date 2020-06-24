@@ -28,7 +28,9 @@
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, close_connections/2,
-         force_connection_event_refresh/1, handshake/2, tcp_host/1, ranch_ref/2]).
+         force_connection_event_refresh/1, handshake/2, tcp_host/1,
+         ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
+         listener_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -196,12 +198,39 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
         modules => [tcp_listener_sup]
     }.
 
+-spec ranch_ref(#listener{} | [{atom(), any()}]) -> ranch:ref().
+ranch_ref(#listener{port = Port}) ->
+    [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
+    {acceptor, IPAddress, Port};
+ranch_ref(Listener) when is_list(Listener) ->
+    Port = rabbit_misc:pget(port, Listener),
+    [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
+    {acceptor, IPAddress, Port}.
+
 -spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
 
 %% Returns a reference that identifies a TCP listener in Ranch.
 ranch_ref(IPAddress, Port) ->
     {acceptor, IPAddress, Port}.
 
+-spec ranch_ref_of_protocol(atom()) -> ranch:ref().
+ranch_ref_of_protocol(Protocol) ->
+    ranch_ref(listener_of_protocol(Protocol)).
+
+-spec listener_of_protocol(atom()) -> #listener{}.
+listener_of_protocol(Protocol) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun() ->
+            MatchSpec = #listener{
+                node = node(),
+                protocol = Protocol,
+                _ = '_'
+            },
+            case mnesia:match_object(rabbit_listener, MatchSpec, read) of
+                []    -> undefined;
+                [Row] -> Row
+            end
+        end).
 
 -spec start_tcp_listener(
         listener_config(), integer()) -> 'ok' | {'error', term()}.
