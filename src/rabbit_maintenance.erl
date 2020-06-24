@@ -53,11 +53,10 @@ drain() ->
     rabbit_log:alert("Closed ~b local client connections", [NConnections]),
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
-    ReadableCandidates = string:join(lists:map(fun rabbit_data_coercion:to_list/1, TransferCandidates), ","),
+    ReadableCandidates = readable_candidate_list(TransferCandidates),
     rabbit_log:info("Node will transfer primary replicas of its queues to ~b peers: ~s",
                     [length(TransferCandidates), ReadableCandidates]),
     transfer_leadership_of_classic_mirrored_queues(TransferCandidates),
-    %% TODO: shut all Ra instances on this node down
     transfer_leadership_of_quorum_queues(TransferCandidates),
     rabbit_log:alert("Node is ready to be shut down for maintenance or upgrade"),
 
@@ -65,6 +64,8 @@ drain() ->
 
 revive() ->
     rabbit_log:alert("This node is being revived from maintenance (drain) mode"),
+    revive_local_quorum_queue_replicas(),
+    rabbit_log:alert("Resumed all listeners and will accept client connections again"),
     resume_all_client_listeners(),
     rabbit_log:alert("Resumed all listeners and will accept client connections again"),
     unmark_as_being_drained(),
@@ -163,8 +164,27 @@ close_all_client_connections() ->
 transfer_leadership_of_quorum_queues([]) ->
     rabbit_log:warning("Skipping leadership transfer of quorum queues: no candidate "
                        "(online, not under maintenance) nodes to transfer to!");
-transfer_leadership_of_quorum_queues(TransferCandidates) ->
-    TransferCandidates.
+transfer_leadership_of_quorum_queues(_TransferCandidates) ->
+    %% we only transfer leadership for QQs that have local leaders
+    Queues = rabbit_amqqueue:list_local_leaders(),
+    rabbit_log:info("Will transfer leadership of ~b quorum queues with current leader on this node",
+                    [length(Queues)]),
+    [begin
+        Name = amqqueue:get_name(Q),
+        rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
+                         [rabbit_misc:rs(Name)]),
+        %% we trigger an election and exclude this node from the list of candidates
+        %% by simply shutting its local QQ replica (Ra server)
+        RaLeader = amqqueue:get_pid(Q),
+        rabbit_log:debug("Will stop Ra server ~p", [RaLeader]),
+        case ra:stop_server(RaLeader) of
+            ok     ->
+                rabbit_log:debug("Successfully stopped Ra server ~p", [RaLeader]);
+            {error, nodedown} ->
+                rabbit_log:error("Failed to stop Ra server ~p: target node was reported as down")
+        end
+     end || Q <- Queues],
+    rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
 
 -spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
  transfer_leadership_of_classic_mirrored_queues([]) ->
@@ -172,8 +192,8 @@ transfer_leadership_of_quorum_queues(TransferCandidates) ->
                        "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
     Queues = rabbit_amqqueue:list_local_mirrored_classic_queues(),
-    ReadableCandidates = string:join(lists:map(fun rabbit_data_coercion:to_list/1, TransferCandidates), ", "),
-    rabbit_log:info("Will transfer leadership of ~b classic mirrored queues to these nodes: ~s",
+    ReadableCandidates = readable_candidate_list(TransferCandidates),
+    rabbit_log:info("Will transfer leadership of ~b classic mirrored queues hosted on this node to these peer nodes: ~s",
                     [length(Queues), ReadableCandidates]),
     
     [begin
@@ -197,7 +217,7 @@ transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
      end || Q <- Queues],
     rabbit_log:info("Leadership transfer for local classic mirrored queues is complete").
 
--spec primary_replica_transfer_candidate_nodes() -> [node()].
+ -spec primary_replica_transfer_candidate_nodes() -> [node()].
 primary_replica_transfer_candidate_nodes() ->
     filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running() -- [node()]).
 
@@ -208,7 +228,27 @@ random_primary_replica_transfer_candidate_node(Candidates) ->
     Nth = erlang:phash2(erlang:monotonic_time(), length(Candidates)),
     Candidate = lists:nth(Nth + 1, Candidates),
     {ok, Candidate}.
-    
+
+revive_local_quorum_queue_replicas() ->
+    Queues = rabbit_amqqueue:list_local_followers(),
+    [begin
+        Name = amqqueue:get_name(Q),
+        RaLeader = amqqueue:get_pid(Q),
+        rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
+                         [rabbit_misc:rs(Name)]),
+        %% start local QQ replica (Ra server) of this queue
+        RaLeader = amqqueue:get_pid(Q),
+        rabbit_log:debug("Will start Ra server ~p", [RaLeader]),
+        case ra:restart_server(RaLeader) of
+            ok     ->
+                rabbit_log:debug("Successfully restarted Ra server ~p", [RaLeader]);
+            {error, {already_started, _Pid}} ->
+                rabbit_log:debug("Ra server ~p is already running", [RaLeader]);
+            {error, nodedown} ->
+                rabbit_log:error("Failed to restart Ra server ~p: target node was reported as down")
+        end
+     end || Q <- Queues],
+    rabbit_log:info("Restart of local quorum queue replicas is complete").
  
 %%
 %% Implementation
@@ -226,3 +266,6 @@ ok_or_first_error(ok, Acc) ->
     Acc;
 ok_or_first_error({error, _} = Err, _Acc) ->
     Err.
+ 
+readable_candidate_list(Nodes) ->
+    string:join(lists:map(fun rabbit_data_coercion:to_list/1, Nodes), ", ").
