@@ -24,6 +24,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResumeListenersCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  alias RabbitMQ.CLI.Core.DocGuide
+
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
@@ -34,6 +36,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResumeListenersCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "resume_listeners"
+
+  def usage_doc_guides() do
+    [
+      DocGuide.upgrade()
+    ]
+  end
 
   def help_section(), do: :operations
 
