@@ -27,5 +27,5 @@ start(_Type, _StartArgs) ->
     rabbit_web_stomp_sup:start_link().
 
 -spec stop(_) -> ok.
-stop(_State) ->
-    ok.
+stop(State) ->
+    rabbit_web_stomp_listener:stop(State).

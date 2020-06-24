@@ -16,15 +16,21 @@
 
 -module(rabbit_web_stomp_listener).
 
--export([init/0]).
+-export([init/0, stop/1]).
 
 %% for testing purposes
 -export([get_binding_address/1, get_tcp_port/1, get_tcp_conf/2]).
 
 -include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
 
+-import(rabbit_misc, [pget/2]).
 
-%% --------------------------------------------------------------------------
+-define(TCP_PROTOCOL, 'http/web-stomp').
+-define(TLS_PROTOCOL, 'https/web-stomp').
+
+%%
+%% API
+%%
 
 -spec init() -> ok.
 init() ->
@@ -48,6 +54,21 @@ init() ->
     end,
     ok.
 
+stop(State) ->
+    case rabbit_networking:ranch_ref_of_protocol(?TCP_PROTOCOL) of
+        {error, not_found} -> ok;
+        Ref1               -> ranch:stop_listener(Ref1)
+    end,
+    case rabbit_networking:ranch_ref_of_protocol(?TLS_PROTOCOL) of
+        {error, not_found} -> ok;
+        Ref2               -> ranch:stop_listener(Ref2)
+    end,
+    State.
+
+%%
+%% Implementation
+%%
+
 start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
   NumTcpAcceptors = case application:get_env(rabbitmq_web_stomp, num_tcp_acceptors) of
       undefined -> get_env(num_acceptors, 10);
@@ -65,11 +86,11 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
                             middlewares => [cowboy_router,
                                             rabbit_web_stomp_middleware,
                                             cowboy_handler]},
-  case ranch:start_listener(web_stomp,
-                           ranch_tcp,
-                           RanchTransportOpts,
-                           rabbit_web_stomp_connection_sup,
-                           CowboyOpts) of
+  case ranch:start_listener(rabbit_networking:ranch_ref(TCPConf),
+                            ranch_tcp,
+                            RanchTransportOpts,
+                            rabbit_web_stomp_connection_sup,
+                            CowboyOpts) of
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTCP}                  ->
@@ -79,7 +100,7 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
-  listener_started('http/web-stomp', TCPConf),
+  listener_started(?TCP_PROTOCOL, TCPConf),
   rabbit_log_connection:info(
       "rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
       [get_binding_address(TCPConf), Port]).
@@ -103,7 +124,7 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
                             middlewares => [cowboy_router,
                                             rabbit_web_stomp_middleware,
                                             cowboy_handler]},
-  case ranch:start_listener(web_stomp_secure,
+  case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
                             ranch_ssl,
                             RanchTransportOpts,
                             rabbit_web_stomp_connection_sup,
@@ -117,7 +138,7 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
-  listener_started('https/web-stomp', TLSConf),
+  listener_started(?TLS_PROTOCOL, TLSConf),
   rabbit_log_connection:info(
       "rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
       [get_binding_address(TLSConf), TLSPort]).
