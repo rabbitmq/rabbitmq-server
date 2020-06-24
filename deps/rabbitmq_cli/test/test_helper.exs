@@ -265,6 +265,19 @@ defmodule TestHelper do
     :timer.sleep(1200)
   end
 
+  def drain_node() do
+    :rpc.call(get_rabbit_hostname(), :rabbit_maintenance, :drain, [])
+  end
+
+  def revive_node() do
+    :rpc.call(get_rabbit_hostname(), :rabbit_maintenance, :revive, [])
+  end
+
+  def is_draining_node() do
+    node = get_rabbit_hostname()
+    :rpc.call(node, :rabbit_maintenance, :is_being_drained_local_read, [node])
+  end
+
   def status do
     :rpc.call(get_rabbit_hostname(), :rabbit, :status, [])
   end
