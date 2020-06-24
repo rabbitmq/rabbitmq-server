@@ -500,8 +500,8 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "Data currently buffered in the output queue of the distribution link\n\nAny values above the 64MB threshold hint to an overloaded distribution\n\nBy default, RabbitMQ sets an upper limit of 128MB for the distribution buffer\n\n* [erlang/otp#2270](https://github.com/erlang/otp/pull/2270)\n* [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)\n",
-      "fill": 1,
+      "description": "Data currently buffered in the output queue of the distribution link.\n\nAny values above the 64MB threshold hint to an overloaded distribution. This applies to the default `zdbbl` value in RabbitMQ, which is 128MB.\n\n- [RabbitMQ Runtime Tuning - zdbbl](https://www.rabbitmq.com/runtime.html#distribution-buffer)\n- [erl +zdbbl](http://erlang.org/doc/man/erl.html#+zdbbl)",
+      "fill": 0,
       "fillGradient": 0,
       "gridPos": {
         "h": 5,
@@ -578,7 +578,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_node_queue_size * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_node_queue_size_bytes * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
