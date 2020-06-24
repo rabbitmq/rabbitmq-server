@@ -50,7 +50,7 @@ ensure_listener(Listener) ->
                                 [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
                              stream_handlers => StreamHandlers},
                            ProtoOptsMap),
-            Child = ranch:child_spec(name(Listener), 100,
+            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener), 100,
                 Transport, TransportOpts,
                 cowboy_clear, CowboyOptsMap),
             case supervisor:start_child(?SUP, Child) of
@@ -61,7 +61,7 @@ ensure_listener(Listener) ->
     end.
 
 stop_listener(Listener) ->
-    Name = name(Listener),
+    Name = rabbit_networking:ranch_ref(Listener),
     ok = supervisor:terminate_child(?SUP, {ranch_listener_sup, Name}),
     ok = supervisor:delete_child(?SUP, {ranch_listener_sup, Name}).
 
@@ -76,12 +76,9 @@ init([]) ->
            permanent, 5000, worker, [dynamic]},
     {ok, {{one_for_one, 10, 10}, [Registry, Log]}}.
 
-%% ----------------------------------------------------------------------
-
-name(Listener) ->
-    Port = pget(port, Listener),
-    [{IPAddress, Port, _Family} | _] = rabbit_networking:tcp_listener_addresses(Port),
-    {acceptor, IPAddress, Port}.
+%%
+%% Implementation
+%%
 
 preprocess_config(Options) ->
     case proplists:get_value(ssl, Options) of
