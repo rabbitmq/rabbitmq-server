@@ -70,7 +70,7 @@ set NAMETYPE=
 REM Set Erlang distribution port, based on the AMQP TCP port.
 REM
 REM We do this only for the Windows service because in this case, the node has
-REM to start with the distribution enabled on the command lind. For all other
+REM to start with the distribution enabled on the command line. For all other
 REM cases, distribution is configured at runtime.
 if "!RABBITMQ_NODE_PORT!"=="" (
     if not "!NODE_PORT!"=="" (
