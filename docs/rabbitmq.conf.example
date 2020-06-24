@@ -463,12 +463,6 @@
 ## NB: Change these only if you understand what you are doing!
 ##
 
-## Explicitly enable/disable hipe compilation. This option is deprecated
-## because HiPE supported has been
-## effectively discontinued in Erlang 22.
-##
-# hipe_compile = false
-
 ## Timeout used when waiting for Mnesia tables in a cluster to
 ## become available.
 ##

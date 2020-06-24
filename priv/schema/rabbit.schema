@@ -1067,13 +1067,6 @@ end}.
 %% NB: Change these only if you understand what you are doing!
 %%
 
-%% Explicitly enable/disable hipe compilation.
-%%
-%% {hipe_compile, true},
-
-{mapping, "hipe_compile", "rabbit.hipe_compile",
-    [{datatype, {enum, [true, false]}}]}.
-
 %% Timeout used when waiting for Mnesia tables in a cluster to
 %% become available.
 %%
