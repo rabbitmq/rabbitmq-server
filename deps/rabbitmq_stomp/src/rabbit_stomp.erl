@@ -38,8 +38,8 @@ start(normal, []) ->
     Listeners = parse_listener_configuration(),
     rabbit_stomp_sup:start_link(Listeners, Config).
 
-stop(_State) ->
-    ok.
+stop(_) ->
+    rabbit_stomp_sup:stop_listeners().
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_stomp, emit_connection_info_local,
