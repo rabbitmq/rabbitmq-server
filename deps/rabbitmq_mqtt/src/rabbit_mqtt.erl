@@ -34,8 +34,8 @@ start(normal, []) ->
     gen_event:add_handler(EMPid, rabbit_mqtt_vhost_event_handler, []),
     Result.
 
-stop(_State) ->
-    ok.
+stop(_) ->
+    rabbit_mqtt_sup:stop_listeners().
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_mqtt, emit_connection_info_local,

@@ -19,7 +19,10 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/2, init/1]).
+-export([start_link/2, init/1, stop_listeners/0]).
+
+-define(TCP_PROTOCOL, 'mqtt').
+-define(TLS_PROTOCOL, 'mqtt/ssl').
 
 start_link(Listeners, []) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
@@ -57,6 +60,21 @@ init([{Listeners, SslListeners0}]) ->
            listener_specs(fun ssl_listener_spec/1,
                           [SocketOpts, SslOpts, NumSslAcceptors], SslListeners)]}}.
 
+stop_listeners() ->
+    case rabbit_networking:ranch_ref_of_protocol(?TCP_PROTOCOL) of
+        {error, not_found} -> ok;
+        Ref1               -> ranch:stop_listener(Ref1)
+    end,
+    case rabbit_networking:ranch_ref_of_protocol(?TLS_PROTOCOL) of
+        {error, not_found} -> ok;
+        Ref2               -> ranch:stop_listener(Ref2)
+    end,
+    ok.
+
+%%
+%% Implementation
+%%
+
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args]) ||
         Listener <- Listeners,
@@ -65,17 +83,17 @@ listener_specs(Fun, Args, Listeners) ->
 tcp_listener_spec([Address, SocketOpts, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts,
-      transport(mqtt), rabbit_mqtt_connection_sup, [],
+      transport(?TCP_PROTOCOL), rabbit_mqtt_connection_sup, [],
       mqtt, NumAcceptors, "MQTT TCP listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts ++ SslOpts,
-      transport('mqtt/ssl'), rabbit_mqtt_connection_sup, [],
+      transport(?TLS_PROTOCOL), rabbit_mqtt_connection_sup, [],
       'mqtt/ssl', NumAcceptors, "MQTT TLS listener").
 
 transport(Protocol) ->
     case Protocol of
-        mqtt       -> ranch_tcp;
-        'mqtt/ssl' -> ranch_ssl
+        ?TCP_PROTOCOL -> ranch_tcp;
+        ?TLS_PROTOCOL -> ranch_ssl
     end.
