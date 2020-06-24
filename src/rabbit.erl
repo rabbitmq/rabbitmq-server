@@ -910,7 +910,7 @@ do_run_postlaunch_phase() ->
                       Error   -> throw(Error)
                   end
           end, Plugins),
-        
+
         rabbit_log_prelaunch:info("Resetting node maintenance status"),
         %% successful boot resets node maintenance state
         rabbit_maintenance:unmark_as_being_drained(),
