@@ -24,7 +24,14 @@
 -behaviour(supervisor).
 -export([init/1]).
 
-%%----------------------------------------------------------------------------
+-import(rabbit_misc, [pget/2]).
+
+-define(TCP_PROTOCOL, 'http/web-mqtt').
+-define(TLS_PROTOCOL, 'https/web-mqtt').
+
+%%
+%% API
+%%
 
 -spec start(_, _) -> {ok, pid()}.
 start(_Type, _StartArgs) ->
@@ -33,16 +40,25 @@ start(_Type, _StartArgs) ->
 
 -spec prep_stop(term()) -> term().
 prep_stop(State) ->
-    ranch:stop_listener(web_mqtt),
     State.
 
 -spec stop(_) -> ok.
 stop(_State) ->
+    case rabbit_networking:ranch_ref_of_protocol(?TCP_PROTOCOL) of
+        {error, not_found} -> ok;
+        Ref1               -> ranch:stop_listener(Ref1)
+    end,
+    case rabbit_networking:ranch_ref_of_protocol(?TLS_PROTOCOL) of
+        {error, not_found} -> ok;
+        Ref2               -> ranch:stop_listener(Ref2)
+    end,
     ok.
 
 init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 
-%%----------------------------------------------------------------------------
+%%
+%% Implementation
+%%
 
 mqtt_init() ->
   CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
@@ -72,7 +88,7 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
     max_connections => get_max_connections(),
     num_acceptors => get_env(num_tcp_acceptors, 10)
   },
-  case ranch:start_listener(web_mqtt,
+  case ranch:start_listener(rabbit_networking:ranch_ref(TCPConf),
                             ranch_tcp,
                             RanchTransportOpts,
                             rabbit_web_mqtt_connection_sup,
@@ -86,7 +102,7 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
-  listener_started('http/web-mqtt', TCPConf),
+  listener_started(?TCP_PROTOCOL, TCPConf),
   rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
                   [IpStr, Port]).
 
@@ -99,7 +115,7 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
     max_connections => get_max_connections(),
     num_acceptors => get_env(num_ssl_acceptors, 10)
   },
-  case ranch:start_listener(web_mqtt_secure,
+  case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
                             ranch_ssl,
                             RanchTransportOpts,
                             rabbit_web_mqtt_connection_sup,
@@ -113,7 +129,7 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
-  listener_started('https/web-mqtt', TLSConf),
+  listener_started(?TLS_PROTOCOL, TLSConf),
   rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
                   [TLSIpStr, TLSPort]).
 
