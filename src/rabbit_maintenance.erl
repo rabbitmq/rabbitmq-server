@@ -64,8 +64,11 @@ drain() ->
     ok.
 
 revive() ->
+    rabbit_log:alert("This node is being revived from maintenance (drain) mode"),
     resume_all_client_listeners(),
+    rabbit_log:alert("Resumed all listeners and will accept client connections again"),
     unmark_as_being_drained(),
+    rabbit_log:info("Marked this node as back from maintenance and ready to serve clients"),
 
     ok.
 
