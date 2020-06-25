@@ -2084,29 +2084,6 @@ to the connected client:
 .Pp
 Evaluates an Erlang expression on the target node
 .\" ------------------------------------------------------------------
-.It Cm hipe_compile Ar directory
-.Pp
-Performs HiPE-compilation and caches resulting
-.Pa .beam Ns -files in the given directory.
-.Pp
-Parent directories are created if necessary.
-Any existing
-.Pa .beam
-files from the directory are automatically deleted prior to compilation.
-.Pp
-To use this precompiled files, you should set
-.Ev RABBITMQ_SERVER_CODE_PATH
-environment variable to directory specified in
-.Cm hipe_compile
-invocation.
-.Pp
-For example, to HiPE-compile modules and store them to
-.Pa /tmp/rabbit-hipe/ebin
-directory:
-.sp
-.Dl rabbitmqctl hipe_compile /tmp/rabbit-hipe/ebin
-.El
-.\" ------------------------------------------------------------------
 .\" ## Queue Operations
 .\" ------------------------------------------------------------------
 .Ss Queue Operations
