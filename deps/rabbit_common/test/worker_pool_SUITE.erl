@@ -197,13 +197,12 @@ dispatch_async_blocks_until_task_begins(_) ->
                          none
                  end,
     ?assert(is_process_alive(SomeWorker), "Dispatched tasks should be running"),
-    Pid = spawn(
-            fun() ->
-                    ok = worker_pool:dispatch_sync(?POOL_NAME,
-                                                   Waiter),
-                    Self ! done_waiting,
-                    exit(normal)
-            end),
+    spawn(fun() ->
+            ok = worker_pool:dispatch_sync(?POOL_NAME,
+                                           Waiter),
+            Self ! done_waiting,
+            exit(normal)
+          end),
     DidWait = receive
                   done_waiting ->
                       false
