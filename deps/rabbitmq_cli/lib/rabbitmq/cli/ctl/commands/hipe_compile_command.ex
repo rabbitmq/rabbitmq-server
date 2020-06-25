@@ -14,6 +14,13 @@
 ## Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
+  @moduledoc """
+  HiPE support has been deprecated since Erlang/OTP 22 (mid-2019) and
+  won't be a part of Erlang/OTP 24.
+
+  Therefore this command is DEPRECATED and is no-op.
+  """
+
   alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   import RabbitMQ.CLI.Core.CodePath
 
@@ -59,11 +66,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
 
   def validate(_, _), do: {:validation_failure, :too_many_args}
 
-  def run([target_dir], _opts) do
-    Code.ensure_loaded(:rabbit_hipe)
-    hipe_compile(String.trim(target_dir))
+  def run([_target_dir], _opts) do
+    :ok
   end
-
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "hipe_compile <directory>"
@@ -81,15 +86,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
     ]
   end
 
-  def help_section(), do: :operations
+  def help_section(), do: :deprecated
 
   def description() do
-    "Only exists for backwards compatibility. HiPE support has been dropped starting with Erlang 22. "
-    <> "Do not use"
+    "DEPRECATED. This command is a no-op. HiPE is no longer supported by modern Erlang versions"
   end
 
-  def banner([target_dir], _) do
-    "Will pre-compile RabbitMQ server modules with HiPE to #{target_dir} ..."
+  def banner([_target_dir], _) do
+    "This command is a no-op. HiPE is no longer supported by modern Erlang versions"
   end
 
   #
@@ -99,19 +103,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   # Accepts any non-blank path
   defp acceptable_path?(value) do
     String.length(String.trim(value)) != 0
-  end
-
-  defp hipe_compile(target_dir) do
-    case :rabbit_hipe.can_hipe_compile() do
-      true ->
-        case :rabbit_hipe.compile_to_directory(target_dir) do
-          {:ok, _, _} -> :ok
-          {:ok, :already_compiled} -> {:ok, "already compiled"}
-          {:error, message} -> {:error, message}
-        end
-
-      false ->
-        {:error, "HiPE compilation is not supported"}
-    end
   end
 end
