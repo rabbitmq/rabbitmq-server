@@ -131,7 +131,7 @@ BUILD_DEPS = rabbitmq_cli syslog
 DEPS = cuttlefish ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
-dep_cuttlefish = hex 2.2.0
+dep_cuttlefish = hex 2.3.0
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
 
 define usage_xml_to_erl
