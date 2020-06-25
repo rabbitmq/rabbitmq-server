@@ -63,7 +63,7 @@ public class StreamTest {
                                                                      Function<Client.StreamMetadata, Client.Broker> consumerBroker) throws Exception {
 
         int messageCount = 10_000;
-        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPort()));
+        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
         Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
         assertThat(metadata).hasSize(1).containsKey(stream);
         Client.StreamMetadata streamMetadata = metadata.get(stream);
@@ -97,7 +97,7 @@ public class StreamTest {
 
     @Test
     void metadataOnClusterShouldReturnLeaderAndReplicas() {
-        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPort()));
+        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
         Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
         assertThat(metadata).hasSize(1).containsKey(stream);
         Client.StreamMetadata streamMetadata = metadata.get(stream);

@@ -21,18 +21,43 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import org.junit.jupiter.api.extension.*;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class TestUtils {
 
-    static int streamPort() {
+    static int streamPortNode1() {
         String port = System.getProperty("node1.stream.port", "5555");
         return Integer.valueOf(port);
+    }
+
+    static int streamPortNode2() {
+        String port = System.getProperty("node2.stream.port", "5555");
+        return Integer.valueOf(port);
+    }
+
+    static void waitAtMost(Duration duration, BooleanSupplier condition) throws InterruptedException {
+        if (condition.getAsBoolean()) {
+            return;
+        }
+        int waitTime = 100;
+        int waitedTime = 0;
+        long timeoutInMs = duration.toMillis();
+        while (waitedTime <= timeoutInMs) {
+            Thread.sleep(waitTime);
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            waitedTime += waitTime;
+        }
+        fail("Waited " + duration.getSeconds() + " second(s), condition never got true");
     }
 
     static class StreamTestInfrastructureExtension implements BeforeAllCallback, AfterAllCallback, BeforeEachCallback, AfterEachCallback {
@@ -67,7 +92,7 @@ public class TestUtils {
                 String stream = UUID.randomUUID().toString();
                 streamField.set(context.getTestInstance().get(), stream);
                 Client client = new Client(new Client.ClientParameters().eventLoopGroup(eventLoopGroup(context))
-                        .port(streamPort())
+                        .port(streamPortNode1())
                 );
                 Client.Response response = client.create(stream);
                 assertThat(response.isOk()).isTrue();
@@ -96,7 +121,7 @@ public class TestUtils {
                 streamField.setAccessible(true);
                 String stream = (String) streamField.get(context.getTestInstance().get());
                 Client client = new Client(new Client.ClientParameters().eventLoopGroup(eventLoopGroup(context))
-                        .port(streamPort())
+                        .port(streamPortNode1())
                 );
                 Client.Response response = client.delete(stream);
                 assertThat(response.isOk()).isTrue();
