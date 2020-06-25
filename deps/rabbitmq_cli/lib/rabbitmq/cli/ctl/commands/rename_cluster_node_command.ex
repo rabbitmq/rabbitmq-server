@@ -16,7 +16,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   require Integer
   alias RabbitMQ.CLI.Core.{DocGuide, Validators}
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

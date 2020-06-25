@@ -33,8 +33,8 @@ Please use the version of CLI tools that come with the RabbitMQ distribution ver
 
 Building this project requires
 
- * Erlang/OTP 20.3 (or later)
- * [Elixir](https://elixir-lang.org/) 1.7.0 (or later).
+ * Erlang/OTP 21.3 (or later)
+ * [Elixir](https://elixir-lang.org/) 1.10.0 (or later).
 
 Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common).
 Dependencies are being resolved by `erlang.mk`

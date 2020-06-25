@@ -13,18 +13,18 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defprotocol Rabbitmq.Atom.Coerce do
+defprotocol RabbitMQ.CLI.Core.DataCoercion do
   def to_atom(data)
 end
 
-defimpl Rabbitmq.Atom.Coerce, for: Atom do
+defimpl RabbitMQ.CLI.Core.DataCoercion, for: Atom do
   def to_atom(atom), do: atom
 end
 
-defimpl Rabbitmq.Atom.Coerce, for: BitString do
+defimpl RabbitMQ.CLI.Core.DataCoercion, for: BitString do
   def to_atom(string), do: String.to_atom(string)
 end
 
-defimpl Rabbitmq.Atom.Coerce, for: List do
+defimpl RabbitMQ.CLI.Core.DataCoercion, for: List do
   def to_atom(list), do: List.to_atom(list)
 end
