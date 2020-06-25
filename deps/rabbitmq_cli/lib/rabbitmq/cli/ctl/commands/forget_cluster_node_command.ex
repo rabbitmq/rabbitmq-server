@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Distribution, Validators}
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

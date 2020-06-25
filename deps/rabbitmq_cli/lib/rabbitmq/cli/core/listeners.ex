@@ -16,7 +16,7 @@
 defmodule RabbitMQ.CLI.Core.Listeners do
   import Record, only: [defrecord: 3, extract: 2]
   import RabbitCommon.Records
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
 
   #
   # API

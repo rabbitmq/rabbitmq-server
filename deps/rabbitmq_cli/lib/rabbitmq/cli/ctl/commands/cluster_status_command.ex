@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   import RabbitMQ.CLI.Core.{Alarms, ANSI, Listeners, Platform, FeatureFlags}
   import RabbitMQ.CLI.Core.Distribution, only: [per_node_timeout: 2]
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

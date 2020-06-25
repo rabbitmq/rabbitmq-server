@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Core.Networking do
 
   @spec address_family(String.t() | atom() | charlist() | binary()) :: address_family()
   def address_family(value) do
-    val = Rabbitmq.Atom.Coerce.to_atom(value)
+    val = RabbitMQ.CLI.Core.DataCoercion.to_atom(value)
     case val do
       :inet  -> :inet
       :inet4 -> :inet
