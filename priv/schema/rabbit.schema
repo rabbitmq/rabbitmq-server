@@ -1070,6 +1070,8 @@ end}.
 %% Explicitly enable/disable hipe compilation.
 %%
 %% {hipe_compile, true},
+%%
+%% DEPRECATED: this is a no-op and is kept only to allow old configs.
 
 {mapping, "hipe_compile", "rabbit.hipe_compile",
     [{datatype, {enum, [true, false]}}]}.
