@@ -3,6 +3,7 @@ HOSTNAME := $(shell hostname)
 MVN_FLAGS += -Dhostname=$(HOSTNAME) \
 			 -Dnode1.stream.port=$(NODE1_STREAM_PORT) \
 			 -Dnode1.name=$(NODE1_NAME) \
+			 -Dnode2.stream.port=$(NODE2_STREAM_PORT) \
 			 -Drabbitmqctl.bin=$(RABBITMQCTL)
 
 .PHONY: tests clean
