@@ -43,6 +43,7 @@
 %% API
 %%
 
+-spec drain() -> ok.
 drain() ->
     rabbit_log:alert("This node is being put into maintenance (drain) mode"),
     mark_as_being_drained(),
@@ -62,6 +63,7 @@ drain() ->
 
     ok.
 
+-spec revive() -> ok.
 revive() ->
     rabbit_log:alert("This node is being revived from maintenance (drain) mode"),
     revive_local_quorum_queue_replicas(),
@@ -233,17 +235,17 @@ revive_local_quorum_queue_replicas() ->
     Queues = rabbit_amqqueue:list_local_followers(),
     [begin
         Name = amqqueue:get_name(Q),
-        RaLeader = amqqueue:get_pid(Q),
         rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
                          [rabbit_misc:rs(Name)]),
         %% start local QQ replica (Ra server) of this queue
-        RaLeader = amqqueue:get_pid(Q),
-        rabbit_log:debug("Will start Ra server ~p", [RaLeader]),
-        case ra:restart_server(RaLeader) of
+        {Prefix, _Node} = amqqueue:get_pid(Q),
+        RaServer = {Prefix, node()},
+        rabbit_log:debug("Will start Ra server ~p", [RaServer]),
+        case ra:restart_server(RaServer) of
             ok     ->
-                rabbit_log:debug("Successfully restarted Ra server ~p", [RaLeader]);
+                rabbit_log:debug("Successfully restarted Ra server ~p", [RaServer]);
             {error, {already_started, _Pid}} ->
-                rabbit_log:debug("Ra server ~p is already running", [RaLeader]);
+                rabbit_log:debug("Ra server ~p is already running", [RaServer]);
             {error, nodedown} ->
                 rabbit_log:error("Failed to restart Ra server ~p: target node was reported as down")
         end
