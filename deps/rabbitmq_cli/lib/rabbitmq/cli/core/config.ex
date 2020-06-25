@@ -42,13 +42,13 @@ defmodule RabbitMQ.CLI.Core.Config do
   def normalise(:node, nil), do: nil
 
   def normalise(:node, node) when not is_atom(node) do
-    Rabbitmq.Atom.Coerce.to_atom(node)
+    RabbitMQ.CLI.Core.DataCoercion.to_atom(node)
   end
 
   def normalise(:erlang_cookie, nil), do: nil
 
   def normalise(:erlang_cookie, c) when not is_atom(c) do
-    Rabbitmq.Atom.Coerce.to_atom(c)
+    RabbitMQ.CLI.Core.DataCoercion.to_atom(c)
   end
 
   def normalise(:longnames, true), do: :longnames

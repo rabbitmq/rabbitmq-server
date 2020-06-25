@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
   import RabbitCommon.Records
   import RabbitMQ.CLI.Core.Platform, only: [path_separator: 0]
   import RabbitMQ.CLI.Core.{CodePath, Paths}

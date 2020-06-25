@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   alias RabbitMQ.CLI.Core.DocGuide
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
