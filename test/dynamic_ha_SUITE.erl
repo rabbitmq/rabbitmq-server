@@ -60,10 +60,10 @@ groups() ->
               force_delete_if_no_master,
               promote_on_shutdown,
               promote_on_failure,
-              slave_recovers_after_vhost_failure,
-              slave_recovers_after_vhost_down_and_up,
+              follower_recovers_after_vhost_failure,
+              follower_recovers_after_vhost_down_and_up,
               master_migrates_on_vhost_down,
-              slave_recovers_after_vhost_down_and_master_migrated,
+              follower_recovers_after_vhost_down_and_master_migrated,
               queue_survive_adding_dead_vhost_mirror,
               dynamic_mirroring
             ]},
@@ -71,7 +71,7 @@ groups() ->
               change_policy,
               rapid_change,
               nodes_policy_should_pick_master_from_its_params,
-              promote_slave_after_standalone_restart,
+              promote_follower_after_standalone_restart,
               queue_survive_adding_dead_vhost_mirror,
               rebalance_all,
               rebalance_exactly,
@@ -194,33 +194,33 @@ change_policy(Config) ->
     %% When we first declare a queue with no policy, it's not HA.
     amqp_channel:call(ACh, #'queue.declare'{queue = ?QNAME}),
     timer:sleep(200),
-    assert_slaves(A, ?QNAME, {A, ''}),
+    assert_followers(A, ?QNAME, {A, ''}),
 
     %% Give it policy "all", it becomes HA and gets all mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, <<"all">>),
-    assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     %% Give it policy "nodes", it gets specific mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
       {<<"nodes">>, [rabbit_misc:atom_to_binary(A),
                      rabbit_misc:atom_to_binary(B)]}),
-    assert_slaves(A, ?QNAME, {A, [B]}, [{A, [B, C]}]),
+    assert_followers(A, ?QNAME, {A, [B]}, [{A, [B, C]}]),
 
     %% Now explicitly change the mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
       {<<"nodes">>, [rabbit_misc:atom_to_binary(A),
                      rabbit_misc:atom_to_binary(C)]}),
-    assert_slaves(A, ?QNAME, {A, [C]}, [{A, [B, C]}]),
+    assert_followers(A, ?QNAME, {A, [C]}, [{A, [B, C]}]),
 
     %% Clear the policy, and we go back to non-mirrored
     ok = rabbit_ct_broker_helpers:clear_policy(Config, A, ?POLICY),
-    assert_slaves(A, ?QNAME, {A, ''}),
+    assert_followers(A, ?QNAME, {A, ''}),
 
     %% Test switching "away" from an unmirrored node
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
       {<<"nodes">>, [rabbit_misc:atom_to_binary(B),
                      rabbit_misc:atom_to_binary(C)]}),
-    assert_slaves(A, ?QNAME, {B, [C]}, [{A, []}, {A, [B]}, {A, [C]}, {A, [B, C]}]),
+    assert_followers(A, ?QNAME, {B, [C]}, [{A, []}, {A, [B]}, {A, [C]}, {A, [B, C]}]),
 
     ok.
 
@@ -230,19 +230,19 @@ change_cluster(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
 
     amqp_channel:call(ACh, #'queue.declare'{queue = ?QNAME}),
-    assert_slaves(A, ?QNAME, {A, ''}),
+    assert_followers(A, ?QNAME, {A, ''}),
 
     %% Give it policy exactly 4, it should mirror to all 3 nodes
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, {<<"exactly">>, 4}),
-    assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     %% Add D and E, D or E joins in
     rabbit_ct_broker_helpers:cluster_nodes(Config, [A, D, E]),
-    assert_slaves(A, ?QNAME, [{A, [B, C, D]}, {A, [B, C, E]}], [{A, [B, C]}]),
+    assert_followers(A, ?QNAME, [{A, [B, C, D]}, {A, [B, C, E]}], [{A, [B, C]}]),
 
     %% Remove one, the other joins in
     rabbit_ct_broker_helpers:stop_node(Config, D),
-    assert_slaves(A, ?QNAME, [{A, [B, C, D]}, {A, [B, C, E]}], [{A, [B, C]}]),
+    assert_followers(A, ?QNAME, [{A, [B, C, D]}, {A, [B, C, E]}], [{A, [B, C]}]),
 
     ok.
 
@@ -437,9 +437,9 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     %% --> Master: A
     %%     Slaves: [B, C] or [C, B]
     Info = find_queue(?QNAME, A),
-    SSPids = proplists:get_value(synchronised_slave_pids, Info),
+    SSPids = proplists:get_value(synchronised_follower_pids, Info),
 
-    %% Choose mirror that isn't the first sync slave. Cover a bug that always
+    %% Choose mirror that isn't the first sync mirror. Cover a bug that always
     %% chose the first, even if it was not part of the policy
     LastSlave = node(lists:last(SSPids)),
     ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A],
@@ -469,29 +469,29 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, A, ?POLICY).
 
-slave_recovers_after_vhost_failure(Config) ->
+follower_recovers_after_vhost_failure(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     rabbit_ct_broker_helpers:set_ha_policy_all(Config),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
-    QName = <<"slave_recovers_after_vhost_failure-q">>,
+    QName = <<"follower_recovers_after_vhost_failure-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
     timer:sleep(500),
-    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+    assert_followers(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on a node hosting a mirror
     {ok, Sup} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
     exit(Sup, foo),
 
-    assert_slaves(A, QName, {A, [B]}, [{A, []}]).
+    assert_followers(A, QName, {A, [B]}, [{A, []}]).
 
-slave_recovers_after_vhost_down_and_up(Config) ->
+follower_recovers_after_vhost_down_and_up(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     rabbit_ct_broker_helpers:set_ha_policy_all(Config),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
-    QName = <<"slave_recovers_after_vhost_down_and_up-q">>,
+    QName = <<"follower_recovers_after_vhost_down_and_up-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
     timer:sleep(200),
-    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+    assert_followers(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on a node hosting a mirror
     rabbit_ct_broker_helpers:force_vhost_failure(Config, B, <<"/">>),
@@ -504,7 +504,7 @@ slave_recovers_after_vhost_down_and_up(Config) ->
       {error,{already_started, _Sup}} -> ok
     end,
 
-    assert_slaves(A, QName, {A, [B]}, [{A, []}]).
+    assert_followers(A, QName, {A, [B]}, [{A, []}]).
 
 master_migrates_on_vhost_down(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -513,25 +513,25 @@ master_migrates_on_vhost_down(Config) ->
     QName = <<"master_migrates_on_vhost_down-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
     timer:sleep(500),
-    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+    assert_followers(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on the node hosting queue master
     rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
     timer:sleep(500),
-    assert_slaves(A, QName, {B, []}).
+    assert_followers(A, QName, {B, []}).
 
-slave_recovers_after_vhost_down_and_master_migrated(Config) ->
+follower_recovers_after_vhost_down_and_master_migrated(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     rabbit_ct_broker_helpers:set_ha_policy_all(Config),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
-    QName = <<"slave_recovers_after_vhost_down_and_master_migrated-q">>,
+    QName = <<"follower_recovers_after_vhost_down_and_master_migrated-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
     timer:sleep(500),
-    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+    assert_followers(A, QName, {A, [B]}, [{A, []}]),
     %% Crash vhost on the node hosting queue master
     rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
     timer:sleep(500),
-    assert_slaves(B, QName, {B, []}),
+    assert_followers(B, QName, {B, []}),
 
     %% Restart the vhost on the node (previously) hosting queue master
     case rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]) of
@@ -539,7 +539,7 @@ slave_recovers_after_vhost_down_and_master_migrated(Config) ->
       {error,{already_started, _Sup}} -> ok
     end,
     timer:sleep(500),
-    assert_slaves(B, QName, {B, [A]}, [{B, []}]).
+    assert_followers(B, QName, {B, [A]}, [{B, []}]).
 
 random_policy(Config) ->
     run_proper(fun prop_random_policy/1, [Config]).
@@ -558,7 +558,7 @@ failing_random_policies(Config) ->
         [all, undefined, {exactly, 2}, all, {exactly, 3}, {exactly, 3},
           undefined, {exactly, 3}, all])).
 
-promote_slave_after_standalone_restart(Config) ->
+promote_follower_after_standalone_restart(Config) ->
     %% Tests that mirrors can be brought up standalone after forgetting the rest
     %% of the cluster. Slave ordering should be irrelevant.
     %% https://github.com/rabbitmq/rabbitmq-server/issues/1213
@@ -620,11 +620,11 @@ rebalance_all(Config) ->
 
     rabbit_ct_client_helpers:publish(ACh, Q1, 5),
     rabbit_ct_client_helpers:publish(ACh, Q2, 3),
-    assert_slaves(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
-    assert_slaves(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
-    assert_slaves(A, Q3, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
-    assert_slaves(A, Q4, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
-    assert_slaves(A, Q5, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q3, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q4, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q5, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     {ok, Summary} = rpc:call(A, rabbit_amqqueue, rebalance, [classic, ".*", ".*"]),
 
@@ -639,8 +639,8 @@ rebalance_all(Config) ->
     rabbit_ct_helpers:await_condition(Condition1, 60000),
 
     %% Check that Q1 and Q2 haven't moved
-    assert_slaves(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
-    assert_slaves(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q1, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
+    assert_followers(A, Q2, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     ok.
 
@@ -795,31 +795,31 @@ rebalance_multiple_blocked1(_) ->
 
 %%----------------------------------------------------------------------------
 
-assert_slaves(RPCNode, QName, Exp) ->
-    assert_slaves(RPCNode, QName, Exp, []).
+assert_followers(RPCNode, QName, Exp) ->
+    assert_followers(RPCNode, QName, Exp, []).
 
-assert_slaves(RPCNode, QName, Exp, PermittedIntermediate) ->
-    assert_slaves0(RPCNode, QName, Exp,
+assert_followers(RPCNode, QName, Exp, PermittedIntermediate) ->
+    assert_followers0(RPCNode, QName, Exp,
                   [{get(previous_exp_m_node), get(previous_exp_s_nodes)} |
                    PermittedIntermediate], 1000).
 
-assert_slaves0(_RPCNode, _QName, [], _PermittedIntermediate, _Attempts) ->
+assert_followers0(_RPCNode, _QName, [], _PermittedIntermediate, _Attempts) ->
     error(invalid_expectation);
-assert_slaves0(RPCNode, QName, [{ExpMNode, ExpSNodes}|T], PermittedIntermediate, Attempts) ->
-    case assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, nofail) of
+assert_followers0(RPCNode, QName, [{ExpMNode, ExpSNodes}|T], PermittedIntermediate, Attempts) ->
+    case assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, nofail) of
         ok ->
             ok;
         failed ->
-            assert_slaves0(RPCNode, QName, T, PermittedIntermediate, Attempts - 1)
+            assert_followers0(RPCNode, QName, T, PermittedIntermediate, Attempts - 1)
     end;
-assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts) ->
-    assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, fail).
+assert_followers0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts) ->
+    assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, fail).
 
-assert_slaves1(_RPCNode, _QName, _Exp, _PermittedIntermediate, 0, fail) ->
-    error(give_up_waiting_for_slaves);
-assert_slaves1(_RPCNode, _QName, _Exp, _PermittedIntermediate, 0, nofail) ->
+assert_followers1(_RPCNode, _QName, _Exp, _PermittedIntermediate, 0, fail) ->
+    error(give_up_waiting_for_followers);
+assert_followers1(_RPCNode, _QName, _Exp, _PermittedIntermediate, 0, nofail) ->
     failed;
-assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, FastFail) ->
+assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts, FastFail) ->
     Q = find_queue(QName, RPCNode),
     Pid = proplists:get_value(pid, Q),
     SPids = proplists:get_value(slave_pids, Q),
@@ -850,7 +850,7 @@ assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Att
                     ct:pal("Waiting to leave state ~p~n Waiting for ~p~n",
                            [State, {ExpMNode, ExpSNodes}]),
                     timer:sleep(200),
-                    assert_slaves1(RPCNode, QName, {ExpMNode, ExpSNodes},
+                    assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes},
                                    PermittedIntermediate,
                                    Attempts - 1, FastFail)
             end;

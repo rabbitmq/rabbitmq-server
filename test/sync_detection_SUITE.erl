@@ -32,10 +32,10 @@ all() ->
 groups() ->
     [
       {cluster_size_2, [], [
-          slave_synchronization
+          follower_synchronization
         ]},
       {cluster_size_3, [], [
-          slave_synchronization_ttl
+          follower_synchronization_ttl
         ]}
     ].
 
@@ -85,7 +85,7 @@ end_per_testcase(Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
-slave_synchronization(Config) ->
+follower_synchronization(Config) ->
     [Master, Slave] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     Channel = rabbit_ct_client_helpers:open_channel(Config, Master),
@@ -107,13 +107,13 @@ slave_synchronization(Config) ->
 
     rabbit_ct_broker_helpers:start_broker(Config, Slave),
 
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
     send_dummy_message(Channel, Queue),                                 % 1 - 1
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
 
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag1}),      % 1 - 0
 
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
 
     %% We restart the mirror and we send a message, so that the mirror will only
     %% have one of the messages.
@@ -122,26 +122,26 @@ slave_synchronization(Config) ->
 
     send_dummy_message(Channel, Queue),                                 % 2 - 0
 
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
 
     %% We reject the message that the mirror doesn't have, and verify that it's
     %% still unsynced
     {#'basic.get_ok'{delivery_tag = Tag2}, _} =
         amqp_channel:call(Channel, #'basic.get'{queue = Queue}),        % 1 - 1
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
     amqp_channel:cast(Channel, #'basic.reject'{ delivery_tag = Tag2,
                                                 requeue      = true }), % 2 - 0
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
     {#'basic.get_ok'{delivery_tag = Tag3}, _} =
         amqp_channel:call(Channel, #'basic.get'{queue = Queue}),        % 1 - 1
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag3}),      % 1 - 0
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
     {#'basic.get_ok'{delivery_tag = Tag4}, _} =
         amqp_channel:call(Channel, #'basic.get'{queue = Queue}),        % 0 - 1
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag4}),      % 0 - 0
-    slave_synced(Master, Queue).
+    follower_synced(Master, Queue).
 
-slave_synchronization_ttl(Config) ->
+follower_synchronization_ttl(Config) ->
     [Master, Slave, DLX] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     Channel = rabbit_ct_client_helpers:open_channel(Config, Master),
@@ -165,33 +165,33 @@ slave_synchronization_ttl(Config) ->
                                                     auto_delete = false,
                                                     arguments   = Args}),
 
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
 
     %% All unknown
     rabbit_ct_broker_helpers:stop_broker(Config, Slave),
     send_dummy_message(Channel, Queue),
     send_dummy_message(Channel, Queue),
     rabbit_ct_broker_helpers:start_broker(Config, Slave),
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
     wait_for_messages(DLXQueue, DLXChannel, 2),
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
 
     %% 1 unknown, 1 known
     rabbit_ct_broker_helpers:stop_broker(Config, Slave),
     send_dummy_message(Channel, Queue),
     rabbit_ct_broker_helpers:start_broker(Config, Slave),
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
     send_dummy_message(Channel, Queue),
-    slave_unsynced(Master, Queue),
+    follower_unsynced(Master, Queue),
     wait_for_messages(DLXQueue, DLXChannel, 2),
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
 
     %% %% both known
     send_dummy_message(Channel, Queue),
     send_dummy_message(Channel, Queue),
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
     wait_for_messages(DLXQueue, DLXChannel, 2),
-    slave_synced(Master, Queue),
+    follower_synced(Master, Queue),
 
     ok.
 
@@ -200,7 +200,7 @@ send_dummy_message(Channel, Queue) ->
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Queue},
     amqp_channel:cast(Channel, Publish, #amqp_msg{payload = Payload}).
 
-slave_pids(Node, Queue) ->
+follower_pids(Node, Queue) ->
     {ok, Q} = rpc:call(Node, rabbit_amqqueue, lookup,
                        [rabbit_misc:r(<<"/">>, queue, Queue)]),
     SSP = synchronised_slave_pids,
@@ -223,17 +223,17 @@ wait_for_sync_status(N, Max, Status, Node, Queue) when N >= Max ->
                    {expected_status, Status},
                    {max_tried, Max}]});
 wait_for_sync_status(N, Max, Status, Node, Queue) ->
-    Synced = length(slave_pids(Node, Queue)) =:= 1,
+    Synced = length(follower_pids(Node, Queue)) =:= 1,
     case Synced =:= Status of
         true  -> ok;
         false -> timer:sleep(?LOOP_RECURSION_DELAY),
                  wait_for_sync_status(N + 1, Max, Status, Node, Queue)
     end.
 
-slave_synced(Node, Queue) ->
+follower_synced(Node, Queue) ->
     wait_for_sync_status(true, Node, Queue).
 
-slave_unsynced(Node, Queue) ->
+follower_unsynced(Node, Queue) ->
     wait_for_sync_status(false, Node, Queue).
 
 wait_for_messages(Queue, Channel, N) ->

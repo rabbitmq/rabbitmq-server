@@ -797,7 +797,7 @@ confirm_sender_death(Pid) ->
     Fun =
         fun (?MODULE, State = #state { known_senders = KS,
                                        gm            = GM }) ->
-                %% We're running still as a slave
+                %% We're running still as a mirror
                 %%
                 %% See comment in local_sender_death/2; we might have
                 %% received a sender_death in the meanwhile so check

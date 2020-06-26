@@ -451,7 +451,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
                               backing_queue_state = BQS,
                               confirmed           = Confirmed }) ->
     %% Here, we need to deal with the possibility that we're about to
-    %% receive a message that we've already seen when we were a slave
+    %% receive a message that we've already seen when we were a mirror
     %% (we received it via gm). Thus if we do receive such message now
     %% via the channel, there may be a confirm waiting to issue for
     %% it.
@@ -478,12 +478,12 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% confirmed some time after that (maybe even after
             %% promotion), but before we received the publish from the
             %% channel, so couldn't previously know what the
-            %% msg_seq_no was (and thus confirm as a slave). So we
+            %% msg_seq_no was (and thus confirm as a mirror). So we
             %% need to confirm now. As above, amqqueue_process will
             %% have the entry for the msg_id_to_channel mapping added
             %% immediately after calling is_duplicate/2.
           orelse Disposition =:= discarded ->
-            %% Message was discarded while we were a slave. Confirm now.
+            %% Message was discarded while we were a mirror. Confirm now.
             %% As above, amqqueue_process will have the entry for the
             %% msg_id_to_channel mapping.
             {{true, drop}, State #state { seen_status = maps:remove(MsgId, SS),

@@ -1522,7 +1522,7 @@ wait_for_promoted_or_stopped(Q0) ->
                     case lists:any(fun(Pid) ->
                                        rabbit_mnesia:is_process_alive(Pid)
                                    end, SPids) of
-                        %% There is a live slave. May be promoted
+                        %% There is a live mirror. May be promoted
                         true ->
                             timer:sleep(100),
                             wait_for_promoted_or_stopped(Q);

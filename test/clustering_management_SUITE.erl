@@ -60,7 +60,7 @@ groups() ->
               persistent_cluster_id
             ]},
           {cluster_size_4, [], [
-              forget_promotes_offline_slave
+              forget_promotes_offline_follower
             ]}
         ]}
     ].
@@ -378,13 +378,13 @@ forget_offline_removes_things(Config) ->
                                                           passive     = true})),
     ok.
 
-forget_promotes_offline_slave(Config) ->
+forget_promotes_offline_follower(Config) ->
     [A, B, C, D] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = <<"mirrored-queue">>,
     declare(ACh, QName),
     set_ha_policy(Config, QName, A, [B, C]),
-    set_ha_policy(Config, QName, A, [C, D]), %% Test add and remove from recoverable_slaves
+    set_ha_policy(Config, QName, A, [C, D]), %% Test add and remove from recoverable_mirrors
 
     %% Publish and confirm
     amqp_channel:call(ACh, #'confirm.select'{}),
@@ -426,41 +426,41 @@ set_ha_policy(Config, QName, Master, Slaves) ->
     Nodes = [list_to_binary(atom_to_list(N)) || N <- [Master | Slaves]],
     HaPolicy = {<<"nodes">>, Nodes},
     rabbit_ct_broker_helpers:set_ha_policy(Config, Master, QName, HaPolicy),
-    await_slaves(QName, Master, Slaves).
+    await_followers(QName, Master, Slaves).
 
-await_slaves(QName, Master, Slaves) ->
-    await_slaves_0(QName, Master, Slaves, 10).
+await_followers(QName, Master, Slaves) ->
+    await_followers_0(QName, Master, Slaves, 10).
 
-await_slaves_0(QName, Master, Slaves0, Tries) ->
-    {ok, Queue} = await_slaves_lookup_queue(QName, Master),
+await_followers_0(QName, Master, Slaves0, Tries) ->
+    {ok, Queue} = await_followers_lookup_queue(QName, Master),
     SPids = amqqueue:get_slave_pids(Queue),
     ActMaster = amqqueue:qnode(Queue),
     ActSlaves = lists:usort([node(P) || P <- SPids]),
     Slaves1 = lists:usort(Slaves0),
-    await_slaves_1(QName, ActMaster, ActSlaves, Master, Slaves1, Tries).
+    await_followers_1(QName, ActMaster, ActSlaves, Master, Slaves1, Tries).
 
-await_slaves_1(QName, _ActMaster, _ActSlaves, _Master, _Slaves, 0) ->
-    error({timeout_waiting_for_slaves, QName});
-await_slaves_1(QName, ActMaster, ActSlaves, Master, Slaves, Tries) ->
+await_followers_1(QName, _ActMaster, _ActSlaves, _Master, _Slaves, 0) ->
+    error({timeout_waiting_for_followers, QName});
+await_followers_1(QName, ActMaster, ActSlaves, Master, Slaves, Tries) ->
     case {Master, Slaves} of
         {ActMaster, ActSlaves} ->
             ok;
         _                      ->
             timer:sleep(250),
-            await_slaves_0(QName, Master, Slaves, Tries - 1)
+            await_followers_0(QName, Master, Slaves, Tries - 1)
     end.
 
-await_slaves_lookup_queue(QName, Master) ->
-    await_slaves_lookup_queue(QName, Master, 10).
+await_followers_lookup_queue(QName, Master) ->
+    await_followers_lookup_queue(QName, Master, 10).
 
-await_slaves_lookup_queue(QName, _Master, 0) ->
+await_followers_lookup_queue(QName, _Master, 0) ->
     error({timeout_looking_up_queue, QName});
-await_slaves_lookup_queue(QName, Master, Tries) ->
+await_followers_lookup_queue(QName, Master, Tries) ->
     RpcArgs = [rabbit_misc:r(<<"/">>, queue, QName)],
     case rpc:call(Master, rabbit_amqqueue, lookup, RpcArgs) of
         {error, not_found} ->
             timer:sleep(250),
-            await_slaves_lookup_queue(QName, Master, Tries - 1);
+            await_followers_lookup_queue(QName, Master, Tries - 1);
         {ok, Q} ->
             {ok, Q}
     end.
