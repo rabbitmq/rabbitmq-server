@@ -317,11 +317,11 @@ store_updated_slaves(Q0) when ?is_amqqueue(Q0) ->
 
 %% Recoverable nodes are those which we could promote if the whole
 %% cluster were to suddenly stop and we then lose the master; i.e. all
-%% nodes with running slaves, and all stopped nodes which had running
-%% slaves when they were up.
+%% nodes with running mirrors , and all stopped nodes which had running
+%% mirrors when they were up.
 %%
-%% Therefore we aim here to add new nodes with slaves, and remove
-%% running nodes without slaves, We also try to keep the order
+%% Therefore we aim here to add new nodes with mirrors , and remove
+%% running nodes without mirrors , We also try to keep the order
 %% constant, and similar to the live SPids field (i.e. oldest
 %% first). That's not necessarily optimal if nodes spend a long time
 %% down, but we don't have a good way to predict what the optimal is
@@ -337,10 +337,10 @@ update_recoverable(SPids, RS) ->
 stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
     PidsMRefs = [{Pid, erlang:monitor(process, Pid)} || Pid <- [GM | SPids]],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
-    %% It's possible that we could be partitioned from some slaves
+    %% It's possible that we could be partitioned from some mirrors
     %% between the lookup and the broadcast, in which case we could
     %% monitor them but they would not have received the GM
-    %% message. So only wait for slaves which are still
+    %% message. So only wait for mirrors which are still
     %% not-partitioned.
     PendingSlavePids = lists:foldl(fun({Pid, MRef}, Acc) ->
         case rabbit_mnesia:on_running_node(Pid) of
@@ -365,7 +365,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
         [Q0] = mnesia:read({rabbit_queue, QName}),
         Q1 = amqqueue:set_gm_pids(Q0, []),
         Q2 = amqqueue:set_slave_pids(Q1, []),
-        %% Restarted slaves on running nodes can
+        %% Restarted mirrors on running nodes can
         %% ensure old incarnations are stopped using
         %% the pending slave pids.
         Q3 = amqqueue:set_slave_pids_pending_shutdown(Q2, PendingSlavePids),
@@ -534,10 +534,10 @@ update_mirrors(Q) when ?is_amqqueue(Q) ->
     OldNodes = [OldMNode | OldSNodes],
     NewNodes = [NewMNode | NewSNodes],
     %% When a mirror dies, remove_from_queue/2 might have to add new
-    %% slaves (in "exactly" mode). It will check mnesia to see which
-    %% slaves there currently are. If drop_mirror/2 is invoked first
+    %% mirrors (in "exactly" mode). It will check mnesia to see which
+    %% mirrors there currently are. If drop_mirror/2 is invoked first
     %% then when we end up in remove_from_queue/2 it will not see the
-    %% slaves that add_mirror/2 will add, and also want to add them
+    %% mirrors that add_mirror/2 will add, and also want to add them
     %% (even though we are not responding to the death of a
     %% mirror). Breakage ensues.
     add_mirrors (QName, NewNodes -- OldNodes, async),
@@ -589,7 +589,7 @@ wait_for_new_master(QName, Destination, N) ->
 
 %% The arrival of a newly synced slave may cause the master to die if
 %% the policy does not want the master but it has been kept alive
-%% because there were no synced slaves.
+%% because there were no synced mirrors.
 %%
 %% We don't just call update_mirrors/2 here since that could decide to
 %% start a slave for some other reason, and since we are the slave ATM
@@ -608,7 +608,7 @@ maybe_drop_master_after_sync(Q) when ?is_amqqueue(Q) ->
     end,
     ok.
 %% [0] ASSERTION - if the policy wants the master to change, it has
-%% not just shuffled it into the slaves. All our modes ensure this
+%% not just shuffled it into the mirrors. All our modes ensure this
 %% does not happen, but we should guard against a misbehaving plugin.
 
 %%----------------------------------------------------------------------------

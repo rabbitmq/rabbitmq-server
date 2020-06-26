@@ -118,9 +118,9 @@ init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
         {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
         %% We need synchronous add here (i.e. do not return until the
         %% slave is running) so that when queue declaration is finished
-        %% all slaves are up; we don't want to end up with unsynced slaves
+        %% all mirrors are up; we don't want to end up with unsynced mirrors
         %% just by declaring a new queue. But add can't be synchronous all
-        %% the time as it can be called by slaves and that's
+        %% the time as it can be called by mirrors and that's
         %% deadlock-prone.
         rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
         #state{name                = QName,
@@ -207,7 +207,7 @@ terminate(Reason,
         true  -> %% Remove the whole queue to avoid data loss
                  rabbit_mirror_queue_misc:log_warning(
                    QName, "Stopping all nodes on master shutdown since no "
-                   "synchronised slave is available~n", []),
+                   "synchronised mirror (replica) is available~n", []),
                  stop_all_slaves(Reason, State);
         false -> %% Just let some other slave take over.
                  ok

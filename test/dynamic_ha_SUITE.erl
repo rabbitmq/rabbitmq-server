@@ -444,7 +444,7 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     LastSlave = node(lists:last(SSPids)),
     ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A],
         [{nodes, [LastSlave]}])),
-    %% --> Master: B or C (depends on the order of current slaves)
+    %% --> Master: B or C (depends on the order of current mirrors )
     %%     Slaves: []
 
     %% Now choose a new master that isn't synchronised. The previous
@@ -452,8 +452,8 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     %% from the initial synchronised list). Thus, by taking the first
     %% node from this list, we know it is not synchronised.
     %%
-    %% Because the policy doesn't cover any synchronised slave, RabbitMQ
-    %% should instead use an existing synchronised slave as the new master,
+    %% Because the policy doesn't cover any synchronised mirror, RabbitMQ
+    %% should instead use an existing synchronised mirror as the new master,
     %% even though that isn't in the policy.
     ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A],
         [{nodes, [LastSlave, A]}])),
@@ -559,7 +559,7 @@ failing_random_policies(Config) ->
           undefined, {exactly, 3}, all])).
 
 promote_slave_after_standalone_restart(Config) ->
-    %% Tests that slaves can be brought up standalone after forgetting the rest
+    %% Tests that mirrors can be brought up standalone after forgetting the rest
     %% of the cluster. Slave ordering should be irrelevant.
     %% https://github.com/rabbitmq/rabbitmq-server/issues/1213
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

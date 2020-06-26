@@ -459,7 +459,7 @@ mirror_queue_sync(Config) ->
 
 mirror_queue_sync_priority_above_max(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    %% Tests synchronisation of slaves when priority is higher than max priority.
+    %% Tests synchronisation of mirrors when priority is higher than max priority.
     %% This causes an infinity loop (and test timeout) before rabbitmq-server-795
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
     Q = <<"mirror_queue_sync_priority_above_max-queue">>,
@@ -476,7 +476,7 @@ mirror_queue_sync_priority_above_max(Config) ->
 
 mirror_queue_sync_priority_above_max_pending_ack(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    %% Tests synchronisation of slaves when priority is higher than max priority
+    %% Tests synchronisation of mirrors when priority is higher than max priority
     %% and there are pending acks.
     %% This causes an infinity loop (and test timeout) before rabbitmq-server-795
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
@@ -499,9 +499,9 @@ mirror_queue_sync_priority_above_max_pending_ack(Config) ->
 
 mirror_queue_auto_ack(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    %% Check correct use of AckRequired in the notifications to the slaves.
-    %% If slaves are notified with AckRequired == true when it is false,
-    %% the slaves will crash with the depth notification as they will not
+    %% Check correct use of AckRequired in the notifications to the mirrors.
+    %% If mirrors are notified with AckRequired == true when it is false,
+    %% the mirrors will crash with the depth notification as they will not
     %% match the master delta.
     %% Bug rabbitmq-server 687
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
@@ -512,11 +512,11 @@ mirror_queue_auto_ack(Config) ->
       <<".*">>, <<"all">>),
     get_partial(Ch, Q, no_ack, [3, 2, 1]),
 
-    %% Retrieve slaves
+    %% Retrieve mirrors
     SPids = slave_pids(Config, A, rabbit_misc:r(<<"/">>, queue, Q)),
     [{SNode1, _SPid1}, {SNode2, SPid2}] = nodes_and_pids(SPids),
 
-    %% Restart one of the slaves so `request_depth` is triggered
+    %% Restart one of the mirrors so `request_depth` is triggered
     rabbit_ct_broker_helpers:restart_node(Config, SNode1),
 
     %% The alive slave must have the same pid after its neighbour is restarted

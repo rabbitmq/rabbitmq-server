@@ -121,7 +121,7 @@ rapid_redeclare(Config) ->
      end || _I <- lists:seq(1, 20)],
     ok.
 
-%% Check that by the time we get a declare-ok back, the slaves are up
+%% Check that by the time we get a declare-ok back, the mirrors are up
 %% and in Mnesia.
 declare_synchrony(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
@@ -222,7 +222,7 @@ consume_survives(Config,
     Channel2 = rabbit_ct_client_helpers:open_channel(Config, B),
     Channel3 = rabbit_ct_client_helpers:open_channel(Config, C),
 
-    %% declare the queue on the master, mirrored to the two slaves
+    %% declare the queue on the master, mirrored to the two mirrors
     Queue = <<"test">>,
     amqp_channel:call(Channel1, #'queue.declare'{queue       = Queue,
                                                  auto_delete = false}),
@@ -253,7 +253,7 @@ confirms_survive(Config, DeathFun) ->
     Node1Channel = rabbit_ct_client_helpers:open_channel(Config, A),
     Node2Channel = rabbit_ct_client_helpers:open_channel(Config, B),
 
-    %% declare the queue on the master, mirrored to the two slaves
+    %% declare the queue on the master, mirrored to the two mirrors
     Queue = <<"test">>,
     amqp_channel:call(Node1Channel,#'queue.declare'{queue       = Queue,
                                                     auto_delete = false,
@@ -288,7 +288,7 @@ rejects_survive(Config, DeathFun) ->
     Node1Channel = rabbit_ct_client_helpers:open_channel(Config, A),
     Node2Channel = rabbit_ct_client_helpers:open_channel(Config, B),
 
-    %% declare the queue on the master, mirrored to the two slaves
+    %% declare the queue on the master, mirrored to the two mirrors
     XOverflow = ?config(overflow, Config),
     Queue = <<"test_rejects", "_", XOverflow/binary>>,
     amqp_channel:call(Node1Channel,#'queue.declare'{queue       = Queue,
