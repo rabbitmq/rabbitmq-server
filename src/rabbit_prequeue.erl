@@ -18,7 +18,7 @@
 
 %% This is the initial gen_server that all queue processes start off
 %% as. It handles the decision as to whether we need to start a new
-%% slave, a new master/unmirrored, or whether we are restarting (and
+%% mirror, a new master/unmirrored, or whether we are restarting (and
 %% if so, as what). Thus a crashing queue process can restart from here
 %% and always do the right thing.
 
@@ -77,7 +77,7 @@ init(Q0, restart) when ?is_amqqueue(Q0) ->
                  end
     end.
 %% [1] There is a master on another node. Regardless of whether we
-%%     were originally a master or a slave, we are now a new slave.
+%%     were originally a master or a mirror, we are now a new slave.
 %%
 %% [2] Nothing is alive. We are the last best hope. Try to restart as a master.
 %%

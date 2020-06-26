@@ -198,7 +198,7 @@ init_it(Self, GM, Node, QName) ->
 stop_pending_slaves(QName, Pids) ->
     [begin
          rabbit_mirror_queue_misc:log_warning(
-           QName, "Detected stale HA slave, stopping it: ~p~n", [Pid]),
+           QName, "Detected a non-responsive classic queue mirror, stopping it: ~p~n", [Pid]),
          case erlang:process_info(Pid, dictionary) of
              undefined -> ok;
              {dictionary, Dict} ->
@@ -431,7 +431,7 @@ terminate(Reason, State = #state{backing_queue       = BQ,
 
 %% If the Reason is shutdown, or {shutdown, _}, it is not the queue
 %% being deleted: it's just the node going down. Even though we're a
-%% slave, we have no idea whether or not we'll be the only copy coming
+%% mirror, we have no idea whether or not we'll be the only copy coming
 %% back up. Thus we must assume we will be, and preserve anything we
 %% have on disk.
 terminate_shutdown(Reason, State = #state{backing_queue       = BQ,
