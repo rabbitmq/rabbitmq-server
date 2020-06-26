@@ -981,9 +981,14 @@ recover() ->
 -spec maybe_insert_default_data() -> 'ok'.
 
 maybe_insert_default_data() ->
-    case rabbit_table:needs_default_data() of
-        true  -> insert_default_data();
-        false -> ok
+    NoDefsToImport = not rabbit_definitions:has_configured_definitions_to_load(),
+    case rabbit_table:needs_default_data() andalso NoDefsToImport of
+        true  ->
+            rabbit_log:info("Will seed default virtual host and user..."),
+            insert_default_data();
+        false ->
+            rabbit_log:info("Will not seed default virtual host and user: have definitions to load..."),
+            ok
     end.
 
 insert_default_data() ->
