@@ -36,10 +36,6 @@ defmodule ExecCommandTest do
     assert @command.validate([""], %{}) == {:validation_failure, "Expression must not be blank"}
   end
 
-  test "validate: syntax errors fail validation" do
-    {:validation_failure, _} = @command.validate(["s,f"], %{})
-  end
-
   test "validate: success" do
     :ok = @command.validate([":ok"], %{})
   end
