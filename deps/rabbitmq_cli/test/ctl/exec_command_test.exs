@@ -37,7 +37,7 @@ defmodule ExecCommandTest do
   end
 
   test "validate: syntax errors fail validation" do
-    {:validation_failure, _} = @command.validate(["s,f"], %{})
+    {:validation_failure, _} = @command.validate(["@@,,^/s,f"], %{})
   end
 
   test "validate: success" do
