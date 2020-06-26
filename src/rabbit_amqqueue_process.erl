@@ -1554,7 +1554,7 @@ handle_cast({deliver,
                end,
     State1 = State#q{senders = Senders1},
     noreply(maybe_deliver_or_enqueue(Delivery, SlaveWhenPublished, State1));
-%% [0] The second ack is since the channel thought we were a slave at
+%% [0] The second ack is since the channel thought we were a mirror at
 %% the time it published this message, so it used two credits (see
 %% rabbit_amqqueue:deliver/2).
 
@@ -1656,7 +1656,7 @@ handle_cast(notify_decorators, State) ->
 handle_cast(policy_changed, State = #q{q = Q0}) ->
     Name = amqqueue:get_name(Q0),
     %% We depend on the #q.q field being up to date at least WRT
-    %% policy (but not slave pids) in various places, so when it
+    %% policy (but not mirror pids) in various places, so when it
     %% changes we go and read it from Mnesia again.
     %%
     %% This also has the side effect of waking us up so we emit a
@@ -1666,7 +1666,7 @@ handle_cast(policy_changed, State = #q{q = Q0}) ->
 
 handle_cast({sync_start, _, _}, State = #q{q = Q}) ->
     Name = amqqueue:get_name(Q),
-    %% Only a slave should receive this, it means we are a duplicated master
+    %% Only a mirror should receive this, it means we are a duplicated master
     rabbit_mirror_queue_misc:log_warning(
       Name, "Stopping after receiving sync_start from another master", []),
     stop(State).

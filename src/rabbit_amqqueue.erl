@@ -688,7 +688,7 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
               fun () -> F(Q) end);
         %% The queue is supposed to be active.
         %% The master node can go away or queue can be killed
-        %% so we retry, waiting for a slave to take over.
+        %% so we retry, waiting for a mirror to take over.
         {ok, Q} when ?amqqueue_state_is(Q, live) ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
@@ -1526,7 +1526,7 @@ wait_for_promoted_or_stopped(Q0) ->
                         true ->
                             timer:sleep(100),
                             wait_for_promoted_or_stopped(Q);
-                        %% All slave pids are stopped.
+                        %% All mirror pids are stopped.
                         %% No process left for the queue
                         false -> {stopped, Q}
                     end
@@ -1857,8 +1857,8 @@ forget_all_durable(Node) ->
           end),
     ok.
 
-%% Try to promote a slave while down - it should recover as a
-%% master. We try to take the oldest slave here for best chance of
+%% Try to promote a mirror while down - it should recover as a
+%% master. We try to take the oldest mirror here for best chance of
 %% recovery.
 forget_node_for_queue(DeadNode, Q)
   when ?amqqueue_is_quorum(Q) ->
@@ -1983,12 +1983,12 @@ maybe_clear_recoverable_node(Node, Q) ->
         true  ->
             %% There is a race with
             %% rabbit_mirror_queue_slave:record_synchronised/1 called
-            %% by the incoming slave node and this function, called
+            %% by the incoming mirror node and this function, called
             %% by the master node. If this function is executed after
             %% record_synchronised/1, the node is erroneously removed
             %% from the recoverable mirrors list.
             %%
-            %% We check if the slave node's queue PID is alive. If it is
+            %% We check if the mirror node's queue PID is alive. If it is
             %% the case, then this function is executed after. In this
             %% situation, we don't touch the queue record, it is already
             %% correct.
@@ -2120,9 +2120,9 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
                                  confirm = Confirm}, QueueState0) ->
     {Quorum, MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
-    %% We use up two credits to send to a slave since the message
-    %% arrives at the slave from two directions. We will ack one when
-    %% the slave receives the message direct from the channel, and the
+    %% We use up two credits to send to a mirror since the message
+    %% arrives at the mirror from two directions. We will ack one when
+    %% the mirror receives the message direct from the channel, and the
     %% other when it receives it via GM.
 
     case Flow of

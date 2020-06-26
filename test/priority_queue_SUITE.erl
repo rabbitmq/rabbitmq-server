@@ -447,7 +447,7 @@ mirror_queue_sync(Config) ->
     ok = rabbit_ct_broker_helpers:set_ha_policy(Config, 0,
       <<"^mirror_queue_sync-queue$">>, <<"all">>),
     publish(Ch, Q, [1, 2, 3, 1, 2, 3]),
-    %% master now has 9, slave 6.
+    %% master now has 9, mirror 6.
     get_partial(Ch, Q, manual_ack, [3, 3, 3, 2, 2, 2]),
     %% So some but not all are unacked at the slave
     Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -519,7 +519,7 @@ mirror_queue_auto_ack(Config) ->
     %% Restart one of the mirrors so `request_depth` is triggered
     rabbit_ct_broker_helpers:restart_node(Config, SNode1),
 
-    %% The alive slave must have the same pid after its neighbour is restarted
+    %% The alive mirror must have the same pid after its neighbour is restarted
     timer:sleep(3000), %% ugly but we can't know when the `depth` instruction arrives
     Slaves = nodes_and_pids(slave_pids(Config, A, rabbit_misc:r(<<"/">>, queue, Q))),
     SPid2 = proplists:get_value(SNode2, Slaves),

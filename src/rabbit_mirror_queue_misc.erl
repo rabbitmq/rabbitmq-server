@@ -91,7 +91,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                                                 %% GM altered, & if all pids are
                                                 %% perceived as dead, rather do
                                                 %% do nothing here, & trust the
-                                                %% promoted slave to have updated
+                                                %% promoted mirror to have updated
                                                 %% mnesia during the alteration.
                                                 {QPid, SPids};
                                             _  -> promote_slave(Alive)
@@ -133,16 +133,16 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                       end
               end
       end).
-%% [1] We still update mnesia here in case the slave that is supposed
+%% [1] We still update mnesia here in case the mirror that is supposed
 %% to become master dies before it does do so, in which case the dead
 %% old master might otherwise never get removed, which in turn might
-%% prevent promotion of another slave (e.g. us).
+%% prevent promotion of another mirror (e.g. us).
 %%
 %% Note however that we do not update the master pid. Otherwise we can
-%% have the situation where a slave updates the mnesia record for a
-%% queue, promoting another slave before that slave realises it has
+%% have the situation where a mirror updates the mnesia record for a
+%% queue, promoting another mirror before that mirror realises it has
 %% become the new master, which is bad because it could then mean the
-%% slave (now master) receives messages it's not ready for (for
+%% mirror (now master) receives messages it's not ready for (for
 %% example, new consumers).
 %%
 %% We set slave_pids to Alive rather than SPids1 since otherwise we'd
@@ -156,7 +156,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
 %% aforementioned restriction on updating the master pid, that pid may
 %% not be present in gm_pids, but only if said master has died.
 
-%% Sometimes a slave dying means we need to start more on other
+%% Sometimes a mirror dying means we need to start more on other
 %% nodes - "exactly" mode can cause this to happen.
 slaves_to_start_on_failure(Q, DeadGMPids) ->
     %% In case Mnesia has not caught up yet, filter out nodes we know
@@ -358,7 +358,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
                 Acc
         end
     end, [], PidsMRefs),
-    %% Normally when we remove a slave another slave or master will
+    %% Normally when we remove a mirror another mirror or master will
     %% notice and update Mnesia. But we just removed them all, and
     %% have stopped listening ourselves. So manually clean up.
     rabbit_misc:execute_mnesia_transaction(fun () ->
@@ -367,7 +367,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
         Q2 = amqqueue:set_slave_pids(Q1, []),
         %% Restarted mirrors on running nodes can
         %% ensure old incarnations are stopped using
-        %% the pending slave pids.
+        %% the pending mirror pids.
         Q3 = amqqueue:set_slave_pids_pending_shutdown(Q2, PendingSlavePids),
         rabbit_mirror_queue_misc:store_updated_slaves(Q3)
     end),
@@ -376,7 +376,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
 %%----------------------------------------------------------------------------
 
 promote_slave([SPid | SPids]) ->
-    %% The slave pids are maintained in descending order of age, so
+    %% The mirror pids are maintained in descending order of age, so
     %% the one to promote is the oldest.
     {SPid, SPids}.
 
@@ -587,12 +587,12 @@ wait_for_new_master(QName, Destination, N) ->
             end
     end.
 
-%% The arrival of a newly synced slave may cause the master to die if
+%% The arrival of a newly synced mirror may cause the master to die if
 %% the policy does not want the master but it has been kept alive
 %% because there were no synced mirrors.
 %%
 %% We don't just call update_mirrors/2 here since that could decide to
-%% start a slave for some other reason, and since we are the slave ATM
+%% start a mirror for some other reason, and since we are the mirror ATM
 %% that allows complicated deadlocks.
 
 -spec maybe_drop_master_after_sync(amqqueue:amqqueue()) -> 'ok'.

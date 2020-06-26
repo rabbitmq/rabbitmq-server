@@ -307,8 +307,8 @@ handle_cast({gm, Instruction}, State = #state{q = Q0}) when ?is_amqqueue(Q0) ->
                true ->
                    handle_process_result(process_instruction(Instruction, State));
                false ->
-                   %% Potentially a duplicated slave caused by a partial partition,
-                   %% will stop as a new slave could start unaware of our presence
+                   %% Potentially a duplicated mirror caused by a partial partition,
+                   %% will stop as a new mirror could start unaware of our presence
                    {stop, shutdown, State}
            end;
        {error, not_found} ->
@@ -637,7 +637,7 @@ promote_me(From, #state { q                   = Q0,
                           msg_id_status       = MS,
                           known_senders       = KS}) when ?is_amqqueue(Q0) ->
     QName = amqqueue:get_name(Q0),
-    rabbit_mirror_queue_misc:log_info(QName, "Promoting slave ~s to master~n",
+    rabbit_mirror_queue_misc:log_info(QName, "Promoting mirror ~s to master~n",
                                       [rabbit_misc:pid_to_string(self())]),
     Q1 = amqqueue:set_pid(Q0, self()),
     DeathFun = rabbit_mirror_queue_master:sender_death_fun(),
@@ -827,7 +827,7 @@ forget_sender(down_from_gm, down_from_gm)        -> false; %% [1]
 forget_sender(down_from_ch, down_from_ch)        -> false;
 forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
 
-%% [1] If another slave goes through confirm_sender_death/1 before we
+%% [1] If another mirror goes through confirm_sender_death/1 before we
 %% do we can get two GM sender_death messages in a row for the same
 %% channel - don't treat that as anything special.
 

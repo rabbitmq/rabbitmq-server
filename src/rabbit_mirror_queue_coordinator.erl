@@ -95,8 +95,8 @@
 %%
 %% The key purpose of also sending messages directly from the channels
 %% to the mirrors is that without this, in the event of the death of
-%% the master, messages could be lost until a suitable slave is
-%% promoted. However, that is not the only reason. A slave cannot send
+%% the master, messages could be lost until a suitable mirror is
+%% promoted. However, that is not the only reason. A mirror cannot send
 %% confirms for a message until it has seen it from the
 %% channel. Otherwise, it might send a confirm to a channel for a
 %% message that it might *never* receive from that channel. This can
@@ -108,48 +108,48 @@
 %%
 %% Hence the mirrors have to wait until they've seen both the publish
 %% via gm, and the publish via the channel before they issue the
-%% confirm. Either form of publish can arrive first, and a slave can
+%% confirm. Either form of publish can arrive first, and a mirror can
 %% be upgraded to the master at any point during this
 %% process. Confirms continue to be issued correctly, however.
 %%
-%% Because the slave is a full process, it impersonates parts of the
+%% Because the mirror is a full process, it impersonates parts of the
 %% amqqueue API. However, it does not need to implement all parts: for
 %% example, no ack or consumer-related message can arrive directly at
-%% a slave from a channel: it is only publishes that pass both
+%% a mirror from a channel: it is only publishes that pass both
 %% directly to the mirrors and go via gm.
 %%
 %% Slaves can be added dynamically. When this occurs, there is no
 %% attempt made to sync the current contents of the master with the
-%% new slave, thus the slave will start empty, regardless of the state
-%% of the master. Thus the slave needs to be able to detect and ignore
+%% new slave, thus the mirror will start empty, regardless of the state
+%% of the master. Thus the mirror needs to be able to detect and ignore
 %% operations which are for messages it has not received: because of
 %% the strict FIFO nature of queues in general, this is
-%% straightforward - all new publishes that the new slave receives via
+%% straightforward - all new publishes that the new mirror receives via
 %% gm should be processed as normal, but fetches which are for
-%% messages the slave has never seen should be ignored. Similarly,
-%% acks for messages the slave never fetched should be
+%% messages the mirror has never seen should be ignored. Similarly,
+%% acks for messages the mirror never fetched should be
 %% ignored. Similarly, we don't republish rejected messages that we
 %% haven't seen. Eventually, as the master is consumed from, the
 %% messages at the head of the queue which were there before the slave
-%% joined will disappear, and the slave will become fully synced with
+%% joined will disappear, and the mirror will become fully synced with
 %% the state of the master.
 %%
 %% The detection of the sync-status is based on the depth of the BQs,
 %% where the depth is defined as the sum of the length of the BQ (as
 %% per BQ:len) and the messages pending an acknowledgement. When the
-%% depth of the slave is equal to the master's, then the slave is
+%% depth of the mirror is equal to the master's, then the mirror is
 %% synchronised. We only store the difference between the two for
 %% simplicity. Comparing the length is not enough since we need to
 %% take into account rejected messages which will make it back into
 %% the master queue but can't go back in the slave, since we don't
-%% want "holes" in the slave queue. Note that the depth, and the
-%% length likewise, must always be shorter on the slave - we assert
+%% want "holes" in the mirror queue. Note that the depth, and the
+%% length likewise, must always be shorter on the mirror - we assert
 %% that in various places. In case mirrors are joined to an empty queue
 %% which only goes on to receive publishes, they start by asking the
 %% master to broadcast its depth. This is enough for mirrors to always
 %% be able to work out when their head does not differ from the master
 %% (and is much simpler and cheaper than getting the master to hang on
-%% to the guid of the msg at the head of its queue). When a slave is
+%% to the guid of the msg at the head of its queue). When a mirror is
 %% promoted to a master, it unilaterally broadcasts its depth, in
 %% order to solve the problem of depth requests from new mirrors being
 %% unanswered by a dead master.
@@ -171,23 +171,23 @@
 %% over gm, the mirrors must convert the msg_ids to acktags (a mapping
 %% the mirrors themselves must maintain).
 %%
-%% When the master dies, a slave gets promoted. This will be the
-%% eldest slave, and thus the hope is that that slave is most likely
+%% When the master dies, a mirror gets promoted. This will be the
+%% eldest slave, and thus the hope is that that mirror is most likely
 %% to be sync'd with the master. The design of gm is that the
 %% notification of the death of the master will only appear once all
 %% messages in-flight from the master have been fully delivered to all
-%% members of the gm group. Thus at this point, the slave that gets
+%% members of the gm group. Thus at this point, the mirror that gets
 %% promoted cannot broadcast different events in a different order
 %% than the master for the same msgs: there is no possibility for the
 %% same msg to be processed by the old master and the new master - if
 %% it was processed by the old master then it will have been processed
-%% by the slave before the slave was promoted, and vice versa.
+%% by the mirror before the mirror was promoted, and vice versa.
 %%
 %% Upon promotion, all msgs pending acks are requeued as normal, the
-%% slave constructs state suitable for use in the master module, and
+%% mirror constructs state suitable for use in the master module, and
 %% then dynamically changes into an amqqueue_process with the master
 %% as the bq, and the slave's bq as the master's bq. Thus the very
-%% same process that was the slave is now a full amqqueue_process.
+%% same process that was the mirror is now a full amqqueue_process.
 %%
 %% It is important that we avoid memory leaks due to the death of
 %% senders (i.e. channels) and partial publications. A sender
@@ -200,7 +200,7 @@
 %% then hold on to the message, assuming they'll receive some
 %% instruction eventually from the master. Thus we have both mirrors
 %% and the master monitor all senders they become aware of. But there
-%% is a race: if the slave receives a DOWN of a sender, how does it
+%% is a race: if the mirror receives a DOWN of a sender, how does it
 %% know whether or not the master is going to send it instructions
 %% regarding those messages?
 %%
@@ -221,12 +221,12 @@
 %% master will ask the coordinator to set up a new monitor, and
 %% will continue to process the messages normally. Slaves may thus
 %% receive publishes via gm from previously declared "dead" senders,
-%% but again, this is fine: should the slave have just thrown out the
+%% but again, this is fine: should the mirror have just thrown out the
 %% message it had received directly from the sender (due to receiving
 %% a sender_death message via gm), it will be able to cope with the
 %% publication purely from the master via gm.
 %%
-%% When a slave receives a DOWN message for a sender, if it has not
+%% When a mirror receives a DOWN message for a sender, if it has not
 %% received the sender_death message from the master via gm already,
 %% then it will wait 20 seconds before broadcasting a request for
 %% confirmation from the master that the sender really has died.
@@ -235,9 +235,9 @@
 %% sender. The master will thus monitor the sender, receive the DOWN,
 %% and subsequently broadcast the sender_death message, allowing the
 %% mirrors to tidy up. This process can repeat for the same sender:
-%% consider one slave receives the publication, then the DOWN, then
+%% consider one mirror receives the publication, then the DOWN, then
 %% asks for confirmation of death, then the master broadcasts the
-%% sender_death message. Only then does another slave receive the
+%% sender_death message. Only then does another mirror receive the
 %% publication and thus set up its monitoring. Eventually that slave
 %% too will receive the DOWN, ask for confirmation and the master will
 %% monitor the sender again, receive another DOWN, and send out
@@ -245,30 +245,30 @@
 %% requesting death confirmation, this is highly unlikely, but it is a
 %% possibility.
 %%
-%% When the 20 second timer expires, the slave first checks to see
+%% When the 20 second timer expires, the mirror first checks to see
 %% whether it still needs confirmation of the death before requesting
 %% it. This prevents unnecessary traffic on gm as it allows one
 %% broadcast of the sender_death message to satisfy many mirrors.
 %%
-%% If we consider the promotion of a slave at this point, we have two
-%% possibilities: that of the slave that has received the DOWN and is
+%% If we consider the promotion of a mirror at this point, we have two
+%% possibilities: that of the mirror that has received the DOWN and is
 %% thus waiting for confirmation from the master that the sender
-%% really is down; and that of the slave that has not received the
+%% really is down; and that of the mirror that has not received the
 %% DOWN. In the first case, in the act of promotion to master, the new
 %% master will monitor again the dead sender, and after it has
 %% finished promoting itself, it should find another DOWN waiting,
 %% which it will then broadcast. This will allow mirrors to tidy up as
 %% normal. In the second case, we have the possibility that
 %% confirmation-of-sender-death request has been broadcast, but that
-%% it was broadcast before the master failed, and that the slave being
+%% it was broadcast before the master failed, and that the mirror being
 %% promoted does not know anything about that sender, and so will not
-%% monitor it on promotion. Thus a slave that broadcasts such a
+%% monitor it on promotion. Thus a mirror that broadcasts such a
 %% request, at the point of broadcasting it, recurses, setting another
 %% 20 second timer. As before, on expiry of the timer, the mirrors
 %% checks to see whether it still has not received a sender_death
 %% message for the dead sender, and if not, broadcasts a death
 %% confirmation request. Thus this ensures that even when a master
-%% dies and the new slave has no knowledge of the dead sender, it will
+%% dies and the new mirror has no knowledge of the dead sender, it will
 %% eventually receive a death confirmation request, shall monitor the
 %% dead sender, receive the DOWN and broadcast the sender_death
 %% message.
@@ -281,17 +281,17 @@
 %% mirrors will receive it via gm, will publish it to their BQ and will
 %% set up monitoring on the sender. They will then receive the DOWN
 %% message and the master will eventually publish the corresponding
-%% sender_death message. The slave will then be able to tidy up its
+%% sender_death message. The mirror will then be able to tidy up its
 %% state as normal.
 %%
 %% Recovery of mirrored queues is straightforward: as nodes die, the
 %% remaining nodes record this, and eventually a situation is reached
 %% in which only one node is alive, which is the master. This is the
 %% only node which, upon recovery, will resurrect a mirrored queue:
-%% nodes which die and then rejoin as a slave will start off empty as
+%% nodes which die and then rejoin as a mirror will start off empty as
 %% if they have no mirrored content at all. This is not surprising: to
 %% achieve anything more sophisticated would require the master and
-%% recovering slave to be able to check to see whether they agree on
+%% recovering mirror to be able to check to see whether they agree on
 %% the last seen state of the queue: checking depth alone is not
 %% sufficient in this case.
 %%
@@ -361,8 +361,8 @@ handle_cast({gm_deaths, DeadGMPids}, State = #state{q = Q}) when ?amqqueue_pid_r
             noreply(State);
         {ok, _MPid0, DeadPids, _ExtraNodes} ->
             %% see rabbitmq-server#914;
-            %% Different slave is now master, stop current coordinator normally.
-            %% Initiating queue is now slave and the least we could do is report
+            %% Different mirror is now master, stop current coordinator normally.
+            %% Initiating queue is now mirror and the least we could do is report
             %% deaths which we 'think' we saw.
             %% NOTE: Reported deaths here, could be inconsistent.
             rabbit_mirror_queue_misc:report_deaths(MPid, false, QueueName,
@@ -416,7 +416,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 handle_pre_hibernate(State = #state { gm = GM }) ->
     %% Since GM notifications of deaths are lazy we might not get a
-    %% timely notification of slave death if policy changes when
+    %% timely notification of mirror death if policy changes when
     %% everything is idle. So cause some activity just before we
     %% sleep. This won't cause us to go into perpetual motion as the
     %% heartbeat does not wake up coordinator or mirrors.

@@ -439,7 +439,7 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     Info = find_queue(?QNAME, A),
     SSPids = proplists:get_value(synchronised_slave_pids, Info),
 
-    %% Choose slave that isn't the first sync slave. Cover a bug that always
+    %% Choose mirror that isn't the first sync slave. Cover a bug that always
     %% chose the first, even if it was not part of the policy
     LastSlave = node(lists:last(SSPids)),
     ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A],
