@@ -86,6 +86,9 @@ defmodule ImportDefinitionsCommandTest do
   @tag format: "json"
   test "run: imports definitions from a file", context do
     assert :ok == @command.run([valid_file_path()], context[:opts])
+
+    # clean up the state we've modified
+    clear_parameter("/", "federation-upstream", "up-1")
   end
 
   defp valid_file_path() do

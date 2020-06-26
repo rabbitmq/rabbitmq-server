@@ -23,7 +23,7 @@ defmodule ClearParameterCommandTest do
   @root   "/"
   @component_name "federation-upstream"
   @key "reconnect-delay"
-  @value "{\"uri\":\"amqp://\"}"
+  @value "{\"uri\":\"amqp://127.0.0.1:5672\"}"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
