@@ -26,8 +26,6 @@
 %% supervisor callbacks
 -export([init/1]).
 
--import(rabbit_misc, [pget/2]).
-
 %% @spec start_link() -> ServerRet
 %% @doc API for starting the supervisor.
 start_link() ->
