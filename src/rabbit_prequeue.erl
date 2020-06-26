@@ -81,7 +81,7 @@ init(Q0, restart) when ?is_amqqueue(Q0) ->
 %%
 %% [2] Nothing is alive. We are the last best hope. Try to restart as a master.
 %%
-%% [3] The current master is dead but either there are alive slaves to
+%% [3] The current master is dead but either there are alive mirrors to
 %%     take over or it's all happening on a different node anyway. This is
 %%     not a stable situation. Sleep and wait for somebody else to make a
 %%     move.

@@ -103,7 +103,7 @@ kill_intermediate(Config) ->
     ProducerPid = rabbit_ha_test_producer:create(ProducerChannel,
                                                  Queue, self(), false, Msgs),
 
-    %% create a killer for the master and the first 3 slaves
+    %% create a killer for the master and the first 3 mirrors
     [rabbit_ct_broker_helpers:kill_node_after(Config, Node, Time) ||
         {Node, Time} <- [{A, 50},
                          {B, 50},

@@ -193,8 +193,8 @@ init_it(Self, GM, Node, QName) ->
             master_in_recovery
     end.
 
-%% Pending slaves have been asked to stop by the master, but despite the node
-%% being up these did not answer on the expected timeout. Stop local slaves now.
+%% Pending mirrors have been asked to stop by the master, but despite the node
+%% being up these did not answer on the expected timeout. Stop local mirrors now.
 stop_pending_slaves(QName, Pids) ->
     [begin
          rabbit_mirror_queue_misc:log_warning(
@@ -276,7 +276,7 @@ handle_call({gm_deaths, DeadGMPids}, From,
                     end,
                     %% Since GM is by nature lazy we need to make sure
                     %% there is some traffic when a master dies, to
-                    %% make sure all slaves get informed of the
+                    %% make sure all mirrors get informed of the
                     %% death. That is all process_death does, create
                     %% some traffic.
                     ok = gm:broadcast(GM, process_death),
@@ -323,7 +323,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
     %% the message delivery. See
     %% rabbit_amqqueue_process:handle_ch_down for more info.
     %% If message is rejected by the master, the publish will be nacked
-    %% even if slaves confirm it. No need to check for length here.
+    %% even if mirrors confirm it. No need to check for length here.
     maybe_flow_ack(Sender, Flow),
     noreply(maybe_enqueue_message(Delivery, State));
 

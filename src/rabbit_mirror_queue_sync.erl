@@ -194,11 +194,11 @@ handle_set_maximum_since_use() ->
 
 syncer(Ref, Log, MPid, SPids) ->
     [erlang:monitor(process, SPid) || SPid <- SPids],
-    %% We wait for a reply from the slaves so that we know they are in
+    %% We wait for a reply from the mirrors so that we know they are in
     %% a receive block and will thus receive messages we send to them
     %% *without* those messages ending up in their gen_server2 pqueue.
     case await_slaves(Ref, SPids) of
-        []     -> Log("all slaves already synced", []);
+        []     -> Log("all mirrors already synced", []);
         SPids1 -> MPid ! {ready, self()},
                   Log("mirrors ~p to sync", [[node(SPid) || SPid <- SPids1]]),
                   syncer_check_resources(Ref, MPid, SPids1)
@@ -214,7 +214,7 @@ await_slaves(Ref, SPids) ->
                  end].
 %% [0] This check is in case there's been a partition which has then
 %% healed in between the master retrieving the slave pids from Mnesia
-%% and sending 'sync_start' over GM. If so there might be slaves on the
+%% and sending 'sync_start' over GM. If so there might be mirrors on the
 %% other side of the partition which we can monitor (since they have
 %% rejoined the distributed system with us) but which did not get the
 %% 'sync_start' and so will not reply. We need to act as though they are
@@ -257,7 +257,7 @@ syncer_loop(Ref, MPid, SPids) ->
             SPids1 = wait_for_credit(SPids),
             case SPids1 of
                 [] ->
-                    % Die silently because there are no slaves left.
+                    % Die silently because there are no mirrors left.
                     ok;
                 _  ->
                     broadcast(SPids1, {sync_msgs, Ref, Msgs}),
@@ -265,7 +265,7 @@ syncer_loop(Ref, MPid, SPids) ->
                     syncer_loop(Ref, MPid, SPids1)
             end;
         {cancel, Ref} ->
-            %% We don't tell the slaves we will die - so when we do
+            %% We don't tell the mirrors we will die - so when we do
             %% they interpret that as a failure, which is what we
             %% want.
             ok;
@@ -304,7 +304,7 @@ wait_for_resources(Ref, SPids) ->
             %% Ignore other alerts.
             wait_for_resources(Ref, SPids);
         {cancel, Ref} ->
-            %% We don't tell the slaves we will die - so when we do
+            %% We don't tell the mirrors we will die - so when we do
             %% they interpret that as a failure, which is what we
             %% want.
             cancel;

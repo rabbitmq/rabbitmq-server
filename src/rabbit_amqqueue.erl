@@ -679,7 +679,7 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
         {ok, Q} when ?amqqueue_state_is(Q, crashed) ->
             E({absent, Q, crashed});
         %% The queue process has been stopped by a supervisor.
-        %% In that case a synchronised slave can take over
+        %% In that case a synchronised mirror can take over
         %% so we should retry.
         {ok, Q} when ?amqqueue_state_is(Q, stopped) ->
             %% The queue process was stopped by the supervisor
@@ -715,7 +715,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
     QState = amqqueue:get_state(Q),
     case {QState, is_replicated(Q)} of
         %% We don't want to repeat an operation if
-        %% there are no slaves to migrate to
+        %% there are no mirrors to migrate to
         {stopped, false} ->
             E({absent, Q, stopped});
         _ ->
@@ -1869,7 +1869,7 @@ forget_node_for_queue(DeadNode, Q) ->
     forget_node_for_queue(DeadNode, RS, Q).
 
 forget_node_for_queue(_DeadNode, [], Q) ->
-    %% No slaves to recover from, queue is gone.
+    %% No mirrors to recover from, queue is gone.
     %% Don't process_deletions since that just calls callbacks and we
     %% are not really up.
     Name = amqqueue:get_name(Q),
@@ -1986,7 +1986,7 @@ maybe_clear_recoverable_node(Node, Q) ->
             %% by the incoming slave node and this function, called
             %% by the master node. If this function is executed after
             %% record_synchronised/1, the node is erroneously removed
-            %% from the recoverable slaves list.
+            %% from the recoverable mirrors list.
             %%
             %% We check if the slave node's queue PID is alive. If it is
             %% the case, then this function is executed after. In this
@@ -2134,7 +2134,7 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
         noflow -> ok
     end,
 
-    %% We let slaves know that they were being addressed as slaves at
+    %% We let mirrors know that they were being addressed as mirrors at
     %% the time - if they receive such a message from the channel
     %% after they have become master they should mark the message as
     %% 'delivered' since they do not know what the master may have

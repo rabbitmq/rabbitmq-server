@@ -33,11 +33,11 @@
 %%
 %% Takes: parameters set in the policy,
 %%        current master,
-%%        current slaves,
-%%        current synchronised slaves,
+%%        current mirrors,
+%%        current synchronised mirrors,
 %%        all nodes to consider
 %%
-%% Returns: tuple of new master, new slaves
+%% Returns: tuple of new master, new mirrors
 %%
 -callback suggested_queue_nodes(
             params(), master(), [slave()], [slave()], [node()]) ->

@@ -35,7 +35,7 @@ description() ->
 suggested_queue_nodes(PolicyNodes0, CurrentMaster, _SNodes, SSNodes, NodesRunningRabbitMQ) ->
     PolicyNodes1 = [list_to_atom(binary_to_list(Node)) || Node <- PolicyNodes0],
     %% If the current master is not in the nodes specified, then what we want
-    %% to do depends on whether there are any synchronised slaves. If there
+    %% to do depends on whether there are any synchronised mirrors. If there
     %% are then we can just kill the current master - the admin has asked for
     %% a migration and we should give it to them. If there are not however
     %% then we must keep the master around so as not to lose messages.
