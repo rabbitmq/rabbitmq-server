@@ -24,7 +24,7 @@ defmodule SetParameterCommandTest do
   @root   "/"
   @component_name "federation-upstream"
   @key "reconnect-delay"
-  @value "{\"uri\":\"amqp://\"}"
+  @value "{\"uri\":\"amqp://127.0.0.1:5672\"}"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -36,6 +36,9 @@ defmodule SetParameterCommandTest do
     on_exit([], fn ->
       delete_vhost @vhost
     end)
+
+    # featured in a definitions file imported by other tests
+    clear_parameter("/", "federation-upstream", "up-1")
 
     :ok
   end
