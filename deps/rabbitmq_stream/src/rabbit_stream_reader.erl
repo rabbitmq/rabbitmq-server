@@ -175,6 +175,8 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                 closing ->
                     close(Transport, S);
                 close_sent ->
+                    rabbit_log:debug("Transitioned to close_sent ~n"),
+                    Transport:setopts(S, [{active, once}]),
                     listen_loop_post_close(Transport, Connection1, State1, Configuration);
                 _ ->
                     State2 = case Blocked of
@@ -295,14 +297,16 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
 
 listen_loop_post_close(Transport, #stream_connection{socket = S} = Connection, State, Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
+    %% FIXME demonitor streams
     %% FIXME introduce timeout to complete the connection closing (after block should be enough)
     receive
         {OK, S, Data} ->
+            Transport:setopts(S, [{active, once}]),
             {Connection1, State1} = handle_inbound_data_post_close(Transport, Connection, State, Data),
             #stream_connection{connection_step = Step} = Connection1,
             case Step of
                 closing_done ->
-                    rabbit_log:info("Received close confirmation from client"),
+                    rabbit_log:debug("Received close confirmation from client"),
                     close(Transport, S);
                 _ ->
                     Transport:setopts(S, [{active, once}]),
@@ -312,7 +316,8 @@ listen_loop_post_close(Transport, #stream_connection{socket = S} = Connection, S
             rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]);
+            rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]),
+            close(Transport, S);
         M ->
             rabbit_log:warning("Ignored message on closing ~p~n", [M])
     end.
@@ -769,12 +774,12 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
                     -1:16, 0:32>>;
             {ok, #{leader_node := LeaderNode, replica_nodes := Replicas}} ->
                 LeaderIndex = case NodesInfo of
-                    #{LeaderNode := NodeInfo} ->
-                        {{index, LeaderIdx}, {host, _}, {port, _}} = NodeInfo,
-                        LeaderIdx;
-                    _ ->
-                        -1
-                end,
+                                  #{LeaderNode := NodeInfo} ->
+                                      {{index, LeaderIdx}, {host, _}, {port, _}} = NodeInfo,
+                                      LeaderIdx;
+                                  _ ->
+                                      -1
+                              end,
                 {ReplicasBinary, ReplicasCount} = lists:foldl(fun(Replica, {Bin, Count}) ->
                     case NodesInfo of
                         #{Replica := NI} ->
@@ -811,7 +816,7 @@ handle_frame_post_auth(Transport, Connection, State, Frame, Rest) ->
     CloseReasonLength = byte_size(CloseReason),
     CloseFrame = <<?COMMAND_CLOSE:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_UNKNOWN_FRAME:16,
         CloseReasonLength:16, CloseReason:CloseReasonLength/binary>>,
-    frame(Transport, State, CloseFrame),
+    frame(Transport, Connection, CloseFrame),
     {Connection#stream_connection{connection_step = close_sent}, State, Rest}.
 
 parse_map(<<>>, _Count) ->
@@ -831,6 +836,7 @@ parse_map(Acc, <<KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/b
 
 handle_frame_post_close(_Transport, Connection, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
+    rabbit_log:info("Received close confirmation~n"),
     {Connection#stream_connection{connection_step = closing_done}, State, Rest};
 handle_frame_post_close(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>, Rest) ->
     rabbit_log:info("Received heartbeat frame post close~n"),
