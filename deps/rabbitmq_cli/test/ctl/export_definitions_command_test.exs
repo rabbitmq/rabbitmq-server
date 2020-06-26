@@ -114,6 +114,25 @@ defmodule ExportDefinitionsCommandTest do
     assert Map.has_key?(map, "rabbitmq_version")
   end
 
+  @tag format: "json"
+  test "run: correctly formats runtime parameter values", context do
+    File.rm(valid_file_path())
+    imported_file_path = Path.join([File.cwd!(), "test", "fixtures", "files", "definitions.json"])
+    # prepopulate some runtime parameters
+    RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand.run([imported_file_path], context[:opts])
+
+    {:ok, nil} = @command.run([valid_file_path()], context[:opts])
+
+    # clean up the state we've modified
+    clear_parameter("/", "federation-upstream", "up-1")
+
+    {:ok, bin} = File.read(valid_file_path())
+    {:ok, map} = JSON.decode(bin)
+    assert Map.has_key?(map, "rabbitmq_version")
+    params = map["parameters"]
+    assert is_map(hd(params)["value"])
+  end
+
   @tag format: "erlang"
   test "run: writes to a file and returns nil when target is a file and format is Erlang Terms", context do
     File.rm(valid_file_path())
