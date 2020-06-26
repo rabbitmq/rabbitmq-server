@@ -99,7 +99,7 @@ crashing_mirrored(Config) ->
                        #'queue.declare'{queue = QName, durable = true}),
     ok.
 
-test_queue_failure(Node, Ch, RaceConn, MsgCount, SlaveCount, Decl) ->
+test_queue_failure(Node, Ch, RaceConn, MsgCount, FollowerCount, Decl) ->
     #'queue.declare_ok'{queue = QName} = amqp_channel:call(Ch, Decl),
     try
         publish(Ch, QName, transient),
@@ -107,7 +107,7 @@ test_queue_failure(Node, Ch, RaceConn, MsgCount, SlaveCount, Decl) ->
         Racer = spawn_declare_racer(RaceConn, Decl),
         kill_queue(Node, QName),
         assert_message_count(MsgCount, Ch, QName),
-        assert_slave_count(SlaveCount, Node, QName),
+        assert_follower_count(FollowerCount, Node, QName),
         stop_declare_racer(Racer)
     after
         amqp_channel:call(Ch, #'queue.delete'{queue = QName})
@@ -258,7 +258,7 @@ assert_message_count(Count, Ch, QName) ->
         amqp_channel:call(Ch, #'queue.declare'{queue   = QName,
                                                passive = true}).
 
-assert_slave_count(Count, Node, QName) ->
+assert_follower_count(Count, Node, QName) ->
     Q = lookup(Node, QName),
     [{_, Pids}] = rpc:call(Node, rabbit_amqqueue, info, [Q, [slave_pids]]),
     RealCount = case Pids of
@@ -270,7 +270,7 @@ assert_slave_count(Count, Node, QName) ->
             ok;
         _ when RealCount < Count ->
             timer:sleep(10),
-            assert_slave_count(Count, Node, QName);
+            assert_follower_count(Count, Node, QName);
         _ ->
-            exit({too_many_slaves, Count, RealCount})
+            exit({too_many_replicas, Count, RealCount})
     end.

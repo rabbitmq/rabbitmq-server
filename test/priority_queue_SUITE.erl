@@ -56,7 +56,7 @@ groups() ->
                            mirror_queue_auto_ack,
                            mirror_fast_reset_policy,
                            mirror_reset_policy,
-                           mirror_stop_pending_slaves
+                           mirror_stop_pending_followers
                           ]}
     ].
 
@@ -449,7 +449,7 @@ mirror_queue_sync(Config) ->
     publish(Ch, Q, [1, 2, 3, 1, 2, 3]),
     %% master now has 9, mirror 6.
     get_partial(Ch, Q, manual_ack, [3, 3, 3, 2, 2, 2]),
-    %% So some but not all are unacked at the slave
+    %% So some but not all are unacked at the mirror
     Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     rabbit_ct_broker_helpers:control_action(sync_queue, Nodename0,
       [binary_to_list(Q)], [{"-p", "/"}]),
@@ -541,7 +541,7 @@ mirror_queue_sync_order(Config) ->
                             {3, <<"msg5">>}]),
     rabbit_ct_client_helpers:close_channel(Ch),
 
-    %% Add and sync slave
+    %% Add and sync mirror
     ok = rabbit_ct_broker_helpers:set_ha_policy(
            Config, A, <<"^mirror_queue_sync_order-queue$">>, <<"all">>),
     rabbit_ct_broker_helpers:control_action(sync_queue, A,
@@ -602,7 +602,7 @@ mirror_reset_policy(Config, Wait) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
-mirror_stop_pending_slaves(Config) ->
+mirror_stop_pending_followers(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
     C = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
@@ -611,17 +611,17 @@ mirror_stop_pending_slaves(Config) ->
            Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 0]) || Nodename <- [A, B, C]],
 
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
-    Q = <<"mirror_stop_pending_slaves-queue">>,
+    Q = <<"mirror_stop_pending_followers-queue">>,
     declare(Ch, Q, 5),
     publish_many(Ch, Q, 20000),
 
     [begin
          rabbit_ct_broker_helpers:set_ha_policy(
-           Config, A, <<"^mirror_stop_pending_slaves-queue$">>, <<"all">>,
+           Config, A, <<"^mirror_stop_pending_followers-queue$">>, <<"all">>,
            [{<<"ha-sync-mode">>, <<"automatic">>}]),
          wait_for_sync(Config, A, rabbit_misc:r(<<"/">>, queue, Q), 2),
          rabbit_ct_broker_helpers:clear_policy(
-           Config, A, <<"^mirror_stop_pending_slaves-queue$">>)
+           Config, A, <<"^mirror_stop_pending_followers-queue$">>)
      end || _ <- lists:seq(1, 15)],
 
     delete(Ch, Q),
