@@ -264,7 +264,7 @@ batch_publish(Publishes, ChPid, Flow,
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 %% [0] When the mirror process handles the publish command, it sets the
 %% IsDelivered flag to true, so to avoid iterating over the messages
-%% again at the slave, we do it here.
+%% again at the mirror, we do it here.
 
 publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, Flow, State = #state { gm                  = GM,
@@ -330,7 +330,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
                       error ->
                           {[MsgId | MsgIdsN], SSN};
                       {ok, published} ->
-                          %% It was published when we were a slave,
+                          %% It was published when we were a mirror,
                           %% and we were promoted before we saw the
                           %% publish from the channel. We still
                           %% haven't seen the channel publish, and

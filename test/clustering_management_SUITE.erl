@@ -417,9 +417,9 @@ forget_promotes_offline_slave(Config) ->
 
     %% We should now have the following dramatis personae:
     %% A - down, master
-    %% B - down, used to be slave, no longer is, never had the message
-    %% C - running, should be slave, but has wiped the message on restart
-    %% D - down, recoverable slave, contains message
+    %% B - down, used to be mirror, no longer is, never had the message
+    %% C - running, should be mirror, but has wiped the message on restart
+    %% D - down, recoverable mirror, contains message
     %%
     %% So forgetting A should offline-promote the queue to D, keeping
     %% the message.

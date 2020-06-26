@@ -120,7 +120,7 @@
 %%
 %% Slaves can be added dynamically. When this occurs, there is no
 %% attempt made to sync the current contents of the master with the
-%% new slave, thus the mirror will start empty, regardless of the state
+%% new mirror, thus the mirror will start empty, regardless of the state
 %% of the master. Thus the mirror needs to be able to detect and ignore
 %% operations which are for messages it has not received: because of
 %% the strict FIFO nature of queues in general, this is
@@ -141,7 +141,7 @@
 %% synchronised. We only store the difference between the two for
 %% simplicity. Comparing the length is not enough since we need to
 %% take into account rejected messages which will make it back into
-%% the master queue but can't go back in the slave, since we don't
+%% the master queue but can't go back in the mirror, since we don't
 %% want "holes" in the mirror queue. Note that the depth, and the
 %% length likewise, must always be shorter on the mirror - we assert
 %% that in various places. In case mirrors are joined to an empty queue
@@ -172,7 +172,7 @@
 %% the mirrors themselves must maintain).
 %%
 %% When the master dies, a mirror gets promoted. This will be the
-%% eldest slave, and thus the hope is that that mirror is most likely
+%% eldest mirror, and thus the hope is that that mirror is most likely
 %% to be sync'd with the master. The design of gm is that the
 %% notification of the death of the master will only appear once all
 %% messages in-flight from the master have been fully delivered to all
