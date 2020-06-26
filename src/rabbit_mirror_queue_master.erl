@@ -117,7 +117,7 @@ init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
         ok = rabbit_misc:execute_mnesia_transaction(Fun),
         {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
         %% We need synchronous add here (i.e. do not return until the
-        %% slave is running) so that when queue declaration is finished
+        %% mirror is running) so that when queue declaration is finished
         %% all mirrors are up; we don't want to end up with unsynced mirrors
         %% just by declaring a new queue. But add can't be synchronous all
         %% the time as it can be called by mirrors and that's
@@ -209,7 +209,7 @@ terminate(Reason,
                    QName, "Stopping all nodes on master shutdown since no "
                    "synchronised mirror (replica) is available~n", []),
                  stop_all_slaves(Reason, State);
-        false -> %% Just let some other slave take over.
+        false -> %% Just let some other mirror take over.
                  ok
     end,
     State #state { backing_queue_state = BQ:terminate(Reason, BQS) }.
@@ -262,7 +262,7 @@ batch_publish(Publishes, ChPid, Flow,
                       MsgSizes),
     BQS1 = BQ:batch_publish(Publishes2, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
-%% [0] When the slave process handles the publish command, it sets the
+%% [0] When the mirror process handles the publish command, it sets the
 %% IsDelivered flag to true, so to avoid iterating over the messages
 %% again at the slave, we do it here.
 
@@ -464,7 +464,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             {Result, BQS1} = BQ:is_duplicate(Message, BQS),
             {Result, State #state { backing_queue_state = BQS1 }};
         {ok, published} ->
-            %% It already got published when we were a slave and no
+            %% It already got published when we were a mirror and no
             %% confirmation is waiting. amqqueue_process will have, in
             %% its msg_id_to_channel mapping, the entry for dealing
             %% with the confirm when that comes back in (it's added
@@ -474,7 +474,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             {{true, drop}, State #state { seen_status = maps:remove(MsgId, SS) }};
         {ok, Disposition}
           when Disposition =:= confirmed
-            %% It got published when we were a slave via gm, and
+            %% It got published when we were a mirror via gm, and
             %% confirmed some time after that (maybe even after
             %% promotion), but before we received the publish from the
             %% channel, so couldn't previously know what the

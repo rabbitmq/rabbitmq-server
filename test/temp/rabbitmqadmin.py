@@ -673,7 +673,7 @@ class Lister:
                         if depth < max_depth:
                             add(column, depth + 1, subitem, fun)
                 elif type(subitem) == list:
-                    # The first branch has slave nodes in queues in
+                    # The first branch has mirror nodes in queues in
                     # mind (which come out looking decent); the second
                     # one has applications in nodes (which look less
                     # so, but what would look good?).

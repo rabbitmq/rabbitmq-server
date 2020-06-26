@@ -213,7 +213,7 @@ await_slaves(Ref, SPids) ->
                      {'DOWN', _, process, SPid, _} -> false
                  end].
 %% [0] This check is in case there's been a partition which has then
-%% healed in between the master retrieving the slave pids from Mnesia
+%% healed in between the master retrieving the mirror pids from Mnesia
 %% and sending 'sync_start' over GM. If so there might be mirrors on the
 %% other side of the partition which we can monitor (since they have
 %% rejoined the distributed system with us) but which did not get the

@@ -98,9 +98,9 @@ slave_synchronization(Config) ->
     %% the master.
     rabbit_ct_broker_helpers:stop_broker(Config, Slave),
 
-    %% We get and ack one message when the slave is down, and check that when we
-    %% start the slave it's not marked as synced until ack the message.  We also
-    %% publish another message when the slave is up.
+    %% We get and ack one message when the mirror is down, and check that when we
+    %% start the mirror it's not marked as synced until ack the message.  We also
+    %% publish another message when the mirror is up.
     send_dummy_message(Channel, Queue),                                 % 1 - 0
     {#'basic.get_ok'{delivery_tag = Tag1}, _} =
         amqp_channel:call(Channel, #'basic.get'{queue = Queue}),        % 0 - 1
@@ -115,7 +115,7 @@ slave_synchronization(Config) ->
 
     slave_synced(Master, Queue),
 
-    %% We restart the slave and we send a message, so that the slave will only
+    %% We restart the mirror and we send a message, so that the mirror will only
     %% have one of the messages.
     rabbit_ct_broker_helpers:stop_broker(Config, Slave),
     rabbit_ct_broker_helpers:start_broker(Config, Slave),
@@ -124,7 +124,7 @@ slave_synchronization(Config) ->
 
     slave_unsynced(Master, Queue),
 
-    %% We reject the message that the slave doesn't have, and verify that it's
+    %% We reject the message that the mirror doesn't have, and verify that it's
     %% still unsynced
     {#'basic.get_ok'{delivery_tag = Tag2}, _} =
         amqp_channel:call(Channel, #'basic.get'{queue = Queue}),        % 1 - 1
