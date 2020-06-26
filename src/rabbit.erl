@@ -104,17 +104,7 @@
 -rabbit_boot_step({definition_import_worker_pool,
                    [{description, "dedicated worker pool for definition import"},
                     {mfa,         {rabbit_definitions, boot, []}},
-                    {requires,    external_infrastructure},
-                    {enables,     load_core_definitions}]}).
-
-%% We want to A) make sure we apply definitions before the node begins serving
-%% traffic and B) in fact do it before empty_db_check (so the defaults will not
-%% get created if we don't need 'em).
--rabbit_boot_step({load_core_definitions,
-                   [{description, "imports definitions"},
-                    {mfa,         {rabbit_definitions, maybe_load_definitions, []}},
-                    {requires,    [recovery, definition_import_worker_pool]},
-                    {enables,     empty_db_check}]}).
+                    {requires,    external_infrastructure}]}).
 
 -rabbit_boot_step({external_infrastructure,
                    [{description, "external infrastructure ready"}]}).
@@ -935,7 +925,10 @@ do_run_postlaunch_phase() ->
 
         ok = rabbit_lager:broker_is_started(),
         ok = log_broker_started(
-               rabbit_plugins:strictly_plugins(rabbit_plugins:active()))
+               rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
+        %% export definitions after all plugins have been enabled,
+        %% see rabbitmq/rabbitmq-server#2384
+        rabbit_definitions:maybe_load_definitions()
     catch
         throw:{error, _} = Error ->
             rabbit_prelaunch_errors:log_error(Error),
