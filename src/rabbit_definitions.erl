@@ -19,7 +19,8 @@
 
 -export([boot/0]).
 %% automatic import on boot
--export([maybe_load_definitions/0, maybe_load_definitions/2, maybe_load_definitions_from/2]).
+-export([maybe_load_definitions/0, maybe_load_definitions/2, maybe_load_definitions_from/2,
+         has_configured_definitions_to_load/0]).
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5]).
@@ -66,7 +67,6 @@ boot() ->
     rabbit_sup:start_supervisor_child(definition_import_pool_sup, worker_pool_sup, [PoolSize, ?IMPORT_WORK_POOL]).
 
 maybe_load_definitions() ->
-    rabbit_log:debug("Will import definitions file from load_definitions"),
     %% Note that management.load_definitions is handled in the plugin for backwards compatibility.
     %% This executes the "core" version of load_definitions.
     maybe_load_definitions(rabbit, load_definitions).
@@ -138,11 +138,24 @@ all_definitions() ->
 %% Implementation
 %%
 
+-spec has_configured_definitions_to_load() -> boolean().
+has_configured_definitions_to_load() ->
+    case application:get_env(rabbit, load_definitions) of
+        undefined   -> false;
+        {ok, none}  -> false;
+        {ok, _Path} -> true
+    end.
+
 maybe_load_definitions(App, Key) ->
     case application:get_env(App, Key) of
-        undefined  -> ok;
-        {ok, none} -> ok;
+        undefined  ->
+            rabbit_log:debug("No definition file configured to import via load_definitions"),
+            ok;
+        {ok, none} ->
+            rabbit_log:debug("No definition file configured to import via load_definitions"),
+            ok;
         {ok, FileOrDir} ->
+            rabbit_log:debug("Will import definitions file from load_definitions"),
             IsDir = filelib:is_dir(FileOrDir),
             maybe_load_definitions_from(IsDir, FileOrDir)
     end.
@@ -172,10 +185,10 @@ load_definitions_from_filenames([File|Rest]) ->
 load_definitions_from_file(File) ->
     case file:read_file(File) of
         {ok, Body} ->
-            rabbit_log:info("Applying definitions from ~s", [File]),
+            rabbit_log:info("Applying definitions from file at '~s'", [File]),
             import_raw(Body);
         {error, E} ->
-            rabbit_log:error("Could not read definitions from ~s, Error: ~p", [File, E]),
+            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [File, E]),
             {error, {could_not_read_defs, {File, E}}}
     end.
 
