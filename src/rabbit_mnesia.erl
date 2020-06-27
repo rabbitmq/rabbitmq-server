@@ -148,7 +148,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {error, Reason} ->
                 RetriesLeft1 = RetriesLeft - 1,
-                rabbit_log:error("Peer discovery returned an error: ~p. Will retry after a delay of ~b, ~b retries left...",
+                rabbit_log:error("Peer discovery returned an error: ~p. Will retry after a delay of ~b ms, ~b retries left...",
                                 [Reason, DelayInterval, RetriesLeft1]),
                 timer:sleep(DelayInterval),
                 run_peer_discovery_with_retries(RetriesLeft1, DelayInterval);
@@ -202,7 +202,7 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             RetriesLeft1 = RetriesLeft - 1,
-            rabbit_log:error("Trying to join discovered peers failed. Will retry after a delay of ~b, ~b retries left...",
+            rabbit_log:error("Trying to join discovered peers failed. Will retry after a delay of ~b ms, ~b retries left...",
                             [DelayInterval, RetriesLeft1]),
             timer:sleep(DelayInterval),
             join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft1, DelayInterval)
