@@ -59,7 +59,7 @@ defmodule RabbitMQCtl do
 
     # the user asked for --help and we are displaying it to her,
     # reporting a success
-    {:ok, ExitCodes.exit_ok(), HelpCommand.all_usage(parsed_options)};
+    {:ok, ExitCodes.exit_ok(), Enum.join(HelpCommand.all_usage(parsed_options), "")};
   end
 
   def exec_command(["--version"] = _unparsed_command, opts) do
@@ -80,7 +80,7 @@ defmodule RabbitMQCtl do
 
         usage_string =
           command_not_found_string <>
-            HelpCommand.all_usage(parsed_options)
+            Enum.join(HelpCommand.all_usage(parsed_options), "")
 
         {:error, ExitCodes.exit_usage(), usage_string}
 
@@ -249,7 +249,7 @@ defmodule RabbitMQCtl do
   end
 
   def auto_complete(script_name, args) do
-    Rabbitmq.CLI.AutoComplete.complete(script_name, args)
+    RabbitMQ.CLI.AutoComplete.complete(script_name, args)
     |> Stream.map(&IO.puts/1)
     |> Stream.run()
 

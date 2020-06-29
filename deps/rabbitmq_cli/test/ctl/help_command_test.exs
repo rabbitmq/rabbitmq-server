@@ -18,7 +18,7 @@ defmodule HelpCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Core.{CommandModules, ExitCodes}
+  alias RabbitMQ.CLI.Core.{CommandModules}
 
   @command RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
@@ -27,8 +27,22 @@ defmodule HelpCommandTest do
     :ok
   end
 
+  test "validate: providing no position arguments passes validation" do
+    assert @command.validate([], %{}) == :ok
+  end
+
+  test "validate: providing one position argument passes validation" do
+    assert @command.validate(["status"], %{}) == :ok
+  end
+
+  test "validate: providing two or more position arguments fails validation" do
+    assert @command.validate(["extra1", "extra2"], %{}) ==
+      {:validation_failure, :too_many_args}
+  end
+
   test "run: prints basic usage info" do
-    output = @command.run([], %{})
+    {:ok, lines} = @command.run([], %{})
+    output = Enum.join(lines, "\n")
     assert output =~ ~r/[-n <node>] [-t <timeout>]/
     assert output =~ ~r/commands/i
   end
@@ -49,9 +63,6 @@ defmodule HelpCommandTest do
   end
 
   test "run prints command info" do
-    assert @command.run([], %{}) =~ ~r/commands/i
-
-    # Checks to verify that each module's command appears in the list.
     ctl_commands = CommandModules.module_map
     |> Enum.filter(fn({_name, command_mod}) ->
                      to_string(command_mod) =~ ~r/^RabbitMQ\.CLI\.Ctl\.Commands/
@@ -61,20 +72,14 @@ defmodule HelpCommandTest do
     Enum.each(
       ctl_commands,
       fn(command) ->
-        assert @command.run([], %{}) =~ ~r/\n\s+#{command}.*\n/
+        {:ok, lines} = @command.run([], %{})
+        output = Enum.join(lines, "\n")
+        assert output =~ ~r/\n\s+#{command}.*\n/
       end)
   end
 
-  test "run: exits with code of OK" do
-    assert @command.output("Help string", %{}) ==
-      {:error, ExitCodes.exit_ok, "Help string"}
-  end
-
-  test "run: no arguments print general help" do
-    assert @command.run([], %{}) =~ ~r/usage/i
-  end
-
-  test "run: unrecognised arguments print general help" do
-    assert @command.run(["extra1", "extra2"], %{}) =~ ~r/usage/i
+  test "run: exits with the code of OK" do
+    assert @command.output({:ok, "Help string"}, %{}) ==
+      {:ok, "Help string"}
   end
 end

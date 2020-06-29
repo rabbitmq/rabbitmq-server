@@ -29,16 +29,42 @@ defmodule RabbitMQCtlTest do
     :ok
   end
 
-## ------------------------ --help option -------------------------------------
+  #
+  # --help and `help [command]`
+  #
 
-  test "--help option prints help for command and exits normally" do
+  test "--help option prints help for the command and exits with an OK" do
     command = ["status", "--help"]
     assert capture_io(fn ->
       error_check(command, exit_ok())
     end) =~ ~r/Usage/
   end
 
-## ------------------------ Error Messages ------------------------------------
+  test "bare --help prints general help and exits with an OK" do
+    command = ["--help"]
+    assert capture_io(fn ->
+      error_check(command, exit_ok())
+    end) =~ ~r/Usage/
+  end
+
+  test "help [command] prints help for the command and exits with an OK" do
+    command = ["help", "status"]
+    assert capture_io(fn ->
+      error_check(command, exit_ok())
+    end) =~ ~r/Usage/
+  end
+
+  test "bare help command prints general help and exits with an OK" do
+    command = ["help"]
+    assert capture_io(fn ->
+      error_check(command, exit_ok())
+    end) =~ ~r/Usage/
+  end
+
+  #
+  # Validation and Error Handling
+  #
+
   test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
@@ -46,14 +72,14 @@ defmodule RabbitMQCtlTest do
     end) =~ ~r/unable to perform an operation on node 'sandwich@pastrami'/
   end
 
-  test "print timeout message when an RPC call times out" do
+  test "when an RPC call times out, prints a timeout message" do
     command = ["list_users", "-t", "0"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_tempfail())
     end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname()} timed out. Timeout value used: 0/
   end
 
-  test "print an authentication error message when auth is refused" do
+  test "when authentication fails, prints an authentication error message" do
     add_user "kirk", "khaaaaaan"
     command = ["authenticate_user", "kirk", "makeitso"]
     assert capture_io(:stderr,
@@ -61,8 +87,6 @@ defmodule RabbitMQCtlTest do
     end) =~ ~r/Error: failed to authenticate user \"kirk\"/
     delete_user "kirk"
   end
-
-## ------------------------ Help and Malformed Commands --------------------------------
 
   test "when invoked without arguments, displays a generic usage message and exits with a non-zero code" do
     command = []
@@ -85,7 +109,7 @@ defmodule RabbitMQCtlTest do
     end) =~ ~r/usage/i
   end
 
-  test "Empty command with options shows usage, and exit with usage exit code" do
+  test "when no command name is provided, displays usage" do
     command = ["-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
@@ -97,14 +121,14 @@ defmodule RabbitMQCtlTest do
     capture_io(:stderr, fn -> error_check(command, exit_ok()) end)
   end
 
-  test "Unimplemented command shows usage message and returns error" do
+  test "a non-existent command results in help message displayed" do
     command = ["not_real"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
     end) =~ ~r/Usage/
   end
 
-  test "Extraneous arguments return a usage error" do
+  test "a command that's been provided extra arguments exits with a reasonable error code" do
     command = ["status", "extra"]
     output = capture_io(:stderr, fn ->
       error_check(command, exit_usage())
@@ -114,7 +138,7 @@ defmodule RabbitMQCtlTest do
     assert output =~ ~r/status/
   end
 
-  test "Insufficient arguments return a usage error" do
+  test "a command that's been provided insufficient arguments exits with a reasonable error code" do
     command = ["list_user_permissions"]
     output = capture_io(:stderr, fn ->
       error_check(command, exit_usage())
@@ -124,17 +148,17 @@ defmodule RabbitMQCtlTest do
     assert output =~ ~r/list_user_permissions/
   end
 
-  test "A bad argument returns a data error" do
+  test "a command that's provided an invalid argument exits a reasonable error" do
     command = ["set_disk_free_limit", "2097152bytes"]
     capture_io(:stderr, fn -> error_check(command, exit_dataerr()) end)
   end
 
-  test "An errored command returns an error code" do
+  test "a command that fails with an error exits with a reasonable error code" do
     command = ["delete_user", "voldemort"]
     capture_io(:stderr, fn -> error_check(command, exit_nouser()) end)
   end
 
-  test "A malformed command with an option as the first command-line arg fails gracefully" do
+  test "a mcommand with an unsupported option as the first command-line arg fails gracefully" do
     command1 = ["--invalid=true", "list_permissions", "-p", "/"]
     assert capture_io(:stderr, fn ->
       error_check(command1, exit_usage())

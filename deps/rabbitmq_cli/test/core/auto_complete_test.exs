@@ -17,7 +17,7 @@
 defmodule AutoCompleteTest do
   use ExUnit.Case, async: false
 
-  @subject Rabbitmq.CLI.AutoComplete
+  @subject RabbitMQ.CLI.AutoComplete
 
 
   test "Auto-completes a command" do

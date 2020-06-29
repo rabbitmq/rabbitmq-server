@@ -17,9 +17,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
   alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
   alias RabbitMQ.CLI.Core.{CommandModules, Config}
 
-  # Use the same jaro distance limit as in Elixir `did_you_mean`
-  @jaro_distance_limit 0.77
-
   def default_switches() do
     [
       node: :atom,
@@ -88,6 +85,13 @@ defmodule RabbitMQ.CLI.Core.Parser do
 
         {command_module, command_name, cmd_arguments, cmd_options, cmd_invalid}
     end
+  end
+
+  def command_suggestion(_cmd_name, empty) when empty == %{} do
+    nil
+  end
+  def command_suggestion(typed, module_map) do
+    RabbitMQ.CLI.AutoComplete.suggest_command(typed, module_map)
   end
 
   defp look_up_command(parsed_args, options) do
@@ -161,27 +165,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
       {:error, err} ->
         IO.puts(:stderr, "Error reading aliases file #{aliases_file}: #{err}")
         %{}
-    end
-  end
-
-  defp command_suggestion(_cmd_name, empty) when empty == %{} do
-    nil
-  end
-
-  defp command_suggestion(typed, module_map) do
-    suggestion =
-      module_map
-      |> Map.keys()
-      |> Enum.map(fn existing ->
-        {existing, String.jaro_distance(existing, typed)}
-      end)
-      |> Enum.max_by(fn {_, distance} -> distance end)
-
-    case suggestion do
-      {cmd, distance} when distance >= @jaro_distance_limit ->
-        {:suggest, cmd}
-      _ ->
-        nil
     end
   end
 
