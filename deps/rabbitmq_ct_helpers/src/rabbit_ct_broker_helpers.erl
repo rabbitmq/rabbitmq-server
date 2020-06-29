@@ -1552,7 +1552,7 @@ enable_feature_flag(Config, [Node1 | _] = Nodes, FeatureName) ->
 mark_as_being_drained(Config, Node) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
 unmark_as_being_drained(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, unmark_as_being_drained, []).
 
 is_being_drained_consistent_read(Config, Node) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, is_being_drained_consistent_read, [Node]).
