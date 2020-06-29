@@ -13,8 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule Rabbitmq.CLI.AutoComplete do
+defmodule RabbitMQ.CLI.AutoComplete do
   alias RabbitMQ.CLI.Core.{CommandModules, Parser}
+
+  # Use the same jaro distance limit as in Elixir's "did you mean?"
+  @jaro_distance_limit 0.77
 
   @spec complete(String.t(), [String.t()]) :: [String.t()]
   def complete(_, []) do
@@ -28,6 +31,26 @@ defmodule Rabbitmq.CLI.AutoComplete do
 
       _ ->
         complete(["--script-name", script_name | args])
+    end
+  end
+
+  def suggest_command(_cmd_name, empty) when empty == %{} do
+    nil
+  end
+  def suggest_command(typed, module_map) do
+    suggestion =
+      module_map
+      |> Map.keys()
+      |> Enum.map(fn existing ->
+        {existing, String.jaro_distance(existing, typed)}
+      end)
+      |> Enum.max_by(fn {_, distance} -> distance end)
+
+    case suggestion do
+      {cmd, distance} when distance >= @jaro_distance_limit ->
+        {:suggest, cmd}
+      _ ->
+        nil
     end
   end
 

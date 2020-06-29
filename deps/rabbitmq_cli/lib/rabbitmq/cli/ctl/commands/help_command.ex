@@ -29,32 +29,52 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def distribution(_), do: :none
   use RabbitMQ.CLI.Core.MergesNoDefaults
 
-  def validate(_, _), do: :ok
+  def validate([], _), do: :ok
+  def validate([_command], _), do: :ok
+  def validate(args, _) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
+  end
 
   def run([command_name | _], opts) do
     CommandModules.load(opts)
 
-    case CommandModules.module_map()[command_name] do
+    module_map = CommandModules.module_map()
+    case module_map[command_name] do
       nil ->
-        all_usage(opts)
+        # command not found
+        # {:error, all_usage(opts)}
+        case RabbitMQ.CLI.AutoComplete.suggest_command(command_name, module_map) do
+          {:suggest, suggested} ->
+            suggest_message = "\nCommand '#{command_name}' not found. \n" <>
+              "Did you mean '#{suggested}'? \n"
+            {:error, ExitCodes.exit_usage(), suggest_message}
+          nil ->
+            {:error, ExitCodes.exit_usage(), "\nCommand '#{command_name}' not found."}
+        end
 
       command ->
-        command_usage(command, opts)
+        {:ok, command_usage(command, opts)}
     end
   end
 
-  def run(_, opts) do
+  def run([], opts) do
     CommandModules.load(opts)
 
     case opts[:list_commands] do
-      true -> commands_description()
-      _ -> all_usage(opts)
+      true ->
+        {:ok, commands_description()}
+      _ ->
+        {:ok, all_usage(opts)}
     end
   end
 
-  def output(result, _) do
-    {:error, ExitCodes.exit_ok(), result}
+  def output({:ok, result}, _) do
+    {:ok, result}
   end
+  def output({:error, result}, _) do
+    {:error, ExitCodes.exit_usage(), result}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 
   def banner(_, _), do: nil
 
@@ -77,12 +97,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def all_usage(opts) do
     tool_name = program_name(opts)
-    Enum.join(
-      tool_usage(tool_name) ++
-        [Enum.join(["Available commands:"] ++ commands_description(), "\n")] ++
-        help_footer(tool_name),
-      "\n\n"
-    ) <> "\n"
+    tool_usage(tool_name) ++
+        ["\n\nAvailable commands:\n"] ++ commands_description() ++
+        help_footer(tool_name)
   end
 
   def command_usage(command, opts) do
@@ -212,7 +229,7 @@ short            | long          | description
         end
       end)
 
-    module_map
+    lines = module_map
     |> Enum.map(
       fn({name, cmd}) ->
         description = CommandBehaviour.description(cmd)
@@ -223,6 +240,7 @@ short            | long          | description
     |> Enum.sort_by(
       fn({help_section, _}) ->
         case help_section do
+          :deprecated -> 999
           :other -> 100
           {:plugin, _} -> 99
           :help -> 1
@@ -241,16 +259,18 @@ short            | long          | description
     |> Enum.map(
       fn({help_section, section_helps}) ->
         [
-          "\n" <> bright(section_head(help_section)) <> ":\n" |
+          "\n" <> bright(section_head(help_section)) <> ":\n\n" |
           Enum.sort(section_helps)
           |> Enum.map(
             fn({name, {description, _}}) ->
-              "   #{String.pad_trailing(name, pad_commands_to)}  #{description}"
+              "   #{String.pad_trailing(name, pad_commands_to)}  #{description}\n"
             end)
         ]
 
       end)
     |> Enum.concat()
+
+    lines ++ ["\n"]
   end
 
   defp section_head(help_section) do
