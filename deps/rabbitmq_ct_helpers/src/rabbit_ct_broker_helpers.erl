@@ -69,6 +69,10 @@
 
     mark_as_being_drained/2,
     unmark_as_being_drained/2,
+    is_being_drained_local_read/2,
+    is_being_drained_local_read/3,
+    is_being_drained_consistent_read/2,
+    is_being_drained_consistent_read/3,
     
     set_partition_handling_mode/3,
     set_partition_handling_mode_globally/2,
@@ -1549,6 +1553,16 @@ mark_as_being_drained(Config, Node) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
 unmark_as_being_drained(Config, Node) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
+
+is_being_drained_consistent_read(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, is_being_drained_consistent_read, [Node]).
+is_being_drained_local_read(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, is_being_drained_local_read, [Node]).
+
+is_being_drained_consistent_read(Config, TargetNode, NodeToCheck) ->
+    rabbit_ct_broker_helpers:rpc(Config, TargetNode, rabbit_maintenance, is_being_drained_consistent_read, [NodeToCheck]).
+is_being_drained_local_read(Config, TargetNode, NodeToCheck) ->
+    rabbit_ct_broker_helpers:rpc(Config, TargetNode, rabbit_maintenance, is_being_drained_local_read, [NodeToCheck]).
 
 %% From a given list of gen_tcp client connections, return the list of
 %% connection handler PID in RabbitMQ.
