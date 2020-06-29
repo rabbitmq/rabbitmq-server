@@ -77,10 +77,12 @@ revive() ->
 
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
+    rabbit_log:debug("Marking the node as undergoing maintenance"),
     set_maintenance_state_status(?DRAINING_STATUS).
  
 -spec unmark_as_being_drained() -> boolean().
 unmark_as_being_drained() ->
+    rabbit_log:debug("Unmarking the node as undergoing maintenance"),
     set_maintenance_state_status(?DEFAULT_STATUS).
 
 set_maintenance_state_status(Status) ->
