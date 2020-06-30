@@ -20,8 +20,8 @@
 -export([names/1, diagnostics/1, make/1, make/2, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/1, set_cluster_name/2, ensure_epmd/0,
-         all_running/0, name_type/0, running_count/0,
-         await_running_count/2,
+         all_running/0, name_type/0, running_count/0, total_count/0,
+         await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
 
@@ -138,15 +138,19 @@ ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
 -spec all_running() -> [node()].
-
 all_running() -> rabbit_mnesia:cluster_nodes(running).
 
 -spec running_count() -> integer().
-
 running_count() -> length(all_running()).
 
--spec await_running_count(integer(), integer()) -> 'ok' | {'error', atom()}.
+-spec total_count() -> integer().
+total_count() -> length(rabbit_mnesia:cluster_nodes(all)).
 
+-spec is_single_node_cluster() -> boolean().
+is_single_node_cluster() ->
+    total_count() =:= 1.
+
+-spec await_running_count(integer(), integer()) -> 'ok' | {'error', atom()}.
 await_running_count(TargetCount, Timeout) ->
     Retries = round(Timeout/?SAMPLING_INTERVAL),
     await_running_count_with_retries(TargetCount, Retries).
