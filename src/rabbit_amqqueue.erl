@@ -1106,9 +1106,9 @@ list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
          #resource{name = Name} = amqqueue:get_name(Q),
          #{
              <<"readable_name">> => rabbit_misc:rs(amqqueue:get_name(Q)),
-             <<"name">> => Name,
-             <<"virtual_host">> => amqqueue:get_vhost(Q),
-             <<"type">> => <<"quorum">>
+             <<"name">>          => Name,
+             <<"virtual_host">>  => amqqueue:get_vhost(Q),
+             <<"type">>          => <<"classic">>
          }
      end || Q <- ClassicQs].
 
