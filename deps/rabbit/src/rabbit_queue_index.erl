@@ -16,7 +16,7 @@
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
--export([scan_queue_segments/3]).
+-export([scan_queue_segments/3, scan_queue_segments/4]).
 
 %% Migrates from global to per-vhost message stores
 -export([move_to_per_vhost_stores/1,
@@ -255,8 +255,9 @@
 
 -spec erase(rabbit_amqqueue:name()) -> 'ok'.
 
-erase(Name) ->
-    #qistate { dir = Dir } = blank_state(Name),
+erase(#resource{ virtual_host = VHost } = Name) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    #qistate { dir = Dir } = blank_state(VHostDir, Name),
     erase_index_dir(Dir).
 
 %% used during variable queue purge when there are no pending acks
@@ -278,8 +279,9 @@ reset_state(#qistate{ queue_name     = Name,
 -spec init(rabbit_amqqueue:name(),
                  on_sync_fun(), on_sync_fun()) -> qistate().
 
-init(Name, OnSyncFun, OnSyncMsgFun) ->
-    State = #qistate { dir = Dir } = blank_state(Name),
+init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    State = #qistate { dir = Dir } = blank_state(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State#qistate{on_sync     = OnSyncFun,
                   on_sync_msg = OnSyncMsgFun}.
@@ -290,9 +292,10 @@ init(Name, OnSyncFun, OnSyncMsgFun) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), qistate()}.
 
-recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun,
-        OnSyncFun, OnSyncMsgFun) ->
-    State = blank_state(Name),
+recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
+        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    State = blank_state(VHostDir, Name),
     State1 = State #qistate{on_sync     = OnSyncFun,
                             on_sync_msg = OnSyncMsgFun},
     CleanShutdown = Terms /= non_clean_shutdown,
@@ -549,17 +552,16 @@ erase_index_dir(Dir) ->
         false -> ok
     end.
 
-blank_state(QueueName) ->
-    Dir = queue_dir(QueueName),
+blank_state(VHostDir, QueueName) ->
+    Dir = queue_dir(VHostDir, QueueName),
     blank_state_name_dir_funs(QueueName,
                          Dir,
                          fun (_) -> ok end,
                          fun (_) -> ok end).
 
-queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
+queue_dir(VHostDir, QueueName) ->
     %% Queue directory is
     %% {node_database_dir}/msg_stores/vhosts/{vhost}/queues/{queue}
-    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     QueueDir = queue_name_to_dir_name(QueueName),
     filename:join([VHostDir, "queues", QueueDir]).
 
@@ -725,9 +727,13 @@ queue_index_walker_reader(QueueName, Gatherer) ->
            end, ok, QueueName),
     ok = gatherer:finish(Gatherer).
 
-scan_queue_segments(Fun, Acc, QueueName) ->
+scan_queue_segments(Fun, Acc, #resource{ virtual_host = VHost } = QueueName) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    scan_queue_segments(Fun, Acc, VHostDir, QueueName).
+
+scan_queue_segments(Fun, Acc, VHostDir, QueueName) ->
     State = #qistate { segments = Segments, dir = Dir } =
-        recover_journal(blank_state(QueueName)),
+        recover_journal(blank_state(VHostDir, QueueName)),
     Result = lists:foldr(
       fun (Seg, AccN) ->
               segment_entries_foldr(
@@ -1465,12 +1471,13 @@ drive_transform_fun(Fun, Hdl, Contents) ->
                                drive_transform_fun(Fun, Hdl, Contents1)
     end.
 
-move_to_per_vhost_stores(#resource{} = QueueName) ->
+move_to_per_vhost_stores(#resource{virtual_host = VHost} = QueueName) ->
     OldQueueDir = filename:join([queues_base_dir(), "queues",
                                  queue_name_to_dir_name_legacy(QueueName)]),
-    NewQueueDir = queue_dir(QueueName),
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    NewQueueDir = queue_dir(VHostDir, QueueName),
     _ = rabbit_log_upgrade:info("About to migrate queue directory '~s' to '~s'",
-                            [OldQueueDir, NewQueueDir]),
+                                [OldQueueDir, NewQueueDir]),
     case rabbit_file:is_dir(OldQueueDir) of
         true  ->
             ok = rabbit_file:ensure_dir(NewQueueDir),

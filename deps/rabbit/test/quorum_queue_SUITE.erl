@@ -382,6 +382,7 @@ start_queue(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -404,6 +405,7 @@ start_queue(Config) ->
     %% Check that the application and process are still up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
+    Expected = Children + 1,
     ?assertMatch(Expected,
                  length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
 

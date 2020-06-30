@@ -17,6 +17,8 @@
 -export([set_maximum_since_use/2, combine_files/3,
          delete_file/2]). %% internal
 
+-export([scan_file_for_valid_messages/1]). %% salvage tool
+
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -1392,11 +1394,14 @@ should_mask_action(CRef, MsgId,
 %% file helper functions
 %%----------------------------------------------------------------------------
 
-open_file(Dir, FileName, Mode) ->
+open_file(File, Mode) ->
     file_handle_cache:open_with_absolute_path(
-      form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
+      File, ?BINARY_MODE ++ Mode,
       [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
        {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
+
+open_file(Dir, FileName, Mode) ->
+    open_file(form_filename(Dir, FileName), Mode).
 
 close_handle(Key, CState = #client_msstate { file_handle_cache = FHC }) ->
     CState #client_msstate { file_handle_cache = close_handle(Key, FHC) };
@@ -1687,17 +1692,21 @@ recover_crashed_compaction(Dir, TmpFileName, NonTmpRelatedFileName) ->
     ok = file_handle_cache:delete(TmpHdl),
     ok.
 
-scan_file_for_valid_messages(Dir, FileName) ->
-    case open_file(Dir, FileName, ?READ_MODE) of
+scan_file_for_valid_messages(File) ->
+    case open_file(File, ?READ_MODE) of
         {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
-                                     Hdl, filelib:file_size(
-                                            form_filename(Dir, FileName)),
+                                     Hdl, filelib:file_size(File),
                                      fun scan_fun/2, []),
                            ok = file_handle_cache:close(Hdl),
                            Valid;
         {error, enoent} -> {ok, [], 0};
-        {error, Reason} -> {error, {unable_to_scan_file, FileName, Reason}}
+        {error, Reason} -> {error, {unable_to_scan_file,
+                                    filename:basename(File),
+                                    Reason}}
     end.
+
+scan_file_for_valid_messages(Dir, FileName) ->
+    scan_file_for_valid_messages(form_filename(Dir, FileName)).
 
 scan_fun({MsgId, TotalSize, Offset, _Msg}, Acc) ->
     [{MsgId, TotalSize, Offset} | Acc].
