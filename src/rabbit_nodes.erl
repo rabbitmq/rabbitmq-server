@@ -148,7 +148,7 @@ total_count() -> length(rabbit_mnesia:cluster_nodes(all)).
 
 -spec is_single_node_cluster() -> boolean().
 is_single_node_cluster() ->
-    total_count() =:= 1 andalso running_count() =:= 1.
+    total_count() =:= 1.
 
 -spec await_running_count(integer(), integer()) -> 'ok' | {'error', atom()}.
 await_running_count(TargetCount, Timeout) ->
