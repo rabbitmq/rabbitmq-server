@@ -356,9 +356,13 @@ handle_inbound_data(Transport, Connection, #stream_connection_state{data = Lefto
 
 write_messages(_ClusterLeader, <<>>) ->
     ok;
-write_messages(ClusterLeader, <<PublishingId:64, MessageSize:32, Message:MessageSize/binary, Rest/binary>>) ->
+write_messages(ClusterLeader, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
     % FIXME handle write error
     ok = osiris:write(ClusterLeader, PublishingId, Message),
+    write_messages(ClusterLeader, Rest);
+write_messages(ClusterLeader, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
+    % FIXME handle write error
+    ok = osiris:write(ClusterLeader, PublishingId, {batch, MessageCount, CompressionType, Batch}),
     write_messages(ClusterLeader, Rest).
 
 generate_publishing_error_details(Acc, _Code, <<>>) ->
