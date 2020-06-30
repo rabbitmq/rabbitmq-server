@@ -110,9 +110,7 @@
 -record(cfg,
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
-         release_cursor_interval ::
-             undefined | non_neg_integer() |
-             {non_neg_integer(), non_neg_integer()},
+         release_cursor_interval :: option({non_neg_integer(), non_neg_integer()}),
          dead_letter_handler :: option(applied_mfa()),
          become_leader_handler :: option(applied_mfa()),
          max_length :: option(non_neg_integer()),
@@ -132,7 +130,7 @@
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = #{} :: #{msg_in_id() => indexed_msg()},
+         messages = lqueue:new() :: lqueue:queue(),
          % defines the lowest message in id available in the messages map
          % that isn't a return
          low_msg_num :: option(msg_in_id()),

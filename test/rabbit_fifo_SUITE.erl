@@ -380,7 +380,7 @@ cancelled_checkout_out_test(_) ->
     {State1, _} = check_auto(Cid, 2, State0),
     % cancelled checkout should not return pending messages to queue
     {State2, _, _} = apply(meta(3), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
-    ?assertEqual(1, maps:size(State2#rabbit_fifo.messages)),
+    ?assertEqual(1, lqueue:len(State2#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State2#rabbit_fifo.returns)),
 
     {State3, {dequeue, empty}} =
@@ -436,13 +436,13 @@ down_with_noconnection_returns_unack_test(_) ->
     Pid = spawn(fun() -> ok end),
     Cid = {<<"down_with_noconnect">>, Pid},
     {State0, _} = enq(1, 1, second, test_init(test)),
-    ?assertEqual(1, maps:size(State0#rabbit_fifo.messages)),
+    ?assertEqual(1, lqueue:len(State0#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State0#rabbit_fifo.returns)),
     {State1, {_, _}} = deq(2, Cid, unsettled, State0),
-    ?assertEqual(0, maps:size(State1#rabbit_fifo.messages)),
+    ?assertEqual(0, lqueue:len(State1#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State1#rabbit_fifo.returns)),
     {State2a, _, _} = apply(meta(3), {down, Pid, noconnection}, State1),
-    ?assertEqual(0, maps:size(State2a#rabbit_fifo.messages)),
+    ?assertEqual(0, lqueue:len(State2a#rabbit_fifo.messages)),
     ?assertEqual(1, lqueue:len(State2a#rabbit_fifo.returns)),
     ?assertMatch(#consumer{checked_out = Ch,
                            status = suspected_down}
@@ -539,7 +539,7 @@ duplicate_delivery_test(_) ->
     {#rabbit_fifo{ra_indexes = RaIdxs,
             messages = Messages}, _} = enq(2, 1, first, State0),
     ?assertEqual(1, rabbit_fifo_index:size(RaIdxs)),
-    ?assertEqual(1, maps:size(Messages)),
+    ?assertEqual(1, lqueue:len(Messages)),
     ok.
 
 state_enter_file_handle_leader_reservation_test(_) ->
@@ -622,7 +622,7 @@ down_noproc_returns_checked_out_in_order_test(_) ->
                          {FS, _} = enq(Num, Num, Num, FS0),
                          FS
                      end, S0, lists:seq(1, 100)),
-    ?assertEqual(100, maps:size(S1#rabbit_fifo.messages)),
+    ?assertEqual(100, lqueue:len(S1#rabbit_fifo.messages)),
     Cid = {<<"cid">>, self()},
     {S2, _} = check(Cid, 101, 1000, S1),
     #consumer{checked_out = Checked} = maps:get(Cid, S2#rabbit_fifo.consumers),
@@ -643,7 +643,7 @@ down_noconnection_returns_checked_out_test(_) ->
                          {FS, _} = enq(Num, Num, Num, FS0),
                          FS
                      end, S0, lists:seq(1, NumMsgs)),
-    ?assertEqual(NumMsgs, maps:size(S1#rabbit_fifo.messages)),
+    ?assertEqual(NumMsgs, lqueue:len(S1#rabbit_fifo.messages)),
     Cid = {<<"cid">>, self()},
     {S2, _} = check(Cid, 101, 1000, S1),
     #consumer{checked_out = Checked} = maps:get(Cid, S2#rabbit_fifo.consumers),
@@ -1384,6 +1384,29 @@ aux_test(_) ->
     [X] = ets:lookup(rabbit_fifo_usage, aux_test),
     meck:unload(),
     ?assert(X > 0.0),
+    ok.
+
+
+%% machine version conversion test
+
+machine_version_test(_) ->
+    V0 = rabbit_fifo_v0,
+    S0 = V0:init(#{name => ?FUNCTION_NAME,
+                   queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+    Idx = 1,
+    {#rabbit_fifo{}, ok, []} = apply(meta(Idx), {machine_version, 0, 1}, S0),
+
+    Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
+    Entries = [
+               {1, rabbit_fifo_v0:make_enqueue(self(), 1, banana)},
+               {2, rabbit_fifo_v0:make_enqueue(self(), 2, apple)},
+               {3, rabbit_fifo_v0:make_checkout(Cid, {auto, 1, unsettled}, #{})}
+              ],
+    {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
+    {#rabbit_fifo{messages = Msgs}, ok, []} = apply(meta(Idx),
+                                                    {machine_version, 0, 1}, S1),
+    %% validate message conversion to lqueue
+    ?assertEqual(1, lqueue:len(Msgs)),
     ok.
 
 %% Utility

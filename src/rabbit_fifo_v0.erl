@@ -53,6 +53,9 @@
          %% misc
          dehydrate_state/1,
          normalize/1,
+         normalize_for_v1/1,
+         %% getters for coversions
+         messages_map/1,
 
          %% protocol helpers
          make_enqueue/3,
@@ -124,6 +127,7 @@
 -spec init(config()) -> state().
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->
+    rabbit_log:info("rabbit_fifo: init v0 ~p", [Conf]),
     update_config(Conf, #?MODULE{cfg = #cfg{name = Name,
                                             resource = Resource}}).
 
@@ -1753,6 +1757,22 @@ is_over_limit(#?MODULE{cfg = #cfg{max_length = MaxLength,
                        msg_bytes_enqueue = BytesEnq} = State) ->
 
     messages_ready(State) > MaxLength orelse (BytesEnq > MaxBytes).
+
+normalize_for_v1(#?MODULE{cfg = Cfg} = State) ->
+    %% run all v0 conversions so that v1 does not have to have this code
+    RCI = case Cfg of
+              #cfg{release_cursor_interval = {_, _} = R} ->
+                  R;
+              #cfg{release_cursor_interval = undefined} ->
+                  {?RELEASE_CURSOR_EVERY, ?RELEASE_CURSOR_EVERY};
+              #cfg{release_cursor_interval = C} ->
+                  {?RELEASE_CURSOR_EVERY, C}
+          end,
+    convert_prefix_msgs(
+      State#?MODULE{cfg = Cfg#cfg{release_cursor_interval = RCI}}).
+
+messages_map(#?MODULE{messages = Messages}) ->
+    Messages.
 
 -spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) -> protocol().
 make_enqueue(Pid, Seq, Msg) ->
