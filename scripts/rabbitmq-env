@@ -133,7 +133,12 @@ SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_O
 
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
-# FIXME
+[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS="$CTL_ERL_ARGS"
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN="$CTL_DIST_PORT_MIN"
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX="$CTL_DIST_PORT_MAX"
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN='35672'
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX="$(($RABBITMQ_CTL_DIST_PORT_MIN + 10))"
+
 [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
 [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
@@ -182,6 +187,8 @@ run_escript()
         -boot "$CLEAN_BOOT_FILE" \
         -noinput -noshell -hidden -smp enable \
         $RABBITMQ_CTL_ERL_ARGS \
+        -kernel inet_dist_listen_min "$RABBITMQ_CTL_DIST_PORT_MIN" \
+        -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
         -run escript start \
         -escript main "$escript_main" \
         -extra "$escript" "$@"
