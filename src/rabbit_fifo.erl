@@ -310,7 +310,7 @@ apply(#{index := RaftIdx}, #purge{},
                messages = Messages} = State0) ->
     Total = messages_ready(State0),
     Indexes1 = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0,
-                          [I || {I, _} <- lists:sort(lqueue:to_list(Messages))]),
+                          [I || {_, {I, _}} <- lqueue:to_list(Messages)]),
     Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes1,
                           [I || {_, {I, _}} <- lqueue:to_list(Returns)]),
     {State, _, Effects} =
@@ -320,7 +320,6 @@ apply(#{index := RaftIdx}, #purge{},
                                                   returns = lqueue:new(),
                                                   msg_bytes_enqueue = 0,
                                                   prefix_msgs = {0, [], 0, []},
-                                                  % low_msg_num = undefined,
                                                   msg_bytes_in_memory = 0,
                                                   msgs_ready_in_memory = 0},
                                    []),
@@ -469,8 +468,9 @@ apply(_Meta, {machine_version, 0, 1}, V0State0) ->
     V0State = rabbit_fifo_v0:normalize_for_v1(V0State0),
     %% quick hack to "convert" the state from version one
     State = setelement(1, V0State, ?MODULE),
-    V0Msgs = rabbit_fifo_v0:messages_map(V0State),
+    V0Msgs = rabbit_fifo_v0:get_field(messages, V0State),
     V1Msgs = lqueue:from_list(lists:sort(maps:to_list(V0Msgs))),
+    %% TODOD each release cursor needs converting too!
     {State#?MODULE{messages = V1Msgs}, ok, []}.
 
 purge_node(Node, State, Effects) ->
@@ -629,7 +629,7 @@ overview(#?MODULE{consumers = Cons,
       num_ready_messages => messages_ready(State),
       num_messages => messages_total(State),
       num_release_cursors => lqueue:len(Cursors),
-      release_crusor_enqueue_counter => EnqCount,
+      release_cursor_enqueue_counter => EnqCount,
       enqueue_message_bytes => EnqueueBytes,
       checkout_message_bytes => CheckoutBytes}.
 
@@ -1244,7 +1244,7 @@ update_smallest_raft_index(IncomingRaftIdx,
                     {State0#?MODULE{release_cursors = Cursors},
                      ok, Effects};
                 {Cursor, Cursors} ->
-                    %% we can emit a release cursor we've passed the smallest
+                    %% we can emit a release cursor when we've passed the smallest
                     %% release cursor available.
                     {State0#?MODULE{release_cursors = Cursors}, ok,
                      Effects ++ [Cursor]}
@@ -1680,7 +1680,6 @@ dehydrate_state(#?MODULE{messages = Messages,
     State#?MODULE{messages = lqueue:new(),
                   ra_indexes = rabbit_fifo_index:empty(),
                   release_cursors = lqueue:new(),
-                  % low_msg_num = undefined,
                   consumers = maps:map(fun (_, C) ->
                                                dehydrate_consumer(C)
                                        end, Consumers),
@@ -1693,9 +1692,9 @@ dehydrate_state(#?MODULE{messages = Messages,
 dehydrate_messages(Msgs0, Acc0)  ->
     {OutRes, Msgs} = lqueue:out(Msgs0),
     case OutRes of
-        {value, {_, 'empty'} = Msg} ->
+        {value, {_MsgId, {_RaftId, {_, 'empty'} = Msg}}} ->
             dehydrate_messages(Msgs, [Msg | Acc0]);
-        {value, {Header, _}} ->
+        {value, {_MsgId, {_RaftId, {Header, _}}}} ->
             dehydrate_messages(Msgs, [Header | Acc0]);
         empty ->
             lists:reverse(Acc0)
@@ -1714,8 +1713,10 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
     Con#consumer{checked_out = Checked}.
 
 %% make the state suitable for equality comparison
-normalize(#?MODULE{release_cursors = Cursors} = State) ->
-    State#?MODULE{release_cursors = lqueue:from_list(lqueue:to_list(Cursors))}.
+normalize(#?MODULE{messages = Messages,
+                   release_cursors = Cursors} = State) ->
+    State#?MODULE{messages = lqueue:from_list(lqueue:to_list(Messages)),
+                  release_cursors = lqueue:from_list(lqueue:to_list(Cursors))}.
 
 is_over_limit(#?MODULE{cfg = #cfg{max_length = undefined,
                                   max_bytes = undefined}}) ->
