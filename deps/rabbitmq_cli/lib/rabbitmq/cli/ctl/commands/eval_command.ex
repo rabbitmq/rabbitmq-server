@@ -14,14 +14,15 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Input}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate([], _) do
-    {:validation_failure, :not_enough_args}
+    # value will be provided via standard input
+    :ok
   end
 
   def validate(["" | _], _) do
@@ -35,16 +36,43 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     end
   end
 
-  def run([expr | arguments], %{node: node_name} = opts) do
-    {:ok, parsed} = parse_expr(expr)
-    bindings = make_bindings(arguments, opts)
+  def run([], %{node: node_name} = opts) do
+    case Input.infer_password("", opts) do
+      :eof -> {:error, :not_enough_args}
+      expr ->
+        case parse_expr(expr) do
+          {:ok, parsed} ->
+            bindings = make_bindings([], opts)
 
-    case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, bindings]) do
-      {:value, value, _} -> {:ok, value}
-      err -> err
+            case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, bindings]) do
+              {:value, value, _} -> {:ok, value}
+              err                -> err
+            end
+
+          {:error, msg} -> {:error, msg}
+        end
+    end
+  end
+  def run([expr | arguments], %{node: node_name} = opts) do
+    case parse_expr(expr) do
+      {:ok, parsed} ->
+        bindings = make_bindings(arguments, opts)
+
+        case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, bindings]) do
+          {:value, value, _} -> {:ok, value}
+          err                -> err
+        end
+
+      {:error, msg} -> {:error, msg}
     end
   end
 
+  def output({:error, :not_enough_args}, _) do
+    {:error, ExitCodes.exit_dataerr(), "Expression to evaluate is not provided via argument or stdin"}
+  end
+  def output({:error, msg}, _) do
+    {:error, ExitCodes.exit_dataerr(), "Evaluation failed: #{msg}"}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
