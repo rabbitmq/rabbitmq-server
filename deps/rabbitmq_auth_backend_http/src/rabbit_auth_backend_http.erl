@@ -59,12 +59,19 @@ user_login_authorization(Username, AuthProps) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, AuthzData = #{peeraddr := PeerAddr}) ->
+check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost, undefined) ->
+    do_check_vhost_access(Username, Tags, VHost, "", undefined);
+check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost,
+                   AuthzData = #{peeraddr := PeerAddr}) when is_map(AuthzData) ->
     AuthzData1 = maps:remove(peeraddr, AuthzData),
-    OptionsParameters = context_as_parameters(AuthzData1),
+    Ip = parse_peeraddr(PeerAddr),
+    do_check_vhost_access(Username, Tags, VHost, Ip, AuthzData1).
+
+do_check_vhost_access(Username, Tags, VHost, Ip, AuthzData) ->
+    OptionsParameters = context_as_parameters(AuthzData),
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-                          {ip,       parse_peeraddr(PeerAddr)},
+                          {ip,       Ip},
                           {tags,     join_tags(Tags)}] ++ OptionsParameters).
 
 check_resource_access(#auth_user{username = Username, tags = Tags},
