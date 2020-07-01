@@ -33,26 +33,42 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :list_with_minimum_quorum_for_cli, [], timeout) do
-      [] -> []
-      qs when is_list(qs) -> qs
+    case :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :is_single_node_cluster, [], timeout) do
+      # if target node is the only one in the cluster, the check makes little sense
+      # and false positives can be misleading
+      true  -> {:ok, :single_node_cluster}
+      false ->
+        case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :list_with_minimum_quorum_for_cli, [], timeout) do
+          [] -> {:ok, []}
+          qs when is_list(qs) -> {:ok, qs}
+          other -> other
+        end
       other -> other
     end
   end
 
-  def output([], %{formatter: "json"}) do
+  def output({:ok, :single_node_cluster}, %{formatter: "json"}) do
+    {:ok, %{
+      "result"  => "ok",
+      "message" => "Target node seems to be the only one in a single node cluster, the check does not apply"
+    }}
+  end
+  def output({:ok, []}, %{formatter: "json"}) do
     {:ok, %{"result" => "ok"}}
   end
-
-  def output([], %{silent: true}) do
+  def output({:ok, :single_node_cluster}, %{silent: true}) do
     {:ok, :check_passed}
   end
-
-  def output([], %{node: node_name}) do
+  def output({:ok, []}, %{silent: true}) do
+    {:ok, :check_passed}
+  end
+  def output({:ok, :single_node_cluster}, %{node: node_name}) do
+    {:ok, "Node #{node_name} seems to be the only one in a single node cluster, the check does not apply"}
+  end
+  def output({:ok, []}, %{node: node_name}) do
     {:ok, "Node #{node_name} reported no quorum queues with minimum quorum"}
   end
-
-  def output(qs, %{node: node_name, formatter: "json"}) when is_list(qs) do
+  def output({:ok, qs}, %{node: node_name, formatter: "json"}) when is_list(qs) do
     {:error, :check_failed,
      %{
        "result" => "error",
@@ -60,12 +76,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
        "message" => "Node #{node_name} reported local queues with minimum online quorum"
      }}
   end
-
-  def output(_qs, %{silent: true}) do
+  def output({:ok, qs}, %{silent: true}) when is_list(qs) do
     {:error, :check_failed}
   end
-
-  def output(qs, %{node: node_name}) when is_list(qs) do
+  def output({:ok, qs}, %{node: node_name}) when is_list(qs) do
     lines = queue_lines(qs, node_name)
 
     {:error, :check_failed, Enum.join(lines, line_separator())}
