@@ -45,7 +45,7 @@
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([has_synchronised_mirrors_online/1]).
--export([is_replicated/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
+-export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
 -export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
          list_local_leaders/0, list_local_followers/0, get_quorum_nodes/1,
          list_local_mirrored_classic_without_synchronised_mirrors/0,
@@ -1094,6 +1094,8 @@ list_local_mirrored_classic_without_synchronised_mirrors() ->
     [ Q || Q <- list(),
          amqqueue:get_state(Q) =/= crashed,
          amqqueue:is_classic(Q),
+         %% filter out exclusive queues as they won't actually be mirrored
+         is_not_exclusive(Q),
          is_local_to_node(amqqueue:get_pid(Q), node()),
          is_replicated(Q),
          not has_synchronised_mirrors_online(Q)].
@@ -1951,6 +1953,14 @@ is_replicated(Q) when ?amqqueue_is_quorum(Q) ->
     true;
 is_replicated(Q) ->
     rabbit_mirror_queue_misc:is_mirrored(Q).
+
+is_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
+    false;
+is_exclusive(Q) when ?amqqueue_exclusive_owner_is_pid(Q) ->
+    true.
+
+is_not_exclusive(Q) ->
+    not is_exclusive(Q).
 
 is_dead_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     false;
