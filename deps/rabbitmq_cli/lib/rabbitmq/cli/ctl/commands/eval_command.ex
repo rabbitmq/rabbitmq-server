@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   end
 
   def run([], %{node: node_name} = opts) do
-    case Input.infer_string("", opts) do
+    case Input.consume_multiline_string() do
       :eof -> {:error, :not_enough_args}
       expr ->
         case ErlEval.parse_expr(expr) do

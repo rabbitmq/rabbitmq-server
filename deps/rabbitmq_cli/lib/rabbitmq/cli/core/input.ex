@@ -16,18 +16,33 @@
 defmodule RabbitMQ.CLI.Core.Input do
   alias RabbitMQ.CLI.Core.Config
 
-  def infer_string(prompt, opts) do
+  def consume_single_line_string_with_prompt(prompt, opts) do
     val = case Config.output_less?(opts) do
-      true  -> IO.gets("")
-      false -> IO.gets(prompt)
+      true  ->
+        IO.read(:stdio, :line)
+      false ->
+        IO.puts(prompt)
+        IO.read(:stdio, :line)
     end
 
     case val do
       :eof -> :eof
+      ""   -> :eof
       s    -> String.trim(s)
     end
   end
+
+  def consume_multiline_string() do
+    val = IO.read(:stdio, :all)
+
+    case val do
+      :eof -> :eof
+      ""   -> :eof
+      s    -> String.trim(s)
+    end
+  end
+
   def infer_password(prompt, opts) do
-    infer_string(prompt, opts)
+    consume_single_line_string_with_prompt(prompt, opts)
   end
 end
