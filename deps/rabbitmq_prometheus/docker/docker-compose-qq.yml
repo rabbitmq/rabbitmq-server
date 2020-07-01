@@ -26,9 +26,10 @@ services:
     cap_add:
       - ALL
     hostname: rmq0-qq
-    environment:
-      RABBITMQ_ERLANG_COOKIE: rabbitmq-qq
+    # environment:
+    #   RABBITMQ_LOG: debug,+color
     volumes:
+      - ./erlang.cookie:/var/lib/rabbitmq/.erlang.cookie
       - ./rabbitmq-qq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-qq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./rabbitmq-qq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro

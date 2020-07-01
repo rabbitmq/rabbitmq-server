@@ -26,9 +26,10 @@ services:
     cap_add:
       - ALL
     hostname: rmq0
-    environment:
-      RABBITMQ_ERLANG_COOKIE: rabbitmq-overview
+    # environment:
+    #   RABBITMQ_LOG: debug,+color
     volumes:
+      - ./erlang.cookie:/var/lib/rabbitmq/.erlang.cookie
       - ./rabbitmq-overview.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-overview-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
     # we want to simulate hitting thresholds

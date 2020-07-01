@@ -26,9 +26,10 @@ services:
     cap_add:
       - ALL
     hostname: rmq0-dist-tls
-    environment:
-      RABBITMQ_ERLANG_COOKIE: rmq0-dist-tls
+    # environment:
+    #   RABBITMQ_LOG: debug,+color
     volumes:
+      - ./erlang.cookie:/var/lib/rabbitmq/.erlang.cookie
       - ./rabbitmq-dist-tls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./rabbitmq-ssl_dist.config:/etc/rabbitmq/ssl_dist.config:ro
