@@ -30,8 +30,9 @@ defmodule EvalCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
-  test "validate: providing too few arguments fails validation" do
-    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+  test "validate: providing no arguments succeeds" do
+    # expression is expected to be provided via standard input
+    assert @command.validate([], %{}) == :ok
   end
 
   test "validate: empty expression to eval fails validation" do
