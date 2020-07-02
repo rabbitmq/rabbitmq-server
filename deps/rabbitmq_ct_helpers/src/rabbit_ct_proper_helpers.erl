@@ -20,8 +20,7 @@
 -export([run_proper/3]).
 
 run_proper(Fun, Args, NumTests) ->
-    ?assertEqual(
-       true,
+    ?assert(
        proper:counterexample(erlang:apply(Fun, Args),
 			     [{numtests, NumTests},
 			      {on_output, fun(".", _) -> ok; % don't print the '.'s on new lines
