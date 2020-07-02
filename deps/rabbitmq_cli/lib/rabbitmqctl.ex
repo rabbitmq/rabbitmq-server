@@ -36,11 +36,6 @@ defmodule RabbitMQCtl do
     handle_shutdown(:ok)
   end
 
-  def main(["--auto-complete", script_name | args]) do
-    script_basename = Path.basename(script_name)
-    auto_complete(script_basename, args)
-  end
-
   def main(unparsed_command) do
     exec_command(unparsed_command, &process_output/3)
     |> handle_shutdown
@@ -53,7 +48,6 @@ defmodule RabbitMQCtl do
     # same thing.
     {:error, ExitCodes.exit_usage(), HelpCommand.all_usage(parsed_options)};
   end
-
   def exec_command(["--help"] = unparsed_command, _) do
     {_args, parsed_options, _} = Parser.parse_global(unparsed_command)
 
@@ -61,12 +55,14 @@ defmodule RabbitMQCtl do
     # reporting a success
     {:ok, ExitCodes.exit_ok(), Enum.join(HelpCommand.all_usage(parsed_options), "")};
   end
-
   def exec_command(["--version"] = _unparsed_command, opts) do
     # rewrite `--version` as `version`
     exec_command(["version"], opts)
   end
-
+  def exec_command(["--auto-complete" | args], opts) do
+    # rewrite `--auto-complete` as `autocomplete`
+    exec_command(["autocomplete" | args], opts)
+  end
   def exec_command(unparsed_command, output_fun) do
     {command, command_name, arguments, parsed_options, invalid} = Parser.parse(unparsed_command)
 
@@ -245,14 +241,6 @@ defmodule RabbitMQCtl do
   end
 
   defp handle_shutdown(_) do
-    exit_program(ExitCodes.exit_ok())
-  end
-
-  def auto_complete(script_name, args) do
-    RabbitMQ.CLI.AutoComplete.complete(script_name, args)
-    |> Stream.map(&IO.puts/1)
-    |> Stream.run()
-
     exit_program(ExitCodes.exit_ok())
   end
 
