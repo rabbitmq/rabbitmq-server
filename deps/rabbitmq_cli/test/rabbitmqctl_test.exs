@@ -224,6 +224,15 @@ defmodule RabbitMQCtlTest do
     check_output(["--auto-complete", "--script-name", "rabbitmq-queues", "add_m"], "add_member\n")
   end
 
+  test "autocompletion command used directly" do
+    # Note: these are not script name (scope) aware without --script-name
+    # but the actual command invoked in a shell will be
+    check_output(["autocomplete", "list_q"], "list_queues\n")
+    check_output(["autocomplete", "list_con", "--script-name", "rabbitmq-diagnostics"], "list_connections\nlist_consumers\n")
+    check_output(["autocomplete", "--script-name", "rabbitmq-diagnostics", "mem"], "memory_breakdown\n")
+    check_output(["autocomplete", "--script-name", "rabbitmq-queues", "add_m"], "add_member\n")
+  end
+
   defp check_output(cmd, out) do
     assert capture_io(fn ->
       error_check(cmd, exit_ok())
