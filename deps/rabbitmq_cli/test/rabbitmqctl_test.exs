@@ -211,19 +211,26 @@ defmodule RabbitMQCtlTest do
     end) =~ ~r/Invalid options for this command/
   end
 
-## ------------------------- Auto-complete ------------------------------------
+  #
+  # --auto-complete and `autocomplete [command]`
+  #
 
-  test "rabbitmqctl auto-completes commands" do
-    check_output(["--auto-complete", "rabbitmqctl", "list_q"], "list_queues\n")
-    check_output(["--auto-complete", "/usr/bin/rabbitmqctl", "list_q"], "list_queues\n")
-    check_output(["--auto-complete", "/my/custom/path/rabbitmqctl", "list_q"], "list_queues\n")
-    check_output(["--auto-complete", "rabbitmq-plugins", "enab"], "enable\n")
-    check_output(["--auto-complete", "/path/to/rabbitmq-plugins", "enab"], "enable\n")
+  test "--auto-complete delegates to the autocomplete command" do
+    # Note: these are not script name (scope) aware without --script-name
+    # but the actual command invoked in a shell will be
+    check_output(["--auto-complete", "list_q"], "list_queues\n")
+    check_output(["--auto-complete", "list_con", "--script-name", "rabbitmq-diagnostics"], "list_connections\nlist_consumers\n")
+    check_output(["--auto-complete", "--script-name", "rabbitmq-diagnostics", "mem"], "memory_breakdown\n")
+    check_output(["--auto-complete", "--script-name", "rabbitmq-queues", "add_m"], "add_member\n")
   end
 
-  test "invalid script name does not autocomplete" do
-    check_output(["--auto-complete", "rabbitmqinvalid list"], "")
-    check_output(["--auto-complete", "rabbitmqinvalid --script-name rabbitmqctl list"], "")
+  test "autocompletion command used directly" do
+    # Note: these are not script name (scope) aware without --script-name
+    # but the actual command invoked in a shell will be
+    check_output(["autocomplete", "list_q"], "list_queues\n")
+    check_output(["autocomplete", "list_con", "--script-name", "rabbitmq-diagnostics"], "list_connections\nlist_consumers\n")
+    check_output(["autocomplete", "--script-name", "rabbitmq-diagnostics", "mem"], "memory_breakdown\n")
+    check_output(["autocomplete", "--script-name", "rabbitmq-queues", "add_m"], "add_member\n")
   end
 
   defp check_output(cmd, out) do
