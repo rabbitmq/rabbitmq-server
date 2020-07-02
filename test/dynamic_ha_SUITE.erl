@@ -429,7 +429,7 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     %% --> Master: A
     %%     Slaves: [B, C] or [C, B]
     SSPids = ?awaitMatch(SSPids when is_list(SSPids),
-                                     proplists:get_value(synchronized_slave_pids,
+                                     proplists:get_value(synchronised_slave_pids,
                                                          find_queue(?QNAME, A)),
                                      5000),
 
