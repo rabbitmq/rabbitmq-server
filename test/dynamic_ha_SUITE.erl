@@ -34,6 +34,7 @@
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -378,8 +379,10 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
         [all])),
     %% --> Master: A
     %%     Slaves: [B, C] or [C, B]
-    Info = find_queue(?QNAME, A),
-    SSPids = proplists:get_value(synchronised_slave_pids, Info),
+    SSPids = ?awaitMatch(SSPids when is_list(SSPids),
+                                     proplists:get_value(synchronized_slave_pids,
+                                                         find_queue(?QNAME, A)),
+                                     5000),
 
     %% Choose slave that isn't the first sync slave. Cover a bug that always
     %% chose the first, even if it was not part of the policy
