@@ -17,16 +17,6 @@
                     tags,
                     impl}).
 
-%% Implementation for the internal auth backend
--record(internal_user, {
-    username,
-    password_hash,
-    tags,
-    %% password hashing implementation module,
-    %% typically rabbit_password_hashing_* but can
-    %% come from a plugin
-    hashing_algorithm,
-    limits = #{}}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
