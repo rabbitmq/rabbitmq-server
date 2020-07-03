@@ -25,9 +25,9 @@
 
 all() ->
     [
-     {group, import_on_a_running_node},
-     {group, import_on_a_booting_node},
-     {group, roundtrip}
+     {group, boot_time_import},
+     {group, roundtrip},
+     {group, import_on_a_running_node}
     ].
 
 groups() ->
@@ -50,8 +50,8 @@ groups() ->
                                import_case11,
                                import_case12
                               ]},
-        {import_on_a_booting_node, [], [
-            import_on_boot_case1
+        {boot_time_import, [], [
+            import_on_a_booting_node
         ]},
 
         {roundtrip, [], [
@@ -70,33 +70,26 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(_, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE}
-                                                   ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-                      rabbit_ct_broker_helpers:setup_steps() ++
-                      rabbit_ct_client_helpers:setup_steps()).
-
-end_per_group(_, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-                                         rabbit_ct_client_helpers:teardown_steps() ++
-                                             rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_testcase(import_on_boot_case1 = Testcase, Config) ->
+init_per_group(boot_time_import = Group, Config) ->
     CasePath = filename:join(?config(data_dir, Config), "case5.json"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Testcase},
+        {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1}
       ]),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1,
       {rabbit, [
           {load_definitions, CasePath}
       ]}),
-    rabbit_ct_helpers:run_steps(Config2,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    rabbit_ct_helpers:testcase_started(Config, Testcase);
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+init_per_group(Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                    {rmq_nodename_suffix, Group}
+                                                   ]),
+    rabbit_ct_helpers:run_setup_steps(Config1, rabbit_ct_broker_helpers:setup_steps()).
+
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -137,7 +130,7 @@ export_import_round_trip_case1(Config) ->
     Defs = export(Config),
     import_raw(Config, rabbit_json:encode(Defs)).
 
-import_on_boot_case1(Config) ->
+import_on_a_booting_node(Config) ->
     %% see case5.json
     VHost = <<"vhost2">>,
     %% verify that vhost2 eventually starts
