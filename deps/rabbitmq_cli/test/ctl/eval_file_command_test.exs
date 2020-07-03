@@ -17,7 +17,6 @@
 defmodule EvalFileCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @command RabbitMQ.CLI.Ctl.Commands.EvalFileCommand
 
