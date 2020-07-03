@@ -71,7 +71,7 @@ public class StreamTest {
         CountDownLatch publishingLatch = new CountDownLatch(messageCount);
         Client publisher = cf.get(new Client.ClientParameters()
                 .port(publisherBroker.apply(streamMetadata).getPort())
-                .confirmListener(publishingId -> publishingLatch.countDown()));
+                .publishConfirmListener(publishingId -> publishingLatch.countDown()));
 
         IntStream.range(0, messageCount).forEach(i -> publisher.publish(stream, ("hello " + i).getBytes(StandardCharsets.UTF_8)));
 

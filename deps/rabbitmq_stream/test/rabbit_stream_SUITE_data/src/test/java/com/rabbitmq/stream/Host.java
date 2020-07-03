@@ -20,6 +20,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class Host {
 
@@ -84,9 +86,12 @@ public class Host {
     }
 
     public static String node1name() {
-        return System.getProperty("node1.name");
+        try {
+            return System.getProperty("node1.name", "rabbit-1@" + InetAddress.getLocalHost().getHostName());
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        }
     }
-
 
     static String rabbitmqctlCommand() {
         return System.getProperty("rabbitmqctl.bin");
