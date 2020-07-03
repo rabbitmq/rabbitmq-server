@@ -656,7 +656,7 @@ exchange_definition(#exchange{name = #resource{virtual_host = VHost, name = Name
       <<"type">> => Type,
       <<"durable">> => Durable,
       <<"auto_delete">> => AD,
-      <<"arguments">> => Args}.
+      <<"arguments">> => rabbit_misc:amqp_table(Args)}.
 
 list_queues() ->
     %% exclude exclusive queues, they cannot be restored
@@ -679,7 +679,7 @@ queue_definition(Q) ->
         <<"type">> => Type,
         <<"durable">> => amqqueue:is_durable(Q),
         <<"auto_delete">> => amqqueue:is_auto_delete(Q),
-        <<"arguments">> => maps:from_list(Arguments)
+        <<"arguments">> => rabbit_misc:amqp_table(Arguments)
     }.
 
 list_bindings() ->
@@ -696,7 +696,7 @@ binding_definition(#binding{source      = S,
         <<"destination">> => D#resource.name,
         <<"destination_type">> => D#resource.kind,
         <<"routing_key">> => RoutingKey,
-        <<"arguments">> => maps:from_list(Arguments)
+        <<"arguments">> => rabbit_misc:amqp_table(Arguments)
     }.
 
 list_vhosts() ->
