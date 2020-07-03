@@ -17,4 +17,20 @@ defmodule RabbitMQ.CLI.Core.ANSI do
   def bright(string) do
     "#{IO.ANSI.bright()}#{string}#{IO.ANSI.reset()}"
   end
+
+  def red(string) do
+    "#{IO.ANSI.red()}#{string}#{IO.ANSI.reset()}"
+  end
+
+  def yellow(string) do
+    "#{IO.ANSI.yellow()}#{string}#{IO.ANSI.reset()}"
+  end
+
+  def bright_red(string) do
+    "#{IO.ANSI.bright()}#{IO.ANSI.red()}#{string}#{IO.ANSI.reset()}"
+  end
+
+  def bright_yellow(string) do
+    "#{IO.ANSI.bright()}#{IO.ANSI.yellow()}#{string}#{IO.ANSI.reset()}"
+  end
 end

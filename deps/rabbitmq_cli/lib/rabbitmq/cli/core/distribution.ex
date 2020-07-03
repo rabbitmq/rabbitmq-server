@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Distribution do
-  alias RabbitMQ.CLI.Core.{Config, Helpers}
+  alias RabbitMQ.CLI.Core.{ANSI, Config, Helpers}
 
   #
   # API
@@ -77,6 +77,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
       cookie ->
         Node.set_cookie(cookie)
+        maybe_warn_about_deprecated_rabbitmq_erlang_cookie_env_variable(options)
         :ok
     end
   end
@@ -108,5 +109,20 @@ defmodule RabbitMQ.CLI.Core.Distribution do
       {:error, _} = err -> throw(err)
       rmq_hostname      -> String.to_atom("rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}")
     end
+  end
+
+  defp maybe_warn_about_deprecated_rabbitmq_erlang_cookie_env_variable(options) do
+      case System.get_env("RABBITMQ_ERLANG_COOKIE") do
+        nil -> :ok
+        _   ->
+          case Config.output_less?(options) do
+            true  -> :ok
+            false ->
+              warning = ANSI.bright_red("RABBITMQ_ERLANG_COOKIE env variable support is deprecated and will be REMOVED in a future version. ") <>
+                        ANSI.yellow("Use the $HOME/.erlang.cookie file or the --erlang-cookie switch instead.")
+
+              IO.puts(warning)
+          end
+      end
   end
 end
