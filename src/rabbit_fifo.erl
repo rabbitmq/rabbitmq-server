@@ -489,11 +489,6 @@ convert_v0_to_v1(V0State0) ->
                max_in_memory_bytes = rabbit_fifo_v0:get_cfg_field(max_in_memory_bytes, V0State)
               },
 
-    V0Cursors = rabbit_fifo_v0:get_field(release_cursors, V0State),
-    Cursors = lqueue:from_list(
-                [{I, convert_v0_to_v1(C)} ||
-                 {I, C} <- lqueue:to_list(V0Cursors)]),
-    %% need to covert each release cursor
     #?MODULE{cfg = Cfg,
              messages = V1Msgs,
              next_msg_num = rabbit_fifo_v0:get_field(next_msg_num, V0State),
@@ -501,7 +496,7 @@ convert_v0_to_v1(V0State0) ->
              enqueue_count = rabbit_fifo_v0:get_field(enqueue_count, V0State),
              enqueuers = rabbit_fifo_v0:get_field(enqueuers, V0State),
              ra_indexes = rabbit_fifo_v0:get_field(ra_indexes, V0State),
-             release_cursors = Cursors,
+             release_cursors = rabbit_fifo_v0:get_field(release_cursors, V0State),
              consumers = rabbit_fifo_v0:get_field(consumers, V0State),
              service_queue = rabbit_fifo_v0:get_field(service_queue, V0State),
              prefix_msgs = rabbit_fifo_v0:get_field(prefix_msgs, V0State),
