@@ -25,8 +25,9 @@
 
 all() ->
     [
-     {group, import_on_a_running_node},
-     {group, import_on_a_booting_node}
+     {group, boot_time_import},
+     {group, roundtrip},
+     {group, import_on_a_running_node}
     ].
 
 groups() ->
@@ -49,8 +50,12 @@ groups() ->
                                import_case11,
                                import_case12
                               ]},
-        {import_on_a_booting_node, [], [
-            import_on_boot_case1
+        {boot_time_import, [], [
+            import_on_a_booting_node
+        ]},
+
+        {roundtrip, [], [
+            export_import_round_trip_case1
         ]}
     ].
 
@@ -61,37 +66,30 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE}
-                                                   ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-                      rabbit_ct_broker_helpers:setup_steps() ++
-                      rabbit_ct_client_helpers:setup_steps()).
+    Config.
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-                                         rabbit_ct_client_helpers:teardown_steps() ++
-                                             rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) ->
     Config.
 
-end_per_group(_, Config) ->
-    Config.
-
-init_per_testcase(import_on_boot_case1 = Testcase, Config) ->
+init_per_group(boot_time_import = Group, Config) ->
     CasePath = filename:join(?config(data_dir, Config), "case5.json"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Testcase},
+        {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1}
       ]),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1,
       {rabbit, [
           {load_definitions, CasePath}
       ]}),
-    rabbit_ct_helpers:run_steps(Config2,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    rabbit_ct_helpers:testcase_started(Config, Testcase);
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+init_per_group(Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                    {rmq_nodename_suffix, Group}
+                                                   ]),
+    rabbit_ct_helpers:run_setup_steps(Config1, rabbit_ct_broker_helpers:setup_steps()).
+
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -126,7 +124,13 @@ import_case5(Config) ->
 import_case11(Config) -> import_file_case(Config, "case11").
 import_case12(Config) -> import_invalid_file_case(Config, "failing_case12").
 
-import_on_boot_case1(Config) ->
+export_import_round_trip_case1(Config) ->
+    %% case 6 has runtime parameters that do not depend on any plugins
+    import_file_case(Config, "case6"),
+    Defs = export(Config),
+    import_raw(Config, rabbit_json:encode(Defs)).
+
+import_on_a_booting_node(Config) ->
     %% see case5.json
     VHost = <<"vhost2">>,
     %% verify that vhost2 eventually starts
@@ -162,6 +166,20 @@ import_from_directory_case_expect(Config, CaseName, Expected) ->
                                  ?MODULE, run_directory_import_case,
                                  [CasePath, Expected]),
     ok.
+
+import_raw(Config, Body) ->
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]) of
+        ok -> ok;
+        {error, E} ->
+            ct:pal("Import of definitions ~p failed: ~p~n", [Body, E]),
+            ct:fail({failure, Body, E})
+    end.
+
+export(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_export, []).
+
+run_export() ->
+    rabbit_definitions:all_definitions().
 
 run_directory_import_case(Path, Expected) ->
     ct:pal("Will load definitions from files under ~p~n", [Path]),
