@@ -55,7 +55,8 @@ groups() ->
         ]},
 
         {roundtrip, [], [
-            export_import_round_trip_case1
+            export_import_round_trip_case1,
+            export_import_round_trip_case2
         ]}
     ].
 
@@ -130,6 +131,11 @@ export_import_round_trip_case1(Config) ->
     Defs = export(Config),
     import_raw(Config, rabbit_json:encode(Defs)).
 
+export_import_round_trip_case2(Config) ->
+    import_file_case(Config, "case9", "case9a"),
+    Defs = export(Config),
+    import_parsed(Config, Defs).
+
 import_on_a_booting_node(Config) ->
     %% see case5.json
     VHost = <<"vhost2">>,
@@ -144,7 +150,19 @@ import_on_a_booting_node(Config) ->
 %%
 
 import_file_case(Config, CaseName) ->
-    CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
+    CasePath = filename:join([
+        ?config(data_dir, Config),
+        CaseName ++ ".json"
+    ]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_import_case, [CasePath]),
+    ok.
+
+import_file_case(Config, Subdirectory, CaseName) ->
+    CasePath = filename:join([
+        ?config(data_dir, Config),
+        Subdirectory,
+        CaseName ++ ".json"
+    ]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_import_case, [CasePath]),
     ok.
 
@@ -171,7 +189,15 @@ import_raw(Config, Body) ->
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]) of
         ok -> ok;
         {error, E} ->
-            ct:pal("Import of definitions ~p failed: ~p~n", [Body, E]),
+            ct:pal("Import of JSON definitions ~p failed: ~p~n", [Body, E]),
+            ct:fail({failure, Body, E})
+    end.
+
+import_parsed(Config, Body) ->
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_parsed, [Body]) of
+        ok -> ok;
+        {error, E} ->
+            ct:pal("Import of parsed definitions ~p failed: ~p~n", [Body, E]),
             ct:fail({failure, Body, E})
     end.
 
