@@ -727,7 +727,7 @@ runtime_parameter_definition(Param) ->
         <<"vhost">> => pget(vhost, Param),
         <<"component">> => pget(component, Param),
         <<"name">> => pget(name, Param),
-        <<"value">> => pget(value, Param)
+        <<"value">> => maps:from_list(pget(value, Param))
     }.
 
 list_global_runtime_parameters() ->
