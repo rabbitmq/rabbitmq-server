@@ -104,7 +104,12 @@
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
          pending = [] :: [{msg_seqno(), ra:index(), raw_msg()}],
-         status = up :: up | suspected_down
+         status = up :: up |
+                        suspected_down |
+                        %% it is useful to have a record of when this was blocked
+                        %% so that we can retry sending the block effect if
+                        %% the publisher did not receive the initial one
+                        {blocked, At :: ra:index()}
         }).
 
 -record(cfg,
@@ -113,6 +118,7 @@
          release_cursor_interval :: option({non_neg_integer(), non_neg_integer()}),
          dead_letter_handler :: option(applied_mfa()),
          become_leader_handler :: option(applied_mfa()),
+         overflow_strategy = drop_head :: drop_head | reject_publish,
          max_length :: option(non_neg_integer()),
          max_bytes :: option(non_neg_integer()),
          %% whether single active consumer is on or not for this queue
@@ -131,9 +137,6 @@
         {cfg :: #cfg{},
          % unassigned messages
          messages = lqueue:new() :: lqueue:queue(),
-         % defines the lowest message in id available in the messages map
-         % that isn't a return
-         low_msg_num :: option(msg_in_id()),
          % defines the next message in id to be added to the messages map
          next_msg_num = 1 :: msg_in_id(),
          % list of returned msg_in_ids - when checking out it picks from

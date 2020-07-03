@@ -56,6 +56,7 @@
          normalize_for_v1/1,
          %% getters for coversions
          get_field/2,
+         get_cfg_field/2,
 
          %% protocol helpers
          make_enqueue/3,
@@ -611,12 +612,12 @@ tick(_Ts, #?STATE{cfg = #cfg{name = Name,
 
 -spec overview(state()) -> map().
 overview(#?STATE{consumers = Cons,
-                  enqueuers = Enqs,
-                  release_cursors = Cursors,
-                  enqueue_count = EnqCount,
-                  msg_bytes_enqueue = EnqueueBytes,
-                  msg_bytes_checkout = CheckoutBytes,
-                  cfg = Cfg} = State) ->
+                 enqueuers = Enqs,
+                 release_cursors = Cursors,
+                 enqueue_count = EnqCount,
+                 msg_bytes_enqueue = EnqueueBytes,
+                 msg_bytes_checkout = CheckoutBytes,
+                 cfg = Cfg} = State) ->
     Conf = #{name => Cfg#cfg.name,
              resource => Cfg#cfg.resource,
              release_cursor_interval => Cfg#cfg.release_cursor_interval,
@@ -1775,6 +1776,11 @@ get_field(Field, State) ->
     Fields = record_info(fields, ?STATE),
     Index = record_index_of(Field, Fields),
     element(Index, State).
+
+get_cfg_field(Field, #?STATE{cfg = Cfg} ) ->
+    Fields = record_info(fields, cfg),
+    Index = record_index_of(Field, Fields),
+    element(Index, Cfg).
 
 record_index_of(F, Fields) ->
     index_of(2, F, Fields).
