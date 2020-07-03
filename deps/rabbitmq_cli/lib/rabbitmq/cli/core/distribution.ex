@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Distribution do
-  alias RabbitMQ.CLI.Core.{Config, Helpers}
+  alias RabbitMQ.CLI.Core.{ANSI, Config, Helpers}
 
   #
   # API
@@ -118,8 +118,10 @@ defmodule RabbitMQ.CLI.Core.Distribution do
           case Config.output_less?(options) do
             true  -> :ok
             false ->
-              IO.puts("RABBITMQ_ERLANG_COOKIE env variable support is deprecated and will be REMOVED in a future version. " <>
-              "Use the $HOME/.erlang.cookie file or the --erlang-cookie switch instead.")
+              warning = ANSI.bright_red("RABBITMQ_ERLANG_COOKIE env variable support is deprecated and will be REMOVED in a future version. ") <>
+                        ANSI.yellow("Use the $HOME/.erlang.cookie file or the --erlang-cookie switch instead.")
+
+              IO.puts(warning)
           end
       end
   end
