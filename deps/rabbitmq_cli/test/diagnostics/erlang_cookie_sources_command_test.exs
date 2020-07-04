@@ -13,32 +13,13 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule OsEnvCommandTest do
-  use ExUnit.Case, async: false
-  import TestHelper
+defmodule ErlangCookieSourcesCommandTest do
+  use ExUnit.Case, async: true
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.OsEnvCommand
-
-  setup_all do
-    RabbitMQ.CLI.Core.Distribution.start()
-
-    start_rabbitmq_app()
-
-    ExUnit.configure([max_cases: 1])
-
-    on_exit([], fn ->
-      start_rabbitmq_app()
-    end)
-
-    :ok
-  end
+  @command RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        all: false
-      }}
+    {:ok, opts: %{}}
   end
 
   test "merge_defaults: merges no defaults" do
@@ -53,19 +34,13 @@ defmodule OsEnvCommandTest do
     assert @command.validate([], %{}) == :ok
   end
 
-  @tag test_timeout: 3000
-  test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
-  end
+  test "run: returns Erlang cookie sources info", context do
+    result = @command.run([], context[:opts])
 
-  test "run: returns defined RabbitMQ-specific environment variables", context do
-    vars = @command.run([], context[:opts])
-
-    # Only variables that are used by RABBITMQ are returned.
-    # They can be prefixed with RABBITMQ_ or not, rabbit_env tries both
-    # when filtering env variables down.
-    assert Enum.any?(vars, fn({k, _v}) ->
-      String.starts_with?(k, "RABBITMQ_") or String.starts_with?(k, "rabbitmq_")
-    end)
+    assert result[:effective_user] != nil
+    assert result[:home_dir] != nil
+    assert result[:cookie_file_path] != nil
+    assert result[:cookie_file_exists] != nil
+    assert result[:cookie_file_access] != nil
   end
 end
