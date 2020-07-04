@@ -70,7 +70,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
     cookie_file_lines = [
       "#{bright("Cookie File")}\n",
       "Effective user: #{result[:effective_user] || "(none)"}",
-      "$HOME directory: #{result[:home_dir] || "(none)"}",
+      "Effective home directory: #{result[:home_dir] || "(none)"}",
       "Cookie file path: #{result[:cookie_file_path]}",
       "Cookie file exists? #{result[:cookie_file_exists]}",
       "Cookie file type: #{result[:cookie_file_type] || "(n/a)"}",
