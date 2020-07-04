@@ -26,9 +26,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
 
   def run([], opts) do
     switch_cookie = opts[:erlang_cookie]
-    home_dir = System.get_env("HOME")
+    home_dir = get_home_dir()
     cookie_file_path = Path.join(home_dir, ".erlang.cookie")
-    cookie_file_stat = case File.stat(Path.join(System.get_env("HOME"), ".erlang.cookie")) do
+    cookie_file_stat = case File.stat(Path.join(home_dir, ".erlang.cookie")) do
       {:error, :enoent} -> nil
       {:ok, value}     -> value
     end
@@ -104,4 +104,22 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
   def usage, do: "erlang_cookie_sources"
 
   def formatter(), do: RabbitMQ.CLI.Formatters.StringPerLine
+
+  #
+  # Implementation
+  #
+
+  @doc """
+  Computes HOME directory path the same way Erlang VM/ei does,
+  including taking Windows-specific env variables into account.
+  """
+  def get_home_dir() do
+    homedrive = System.get_env("HOMEDRIVE")
+    homepath  = System.get_env("HOMEPATH")
+
+    case {homedrive != nil, homepath != nil} do
+      {true, true} -> "#{homedrive}#{homepath}"
+      _            -> System.get_env("HOME")
+    end
+  end
 end
