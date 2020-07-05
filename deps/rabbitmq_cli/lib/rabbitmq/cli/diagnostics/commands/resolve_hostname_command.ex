@@ -90,7 +90,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolveHostnameCommand do
     "resolve_hostname <hostname> [--address-family <ipv4 | ipv6>]"
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description(), do: "Resolves a hostname to a set of addresses. Takes Erlang's inetrc file into account."
 

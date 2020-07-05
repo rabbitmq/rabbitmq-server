@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.OsEnvCommand do
     "os_env"
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description(), do: "Lists RabbitMQ-specific environment variables set on target node"
 

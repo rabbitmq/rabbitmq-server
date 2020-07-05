@@ -298,7 +298,7 @@ short            | long          | description
       :policies ->
         "Policies"
       :configuration ->
-        "Node configuration"
+        "Configuration and Environment"
       :feature_flags ->
         "Feature flags"
       :other ->

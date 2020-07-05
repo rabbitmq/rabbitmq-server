@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CommandLineArgumentsCommand do
     ]
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description(), do: "Displays target node's command-line arguments and flags as reported by the runtime"
 

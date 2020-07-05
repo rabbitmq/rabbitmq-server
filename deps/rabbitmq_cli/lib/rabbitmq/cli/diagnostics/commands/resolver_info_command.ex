@@ -80,7 +80,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolverInfoCommand do
     "resolver_info"
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description(), do: "Displays effective hostname resolver (inetrc) configuration on target node"
 

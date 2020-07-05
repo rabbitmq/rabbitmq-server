@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
     {:ok, result}
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description(), do: "Displays a hash of the Erlang cookie (shared secret) used by the target node"
 

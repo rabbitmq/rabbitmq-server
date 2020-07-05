@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
     ]
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description(), do: "Displays the name and value of each variable in the application environment for each running application"
 
