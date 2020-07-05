@@ -95,7 +95,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
     {:ok, lines}
   end
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :configuration
 
   def description() do
     "Display Erlang cookie source (e.g. $HOME/.erlang.cookie file) information useful for troubleshooting"
