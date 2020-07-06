@@ -80,14 +80,26 @@ public class Host {
     }
 
     public static Process rabbitmqctl(String command) throws IOException {
+        return rabbitmqctl(command, node1name());
+    }
+
+    public static Process rabbitmqctl(String command, String nodename) throws IOException {
         return executeCommand(rabbitmqctlCommand() +
-                " -n '" + node1name() + "'" +
+                " -n '" + nodename + "'" +
                 " " + command);
     }
 
     public static String node1name() {
         try {
             return System.getProperty("node1.name", "rabbit-1@" + InetAddress.getLocalHost().getHostName());
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static String node2name() {
+        try {
+            return System.getProperty("node2.name", "rabbit-2@" + InetAddress.getLocalHost().getHostName());
         } catch (UnknownHostException e) {
             throw new RuntimeException(e);
         }
