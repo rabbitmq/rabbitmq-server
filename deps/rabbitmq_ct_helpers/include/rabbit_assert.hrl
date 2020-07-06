@@ -1,13 +1,13 @@
 -define(awaitMatch(Guard, Expr, Timeout),
         begin
-            ((fun Filter(Horizon) ->
-                      R = Expr,
-                      case (R) of
-                          Guard -> R;
+            ((fun AwaitMatchFilter(AwaitMatchHorizon) ->
+                      AwaitMatchResult = Expr,
+                      case (AwaitMatchResult) of
+                          Guard -> AwaitMatchResult;
                           __V -> case erlang:system_time(millisecond) of
-                                     Now when Now < Horizon ->
-                                         timer:sleep(min(50, Horizon - Now)),
-                                         Filter(Horizon);
+                                     AwaitMatchNow when AwaitMatchNow < AwaitMatchHorizon ->
+                                         timer:sleep(min(50, AwaitMatchHorizon - AwaitMatchNow)),
+                                         AwaitMatchFilter(AwaitMatchHorizon);
                                      _ ->
                                          erlang:error({awaitMatch,
                                                        [{module, ?MODULE},
