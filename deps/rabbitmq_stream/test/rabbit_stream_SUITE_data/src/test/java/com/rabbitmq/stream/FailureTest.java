@@ -16,16 +16,14 @@
 
 package com.rabbitmq.stream;
 
+import com.rabbitmq.stream.codec.WrapperMessageBuilder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -156,7 +154,12 @@ public class FailureTest {
         Set<Message> confirmed = ConcurrentHashMap.newKeySet();
 
         Client.PublishConfirmListener publishConfirmListener = publishingId -> {
-            Message confirmedMessage = published.remove(publishingId);
+            Message confirmedMessage;
+            int attempts = 0;
+            while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
+                wait(Duration.ofMillis(5));
+                attempts++;
+            }
             confirmed.add(confirmedMessage);
         };
 
@@ -296,6 +299,163 @@ public class FailureTest {
             lastMessageId = messageId;
         }
         assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
+    }
+
+    @Test
+    void consumerReattachesToOtherReplicaWhenReplicaGoesAway() throws Exception {
+        executorService = Executors.newCachedThreadPool();
+        Client metadataClient = cf.get(new Client.ClientParameters()
+                .port(TestUtils.streamPortNode1())
+        );
+        Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
+        Client.StreamMetadata streamMetadata = metadata.get(stream);
+        assertThat(streamMetadata).isNotNull();
+
+        assertThat(streamMetadata.getLeader()).isNotNull();
+        assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+
+        Map<Long, Message> published = new ConcurrentHashMap<>();
+        Set<Message> confirmed = ConcurrentHashMap.newKeySet();
+        Set<Long> confirmedIds = ConcurrentHashMap.newKeySet();
+        Client.PublishConfirmListener publishConfirmListener = publishingId -> {
+            Message confirmedMessage;
+            int attempts = 0;
+            while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
+                wait(Duration.ofMillis(5));
+                attempts++;
+            }
+            confirmed.add(confirmedMessage);
+            confirmedIds.add(confirmedMessage.getProperties().getMessageIdAsLong());
+        };
+
+        Client publisher = cf.get(new Client.ClientParameters()
+                .port(streamMetadata.getLeader().getPort())
+                .publishConfirmListener(publishConfirmListener)
+        );
+
+        AtomicLong generation = new AtomicLong(0);
+        AtomicLong sequence = new AtomicLong(0);
+        AtomicBoolean keepPublishing = new AtomicBoolean(true);
+        CountDownLatch publishingLatch = new CountDownLatch(1);
+
+        executorService.submit(() -> {
+            while (keepPublishing.get()) {
+                Message message = new WrapperMessageBuilder()
+                        .properties().messageId(sequence.getAndIncrement())
+                        .messageBuilder().applicationProperties().entry("generation", generation.get())
+                        .messageBuilder().build();
+                try {
+                    long publishingId = publisher.publish(stream, message);
+                    published.put(publishingId, message);
+                } catch (Exception e) {
+                    // keep going
+                }
+                wait(Duration.ofMillis(10));
+            }
+            publishingLatch.countDown();
+        });
+
+        Queue<Message> consumed = new ConcurrentLinkedQueue<>();
+
+        Client.Broker replica = streamMetadata.getReplicas().stream()
+                .filter(broker -> broker.getPort() == TestUtils.streamPortNode2())
+                .findFirst()
+                .orElseThrow(() -> new NoSuchElementException());
+
+        AtomicLong lastProcessedOffset = new AtomicLong(-1);
+        Set<Long> generations = ConcurrentHashMap.newKeySet();
+        Set<Long> consumedIds = ConcurrentHashMap.newKeySet();
+        Client.MessageListener messageListener = (subscriptionId, offset, message) -> {
+            consumed.add(message);
+            generations.add((Long) message.getApplicationProperties().get("generation"));
+            consumedIds.add(message.getProperties().getMessageIdAsLong());
+            lastProcessedOffset.set(offset);
+        };
+
+        CountDownLatch reconnectionLatch = new CountDownLatch(1);
+        AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
+        Client.ShutdownListener shutdownListener = shutdownContext -> {
+            if (shutdownContext.getShutdownReason() == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
+                // avoid long-running task in the IO thread
+                executorService.submit(() -> {
+                    Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+                    int newReplicaPort = m.getReplicas().get(0).getPort();
+
+                    Client newConsumer = cf.get(new Client.ClientParameters()
+                            .port(newReplicaPort)
+                            .shutdownListener(shutdownListenerReference.get())
+                            .chunkListener((client1, subscriptionId, offset, messageCount, dataSize) -> client1.credit(subscriptionId, 1))
+                            .messageListener(messageListener)
+                    );
+
+                    newConsumer.subscribe(1, stream, OffsetSpecification.offset(lastProcessedOffset.get() + 1), 10);
+
+                    generation.incrementAndGet();
+                    reconnectionLatch.countDown();
+                });
+            }
+        };
+        shutdownListenerReference.set(shutdownListener);
+
+        Client consumer = cf.get(new Client.ClientParameters()
+                .port(replica.getPort())
+                .shutdownListener(shutdownListener)
+                .chunkListener((client1, subscriptionId, offset, messageCount, dataSize) -> client1.credit(subscriptionId, 1))
+                .messageListener(messageListener)
+        );
+
+        Client.Response response = consumer.subscribe(1, stream, OffsetSpecification.first(), 10);
+        assertThat(response.isOk()).isTrue();
+
+        // let's publish for a bit of time
+        Thread.sleep(2000);
+
+        assertThat(confirmed).isNotEmpty();
+        assertThat(consumed).isNotEmpty();
+        int confirmedCount = confirmed.size();
+
+        try {
+            Host.rabbitmqctl("stop_app", Host.node2name());
+
+            assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+            // let's publish for a bit of time
+            Thread.sleep(2000);
+
+        } finally {
+            Host.rabbitmqctl("start_app", Host.node2name());
+        }
+        assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
+        confirmedCount = confirmed.size();
+
+        // wait until all the replicas are there
+        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
+            Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+            return m.getReplicas().size() == 2;
+        });
+
+        // let's publish for a bit of time
+        Thread.sleep(2000);
+
+        assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
+
+        keepPublishing.set(false);
+
+        assertThat(publishingLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
+
+        assertThat(generations).hasSize(2).contains(0L, 1L);
+        assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
+        long lastMessageId = -1;
+        for (Message message : consumed) {
+            long messageId = message.getProperties().getMessageIdAsLong();
+            assertThat(messageId).isGreaterThanOrEqualTo(lastMessageId);
+            lastMessageId = messageId;
+        }
+        assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
+
+        confirmedIds.forEach(confirmedId -> assertThat(consumedIds).contains(confirmedId));
     }
 
 }

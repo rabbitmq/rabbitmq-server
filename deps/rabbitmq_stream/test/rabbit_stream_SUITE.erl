@@ -75,12 +75,14 @@ test_stream(Config) ->
 java(Config) ->
     StreamPortNode1 = get_stream_port(Config, 0),
     StreamPortNode2 = get_stream_port(Config, 1),
-    NodeName = get_node_name(Config),
+    Node1Name = get_node_name(Config, 0),
+    Node2Name = get_node_name(Config, 1),
     RabbitMqCtl = get_rabbitmqctl(Config),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
     MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests",
         {"NODE1_STREAM_PORT=~b", [StreamPortNode1]},
-        {"NODE1_NAME=~p", [NodeName]},
+        {"NODE1_NAME=~p", [Node1Name]},
+        {"NODE2_NAME=~p", [Node2Name]},
         {"NODE2_STREAM_PORT=~b", [StreamPortNode2]},
         {"RABBITMQCTL=~p", [RabbitMqCtl]}
     ]),
