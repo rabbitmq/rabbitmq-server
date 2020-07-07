@@ -16,7 +16,7 @@
 
 -module(rabbit_log).
 
--export([log/3, log/4]).
+-export([log/2, log/3, log/4]).
 -export([debug/1, debug/2, debug/3,
          info/1, info/2, info/3,
          notice/1, notice/2, notice/3,
@@ -83,6 +83,32 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
         _       -> make_internal_sink_name(Category)
     end,
     lager:log(Sink, Level, self(), Fmt, Args).
+
+%% logger(3) handler.
+log(#{level := Level,
+      msg := Msg,
+      meta := #{pid := Pid}} = _LogEvent,
+    _Config) ->
+    case Msg of
+        {report, #{label := {error_logger, _}}} ->
+            %% Avoid recursive loop.
+            ok;
+        {report, #{label := {application_controller, progress}}} ->
+            %% Already logged by Lager.
+            ok;
+        {report, #{label := {supervisor, progress}}} ->
+            %% Already logged by Lager.
+            ok;
+        {report, #{report := Report}} ->
+            %% FIXME: Is this code reached?
+            error_logger:info_report(Report);
+        {report, #{format := Format, args := Args}} when is_list(Format) ->
+            lager:log(?LAGER_SINK, Level, Pid, Format, Args);
+        {string, String} ->
+            lager:log(?LAGER_SINK, Level, Pid, "~ts", [String]);
+        {Format, Args} when is_list(Format) ->
+            lager:log(?LAGER_SINK, Level, Pid, Format, Args)
+    end.
 
 make_internal_sink_name(channel)    -> rabbit_log_channel_lager_event;
 make_internal_sink_name(connection) -> rabbit_log_connection_lager_event;
