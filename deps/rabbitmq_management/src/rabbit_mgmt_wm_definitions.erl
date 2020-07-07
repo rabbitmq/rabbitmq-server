@@ -272,7 +272,7 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,              [name, password_hash, hashing_algorithm, tags]},
+    [{users,              [name, password_hash, hashing_algorithm, tags, limits]},
      {vhosts,             [name]},
      {permissions,        [user, vhost, configure, write, read]},
      {topic_permissions,  [user, vhost, exchange, write, read]},
