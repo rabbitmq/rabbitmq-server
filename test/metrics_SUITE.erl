@@ -21,6 +21,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 
 all() ->
@@ -142,7 +143,10 @@ prop_queue_metric_count_channel_per_queue(Config) ->
 connection_metric_idemp(Config, {N, R}) ->
     Conns = [rabbit_ct_client_helpers:open_unmanaged_connection(Config)
                || _ <- lists:seq(1, N)],
-    Table = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
+    Table = ?awaitMatch(L when is_list(L) andalso length(L) == N,
+                               [ Pid || {Pid, _} <- read_table_rpc(Config,
+                                                                   connection_metrics)],
+                               5000),
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
     % refresh stats 'R' times
     [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
