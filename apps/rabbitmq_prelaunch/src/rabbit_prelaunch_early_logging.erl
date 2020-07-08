@@ -26,6 +26,7 @@ get_default_log_level() ->
 
 do_setup_early_logging(#{log_levels := LogLevels} = Context,
                        LagerEventToStdout) ->
+    redirect_logger_messages_to_lager(),
     Colored = use_colored_logging(Context),
     application:set_env(lager, colored, Colored),
     ConsoleBackend = lager_console_backend,
@@ -49,6 +50,11 @@ do_setup_early_logging(#{log_levels := LogLevels} = Context,
                 [{handlers, [{ConsoleBackend, [{level, CLogLevel}]}]}])
       end, list_expected_sinks()),
     ok.
+
+redirect_logger_messages_to_lager() ->
+    io:format(standard_error, "Configuring logger redirection~n", []),
+    ok = logger:add_handler(rabbit_log, rabbit_log, #{}),
+    ok = logger:set_primary_config(level, all).
 
 use_colored_logging() ->
     use_colored_logging(rabbit_prelaunch:get_context()).
