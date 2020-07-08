@@ -20,7 +20,8 @@
 -export([start/2, stop/1]).
 -export([connection_info_local/1,
          emit_connection_info_local/3,
-         emit_connection_info_all/4]).
+         emit_connection_info_all/4,
+         close_all_client_connections/1]).
 
 start(normal, []) ->
     {ok, Listeners} = application:get_env(tcp_listeners),
@@ -31,11 +32,17 @@ start(normal, []) ->
               {ok, Pid}                       -> Pid;
               {error, {already_started, Pid}} -> Pid
             end,
-    gen_event:add_handler(EMPid, rabbit_mqtt_vhost_event_handler, []),
+    gen_event:add_handler(EMPid, rabbit_mqtt_internal_event_handler, []),
     Result.
 
 stop(_) ->
     rabbit_mqtt_sup:stop_listeners().
+
+-spec close_all_client_connections(string() | binary()) -> {'ok', [{string(), pid()}]}.
+close_all_client_connections(Reason) ->
+     Connections = rabbit_mqtt_collector:list(),
+    [rabbit_mqtt_reader:close_connection(Pid, Reason) || {_, Pid} <- Connections],
+    {ok, Connections}.
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_mqtt, emit_connection_info_local,

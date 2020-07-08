@@ -26,7 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2, handle_pre_hibernate/1]).
 
--export([conserve_resources/3, start_keepalive/2]).
+-export([conserve_resources/3, start_keepalive/2,
+         close_connection/2]).
 
 -export([ssl_login_name/1]).
 -export([info/2]).
@@ -54,6 +55,9 @@ info(Pid, InfoItems) ->
         [] -> gen_server2:call(Pid, {info, InfoItems});
         UnknownItems -> throw({bad_argument, UnknownItems})
     end.
+
+close_connection(Pid, Reason) ->
+    gen_server:cast(Pid, {close_connection, Reason}).
 
 %%----------------------------------------------------------------------------
 
@@ -114,10 +118,16 @@ handle_cast(duplicate_id,
 handle_cast(decommission_node,
             State = #state{ proc_state = PState,
                             conn_name  = ConnName }) ->
-    rabbit_log_connection:warning("MQTT disconnecting client ~p with id '~s' as its node is about"
+    rabbit_log_connection:warning("MQTT disconnecting client ~p with client ID '~s' as its node is about"
                                   " to be decommissioned~n",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
     {stop, {shutdown, decommission_node}, State};
+
+handle_cast({close_connection, Reason},
+            State = #state{conn_name = ConnName, proc_state = PState}) ->
+    rabbit_log_connection:warning("MQTT disconnecting client ~p with client ID '~s', reason: ~s",
+                                  [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
+    {stop, {shutdown, server_initiated_close}, State};
 
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.

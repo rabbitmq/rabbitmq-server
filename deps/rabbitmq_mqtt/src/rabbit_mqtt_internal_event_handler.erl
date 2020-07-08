@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(rabbit_mqtt_vhost_event_handler).
+-module(rabbit_mqtt_internal_event_handler).
 
 -behaviour(gen_event).
 
@@ -32,6 +32,11 @@ handle_event({event, vhost_created, Info, _, _}, State) ->
 handle_event({event, vhost_deleted, Info, _, _}, State) ->
   Name = pget(name, Info),
   rabbit_mqtt_retainer_sup:delete_child(Name),
+  {ok, State};
+handle_event({event, maintenance_connections_closed, _Info, _, _}, State) ->
+  %% we should close our  connections
+  {ok, NConnections} = rabbit_mqtt:close_all_client_connections("Node is being put into maintenance mode"),
+  rabbit_log:alert("Closed ~b local MQTT client connections", [length(NConnections)]),
   {ok, State};
 handle_event(_Event, State) ->
   {ok, State}.
