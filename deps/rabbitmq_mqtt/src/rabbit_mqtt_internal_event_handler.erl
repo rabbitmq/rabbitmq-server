@@ -34,8 +34,8 @@ handle_event({event, vhost_deleted, Info, _, _}, State) ->
   rabbit_mqtt_retainer_sup:delete_child(Name),
   {ok, State};
 handle_event({event, maintenance_connections_closed, _Info, _, _}, State) ->
-  %% we should close our  connections
-  {ok, NConnections} = rabbit_mqtt:close_all_client_connections("Node is being put into maintenance mode"),
+  %% we should close our connections
+  {ok, NConnections} = rabbit_mqtt:close_all_client_connections("node is being put into maintenance mode"),
   rabbit_log:alert("Closed ~b local MQTT client connections", [NConnections]),
   {ok, State};
 handle_event(_Event, State) ->
