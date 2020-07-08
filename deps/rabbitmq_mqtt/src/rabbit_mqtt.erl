@@ -38,11 +38,11 @@ start(normal, []) ->
 stop(_) ->
     rabbit_mqtt_sup:stop_listeners().
 
--spec close_all_client_connections(string() | binary()) -> {'ok', [{string(), pid()}]}.
+-spec close_all_client_connections(string() | binary()) -> {'ok', non_neg_integer()}.
 close_all_client_connections(Reason) ->
      Connections = rabbit_mqtt_collector:list(),
     [rabbit_mqtt_reader:close_connection(Pid, Reason) || {_, Pid} <- Connections],
-    {ok, Connections}.
+    {ok, length(Connections)}.
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_mqtt, emit_connection_info_local,
