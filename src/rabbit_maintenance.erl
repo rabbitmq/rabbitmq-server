@@ -51,6 +51,10 @@ drain() ->
     suspend_all_client_listeners(),
     rabbit_log:alert("Suspended all listeners and will no longer accept client connections"),
     {ok, NConnections} = close_all_client_connections(),
+    %% allow plugins to react e.g. by closing their protocol connections
+    rabbit_event:notify(maintenance_connections_closed, #{
+        reason => <<"node is being put into maintenance">>
+    }),
     rabbit_log:alert("Closed ~b local client connections", [NConnections]),
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
@@ -59,6 +63,11 @@ drain() ->
                     [length(TransferCandidates), ReadableCandidates]),
     transfer_leadership_of_classic_mirrored_queues(TransferCandidates),
     transfer_leadership_of_quorum_queues(TransferCandidates),
+    
+    %% allow plugins to react
+    rabbit_event:notify(maintenance_draining, #{
+        reason => <<"node is being put into maintenance">>
+    }),
     rabbit_log:alert("Node is ready to be shut down for maintenance or upgrade"),
 
     ok.
@@ -73,6 +82,9 @@ revive() ->
     unmark_as_being_drained(),
     rabbit_log:info("Marked this node as back from maintenance and ready to serve clients"),
 
+    %% allow plugins to react
+    rabbit_event:notify(maintenance_revived, #{}),
+    
     ok.
 
 -spec mark_as_being_drained() -> boolean().
