@@ -198,14 +198,16 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
         modules => [tcp_listener_sup]
     }.
 
--spec ranch_ref(#listener{} | [{atom(), any()}]) -> ranch:ref().
+-spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref().
 ranch_ref(#listener{port = Port}) ->
     [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
     {acceptor, IPAddress, Port};
 ranch_ref(Listener) when is_list(Listener) ->
     Port = rabbit_misc:pget(port, Listener),
     [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
-    {acceptor, IPAddress, Port}.
+    {acceptor, IPAddress, Port};
+ranch_ref(undefined) ->
+    undefined.
 
 -spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
 
