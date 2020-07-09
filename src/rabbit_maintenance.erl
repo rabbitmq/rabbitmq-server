@@ -16,29 +16,37 @@
 
 -module(rabbit_maintenance).
 
- -include("rabbit.hrl").
- 
- -export([
-     drain/0,
-     revive/0,
-     mark_as_being_drained/0,
-     unmark_as_being_drained/0,
-     is_being_drained_local_read/1,
-     is_being_drained_consistent_read/1,
-     filter_out_drained_nodes_local_read/1,
-     filter_out_drained_nodes_consistent_read/1,
-     suspend_all_client_listeners/0,
-     resume_all_client_listeners/0,
-     close_all_client_connections/0,
-     primary_replica_transfer_candidate_nodes/0,
-     random_primary_replica_transfer_candidate_node/1,
-     transfer_leadership_of_quorum_queues/1,
-     transfer_leadership_of_classic_mirrored_queues/1]).
+-include("rabbit.hrl").
 
- -define(TABLE, rabbit_node_maintenance_states).
- -define(DEFAULT_STATUS,  regular).
- -define(DRAINING_STATUS, draining).
- 
+-export([
+    drain/0,
+    revive/0,
+    mark_as_being_drained/0,
+    unmark_as_being_drained/0,
+    is_being_drained_local_read/1,
+    is_being_drained_consistent_read/1,
+    status_local_read/1,
+    status_consistent_read/1,
+    filter_out_drained_nodes_local_read/1,
+    filter_out_drained_nodes_consistent_read/1,
+    suspend_all_client_listeners/0,
+    resume_all_client_listeners/0,
+    close_all_client_connections/0,
+    primary_replica_transfer_candidate_nodes/0,
+    random_primary_replica_transfer_candidate_node/1,
+    transfer_leadership_of_quorum_queues/1,
+    transfer_leadership_of_classic_mirrored_queues/1]).
+
+-define(TABLE, rabbit_node_maintenance_states).
+-define(DEFAULT_STATUS,  regular).
+-define(DRAINING_STATUS, draining).
+
+-type maintenance_status() :: ?DEFAULT_STATUS | ?DRAINING_STATUS.
+
+-export_type([
+    maintenance_status/0
+]).
+
 %%
 %% API
 %%
@@ -90,14 +98,14 @@ revive() ->
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
     rabbit_log:debug("Marking the node as undergoing maintenance"),
-    set_maintenance_state_status(?DRAINING_STATUS).
+    set_maintenance_status_status(?DRAINING_STATUS).
  
 -spec unmark_as_being_drained() -> boolean().
 unmark_as_being_drained() ->
     rabbit_log:debug("Unmarking the node as undergoing maintenance"),
-    set_maintenance_state_status(?DEFAULT_STATUS).
+    set_maintenance_status_status(?DEFAULT_STATUS).
 
-set_maintenance_state_status(Status) ->
+set_maintenance_status_status(Status) ->
     Res = mnesia:transaction(fun () ->
         case mnesia:wread({?TABLE, node()}) of
            [] ->
@@ -122,23 +130,33 @@ set_maintenance_state_status(Status) ->
  
 -spec is_being_drained_local_read(node()) -> boolean().
 is_being_drained_local_read(Node) ->
-    case mnesia:dirty_read(?TABLE, Node) of
-        []  -> false;
-        [#node_maintenance_state{node = Node, status = Status}] ->
-            Status =:= ?DRAINING_STATUS;
-        _   -> false
-    end.
+    Status = status_local_read(Node),
+    Status =:= ?DRAINING_STATUS.
 
 -spec is_being_drained_consistent_read(node()) -> boolean().
 is_being_drained_consistent_read(Node) ->
-    case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
-        {atomic, []} -> false;
-        {atomic, [#node_maintenance_state{node = Node, status = Status}]} ->
-            Status =:= ?DRAINING_STATUS;
-        {atomic, _}  -> false;
-        {aborted, _Reason} -> false
-    end.
+    Status = status_consistent_read(Node),
+    Status =:= ?DRAINING_STATUS.
 
+-spec status_local_read(node()) -> maintenance_status().
+status_local_read(Node) ->
+    case mnesia:dirty_read(?TABLE, Node) of
+        []  -> ?DEFAULT_STATUS;
+        [#node_maintenance_state{node = Node, status = Status}] ->
+            Status;
+        _   -> ?DEFAULT_STATUS
+    end.
+ 
+-spec status_consistent_read(node()) -> maintenance_status().
+status_consistent_read(Node) ->
+    case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
+        {atomic, []} -> ?DEFAULT_STATUS;
+        {atomic, [#node_maintenance_state{node = Node, status = Status}]} ->
+            Status;
+        {atomic, _}  -> ?DEFAULT_STATUS;
+        {aborted, _Reason} -> ?DEFAULT_STATUS
+    end.
+ 
  -spec filter_out_drained_nodes_local_read([node()]) -> [node()].
 filter_out_drained_nodes_local_read(Nodes) ->
     lists:filter(fun(N) -> not is_being_drained_local_read(N) end, Nodes).
