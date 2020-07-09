@@ -933,7 +933,7 @@ demonitor_stream(Stream, #stream_connection{monitors = Monitors0} = Connection) 
 demonitor_all_streams(#stream_connection{monitors = Monitors} = Connection) ->
     lists:foreach(fun(MonitorRef) ->
         demonitor(MonitorRef, [flush])
-                  end, maps:values(Monitors)),
+                  end, maps:keys(Monitors)),
     Connection#stream_connection{monitors = #{}}.
 
 frame(Transport, #stream_connection{socket = S}, Frame) ->
