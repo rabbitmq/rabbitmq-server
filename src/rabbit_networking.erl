@@ -30,7 +30,7 @@
          close_connection/2, close_connections/2,
          force_connection_event_refresh/1, handshake/2, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
-         listener_of_protocol/1]).
+         listener_of_protocol/1, stop_ranch_listener_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -233,6 +233,16 @@ listener_of_protocol(Protocol) ->
                 [Row] -> Row
             end
         end).
+
+-spec stop_ranch_listener_of_protocol(atom()) -> ok | {error, not_found}.
+stop_ranch_listener_of_protocol(Protocol) ->
+    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
+        {error, not_found} -> ok;
+        undefined          -> ok;
+        Ref                ->
+            rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
+            ranch:stop_listener(Ref)
+    end.
 
 -spec start_tcp_listener(
         listener_config(), integer()) -> 'ok' | {'error', term()}.
