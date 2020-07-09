@@ -148,22 +148,3 @@ connections_in(Config, NodeIndex, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
                                  list, [VHost]).
-
-connections_on_node(Config) ->
-    connections_on_node(Config, 0).
-connections_on_node(Config, NodeIndex) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, NodeIndex, nodename),
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                 rabbit_connection_tracking,
-                                 list_on_node, [Node]).
-connections_on_node(Config, NodeIndex, NodeForListing) ->
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                 rabbit_connection_tracking,
-                                 list_on_node, [NodeForListing]).
-
-all_connections(Config) ->
-    all_connections(Config, 0).
-all_connections(Config, NodeIndex) ->
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                 rabbit_connection_tracking,
-                                 list, []).
