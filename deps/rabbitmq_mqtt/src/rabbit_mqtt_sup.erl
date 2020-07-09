@@ -61,14 +61,8 @@ init([{Listeners, SslListeners0}]) ->
                           [SocketOpts, SslOpts, NumSslAcceptors], SslListeners)]}}.
 
 stop_listeners() ->
-    case rabbit_networking:ranch_ref_of_protocol(?TCP_PROTOCOL) of
-        {error, not_found} -> ok;
-        Ref1               -> ranch:stop_listener(Ref1)
-    end,
-    case rabbit_networking:ranch_ref_of_protocol(?TLS_PROTOCOL) of
-        {error, not_found} -> ok;
-        Ref2               -> ranch:stop_listener(Ref2)
-    end,
+    rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
+    rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
     ok.
 
 %%
