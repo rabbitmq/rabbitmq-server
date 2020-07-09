@@ -60,8 +60,8 @@ init() ->
     ok.
 
 stop(State) ->
-    stop_ranch_listener(?TCP_PROTOCOL),
-    stop_ranch_listener(?TLS_PROTOCOL),
+    rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
+    rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
     State.
 
 -spec list_connections() -> [pid()].
@@ -81,13 +81,6 @@ close_all_client_connections(Reason) ->
 %%
 %% Implementation
 %%
-
-stop_ranch_listener(Protocol) ->
-    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
-        {error, not_found} -> ok;
-        undefined          -> ok;
-        Ref                -> ranch:stop_listener(Ref)
-    end.
 
 connection_pids_of_protocol(Protocol) ->
     case rabbit_networking:ranch_ref_of_protocol(Protocol) of
