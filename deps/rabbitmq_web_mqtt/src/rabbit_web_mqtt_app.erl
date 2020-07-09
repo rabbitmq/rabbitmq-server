@@ -17,7 +17,13 @@
 -module(rabbit_web_mqtt_app).
 
 -behaviour(application).
--export([start/2, prep_stop/1, stop/1]).
+-export([
+    start/2,
+    prep_stop/1,
+    stop/1,
+    list_connections/0,
+    close_all_client_connections/1
+]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
@@ -44,21 +50,48 @@ prep_stop(State) ->
 
 -spec stop(_) -> ok.
 stop(_State) ->
-    case rabbit_networking:ranch_ref_of_protocol(?TCP_PROTOCOL) of
-        {error, not_found} -> ok;
-        Ref1               -> ranch:stop_listener(Ref1)
-    end,
-    case rabbit_networking:ranch_ref_of_protocol(?TLS_PROTOCOL) of
-        {error, not_found} -> ok;
-        Ref2               -> ranch:stop_listener(Ref2)
-    end,
+    stop_ranch_listener(?TCP_PROTOCOL),
+    stop_ranch_listener(?TLS_PROTOCOL),
     ok.
 
 init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 
+-spec list_connections() -> [pid()].
+list_connections() ->
+    PlainPids = connection_pids_of_protocol(?TCP_PROTOCOL),
+    TLSPids   = connection_pids_of_protocol(?TLS_PROTOCOL),
+
+    PlainPids ++ TLSPids.
+
+-spec close_all_client_connections(string()) -> {'ok', non_neg_integer()}.
+close_all_client_connections(Reason) ->
+    Connections = list_connections(),
+    [rabbit_web_mqtt_handler:close_connection(Pid, Reason) || Pid <- Connections],
+    {ok, length(Connections)}.
+
 %%
 %% Implementation
 %%
+
+stop_ranch_listener(Protocol) ->
+    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
+        {error, not_found} -> ok;
+        undefined          -> ok;
+        Ref                -> ranch:stop_listener(Ref)
+    end.
+
+connection_pids_of_protocol(Protocol) ->
+    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
+        undefined   -> [];
+        AcceptorRef ->
+            lists:map(fun cowboy_ws_connection_pid/1, ranch:procs(AcceptorRef, connections))
+    end.
+
+-spec cowboy_ws_connection_pid(pid()) -> pid().
+cowboy_ws_connection_pid(RanchConnPid) ->
+    Children = supervisor:which_children(RanchConnPid),
+    {cowboy_clear, Pid, _, _} = lists:keyfind(cowboy_clear, 1, Children),
+    Pid.
 
 mqtt_init() ->
   CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
