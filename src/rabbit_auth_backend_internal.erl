@@ -26,7 +26,7 @@
 
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
-         user_vhost_perms_info_keys/0,
+         user_vhost_perms_info_keys/0, all_users/0,
          list_users/0, list_users/2, list_permissions/0,
          list_user_permissions/1, list_user_permissions/3,
          list_topic_permissions/0,
@@ -50,9 +50,9 @@
 %% there is no information in the record, we consider it to be legacy
 %% (inserted by a version older than 3.6.0) and fall back to MD5, the
 %% now obsolete hashing function.
-hashing_module_for_user(#internal_user{
-    hashing_algorithm = ModOrUndefined}) ->
-        rabbit_password:hashing_mod(ModOrUndefined).
+hashing_module_for_user(User) ->
+    ModOrUndefined = internal_user:get_hashing_algorithm(User),
+    rabbit_password:hashing_mod(ModOrUndefined).
 
 -define(BLANK_PASSWORD_REJECTION_MESSAGE,
         "user '~s' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
@@ -78,13 +78,14 @@ user_login_authentication(Username, AuthProps) ->
         {password, Cleartext} ->
             internal_check_user_login(
               Username,
-              fun (#internal_user{
-                        password_hash = <<Salt:4/binary, Hash/binary>>
-                    } = U) ->
-                  Hash =:= rabbit_password:salted_hash(
-                      hashing_module_for_user(U), Salt, Cleartext);
-                  (#internal_user{}) ->
-                      false
+              fun(User) ->
+                  case internal_user:get_password_hash(User) of
+                      <<Salt:4/binary, Hash/binary>> ->
+                          Hash =:= rabbit_password:salted_hash(
+                              hashing_module_for_user(User), Salt, Cleartext);
+                      _ ->
+                          false
+                  end
               end);
         false -> exit({unknown_auth_props, Username, AuthProps})
     end.
@@ -100,7 +101,8 @@ user_login_authorization(Username, _AuthProps) ->
 internal_check_user_login(Username, Fun) ->
     Refused = {refused, "user '~s' - invalid credentials", [Username]},
     case lookup_user(Username) of
-        {ok, User = #internal_user{tags = Tags}} ->
+        {ok, User} ->
+            Tags = internal_user:get_tags(User),
             case Fun(User) of
                 true -> {ok, #auth_user{username = Username,
                                         tags     = Tags,
@@ -210,10 +212,8 @@ add_user_sans_validation(Username, Password, ActingUser) ->
     %% but we also need to store a hint as part of the record, so we
     %% retrieve it here one more time
     HashingMod = rabbit_password:hashing_mod(),
-    User = #internal_user{username          = Username,
-                          password_hash     = hash_password(HashingMod, Password),
-                          tags              = [],
-                          hashing_algorithm = HashingMod},
+    PasswordHash = hash_password(HashingMod, Password),
+    User = internal_user:create_user(Username, PasswordHash, HashingMod),
     try
         R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -283,7 +283,7 @@ delete_user(Username, ActingUser) ->
 
 -spec lookup_user
         (rabbit_types:username()) ->
-            rabbit_types:ok(rabbit_types:internal_user()) |
+            rabbit_types:ok(internal_user:internal_user()) |
             rabbit_types:error('not_found').
 
 lookup_user(Username) ->
@@ -354,9 +354,8 @@ change_password_hash(Username, PasswordHash) ->
 
 change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
     update_user(Username, fun(User) ->
-                                  User#internal_user{
-                                    password_hash     = PasswordHash,
-                                    hashing_algorithm = HashingAlgorithm }
+                              internal_user:set_password_hash(User,
+                                  PasswordHash, HashingAlgorithm)
                           end).
 
 -spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
@@ -366,7 +365,7 @@ set_tags(Username, Tags, ActingUser) ->
     rabbit_log:debug("Asked to set user tags for user '~s' to ~p", [Username, ConvertedTags]),
     try
         R = update_user(Username, fun(User) ->
-                                          User#internal_user{tags = ConvertedTags}
+                                     internal_user:set_tags(User, ConvertedTags)
                                   end),
         rabbit_log:info("Successfully set user tags for user '~s' to ~p", [Username, ConvertedTags]),
         rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags},
@@ -783,9 +782,8 @@ validate_parameters_and_update_limit(Username, Term) ->
     case flatten_errors(rabbit_parameter_validation:proplist(
                         <<"user-limits">>, user_limit_validation(), Term)) of
         ok ->
-            update_user(Username, fun(User = #internal_user{limits = Limits}) ->
-                                      User#internal_user{
-                                           limits = maps:merge(Limits, Term)}
+            update_user(Username, fun(User) ->
+                                      internal_user:update_limits(add, User, Term)
                                   end);
         {errors, [{Reason, Arguments}]} ->
             {error_string, rabbit_misc:format(Reason, Arguments)}
@@ -797,12 +795,11 @@ user_limit_validation() ->
 
 clear_user_limits(Username, <<"all">>) ->
     update_user(Username, fun(User) ->
-                              User#internal_user{limits = #{}}
+                              internal_user:clear_limits(User)
                           end);
 clear_user_limits(Username, LimitType) ->
-    update_user(Username, fun(User = #internal_user{limits = Limits}) ->
-                              User#internal_user{
-                                    limits = maps:remove(LimitType, Limits)}
+    update_user(Username, fun(User) ->
+                              internal_user:update_limits(remove, User, LimitType)
                           end).
 
 flatten_errors(L) ->
@@ -842,11 +839,13 @@ user_topic_perms_info_keys()       -> [vhost, exchange, write, read].
 vhost_topic_perms_info_keys()      -> [user, exchange, write, read].
 user_vhost_topic_perms_info_keys() -> [exchange, write, read].
 
+all_users() -> mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
+
 -spec list_users() -> [rabbit_types:infos()].
 
 list_users() ->
     [extract_internal_user_params(U) ||
-        U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+        U <- all_users()].
 
 -spec list_users(reference(), pid()) -> 'ok'.
 
@@ -854,7 +853,7 @@ list_users(Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
       fun(U) -> extract_internal_user_params(U) end,
-      mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
+      all_users()).
 
 -spec list_permissions() -> [rabbit_types:infos()].
 
@@ -929,8 +928,9 @@ extract_user_permission_params(Keys, #user_permission{
                         {write,     WritePerm},
                         {read,      ReadPerm}]).
 
-extract_internal_user_params(#internal_user{username = Username, tags = Tags}) ->
-    [{user, Username}, {tags, Tags}].
+extract_internal_user_params(User) ->
+    [{user, internal_user:get_username(User)},
+     {tags, internal_user:get_tags(User)}].
 
 match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(
@@ -1034,7 +1034,7 @@ is_over_limit(Username, LimitType, Fun) ->
 get_user_limit(Username, LimitType) ->
     case lookup_user(Username) of
         {ok, User} ->
-            case rabbit_misc:pget(LimitType, User#internal_user.limits) of
+            case rabbit_misc:pget(LimitType, internal_user:get_limits(User)) of
                 undefined -> undefined;
                 N when N < 0  -> undefined;
                 N when N >= 0 -> {ok, N}
@@ -1045,6 +1045,6 @@ get_user_limit(Username, LimitType) ->
 
 get_user_limits(Username) ->
     case lookup_user(Username) of
-        {ok, User} -> User#internal_user.limits;
+        {ok, User} -> internal_user:get_limits(User);
         _ -> undefined
     end.
