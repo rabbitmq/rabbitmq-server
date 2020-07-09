@@ -94,23 +94,17 @@ password_hashing1(_Config) ->
 
     rabbit_password_hashing_md5    =
         rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{}),
+          internal_user:new()),
     rabbit_password_hashing_md5    =
         rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{
-             hashing_algorithm = undefined
-            }),
+          internal_user:new({hashing_algorithm, undefined})),
     rabbit_password_hashing_md5    =
         rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{
-             hashing_algorithm = rabbit_password_hashing_md5
-            }),
+          internal_user:new({hashing_algorithm, rabbit_password_hashing_md5})),
 
     rabbit_password_hashing_sha256 =
         rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{
-             hashing_algorithm = rabbit_password_hashing_sha256
-            }),
+          internal_user:new({hashing_algorithm, rabbit_password_hashing_sha256})),
 
     passed.
 
@@ -211,23 +205,20 @@ set_tags_for_passwordless_user1(_Config) ->
     ok = rabbit_auth_backend_internal:set_tags(Username, [management],
                                                <<"acting-user">>),
 
-    ?assertMatch(
-       {ok, #internal_user{tags = [management]}},
-       rabbit_auth_backend_internal:lookup_user(Username)),
+    {ok, User1} = rabbit_auth_backend_internal:lookup_user(Username),
+    ?assertEqual([management], internal_user:get_tags(User1)),
 
     ok = rabbit_auth_backend_internal:set_tags(Username, [management, policymaker],
                                                <<"acting-user">>),
 
-    ?assertMatch(
-       {ok, #internal_user{tags = [management, policymaker]}},
-       rabbit_auth_backend_internal:lookup_user(Username)),
+    {ok, User2} = rabbit_auth_backend_internal:lookup_user(Username),
+    ?assertEqual([management, policymaker], internal_user:get_tags(User2)),
 
     ok = rabbit_auth_backend_internal:set_tags(Username, [],
                                                <<"acting-user">>),
 
-    ?assertMatch(
-       {ok, #internal_user{tags = []}},
-       rabbit_auth_backend_internal:lookup_user(Username)),
+    {ok, User3} = rabbit_auth_backend_internal:lookup_user(Username),
+    ?assertEqual([], internal_user:get_tags(User3)),
 
     ok = rabbit_auth_backend_internal:delete_user(Username,
                                                   <<"acting-user">>),

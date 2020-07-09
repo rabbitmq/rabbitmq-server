@@ -295,9 +295,9 @@ definitions(ram) ->
 definitions() ->
     [{rabbit_user,
       [{record_name, internal_user},
-       {attributes, record_info(fields, internal_user)},
+       {attributes, internal_user:fields()},
        {disc_copies, [node()]},
-       {match, #internal_user{_='_'}}]},
+       {match, internal_user:pattern_match_all()}]},
      {rabbit_user_permission,
       [{record_name, user_permission},
        {attributes, record_info(fields, user_permission)},
