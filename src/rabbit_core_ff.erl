@@ -10,7 +10,8 @@
 -export([quorum_queue_migration/3,
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
-         maintenance_mode_status_migration/3]).
+         maintenance_mode_status_migration/3,
+         user_limits_migration/3]).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -40,6 +41,13 @@
     #{desc          => "Maintenance mode status",
       stability     => stable,
       migration_fun => {?MODULE, maintenance_mode_status_migration}
+     }}).
+
+-rabbit_feature_flag(
+    {user_limits,
+     #{desc          => "Configure connection and channel limits for a user",
+       stability     => stable,
+       migration_fun => {?MODULE, user_limits_migration}
      }}).
 
 %% -------------------------------------------------------------------
@@ -141,3 +149,18 @@ maintenance_mode_status_migration(FeatureName, _FeatureProps, enable) ->
     end;
 maintenance_mode_status_migration(_FeatureName, _FeatureProps, is_enabled) ->
     rabbit_table:exists(rabbit_maintenance:status_table_name()).
+
+%% -------------------------------------------------------------------
+%% User limits.
+%% -------------------------------------------------------------------
+
+user_limits_migration(_FeatureName, _FeatureProps, enable) ->
+    Tab = rabbit_user,
+    rabbit_table:wait([Tab], _Retry = true),
+    Fun = fun(Row) -> internal_user:upgrade_to(internal_user_v2, Row) end,
+    case mnesia:transform_table(Tab, Fun, internal_user:fields(internal_user_v2)) of
+        {atomic, ok}      -> ok;
+        {aborted, Reason} -> {error, Reason}
+    end;
+user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
+    mnesia:table_info(rabbit_user, attributes) =:= internal_user:fields(internal_user_v2).
