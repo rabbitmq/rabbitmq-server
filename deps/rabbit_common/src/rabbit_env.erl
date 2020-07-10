@@ -1706,9 +1706,12 @@ var_is_used("HOME") ->
 var_is_used(Var) ->
     lists:member("RABBITMQ_" ++ Var, ?USED_ENV_VARS).
 
-var_is_set("RABBITMQ_" ++ Var = PrefixedVar) ->
-    os:getenv(PrefixedVar) /= false orelse
-    os:getenv(Var) /= false;
+%% The $RABBITMQ_* variables have precedence over their un-prefixed equivalent.
+%% Therefore, when we check if $RABBITMQ_* is set, we only look at this
+%% variable. However, when we check if an un-prefixed variable is set, we first
+%% look at its $RABBITMQ_* variant.
+var_is_set("RABBITMQ_" ++ _ = PrefixedVar) ->
+    os:getenv(PrefixedVar) /= false;
 var_is_set(Var) ->
     os:getenv("RABBITMQ_" ++ Var) /= false orelse
     os:getenv(Var) /= false.
