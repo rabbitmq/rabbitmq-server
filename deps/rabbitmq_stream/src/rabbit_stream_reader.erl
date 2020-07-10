@@ -77,7 +77,7 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
     heartbeat := Heartbeat}]) ->
     process_flag(trap_exit, true),
     {ok, Sock} = rabbit_networking:handshake(Ref,
-        application:get_env(rabbitmq_mqtt, proxy_protocol, false)),
+        application:get_env(rabbitmq_stream, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->

@@ -86,7 +86,10 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
             {new, Q} ->
                 {reply, {ok, amqqueue:get_type_state(Q)}, State};
             {existing, _} ->
-                {reply, {error, reference_already_exists}, State}
+                {reply, {error, reference_already_exists}, State};
+            {error, Err} ->
+                rabbit_log:warn("Error while creating ~p stream, ~p~n", [Reference, Err]),
+                {reply, {error, internal_error}, State}
         end
     catch
         exit:Error ->
