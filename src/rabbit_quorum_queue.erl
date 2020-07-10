@@ -158,12 +158,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
-    Overflow = args_policy_lookup(<<"overflow">>,
-                                  fun (A, B) ->
-                                          rabbit_log:info("RESOLVE ~p", [{A, B}]),
-                                          A
-                                  end , Q),
-    rabbit_log:info("OVERFLOW ~p ARGS ~p", [Overflow, amqqueue:get_arguments(Q)]),
+    %% prefer the policy defined strategy if available
+    Overflow = args_policy_lookup(<<"overflow">>, fun (A, _B) -> A end , Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
     MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
