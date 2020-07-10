@@ -50,7 +50,7 @@ Questions about contributing, internals and so on are very welcome on the [maili
 
 ## Licensing
 
-RabbitMQ server is [licensed under the MPL 1.1](LICENSE-MPL-RabbitMQ).
+RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 
 ## Building From Source and Packaging
