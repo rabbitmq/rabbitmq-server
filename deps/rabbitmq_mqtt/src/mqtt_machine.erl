@@ -48,7 +48,7 @@ apply(_Meta, {register, ClientId, Pid}, #machine_state{client_ids = Ids} = State
                             {monitor, process, Pid},
                             {mod_call, ?MODULE, notify_connection, [OldPid, duplicate_id]}],
                 {Effects0, maps:remove(ClientId, Ids)};
-            error ->
+            _ ->
               Effects0 = [{monitor, process, Pid}],
               {Effects0, Ids}
         end,
