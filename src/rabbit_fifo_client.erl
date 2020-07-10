@@ -161,7 +161,10 @@ enqueue(Correlation, Msg,
                         State0#state{queue_status = go};
                     Err ->
                         exit(Err)
-                end
+                end;
+            {badrpc, nodedown} ->
+                rabbit_log:info("rabbit_fifo_client: badrpc for node ~w", [Node]),
+                State0#state{queue_status = go}
         end,
     enqueue(Correlation, Msg, State);
 enqueue(_Correlation, _Msg,
@@ -685,8 +688,10 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
         error ->
             State
     end.
+
 resend_all_pending(#state{pending = Pend} = State) ->
     Seqs = lists:sort(maps:keys(Pend)),
+    rabbit_log:info("rabbit_fifo_client resend all pending ~w", [Seqs]),
     lists:foldl(fun resend/2, State, Seqs).
 
 handle_delivery(From, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
@@ -762,7 +767,7 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     end.
 
 pick_server(#state{leader = undefined,
-                 cfg = #cfg{servers = [N | _]}}) ->
+                   cfg = #cfg{servers = [N | _]}}) ->
     %% TODO: pick random rather that first?
     N;
 pick_server(#state{leader = Leader}) ->

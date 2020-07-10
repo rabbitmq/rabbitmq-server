@@ -346,7 +346,7 @@ declare_invalid_args(Config) ->
         declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                 LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                      {<<"x-overflow">>, longstr, XOverflow}]))
-     || XOverflow <- [<<"reject-publish">>, <<"reject-publish-dlx">>]],
+     || XOverflow <- [<<"reject-publish-dlx">>]],
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
@@ -1038,6 +1038,7 @@ publishing_to_unavailable_queue(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
 
+    ct:pal("opening channel to ~w", [Server]),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),

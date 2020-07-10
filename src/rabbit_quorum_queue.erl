@@ -102,6 +102,7 @@ handle_event({ra_event, From, Evt}, QState) ->
     {new | existing, amqqueue:amqqueue()} | rabbit_types:channel_exit().
 
 declare(Q) when ?amqqueue_is_quorum(Q) ->
+    rabbit_log:info("quorum_queue declaring ~w", [Q]),
     QName = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),
@@ -123,6 +124,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout)
                        || ServerId <- members(NewQ)],
+            rabbit_log:info("quorum_queue starting cluster ~w", [RaConfs]),
             case ra:start_cluster(RaConfs) of
                 {ok, _, _} ->
                     %% TODO: handle error - what should be done if the
@@ -1359,6 +1361,17 @@ check_invalid_arguments(QueueName, Args) ->
                          "invalid arg '~s' for ~s",
                          [Key, rabbit_misc:rs(QueueName)])
      end || Key <- Keys],
+
+    case rabbit_misc:table_lookup(Args, <<"x-overflow">>) of
+        undefined -> ok;
+        {_, <<"reject-publish-dlx">>} ->
+            rabbit_misc:protocol_error(
+              precondition_failed,
+              "invalid arg 'x-overflow' with value 'reject-publish-dlx' for ~s",
+              [rabbit_misc:rs(QueueName)]);
+        _ ->
+            ok
+    end,
     ok.
 
 check_auto_delete(Q) when ?amqqueue_is_auto_delete(Q) ->
