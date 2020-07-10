@@ -50,6 +50,7 @@
 
          %% protocol helpers
          make_enqueue/3,
+         make_register_enqueuer/1,
          make_checkout/3,
          make_settle/2,
          make_return/2,
@@ -64,6 +65,7 @@
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
                   msg :: raw_msg()}).
+-record(register_enqueuer, {pid :: pid()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
                    meta :: consumer_meta()}).
@@ -83,6 +85,7 @@
 
 -opaque protocol() ::
     #enqueue{} |
+    #register_enqueuer{} |
     #checkout{} |
     #settle{} |
     #return{} |
@@ -164,9 +167,27 @@ zero(_) ->
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), Reply :: term(), ra_machine:effects()} |
     {state(), Reply :: term()}.
-apply(Metadata, #enqueue{pid = From, seq = Seq,
-                         msg = RawMsg}, State00) ->
-    apply_enqueue(Metadata, From, Seq, RawMsg, State00);
+apply(Meta, #enqueue{pid = From, seq = Seq,
+                     msg = RawMsg}, State00) ->
+    apply_enqueue(Meta, From, Seq, RawMsg, State00);
+apply(_Meta, #register_enqueuer{pid = Pid},
+      #?MODULE{enqueuers = Enqueuers0,
+               cfg = #cfg{overflow_strategy = Overflow}} = State0) ->
+
+    State = case maps:is_key(Pid, Enqueuers0) of
+                true ->
+                    %% if the enqueuer exits just echo the overflow state
+                    State0;
+                false ->
+                    State0#?MODULE{enqueuers = Enqueuers0#{Pid => #enqueuer{}}}
+            end,
+    Res = case is_over_limit(State) of
+              true when Overflow == reject_publish ->
+                  reject_publish;
+              _ ->
+                  ok
+          end,
+    {State, Res, [{monitor, process, Pid}]};
 apply(Meta,
       #settle{msg_ids = MsgIds, consumer_id = ConsumerId},
       #?MODULE{consumers = Cons0} = State) ->
@@ -215,8 +236,9 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
                                                 ServiceQueue0),
             Cons = maps:put(ConsumerId, Con1, Cons0),
             {State1, ok, Effects} =
-                checkout(Meta, State0#?MODULE{service_queue = ServiceQueue,
-                                              consumers = Cons}, []),
+            checkout(Meta, State0,
+                     State0#?MODULE{service_queue = ServiceQueue,
+                                    consumers = Cons}, []),
             Response = {send_credit_reply, messages_ready(State1)},
             %% by this point all checkouts for the updated credit value
             %% should be processed so we can evaluate the drain
@@ -262,7 +284,8 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
 apply(_, #checkout{spec = {dequeue, _}},
       #?MODULE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
     {State0, {error, unsupported}};
-apply(#{from := From} = Meta, #checkout{spec = {dequeue, Settlement},
+apply(#{index := Index,
+        from := From} = Meta, #checkout{spec = {dequeue, Settlement},
                                         meta = ConsumerMeta,
                                         consumer_id = ConsumerId},
       #?MODULE{consumers = Consumers} = State0) ->
@@ -278,57 +301,69 @@ apply(#{from := From} = Meta, #checkout{spec = {dequeue, Settlement},
                                      {once, 1, simple_prefetch},
                                      State0),
             {success, _, MsgId, Msg, State2} = checkout_one(State1),
-            {State, Effects} = case Settlement of
-                                   unsettled ->
-                                       {_, Pid} = ConsumerId,
-                                       {State2, [{monitor, process, Pid}]};
-                                   settled ->
-                                       %% immediately settle the checkout
-                                       {State3, _, Effects0} =
-                                           apply(Meta, make_settle(ConsumerId, [MsgId]),
-                                                 State2),
-                                       {State3, Effects0}
-                               end,
+            {State4, Effects1} = case Settlement of
+                                     unsettled ->
+                                         {_, Pid} = ConsumerId,
+                                         {State2, [{monitor, process, Pid}]};
+                                     settled ->
+                                         %% immediately settle the checkout
+                                         {State3, _, Effects0} =
+                                         apply(Meta, make_settle(ConsumerId, [MsgId]),
+                                               State2),
+                                         {State3, Effects0}
+                                 end,
+            {Reply, Effects2} =
             case Msg of
                 {RaftIdx, {Header, 'empty'}} ->
                     %% TODO add here new log effect with reply
-                    {State, '$ra_no_reply',
-                     reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From)};
+                    {'$ra_no_reply',
+                     [reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From) |
+                      Effects1]};
                 _ ->
-                    {State, {dequeue, {MsgId, Msg}, Ready-1}, Effects}
+                    {{dequeue, {MsgId, Msg}, Ready-1}, Effects1}
+
+            end,
+
+            case evaluate_limit(Index, false, State0, State4, Effects2) of
+                {State, true, Effects} ->
+                    update_smallest_raft_index(Index, Reply, State, Effects);
+                {State, false, Effects} ->
+                    {State, Reply, Effects}
             end
     end;
 apply(Meta, #checkout{spec = cancel, consumer_id = ConsumerId}, State0) ->
     {State, Effects} = cancel_consumer(ConsumerId, State0, [], consumer_cancel),
-    checkout(Meta, State, Effects);
+    checkout(Meta, State0, State, Effects);
 apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
                       consumer_id = {_, Pid} = ConsumerId},
       State0) ->
     State1 = update_consumer(ConsumerId, ConsumerMeta, Spec, State0),
-    checkout(Meta, State1, [{monitor, process, Pid}]);
-apply(#{index := RaftIdx}, #purge{},
+    checkout(Meta, State0, State1, [{monitor, process, Pid}]);
+apply(#{index := Index}, #purge{},
       #?MODULE{ra_indexes = Indexes0,
                returns = Returns,
                messages = Messages} = State0) ->
     Total = messages_ready(State0),
     Indexes1 = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0,
-                          [I || {_, {I, _}} <- lqueue:to_list(Messages)]),
+                           [I || {_, {I, _}} <- lqueue:to_list(Messages)]),
     Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes1,
                           [I || {_, {I, _}} <- lqueue:to_list(Returns)]),
-    {State, _, Effects} =
-        update_smallest_raft_index(RaftIdx,
-                                   State0#?MODULE{ra_indexes = Indexes,
-                                                  messages = lqueue:new(),
-                                                  returns = lqueue:new(),
-                                                  msg_bytes_enqueue = 0,
-                                                  prefix_msgs = {0, [], 0, []},
-                                                  msg_bytes_in_memory = 0,
-                                                  msgs_ready_in_memory = 0},
-                                   []),
-    %% as we're not checking out after a purge (no point) we have to
-    %% reverse the effects ourselves
-    {State, {purge, Total},
-     lists:reverse([garbage_collection | Effects])};
+
+    State1 = State0#?MODULE{ra_indexes = Indexes,
+                            messages = lqueue:new(),
+                            returns = lqueue:new(),
+                            msg_bytes_enqueue = 0,
+                            prefix_msgs = {0, [], 0, []},
+                            msg_bytes_in_memory = 0,
+                            msgs_ready_in_memory = 0},
+    Effects0 = [garbage_collection],
+    Reply = {purge, Total},
+    case evaluate_limit(Index, false, State0, State1, Effects0) of
+        {State, true, Effects} ->
+            update_smallest_raft_index(Index, Reply, State, Effects);
+        {State, false, Effects} ->
+            {State, Reply, Effects}
+    end;
 apply(Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
@@ -375,7 +410,7 @@ apply(Meta, {down, Pid, noconnection},
                        (_, E) -> E
                     end, Enqs0),
     Effects = [{monitor, node, Node} | Effects1],
-    checkout(Meta, State#?MODULE{enqueuers = Enqs}, Effects);
+    checkout(Meta, State0, State#?MODULE{enqueuers = Enqs}, Effects);
 apply(Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                enqueuers = Enqs0} = State0) ->
@@ -418,10 +453,10 @@ apply(Meta, {down, Pid, noconnection},
                   _ ->
                       [{monitor, node, Node}]
               end ++ Effects1,
-    checkout(Meta, State#?MODULE{enqueuers = Enqs}, Effects);
+    checkout(Meta, State0, State#?MODULE{enqueuers = Enqs}, Effects);
 apply(Meta, {down, Pid, _Info}, State0) ->
     {State, Effects} = handle_down(Pid, State0),
-    checkout(Meta, State, Effects);
+    checkout(Meta, State0, State, Effects);
 apply(Meta, {nodeup, Node}, #?MODULE{consumers = Cons0,
                                      enqueuers = Enqs0,
                                      service_queue = SQ0} = State0) ->
@@ -456,7 +491,7 @@ apply(Meta, {nodeup, Node}, #?MODULE{consumers = Cons0,
                             service_queue = SQ,
                             waiting_consumers = Waiting},
     {State, Effects} = activate_next_consumer(State1, Effects1),
-    checkout(Meta, State, Effects);
+    checkout(Meta, State0, State, Effects);
 apply(_, {nodedown, _Node}, State) ->
     {State, ok};
 apply(_, #purge_nodes{nodes = Nodes}, State0) ->
@@ -465,7 +500,7 @@ apply(_, #purge_nodes{nodes = Nodes}, State0) ->
                                    end, {State0, []}, Nodes),
     {State, ok, Effects};
 apply(Meta, #update_config{config = Conf}, State) ->
-    checkout(Meta, update_config(Conf, State), []);
+    checkout(Meta, State, update_config(Conf, State), []);
 apply(_Meta, {machine_version, 0, 1}, V0State) ->
     State = convert_v0_to_v1(V0State),
     {State, ok, []}.
@@ -1011,7 +1046,7 @@ apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, [], State0) of
         {ok, State1, Effects1} ->
             State2 = append_to_master_index(RaftIdx, State1),
-            {State, ok, Effects} = checkout(Meta, State2, Effects1),
+            {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
             {maybe_store_dehydrated_state(RaftIdx, State), ok, Effects};
         {duplicate, State, Effects} ->
             {State, ok, Effects}
@@ -1173,7 +1208,7 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
             _ ->
                 {State1, Effects1}
         end,
-    {State, ok, Effects} = checkout(Meta, State2, Effects3),
+    {State, ok, Effects} = checkout(Meta, State0, State2, Effects3),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 % used to processes messages that are finished
@@ -1221,7 +1256,7 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
     Discarded = maps:with(MsgIds, Checked0),
     {State2, Effects1} = complete(ConsumerId, Discarded, Con0,
                                   Effects0, State0),
-    {State, ok, Effects} = checkout(Meta, State2, Effects1),
+    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 dead_letter_effects(_Reason, _Discarded,
@@ -1257,7 +1292,10 @@ cancel_consumer_effects(ConsumerId,
     [{mod_call, rabbit_quorum_queue,
       cancel_consumer_handler, [QName, ConsumerId]} | Effects].
 
-update_smallest_raft_index(IncomingRaftIdx,
+update_smallest_raft_index(Idx, State, Effects) ->
+    update_smallest_raft_index(Idx, ok, State, Effects).
+
+update_smallest_raft_index(IncomingRaftIdx, Reply,
                            #?MODULE{ra_indexes = Indexes,
                                     release_cursors = Cursors0} = State0,
                            Effects) ->
@@ -1267,17 +1305,16 @@ update_smallest_raft_index(IncomingRaftIdx,
             % we can forward release_cursor all the way until
             % the last received command, hooray
             State = State0#?MODULE{release_cursors = lqueue:new()},
-            {State, ok, Effects ++ [{release_cursor, IncomingRaftIdx, State}]};
+            {State, Reply, Effects ++ [{release_cursor, IncomingRaftIdx, State}]};
         _ ->
             Smallest = rabbit_fifo_index:smallest(Indexes),
             case find_next_cursor(Smallest, Cursors0) of
                 {empty, Cursors} ->
-                    {State0#?MODULE{release_cursors = Cursors},
-                     ok, Effects};
+                    {State0#?MODULE{release_cursors = Cursors}, Reply, Effects};
                 {Cursor, Cursors} ->
                     %% we can emit a release cursor when we've passed the smallest
                     %% release cursor available.
-                    {State0#?MODULE{release_cursors = Cursors}, ok,
+                    {State0#?MODULE{release_cursors = Cursors}, Reply,
                      Effects ++ [Cursor]}
             end
     end.
@@ -1382,10 +1419,10 @@ return_all(#?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
                 end, {State, Effects0}, Checked).
 
 %% checkout new messages to consumers
-checkout(#{index := Index}, State0, Effects0) ->
+checkout(#{index := Index}, OldState, State0, Effects0) ->
     {State1, _Result, Effects1} = checkout0(checkout_one(State0),
                                             Effects0, {#{}, #{}}),
-    case evaluate_limit(false, State1, Effects1) of
+    case evaluate_limit(Index, false, OldState, State1, Effects1) of
         {State, true, Effects} ->
             update_smallest_raft_index(Index, State, Effects);
         {State, false, Effects} ->
@@ -1418,16 +1455,54 @@ checkout0({Activity, State0}, Effects0, {SendAcc, LogAcc}) ->
                end,
     {State0, ok, lists:reverse(Effects1)}.
 
-evaluate_limit(Result,
+evaluate_limit(_Index, Result, _BeforeState,
                #?MODULE{cfg = #cfg{max_length = undefined,
                                    max_bytes = undefined}} = State,
                Effects) ->
     {State, Result, Effects};
-evaluate_limit(Result, State0, Effects0) ->
+evaluate_limit(Index, Result, BeforeState,
+               #?MODULE{cfg = #cfg{overflow_strategy = Strategy},
+                        enqueuers = Enqs0} = State0,
+               Effects0) ->
     case is_over_limit(State0) of
-        true ->
+        true when Strategy == drop_head ->
             {State, Effects} = drop_head(State0, Effects0),
-            evaluate_limit(true, State, Effects);
+            evaluate_limit(Index, true, BeforeState, State, Effects);
+        true when Strategy == reject_publish ->
+            %% generate send_msg effect for each enqueuer to let them know
+            %% they need to block
+            {Enqs, Effects} =
+                maps:fold(
+                  fun (P, #enqueuer{blocked = undefined} = E0, {Enqs, Acc})  ->
+                          E = E0#enqueuer{blocked = Index},
+                          {Enqs#{P => E},
+                           [{send_msg, P, {queue_status, reject_publish},
+                             [ra_event]} | Acc]};
+                      (_P, _E, Acc) ->
+                          Acc
+                  end, {Enqs0, Effects0}, Enqs0),
+            {State0#?MODULE{enqueuers = Enqs}, Result, Effects};
+        false when Strategy == reject_publish ->
+            %% TODO: optimise as this case gets called for every command
+            %% pretty much
+            Before = is_below_soft_limit(BeforeState),
+            case {Before, is_below_soft_limit(State0)} of
+                {false, true} ->
+                    %% we have moved below the lower limit which
+                    {Enqs, Effects} =
+                    maps:fold(
+                      fun (P, #enqueuer{} = E0, {Enqs, Acc})  ->
+                              E = E0#enqueuer{blocked = undefined},
+                              {Enqs#{P => E},
+                               [{send_msg, P, {queue_status, go}, [ra_event]}
+                                | Acc]};
+                          (_P, _E, Acc) ->
+                              Acc
+                      end, {Enqs0, Effects0}, Enqs0),
+                    {State0#?MODULE{enqueuers = Enqs}, Result, Effects};
+                _ ->
+                    {State0, Result, Effects0}
+            end;
         false ->
             {State0, Result, Effects0}
     end.
@@ -1753,12 +1828,30 @@ is_over_limit(#?MODULE{cfg = #cfg{max_length = undefined,
 is_over_limit(#?MODULE{cfg = #cfg{max_length = MaxLength,
                                   max_bytes = MaxBytes},
                        msg_bytes_enqueue = BytesEnq} = State) ->
-
     messages_ready(State) > MaxLength orelse (BytesEnq > MaxBytes).
+
+is_below_soft_limit(#?MODULE{cfg = #cfg{max_length = undefined,
+                                        max_bytes = undefined}}) ->
+    false;
+is_below_soft_limit(#?MODULE{cfg = #cfg{max_length = MaxLength,
+                                        max_bytes = MaxBytes},
+                            msg_bytes_enqueue = BytesEnq} = State) ->
+    is_below(MaxLength, messages_ready(State)) andalso
+    is_below(MaxBytes, BytesEnq).
+
+is_below(undefined, _Num) ->
+    true;
+is_below(Val, Num) when is_integer(Val) andalso is_integer(Num) ->
+    Num =< trunc(Val * ?LOW_LIMIT).
 
 -spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) -> protocol().
 make_enqueue(Pid, Seq, Msg) ->
     #enqueue{pid = Pid, seq = Seq, msg = Msg}.
+
+-spec make_register_enqueuer(pid()) -> protocol().
+make_register_enqueuer(Pid) ->
+    #register_enqueuer{pid = Pid}.
+
 -spec make_checkout(consumer_id(),
                     checkout_spec(), consumer_meta()) -> protocol().
 make_checkout(ConsumerId, Spec, Meta) ->

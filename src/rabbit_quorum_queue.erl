@@ -125,6 +125,12 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
                        || ServerId <- members(NewQ)],
             case ra:start_cluster(RaConfs) of
                 {ok, _, _} ->
+                    %% TODO: handle error - what should be done if the
+                    %% config cannot be updated
+                    ok = rabbit_fifo_client:update_machine_state(Id,
+                                                                 ra_machine_config(NewQ)),
+                    %% force a policy change to ensure the latest config is
+                    %% updated even when running the machine version from 0
                     rabbit_event:notify(queue_created,
                                         [{name, QName},
                                          {durable, Durable},
@@ -152,6 +158,12 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
+    Overflow = args_policy_lookup(<<"overflow">>,
+                                  fun (A, B) ->
+                                          rabbit_log:info("RESOLVE ~p", [{A, B}]),
+                                          A
+                                  end , Q),
+    rabbit_log:info("OVERFLOW ~p ARGS ~p", [Overflow, amqqueue:get_arguments(Q)]),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
     MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
@@ -165,7 +177,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       max_in_memory_length => MaxMemoryLength,
       max_in_memory_bytes => MaxMemoryBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
-      delivery_limit => DeliveryLimit
+      delivery_limit => DeliveryLimit,
+      overflow_strategy => overflow(Overflow, drop_head)
      }.
 
 single_active_consumer_on(Q) ->
@@ -292,8 +305,13 @@ filter_quorum_critical(Queues, ReplicaStates) ->
 
 -spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
 is_policy_applicable(_Q, Policy) ->
-    Applicable = [<<"max-length">>, <<"max-length-bytes">>, <<"max-in-memory-length">>,
-                  <<"max-in-memory-bytes">>, <<"delivery-limit">>, <<"dead-letter-exchange">>,
+    Applicable = [<<"max-length">>,
+                  <<"max-length-bytes">>,
+                  <<"x-overflow">>,
+                  <<"max-in-memory-length">>,
+                  <<"max-in-memory-bytes">>,
+                  <<"delivery-limit">>,
+                  <<"dead-letter-exchange">>,
                   <<"dead-letter-routing-key">>],
     lists:all(fun({P, _}) ->
                       lists:member(P, Applicable)
@@ -694,13 +712,29 @@ stateless_deliver(ServerId, Delivery) ->
 
 -spec deliver(Confirm :: boolean(), rabbit_types:delivery(),
               rabbit_fifo_client:state()) ->
-    {ok | slow, rabbit_fifo_client:state()}.
+    {ok | slow, rabbit_fifo_client:state()} |
+    {reject_publish, rabbit_fifo_client:state()}.
 
 deliver(false, Delivery, QState0) ->
-    rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0);
+    case rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0) of
+        {ok, _} = Res -> Res;
+        {slow, _} = Res -> Res;
+        {reject_publish, State} ->
+            {ok, State}
+    end;
 deliver(true, Delivery, QState0) ->
-    rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
-                               Delivery#delivery.message, QState0).
+    Seq = Delivery#delivery.msg_seq_no,
+    case rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
+                                    Delivery#delivery.message, QState0) of
+        {ok, _} = Res -> Res;
+        {slow, _} = Res -> Res;
+        {reject_publish, State} ->
+            %% TODO: this works fine but once the queue types interface is in
+            %% place it could be replaced with an action or similar to avoid
+            %% self publishing messages.
+            gen_server2:cast(self(), {reject_publish, Seq, undefined}),
+            {ok, State}
+    end.
 
 -spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
@@ -783,9 +817,9 @@ maybe_delete_data_dir(UId) ->
             ok
     end.
 
-policy_changed(QName, Node) ->
+policy_changed(QName, Server) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
-    rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
+    rabbit_fifo_client:update_machine_state(Server, ra_machine_config(Q)).
 
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
 
@@ -1321,7 +1355,7 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 check_invalid_arguments(QueueName, Args) ->
     Keys = [<<"x-expires">>, <<"x-message-ttl">>,
-            <<"x-max-priority">>, <<"x-queue-mode">>, <<"x-overflow">>],
+            <<"x-max-priority">>, <<"x-queue-mode">>],
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          _TypeVal   -> rabbit_misc:protocol_error(
@@ -1413,3 +1447,7 @@ get_nodes(Q) when ?is_amqqueue(Q) ->
 update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
     Ts = amqqueue:get_type_state(Q),
     amqqueue:set_type_state(Q, Fun(Ts)).
+
+overflow(undefined, Def) -> Def;
+overflow(<<"reject-publish">>, _Def) -> reject_publish;
+overflow(<<"drop-head">>, _Def) -> drop_head.

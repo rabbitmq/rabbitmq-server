@@ -113,6 +113,7 @@ all_tests() ->
      subscribe_redelivery_count,
      message_bytes_metrics,
      queue_length_limit_drop_head,
+     queue_length_limit_reject_publish,
      subscribe_redelivery_limit,
      subscribe_redelivery_policy,
      subscribe_redelivery_limit_with_dead_letter,
@@ -612,14 +613,16 @@ publish_confirm(Ch, QName) ->
     publish(Ch, QName),
     amqp_channel:register_confirm_handler(Ch, self()),
     ct:pal("waiting for confirms from ~s", [QName]),
-    ok = receive
-             #'basic.ack'{}  -> ok;
-             #'basic.nack'{} -> fail
-         after 2500 ->
-                   exit(confirm_timeout)
-         end,
-    ct:pal("CONFIRMED! ~s", [QName]),
-    ok.
+    receive
+        #'basic.ack'{} ->
+            ct:pal("CONFIRMED! ~s", [QName]),
+            ok;
+        #'basic.nack'{} ->
+            ct:pal("NOT CONFIRMED! ~s", [QName]),
+            fail
+    after 2500 ->
+              exit(confirm_timeout)
+    end.
 
 publish_and_restart(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
@@ -1244,13 +1247,13 @@ simple_confirm_availability_on_leader_change(Config) ->
     %% open a channel to another node
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ),
 
     %% stop the node hosting the leader
     ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
     %% this should not fail as the channel should detect the new leader and
     %% resend to that
-    publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ),
     ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
     ok.
 
@@ -1270,7 +1273,7 @@ confirm_availability_on_leader_change(Config) ->
                              Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
                              #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
                              ConfirmLoop = fun Loop() ->
-                                                     publish_confirm(Ch, QQ),
+                                                     ok = publish_confirm(Ch, QQ),
                                                      receive {done, P} ->
                                                                  P ! done,
                                                                  ok
@@ -2019,6 +2022,35 @@ queue_length_limit_drop_head(Config) ->
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg2">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                     no_ack = true})).
+
+queue_length_limit_reject_publish(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-length">>, long, 1},
+                                  {<<"x-overflow">>, longstr, <<"reject-publish">>}])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    ok = publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ),
+    %% give the channel some time to process the async reject_publish notification
+    %% now that we are over the limit it should start failing
+    wait_for_messages_total(Servers, RaName, 2),
+    fail = publish_confirm(Ch, QQ),
+    %% remove all messages
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = _}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = _}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                                    no_ack = true})),
+    %% publish should be allowed again now
+    ok = publish_confirm(Ch, QQ),
+    ok.
 
 queue_length_in_memory_limit_basic_get(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

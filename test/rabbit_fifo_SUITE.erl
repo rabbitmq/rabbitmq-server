@@ -59,19 +59,24 @@ end_per_testcase(_TestCase, _Config) ->
         ?ASSERT_EFF(EfxPat, true, Effects)).
 
 -define(ASSERT_EFF(EfxPat, Guard, Effects),
-    ?assert(lists:any(fun (EfxPat) when Guard -> true;
-                          (_) -> false
-                      end, Effects))).
+        ?assert(lists:any(fun (EfxPat) when Guard -> true;
+                              (_) -> false
+                          end, Effects))).
 
 -define(ASSERT_NO_EFF(EfxPat, Effects),
-    ?assert(not lists:any(fun (EfxPat) -> true;
-                          (_) -> false
-                      end, Effects))).
+        ?assert(not lists:any(fun (EfxPat) -> true;
+                                  (_) -> false
+                              end, Effects))).
+
+-define(ASSERT_NO_EFF(EfxPat, Guard, Effects),
+        ?assert(not lists:any(fun (EfxPat) when Guard -> true;
+                                  (_) -> false
+                              end, Effects))).
 
 -define(assertNoEffect(EfxPat, Effects),
-    ?assert(not lists:any(fun (EfxPat) -> true;
-                          (_) -> false
-                      end, Effects))).
+        ?assert(not lists:any(fun (EfxPat) -> true;
+                                  (_) -> false
+                              end, Effects))).
 
 test_init(Name) ->
     init(#{name => Name,
@@ -1258,6 +1263,99 @@ single_active_with_credited_test(_) ->
                  State3#rabbit_fifo.waiting_consumers),
     ok.
 
+
+register_enqueuer_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    max_length => 2,
+                    overflow_strategy => reject_publish}),
+    %% simply registering should be ok when we're below limit
+    Pid1 = test_util:fake_pid(node()),
+    {State1, ok, [_]} = apply(meta(1), make_register_enqueuer(Pid1), State0),
+
+    {State2, ok, _} = apply(meta(2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    %% register another enqueuer shoudl be ok
+    Pid2 = test_util:fake_pid(node()),
+    {State3, ok, [_]} = apply(meta(3), make_register_enqueuer(Pid2), State2),
+
+    {State4, ok, _} = apply(meta(4), rabbit_fifo:make_enqueue(Pid1, 2, two), State3),
+    {State5, ok, Efx} = apply(meta(5), rabbit_fifo:make_enqueue(Pid1, 3, three), State4),
+    % ct:pal("Efx ~p", [Efx]),
+    %% validate all registered enqueuers are notified of overflow state
+    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
+    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid2, Efx),
+
+    %% this time, registry should return reject_publish
+    {State6, reject_publish, [_]} = apply(meta(6), make_register_enqueuer(
+                                                     test_util:fake_pid(node())), State5),
+    ?assertMatch(#{num_enqueuers := 3}, rabbit_fifo:overview(State6)),
+
+
+    %% remove two messages this should make the queue fall below the 0.8 limit
+    {State7, {dequeue, _, _}, _Efx7} =
+        apply(meta(7),
+              rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State6),
+    ct:pal("Efx7 ~p", [_Efx7]),
+    {State8, {dequeue, _, _}, Efx8} =
+        apply(meta(8),
+              rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State7),
+    ct:pal("Efx8 ~p", [Efx8]),
+    %% validate all registered enqueuers are notified of overflow state
+    ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx8),
+    ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid2, Efx8),
+    {_State9, {dequeue, _, _}, Efx9} =
+        apply(meta(9),
+              rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State8),
+    ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid1, Efx9),
+    ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid2, Efx9),
+    ok.
+
+reject_publish_purge_test(_) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    max_length => 2,
+                    overflow_strategy => reject_publish}),
+    %% simply registering should be ok when we're below limit
+    Pid1 = test_util:fake_pid(node()),
+    {State1, ok, [_]} = apply(meta(1), make_register_enqueuer(Pid1), State0),
+    {State2, ok, _} = apply(meta(2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    {State3, ok, _} = apply(meta(3), rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
+    {State4, ok, Efx} = apply(meta(4), rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
+    % ct:pal("Efx ~p", [Efx]),
+    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
+    {_State5, {purge, 3}, Efx1} = apply(meta(5), rabbit_fifo:make_purge(), State4),
+    ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx1),
+    ok.
+
+reject_publish_applied_after_limit_test(_) ->
+    InitConf = #{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8))
+                   },
+    State0 = init(InitConf),
+    %% simply registering should be ok when we're below limit
+    Pid1 = test_util:fake_pid(node()),
+    {State1, ok, [_]} = apply(meta(1), make_register_enqueuer(Pid1), State0),
+    {State2, ok, _} = apply(meta(2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    {State3, ok, _} = apply(meta(3), rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
+    {State4, ok, Efx} = apply(meta(4), rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
+    % ct:pal("Efx ~p", [Efx]),
+    ?ASSERT_NO_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
+    %% apply new config
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue,
+                                             atom_to_binary(?FUNCTION_NAME, utf8)),
+             max_length => 2,
+             overflow_strategy => reject_publish
+            },
+    {State5, ok, Efx1} = apply(meta(5), rabbit_fifo:make_update_config(Conf), State4),
+    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx1),
+    Pid2 = test_util:fake_pid(node()),
+    {_State6, reject_publish, _} = apply(meta(1), make_register_enqueuer(Pid2), State5),
+    ok.
+
 purge_nodes_test(_) ->
     Node = purged@node,
     ThisNode = node(),
@@ -1412,6 +1510,7 @@ machine_version_test(_) ->
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
+make_register_enqueuer(Pid) -> rabbit_fifo:make_register_enqueuer(Pid).
 apply(Meta, Entry, State) -> rabbit_fifo:apply(Meta, Entry, State).
 init_aux(Conf) -> rabbit_fifo:init_aux(Conf).
 handle_aux(S, T, C, A, L, M) -> rabbit_fifo:handle_aux(S, T, C, A, L, M).

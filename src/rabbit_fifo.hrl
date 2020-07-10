@@ -75,6 +75,7 @@
 -define(GC_MEM_LIMIT_B, 2000000).
 
 -define(MB, 1048576).
+-define(LOW_LIMIT, 0.8).
 
 -record(consumer,
         {meta = #{} :: consumer_meta(),
@@ -105,11 +106,11 @@
          % out of order enqueues - sorted list
          pending = [] :: [{msg_seqno(), ra:index(), raw_msg()}],
          status = up :: up |
-                        suspected_down |
-                        %% it is useful to have a record of when this was blocked
-                        %% so that we can retry sending the block effect if
-                        %% the publisher did not receive the initial one
-                        {blocked, At :: ra:index()}
+                        suspected_down,
+         %% it is useful to have a record of when this was blocked
+         %% so that we can retry sending the block effect if
+         %% the publisher did not receive the initial one
+         blocked :: undefined | ra:index()
         }).
 
 -record(cfg,
@@ -191,5 +192,6 @@
                     max_bytes => non_neg_integer(),
                     max_in_memory_length => non_neg_integer(),
                     max_in_memory_bytes => non_neg_integer(),
+                    overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
                     delivery_limit => non_neg_integer()}.
