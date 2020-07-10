@@ -274,10 +274,16 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                                             {Connection, State#stream_connection_state{consumers = Consumers1}}
                                     end,
             listen_loop_post_auth(Transport, Connection1, State1, Configuration);
-        {heartbeat_send_error, Reason} ->
-            rabbit_log:info("Heartbeat send error ~p, closing connection~n", [Reason]),
-            C1 = demonitor_all_streams(Connection),
-            close(Transport, C1);
+        heartbeat_send ->
+            Frame = <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>,
+            case catch frame(Transport, Connection, Frame) of
+                ok ->
+                    listen_loop_post_auth(Transport, Connection, State, Configuration);
+                Unexpected ->
+                    rabbit_log:info("Heartbeat send error ~p, closing connection~n", [Unexpected]),
+                    C1 = demonitor_all_streams(Connection),
+                    close(Transport, C1)
+            end;
         heartbeat_timeout ->
             rabbit_log:info("Heartbeat timeout, closing connection~n"),
             C1 = demonitor_all_streams(Connection),
@@ -483,22 +489,17 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                            end,
 
     {Connection1, State, Rest1};
-handle_frame_pre_auth(Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = Connection, State,
+handle_frame_pre_auth(_Transport, #stream_connection{helper_sup = SupPid, socket = Sock, name = ConnectionName} = Connection, State,
     <<?COMMAND_TUNE:16, ?VERSION_0:16, FrameMax:32, Heartbeat:32>>, Rest) ->
     rabbit_log:info("Tuning response ~p ~p ~n", [FrameMax, Heartbeat]),
-
-    Frame = <<?COMMAND_HEARTBEAT:16, ?VERSION_0:16>>,
     Parent = self(),
+    %% sending a message to the main process so the heartbeat frame is sent from this main process
+    %% otherwise heartbeat frames can interleave with chunk delivery
+    %% (chunk delivery is made of 2 calls on the socket, one for the header and one send_file for the chunk,
+    %% we don't want a heartbeat frame to sneak in in-between)
     SendFun =
         fun() ->
-            case catch frame(Transport, Connection, Frame) of
-                ok ->
-                    ok;
-                {error, Reason} ->
-                    Parent ! {heartbeat_send_error, Reason};
-                Unexpected ->
-                    Parent ! {heartbeat_send_error, Unexpected}
-            end,
+            Parent ! heartbeat_send,
             ok
         end,
     ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
