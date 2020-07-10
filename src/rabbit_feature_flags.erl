@@ -54,10 +54,10 @@
 %% == How to declare a feature flag ==
 %%
 %% To define a new feature flag, you need to use the
-%% `rabbitmq_feature_flag()' module attribute:
+%% `rabbit_feature_flag()' module attribute:
 %%
 %% ```
-%% -rabitmq_feature_flag(FeatureFlag).
+%% -rabbit_feature_flag(FeatureFlag).
 %% '''
 %%
 %% `FeatureFlag' is a {@type feature_flag_modattr()}.
