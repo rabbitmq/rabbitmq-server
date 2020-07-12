@@ -24,22 +24,16 @@ more details.
 
 A couple of examples:
 
-``` erlang
-[
-  {rabbit, [
-    {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'EXTERNAL']}
-  ]}
-].
+``` ini
+auth_mechanisms.1 = PLAIN
+auth_mechanisms.1 = AMQPLAIN
+auth_mechanisms.1 = EXTERNAL
 ```
 
 to allow this mechanism in addition to the defaults, or:
 
-``` erlang
-[
-  {rabbit, [
-    {auth_mechanisms, ['EXTERNAL']}
-  ]}
-].
+``` ini
+auth_mechanisms.1 = EXTERNAL
 ```
 
 to allow only this mechanism and prohibit connections that use
@@ -65,7 +59,7 @@ openssl x509 -in path/to/cert.pem -nameopt RFC2253 -subject -noout
 
 or from an existing amqps connection with commands like:
 
-```
+``` bash
 rabbitmqctl list_connections peer_cert_subject
 ```
 
@@ -73,13 +67,10 @@ rabbitmqctl list_connections peer_cert_subject
 
 To use the Common Name instead, set `rabbit.ssl_cert_login_from` to `common_name`:
 
-```
-[
-  {rabbit, [
-    {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'EXTERNAL']},
-    {ssl_cert_login_from, common_name}
-  ]}
-].
+``` ini
+auth_mechanisms.1 = EXTERNAL
+
+ssl_cert_login_from = common_name
 ```
 
 Note that the authenticated user will then be looked up in the
