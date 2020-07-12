@@ -80,6 +80,7 @@
 boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
+    rabbit_log:debug("Started Ranch"),
     %% Failures will throw exceptions
     _ = boot_listeners(fun boot_tcp/1, application:get_env(rabbit, num_tcp_acceptors, 10), "TCP"),
     _ = boot_listeners(fun boot_tls/1, application:get_env(rabbit, num_ssl_acceptors, 10), "TLS"),

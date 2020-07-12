@@ -250,8 +250,8 @@
                     {requires,    pre_flight}]}).
 
 -rabbit_boot_step({networking,
-                   [{description, "TCP and TLS listeners"},
-                    {mfa,         {rabbit_networking, boot, []}},
+                   [{description, "TCP and TLS listeners (backwards compatibility)"},
+                    {mfa,         {rabbit_log, debug, ["'networking' boot step skipped and moved to end of startup", []]}},
                     {requires,    notify_cluster}]}).
 
 %%---------------------------------------------------------------------------
@@ -928,7 +928,15 @@ do_run_postlaunch_phase() ->
                rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
         %% export definitions after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2384
-        rabbit_definitions:maybe_load_definitions()
+        case rabbit_definitions:maybe_load_definitions() of
+            ok -> ok;
+            DefLoadError -> throw(DefLoadError)
+        end,
+
+        %% start listeners after all plugins have been enabled,
+        %% see rabbitmq/rabbitmq-server#2405
+        rabbit_log_prelaunch:info("Ready to start client connection listeners"),
+        ok = rabbit_networking:boot()
     catch
         throw:{error, _} = Error ->
             rabbit_prelaunch_errors:log_error(Error),
