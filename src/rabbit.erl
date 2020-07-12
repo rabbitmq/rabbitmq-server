@@ -935,6 +935,7 @@ do_run_postlaunch_phase() ->
 
         %% start listeners after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2405
+        rabbit_log_prelaunch:info("Ready to start client connection listeners"),
         ok = rabbit_networking:boot()
     catch
         throw:{error, _} = Error ->
