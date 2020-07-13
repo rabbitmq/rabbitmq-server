@@ -69,7 +69,7 @@ defmodule ClearUserLimitsCommandTest do
   end
 
   test "run: if limit exists, returns ok and clears it", context do
-    :ok = set_user_limits(@user, @definition)
+    :ok = set_user_limits(@user, @channel_definition)
 
     assert get_user_limits(@user) != []
 
