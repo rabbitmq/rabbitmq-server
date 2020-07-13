@@ -22,7 +22,7 @@
          add_user_sans_validation/3, put_user/2, put_user/3]).
 
 -export([set_user_limits/2, clear_user_limits/2, is_over_connection_limit/1,
-         is_over_channel_limit/1, get_user_limits/1]).
+         is_over_channel_limit/1, get_user_limits/0, get_user_limits/1]).
 
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
@@ -1042,6 +1042,11 @@ get_user_limit(Username, LimitType) ->
         _ ->
             undefined
     end.
+
+get_user_limits() ->
+    [{internal_user:get_username(U), internal_user:get_limits(U)} ||
+        U <- all_users(),
+        internal_user:get_limits(U) =/= #{}].
 
 get_user_limits(Username) ->
     case lookup_user(Username) of
