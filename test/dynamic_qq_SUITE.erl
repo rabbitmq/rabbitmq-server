@@ -24,15 +24,13 @@ all() ->
 groups() ->
     [
       {clustered, [], [
-          {cluster_size_2, [], [
+          {cluster_size_3, [], [
+              recover_follower_after_standalone_restart,
               vhost_deletion,
               force_delete_if_no_consensus,
               takeover_on_failure,
               takeover_on_shutdown,
               quorum_unaffected_after_vhost_failure
-            ]},
-          {cluster_size_3, [], [
-              recover_follower_after_standalone_restart
             ]}
         ]}
     ].
@@ -108,7 +106,7 @@ vhost_deletion(Config) ->
     ok.
 
 force_delete_if_no_consensus(Config) ->
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = ?config(queue_name, Config),
     Args = ?config(queue_args, Config),
@@ -119,6 +117,7 @@ force_delete_if_no_consensus(Config) ->
     rabbit_ct_client_helpers:publish(ACh, QName, 10),
     ok = rabbit_ct_broker_helpers:restart_node(Config, B),
     ok = rabbit_ct_broker_helpers:stop_node(Config, A),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, C),
 
     BCh = rabbit_ct_client_helpers:open_channel(Config, B),
     ?assertMatch(
@@ -140,7 +139,7 @@ takeover_on_shutdown(Config) ->
     takeover_on(Config, stop_node).
 
 takeover_on(Config, Fun) ->
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = ?config(queue_name, Config),
@@ -152,6 +151,7 @@ takeover_on(Config, Fun) ->
     rabbit_ct_client_helpers:publish(ACh, QName, 10),
     ok = rabbit_ct_broker_helpers:restart_node(Config, B),
 
+    ok = rabbit_ct_broker_helpers:Fun(Config, C),
     ok = rabbit_ct_broker_helpers:Fun(Config, A),
 
     BCh = rabbit_ct_client_helpers:open_channel(Config, B),
@@ -170,7 +170,7 @@ takeover_on(Config, Fun) ->
     ok.
 
 quorum_unaffected_after_vhost_failure(Config) ->
-    [A, B] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, _] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Servers = lists:sort(Servers0),
 
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
