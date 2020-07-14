@@ -198,7 +198,7 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
         modules => [tcp_listener_sup]
     }.
 
--spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref().
+-spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref() | undefined.
 ranch_ref(#listener{port = Port}) ->
     [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
     {acceptor, IPAddress, Port};
@@ -215,7 +215,7 @@ ranch_ref(undefined) ->
 ranch_ref(IPAddress, Port) ->
     {acceptor, IPAddress, Port}.
 
--spec ranch_ref_of_protocol(atom()) -> ranch:ref().
+-spec ranch_ref_of_protocol(atom()) -> ranch:ref() | undefined.
 ranch_ref_of_protocol(Protocol) ->
     ranch_ref(listener_of_protocol(Protocol)).
 
@@ -237,9 +237,8 @@ listener_of_protocol(Protocol) ->
 -spec stop_ranch_listener_of_protocol(atom()) -> ok | {error, not_found}.
 stop_ranch_listener_of_protocol(Protocol) ->
     case rabbit_networking:ranch_ref_of_protocol(Protocol) of
-        {error, not_found} -> ok;
-        undefined          -> ok;
-        Ref                ->
+        undefined -> ok;
+        Ref       ->
             rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
             ranch:stop_listener(Ref)
     end.
