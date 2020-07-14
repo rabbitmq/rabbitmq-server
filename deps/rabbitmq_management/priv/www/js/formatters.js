@@ -33,7 +33,7 @@ function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
     var power = num_power[2];
     var powers = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
     return (((power != 0 || allow_fractions) && max <= 10) ? num.toFixed(1) :
-            num.toFixed(0)) + powers[power];
+            num.toFixed(0)) + " " + powers[power];
 }
 
 function fmt_boolean(b, unknown) {
