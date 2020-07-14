@@ -1085,15 +1085,23 @@ list_login_vhosts_names(User, AuthzData) ->
     [V || V <- rabbit_vhost:list_names(),
           case catch rabbit_access_control:check_vhost_access(User, V, AuthzData, #{}) of
               ok -> true;
-              _  -> false
+              NotOK ->
+                  log_access_control_result(NotOK),
+                  false
           end].
 
 list_login_vhosts(User, AuthzData) ->
     [V || V <- rabbit_vhost:all(),
           case catch rabbit_access_control:check_vhost_access(User, vhost:get_name(V), AuthzData, #{}) of
               ok -> true;
-              _  -> false
+              NotOK ->
+                  log_access_control_result(NotOK),
+                  false
           end].
+
+% rabbitmq/rabbitmq-auth-backend-http#100
+log_access_control_result(NotOK) ->
+    rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]).
 
 %% base64:decode throws lots of weird errors. Catch and convert to one
 %% that will cause a bad_request.
