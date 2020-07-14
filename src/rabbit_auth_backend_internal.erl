@@ -21,7 +21,7 @@
          set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
          add_user_sans_validation/3, put_user/2, put_user/3]).
 
--export([set_user_limits/2, clear_user_limits/2, is_over_connection_limit/1,
+-export([set_user_limits/3, clear_user_limits/3, is_over_connection_limit/1,
          is_over_channel_limit/1, get_user_limits/0, get_user_limits/1]).
 
 -export([user_info_keys/0, perms_info_keys/0,
@@ -768,23 +768,25 @@ preconfigure_permissions(Username, Map, ActingUser) when is_map(Map) ->
              Map),
     ok.
 
-set_user_limits(Username, Defn) ->
-    Definition = rabbit_data_coercion:to_binary(Defn),
-    case rabbit_json:try_decode(Definition) of
+set_user_limits(Username, Definition, ActingUser) when is_list(Definition); is_binary(Definition) ->
+    case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Definition)) of
         {ok, Term} ->
-            validate_parameters_and_update_limit(Username, Term);
+            validate_parameters_and_update_limit(Username, Term, ActingUser);
         {error, Reason} ->
             {error_string, rabbit_misc:format(
                              "JSON decoding error. Reason: ~ts", [Reason])}
-    end.
+    end;
+set_user_limits(Username, Definition, ActingUser) when is_map(Definition) ->
+    validate_parameters_and_update_limit(Username, Definition, ActingUser).
 
-validate_parameters_and_update_limit(Username, Term) ->
+validate_parameters_and_update_limit(Username, Term, ActingUser) ->
     case flatten_errors(rabbit_parameter_validation:proplist(
                         <<"user-limits">>, user_limit_validation(), Term)) of
         ok ->
             update_user(Username, fun(User) ->
                                       internal_user:update_limits(add, User, Term)
-                                  end);
+                                  end),
+            notify_limit_set(Username, ActingUser, Term);
         {errors, [{Reason, Arguments}]} ->
             {error_string, rabbit_misc:format(Reason, Arguments)}
     end.
@@ -793,14 +795,16 @@ user_limit_validation() ->
     [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},
      {<<"max-channels">>, fun rabbit_parameter_validation:integer/2, optional}].
 
-clear_user_limits(Username, <<"all">>) ->
+clear_user_limits(Username, <<"all">>, ActingUser) ->
     update_user(Username, fun(User) ->
                               internal_user:clear_limits(User)
-                          end);
-clear_user_limits(Username, LimitType) ->
+                          end),
+    notify_limit_clear(Username, ActingUser);
+clear_user_limits(Username, LimitType, ActingUser) ->
     update_user(Username, fun(User) ->
                               internal_user:update_limits(remove, User, LimitType)
-                          end).
+                          end),
+    notify_limit_clear(Username, ActingUser).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
@@ -1053,3 +1057,13 @@ get_user_limits(Username) ->
         {ok, User} -> internal_user:get_limits(User);
         _ -> undefined
     end.
+
+notify_limit_set(Username, ActingUser, Term) ->
+    rabbit_event:notify(user_limits_set,
+        [{name, <<"limits">>},  {user_who_performed_action, ActingUser},
+        {username, Username}  | maps:to_list(Term)]).
+
+notify_limit_clear(Username, ActingUser) ->
+    rabbit_event:notify(user_limits_cleared,
+        [{name, <<"limits">>}, {user_who_performed_action, ActingUser},
+        {username, Username}]).
