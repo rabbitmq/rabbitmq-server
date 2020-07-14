@@ -16,10 +16,6 @@ update_app_env(Config, Key, Val) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
                                       application, stop,
                                       [rabbitmq_web_mqtt]),
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-                                      ranch, stop_listener,
-                                      [web_mqtt]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ranch, stop_listener, [web_mqtt_secure]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
                                       application, start,
                                       [rabbitmq_web_mqtt]).

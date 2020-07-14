@@ -8,11 +8,14 @@
 -module(rabbit_web_mqtt_handler).
 -behaviour(cowboy_websocket).
 
--export([init/2]).
--export([websocket_init/1]).
--export([websocket_handle/2]).
--export([websocket_info/2]).
--export([terminate/3]).
+-export([
+    init/2,
+    websocket_init/1,
+    websocket_handle/2,
+    websocket_info/2,
+    terminate/3
+]).
+-export([close_connection/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -79,6 +82,13 @@ websocket_init(State = #state{conn_name = ConnStr, socket = Sock, peername = Pee
          #state.stats_timer),
      hibernate}.
 
+-spec close_connection(pid(), string()) -> 'ok'.
+close_connection(Pid, Reason) ->
+    rabbit_log_connection:info("Web MQTT: will terminate connection process ~p, reason: ~s",
+                               [Pid, Reason]),
+    sys:terminate(Pid, Reason),
+    ok.
+
 websocket_handle({binary, Data}, State) ->
     handle_data(Data, State);
 %% Silently ignore ping and pong frames.
@@ -123,8 +133,13 @@ websocket_info({'EXIT', _, _}, State) ->
     stop(State);
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
-    rabbit_log_connection:warning("Web MQTT disconnecting duplicate client id ~p (~p)~n",
+    rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~s' (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
+    stop(State);
+websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
+                                                                 conn_name = ConnName }) ->
+    rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s~n",
+                 [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
     stop(State);
 websocket_info({start_keepalives, Keepalive},
                State = #state{ socket = Sock, keepalive_sup = KeepaliveSup }) ->
