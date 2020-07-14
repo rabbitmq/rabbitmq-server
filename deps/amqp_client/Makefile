@@ -13,7 +13,7 @@ endef
 
 define PROJECT_APP_EXTRA_KEYS
 %% Hex.pm package informations.
-	{licenses, ["MPL 1.1"]},
+	{licenses, ["MPL 2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},
 	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-erlang-client"},
