@@ -1028,9 +1028,11 @@ recover_from_multiple_failures(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 publishing_to_unavailable_queue(Config) ->
+    %% publishing to an unavialable queue but with a reachable member should result
+    %% in the initial enqueuer session timing out and the message being nacked
     [Server, Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    TCh = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    TCh = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(TCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1042,16 +1044,25 @@ publishing_to_unavailable_queue(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
-    publish_many(Ch, QQ, 300),
-    timer:sleep(1000),
+    publish_many(Ch, QQ, 1),
+    %% this should result in a nack
+    ok = receive
+             #'basic.ack'{}  -> fail;
+             #'basic.nack'{} -> ok
+         after 90000 ->
+                   exit(confirm_timeout)
+         end,
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    %% check we get at least on ack
+    timer:sleep(2000),
+    publish_many(Ch, QQ, 1),
+    %% this should now be acked
     ok = receive
              #'basic.ack'{}  -> ok;
              #'basic.nack'{} -> fail
-         after 30000 ->
+         after 90000 ->
                    exit(confirm_timeout)
          end,
+    %% check we get at least on ack
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     ok.
 

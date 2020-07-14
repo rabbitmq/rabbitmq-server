@@ -128,7 +128,6 @@
 -spec init(config()) -> state().
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->
-    rabbit_log:info("rabbit_fifo: init v0 ~p", [Conf]),
     update_config(Conf, #?STATE{cfg = #cfg{name = Name,
                                             resource = Resource}}).
 
