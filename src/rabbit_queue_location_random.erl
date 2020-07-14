@@ -30,7 +30,13 @@ description() ->
       <<"Locate queue master node from cluster in a random manner">>}].
 
 queue_master_location(Q) when ?is_amqqueue(Q) ->
-    Cluster    = rabbit_queue_master_location_misc:all_nodes(Q),
-    RandomPos  = erlang:phash2(erlang:monotonic_time(), length(Cluster)),
-    MasterNode = lists:nth(RandomPos + 1, Cluster),
-    {ok, MasterNode}.
+    Cluster0   = rabbit_queue_master_location_misc:all_nodes(Q),
+    Cluster    = rabbit_maintenance:filter_out_drained_nodes_local_read(Cluster0),
+    case Cluster of
+        [] ->
+            undefined;
+        Candidates when is_list(Candidates) ->
+            RandomPos  = erlang:phash2(erlang:monotonic_time(), length(Candidates)),
+            MasterNode = lists:nth(RandomPos + 1, Candidates),
+            {ok, MasterNode}
+    end.

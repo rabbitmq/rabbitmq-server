@@ -32,7 +32,7 @@ description() ->
 queue_master_location(Q) when ?is_amqqueue(Q) ->
     Cluster = rabbit_queue_master_location_misc:all_nodes(Q),
     QueueNames = rabbit_amqqueue:list_names(),
-    MastersPerNode = lists:foldl(
+    MastersPerNode0 = lists:foldl(
         fun(#resource{virtual_host = VHost, name = QueueName}, NodeMasters) ->
             case rabbit_queue_master_location_misc:lookup_master(QueueName, VHost) of
                 {ok, Master} when is_atom(Master) ->
@@ -47,16 +47,24 @@ queue_master_location(Q) when ?is_amqqueue(Q) ->
         end,
         maps:from_list([{N, 0} || N <- Cluster]),
         QueueNames),
+    
+    MastersPerNode = maps:filter(fun (Node, _N) ->
+                                    not rabbit_maintenance:is_being_drained_local_read(Node)
+                                 end, MastersPerNode0),
 
-    {MinNode, _NMasters} = maps:fold(
-        fun(Node, NMasters, init) ->
-            {Node, NMasters};
-        (Node, NMasters, {MinNode, MinMasters}) ->
-            case NMasters < MinMasters of
-                true  -> {Node, NMasters};
-                false -> {MinNode, MinMasters}
-            end
-        end,
-        init,
-        MastersPerNode),
-    {ok, MinNode}.
+    case map_size(MastersPerNode) > 0 of
+        true ->
+            {MinNode, _NMasters} = maps:fold(
+                fun(Node, NMasters, init) ->
+                    {Node, NMasters};
+                (Node, NMasters, {MinNode, MinMasters}) ->
+                    case NMasters < MinMasters of
+                        true  -> {Node, NMasters};
+                        false -> {MinNode, MinMasters}
+                    end
+                end,
+                init, MastersPerNode),
+            {ok, MinNode};
+        false ->
+            undefined
+    end.
