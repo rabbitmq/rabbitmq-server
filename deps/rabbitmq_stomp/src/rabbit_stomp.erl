@@ -15,7 +15,8 @@
 -export([connection_info_local/1,
          emit_connection_info_local/3,
          emit_connection_info_all/4,
-         list/0]).
+         list/0,
+         close_all_client_connections/1]).
 
 -define(DEFAULT_CONFIGURATION,
         #stomp_configuration{
@@ -27,10 +28,22 @@
 start(normal, []) ->
     Config = parse_configuration(),
     Listeners = parse_listener_configuration(),
-    rabbit_stomp_sup:start_link(Listeners, Config).
+    Result = rabbit_stomp_sup:start_link(Listeners, Config),
+    EMPid = case rabbit_event:start_link() of
+              {ok, Pid}                       -> Pid;
+              {error, {already_started, Pid}} -> Pid
+            end,
+    gen_event:add_handler(EMPid, rabbit_stomp_internal_event_handler, []),
+    Result.
 
-stop(_State) ->
-    ok.
+stop(_) ->
+    rabbit_stomp_sup:stop_listeners().
+
+-spec close_all_client_connections(string() | binary()) -> {'ok', non_neg_integer()}.
+close_all_client_connections(Reason) ->
+     Connections = list(),
+    [rabbit_stomp_reader:close_connection(Pid, Reason) || Pid <- Connections],
+    {ok, length(Connections)}.
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_stomp, emit_connection_info_local,

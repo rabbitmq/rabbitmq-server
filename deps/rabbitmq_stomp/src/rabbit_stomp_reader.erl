@@ -13,7 +13,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 -export([start_heartbeats/2]).
--export([info/2]).
+-export([info/2, close_connection/2]).
 -export([ssl_login_name/2]).
 
 -include("rabbit_stomp.hrl").
@@ -44,6 +44,10 @@ info(Pid, InfoItems) ->
             gen_server2:call(Pid, {info, InfoItems});
         UnknownItems -> throw({bad_argument, UnknownItems})
     end.
+
+close_connection(Pid, Reason) ->
+    gen_server:cast(Pid, {close_connection, Reason}).
+
 
 init([SupHelperPid, Ref, Configuration]) ->
     process_flag(trap_exit, true),
@@ -97,6 +101,8 @@ handle_call({info, InfoItems}, _From, State) ->
 handle_call(Msg, From, State) ->
     {stop, {stomp_unexpected_call, Msg, From}, State}.
 
+handle_cast({close_connection, Reason}, State) ->
+    {stop, {shutdown, {server_initiated_close, Reason}}, State};
 handle_cast(client_timeout, State) ->
     {stop, {shutdown, client_heartbeat_timeout}, State};
 handle_cast(Msg, State) ->
@@ -272,7 +278,7 @@ run_socket(State = #reader_state{socket = Sock}) ->
 terminate(Reason, undefined) ->
     log_reason(Reason, undefined),
     {stop, Reason};
-terminate(Reason, State = #reader_state{ processor_state = ProcState }) ->
+terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
   maybe_emit_stats(State),
   log_reason(Reason, State),
   _ = rabbit_stomp_processor:flush_and_die(ProcState),
@@ -317,19 +323,24 @@ log_reason({network_error, Reason}, _State) ->
 log_reason({shutdown, client_heartbeat_timeout},
            #reader_state{ processor_state = ProcState }) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
-    rabbit_log:warning("STOMP detected missed client heartbeat(s) "
-                       "on connection ~s, closing it~n", [AdapterName]);
+    rabbit_log_connection:warning("STOMP detected missed client heartbeat(s) "
+                                  "on connection ~s, closing it~n", [AdapterName]);
 
-log_reason(normal, #reader_state{ conn_name  = ConnName}) ->
+log_reason({shutdown, {server_initiated_close, Reason}},
+           #reader_state{conn_name = ConnName}) ->
+    rabbit_log_connection:info("closing STOMP connection ~p (~s), reason: ~s~n",
+                               [self(), ConnName, Reason]);
+
+log_reason(normal, #reader_state{conn_name  = ConnName}) ->
     rabbit_log_connection:info("closing STOMP connection ~p (~s)~n", [self(), ConnName]);
 
 log_reason(shutdown, undefined) ->
     rabbit_log_connection:error("closing STOMP connection that never completed connection handshake (negotiation)~n", []);
 
-log_reason(Reason, #reader_state{ processor_state = ProcState }) ->
+log_reason(Reason, #reader_state{processor_state = ProcState}) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
-    rabbit_log:warning("STOMP connection ~s terminated"
-                       " with reason ~p, closing it~n", [AdapterName, Reason]).
+    rabbit_log_connection:warning("STOMP connection ~s terminated"
+                                  " with reason ~p, closing it~n", [AdapterName, Reason]).
 
 log_tls_alert(handshake_failure, ConnStr) ->
     rabbit_log_connection:error("STOMP detected TLS upgrade error on ~s: handshake failure~n",

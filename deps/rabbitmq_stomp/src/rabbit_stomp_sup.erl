@@ -8,7 +8,10 @@
 -module(rabbit_stomp_sup).
 -behaviour(supervisor).
 
--export([start_link/2, init/1]).
+-export([start_link/2, init/1, stop_listeners/0]).
+
+-define(TCP_PROTOCOL, 'stomp').
+-define(TLS_PROTOCOL, 'stomp/ssl').
 
 start_link(Listeners, Configuration) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE,
@@ -38,6 +41,15 @@ init([{Listeners, SslListeners0}, Configuration]) ->
            listener_specs(fun ssl_listener_spec/1,
                           [SocketOpts, SslOpts, Configuration, NumSslAcceptors], SslListeners)}}.
 
+stop_listeners() ->
+    rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
+    rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
+    ok.
+
+%%
+%% Implementation
+%%
+
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args]) ||
         Listener <- Listeners,
@@ -46,17 +58,17 @@ listener_specs(Fun, Args, Listeners) ->
 tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts,
-      transport(stomp), rabbit_stomp_client_sup, Configuration,
+      transport(?TCP_PROTOCOL), rabbit_stomp_client_sup, Configuration,
       stomp, NumAcceptors, "STOMP TCP listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts ++ SslOpts,
-      transport('stomp/ssl'), rabbit_stomp_client_sup, Configuration,
+      transport(?TLS_PROTOCOL), rabbit_stomp_client_sup, Configuration,
       'stomp/ssl', NumAcceptors, "STOMP TLS listener").
 
 transport(Protocol) ->
     case Protocol of
-        stomp       -> ranch_tcp;
-        'stomp/ssl' -> ranch_ssl
+        ?TCP_PROTOCOL -> ranch_tcp;
+        ?TLS_PROTOCOL -> ranch_ssl
     end.
