@@ -12,8 +12,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserLimitsCommand do
   def scopes(), do: [:ctl, :diagnostics]
   def switches(), do: [global: :boolean, user: :string]
 
+  def merge_defaults(args, %{global: true} = opts) do
+    {args, Map.merge(%{table_headers: true}, opts)}
+  end
+
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{user: "guest"}, opts)}
+    {args, Map.merge(%{user: "guest", table_headers: true}, opts)}
   end
 
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
