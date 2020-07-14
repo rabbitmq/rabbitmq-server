@@ -571,7 +571,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             %% Subsequent node in cluster, catch up
             maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(_Retry = true),
-            ok = rabbit_table:create_local_copy(NodeType)
+            ok = rabbit_table:ensure_local_copies(NodeType)
     end,
     ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
     ensure_schema_integrity(),

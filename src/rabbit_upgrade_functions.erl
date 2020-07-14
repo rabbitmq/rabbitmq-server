@@ -52,7 +52,6 @@
 -rabbit_upgrade({topic_permission,      mnesia,  []}).
 -rabbit_upgrade({queue_options,         mnesia, [queue_vhost_field]}).
 -rabbit_upgrade({exchange_options,      mnesia, [operator_policies]}).
--rabbit_upgrade({node_maintenance_states, mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -634,13 +633,6 @@ exchange_options(Table) ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        operator_policy, decorators, options]).
-
--spec node_maintenance_states() -> 'ok'.
-node_maintenance_states() ->
-    create(rabbit_node_maintenance_states,
-        [{record_name, node_maintenance_state},
-         {attributes, [node, state, context]},
-         {disc_copies, [node()]}]).
 
 %%--------------------------------------------------------------------
 

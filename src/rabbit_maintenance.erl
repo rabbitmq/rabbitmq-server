@@ -19,6 +19,7 @@
 -include("rabbit.hrl").
 
 -export([
+    is_enabled/0,
     drain/0,
     revive/0,
     mark_as_being_drained/0,
@@ -35,9 +36,13 @@
     primary_replica_transfer_candidate_nodes/0,
     random_primary_replica_transfer_candidate_node/1,
     transfer_leadership_of_quorum_queues/1,
-    transfer_leadership_of_classic_mirrored_queues/1]).
+    transfer_leadership_of_classic_mirrored_queues/1,
+    status_table_name/0,
+    status_table_definition/0
+]).
 
 -define(TABLE, rabbit_node_maintenance_states).
+-define(FEATURE_FLAG, maintenance_mode_status).
 -define(DEFAULT_STATUS,  regular).
 -define(DRAINING_STATUS, draining).
 
@@ -51,8 +56,30 @@
 %% API
 %%
 
+-spec status_table_name() -> mnesia:table().
+status_table_name() ->
+    ?TABLE.
+
+-spec status_table_definition() -> list().
+status_table_definition() ->
+    maps:to_list(#{
+        record_name => node_maintenance_state,
+        attributes  => record_info(fields, node_maintenance_state)
+    }).
+
+-spec is_enabled() -> boolean().
+is_enabled() ->
+    rabbit_feature_flags:is_enabled(?FEATURE_FLAG).
+
 -spec drain() -> ok.
 drain() ->
+    case is_enabled() of
+        true  -> do_drain();
+        false -> rabbit_log:warning("Feature flag `~s` is not enabled, draining is a no-op", [?FEATURE_FLAG])
+    end.
+
+-spec do_drain() -> ok.
+do_drain() ->
     rabbit_log:alert("This node is being put into maintenance (drain) mode"),
     mark_as_being_drained(),
     rabbit_log:info("Marked this node as undergoing maintenance"),
@@ -71,7 +98,7 @@ drain() ->
                     [length(TransferCandidates), ReadableCandidates]),
     transfer_leadership_of_classic_mirrored_queues(TransferCandidates),
     transfer_leadership_of_quorum_queues(TransferCandidates),
-    
+
     %% allow plugins to react
     rabbit_event:notify(maintenance_draining, #{
         reason => <<"node is being put into maintenance">>
@@ -82,6 +109,13 @@ drain() ->
 
 -spec revive() -> ok.
 revive() ->
+    case is_enabled() of
+        true  -> do_revive();
+        false -> rabbit_log:warning("Feature flag `~s` is not enabled, reviving is a no-op", [?FEATURE_FLAG])
+    end.
+
+-spec do_revive() -> ok.
+do_revive() ->
     rabbit_log:alert("This node is being revived from maintenance (drain) mode"),
     revive_local_quorum_queue_replicas(),
     rabbit_log:alert("Resumed all listeners and will accept client connections again"),
@@ -92,9 +126,9 @@ revive() ->
 
     %% allow plugins to react
     rabbit_event:notify(maintenance_revived, #{}),
-    
-    ok.
 
+    ok.
+ 
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
     rabbit_log:debug("Marking the node as undergoing maintenance"),
