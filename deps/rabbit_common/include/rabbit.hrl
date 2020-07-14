@@ -182,6 +182,12 @@
           connected_at
          }).
 
+%% Indicates maintenance state of a node
+-record(node_maintenance_state, {
+          node,
+          status = regular,
+          context = #{}
+        }).
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2020 VMware, Inc. or its affiliates.").
