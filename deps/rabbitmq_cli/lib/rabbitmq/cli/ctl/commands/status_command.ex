@@ -86,6 +86,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "OS: #{m[:os]}",
       # TODO: format
       "Uptime (seconds): #{m[:uptime]}",
+      "Is under maintenance?: #{m[:is_under_maintenance]}"
     ] ++
     product_name_section ++
     product_version_section ++
@@ -208,6 +209,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
       erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
       uptime: Keyword.get(result, :uptime),
+      is_under_maintenance: Keyword.get(result, :is_under_maintenance, false),
       processes: Enum.into(Keyword.get(result, :processes), %{}),
       run_queue: Keyword.get(result, :run_queue),
       net_ticktime: net_ticktime(result),

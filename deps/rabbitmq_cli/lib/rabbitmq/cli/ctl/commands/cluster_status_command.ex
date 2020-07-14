@@ -50,6 +50,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
             alarms_by_node    = Enum.map(nodes, fn n -> alarms_by_node(n, per_node_timeout(timeout, count)) end)
             listeners_by_node = Enum.map(nodes, fn n -> listeners_of(n, per_node_timeout(timeout, count)) end)
             versions_by_node  = Enum.map(nodes, fn n -> versions_by_node(n, per_node_timeout(timeout, count)) end)
+            maintenance_status_by_node  = Enum.map(nodes,
+                                            fn n -> maintenance_status_by_node(n, per_node_timeout(timeout, count)) end)
 
             feature_flags = case :rabbit_misc.rpc_call(node_name, :rabbit_ff_extra, :cli_info, [], timeout) do
                               {:badrpc, {:EXIT, {:undef, _}}} -> []
@@ -57,7 +59,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
                               val                   -> val
                             end
 
-            status ++ [{:alarms, alarms_by_node}] ++ [{:listeners, listeners_by_node}] ++ [{:versions, versions_by_node}] ++ [{:feature_flags, feature_flags}]
+            status ++
+            [{:alarms, alarms_by_node}] ++
+            [{:listeners, listeners_by_node}] ++
+            [{:versions, versions_by_node}] ++
+            [{:maintenance_status, maintenance_status_by_node}] ++
+            [{:feature_flags, feature_flags}]
         end
     end
   end
@@ -132,6 +139,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
                                                end)
          end
 
+    maintenance_section = [
+      "\n#{bright("Maintenance status")}\n",
+    ] ++ maintenance_lines(m[:maintenance_status])
+
     feature_flags_section = [
       "\n#{bright("Feature flags")}\n"
     ] ++ case Enum.count(m[:feature_flags]) do
@@ -140,7 +151,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
          end
 
     lines = cluster_name_section ++ disk_nodes_section ++ ram_nodes_section ++ running_nodes_section ++
-            versions_section ++ alarms_section ++ partitions_section ++ listeners_section ++ feature_flags_section
+            versions_section ++ maintenance_section ++ alarms_section ++ partitions_section ++
+            listeners_section ++ feature_flags_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -184,6 +196,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       ram_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:ram, []),
       running_nodes: result |> Keyword.get(:running_nodes, []) |> Enum.map(&to_string/1),
       alarms: Keyword.get(result, :alarms) |> Keyword.values |> Enum.concat |> Enum.uniq,
+      maintenance_status: Keyword.get(result, :maintenance_status, []) |> Enum.into(%{}),
       partitions: Keyword.get(result, :partitions, []) |> Enum.into(%{}),
       listeners: Keyword.get(result, :listeners, []) |> Enum.into(%{}),
       versions: Keyword.get(result, :versions, []) |> Enum.into(%{}),
@@ -234,6 +247,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     {node, %{rabbitmq_name: to_string(rmq_name), rabbitmq_version: to_string(rmq_vsn), erlang_version: to_string(otp_vsn)}}
   end
 
+  defp maintenance_status_by_node(node, timeout) do
+    target = to_atom(node)
+    result = case :rabbit_misc.rpc_call(target,
+                       :rabbit_maintenance, :status_local_read, [target], timeout) do
+      {:badrpc, _} -> "unknown"
+      :regular     -> "not under maintenance"
+      :draining    -> magenta("marked for maintenance")
+      # forward compatibility: should we figure out a way to know when
+      # draining completes (it involves inherently asynchronous cluster
+      # operations such as quorum queue leader re-election), we'd introduce
+      # a new state
+      :drained     -> magenta("marked for maintenance")
+      value        -> to_string(value)
+    end
+
+    {node, result}
+  end
+
   defp node_lines(nodes) do
     Enum.map(nodes, &to_string/1) |> Enum.sort
   end
@@ -246,5 +277,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   defp partition_lines(mapping) do
     Enum.map(mapping, fn {node, unreachable_peers} -> "Node #{node} cannot communicate with #{Enum.join(unreachable_peers, ", ")}" end)
+  end
+
+  defp maintenance_lines(mapping) do
+    Enum.map(mapping, fn {node, status} -> "Node: #{node}, status: #{status}" end)
   end
 end

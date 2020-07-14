@@ -10,7 +10,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitStartupCommand do
   returns immediately.
 
   This command is meant to be used when automating deployments.
-  See also `AwaitOnlineNodes`.
+  See also `AwaitOnlineNodesCommand`.
   """
 
   import RabbitMQ.CLI.Core.Config, only: [output_less?: 1]

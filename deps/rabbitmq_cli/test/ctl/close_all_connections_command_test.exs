@@ -28,8 +28,9 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   setup context do
-    close_all_connections(get_rabbit_hostname())
-    :timer.sleep(100)
+    node_name = get_rabbit_hostname()
+    close_all_connections(node_name)
+    await_no_client_connections(node_name, 5_000)
 
     {:ok, context}
   end
@@ -50,7 +51,8 @@ defmodule CloseAllConnectionsCommandTest do
       [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
       opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 1 connections"} == @command.run(["test"], opts)
-      Process.sleep(100)
+
+      await_no_client_connections(node, 5_000)
       assert fetch_connection_vhosts(node, nodes) == []
     end)
   end
@@ -85,7 +87,7 @@ defmodule CloseAllConnectionsCommandTest do
       [[vhost: @vhost]] = fetch_connection_vhosts(node, nodes)
       opts = %{node: node, global: true, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 1 connections"} == @command.run(["test"], opts)
-      Process.sleep(100)
+      await_no_client_connections(node, 5_000)
       assert fetch_connection_vhosts(node, nodes) == []
     end)
   end

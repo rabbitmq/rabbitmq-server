@@ -4,7 +4,6 @@
 ##
 # Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule AwaitStartupCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -40,6 +39,7 @@ defmodule AwaitStartupCommandTest do
   end
 
   test "run: request to a fully booted node succeeds", context do
+    # this timeout value is in seconds
     assert @command.run([], Map.merge(context[:opts], %{timeout: 5})) == :ok
   end
 
