@@ -13,11 +13,14 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Websocket.
--export([init/2]).
--export([websocket_init/1]).
--export([websocket_handle/2]).
--export([websocket_info/2]).
--export([terminate/3]).
+-export([
+    init/2,
+    websocket_init/1,
+    websocket_handle/2,
+    websocket_info/2,
+    terminate/3
+]).
+-export([close_connection/2]).
 
 -record(state, {
     frame_type,
@@ -78,6 +81,13 @@ websocket_init(State) ->
            State#state{proc_state     = ProcessorState,
                        parse_state    = rabbit_stomp_frame:initial_state()},
            #state.stats_timer)}.
+
+-spec close_connection(pid(), string()) -> 'ok'.
+close_connection(Pid, Reason) ->
+    rabbit_log_connection:info("Web STOMP: will terminate connection process ~p, reason: ~s",
+                               [Pid, Reason]),
+    sys:terminate(Pid, Reason),
+    ok.
 
 init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
     Self = self(),

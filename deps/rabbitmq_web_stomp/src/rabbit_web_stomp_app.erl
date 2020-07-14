@@ -15,8 +15,13 @@
 -spec start(_, _) -> {ok, pid()}.
 start(_Type, _StartArgs) ->
     ok = rabbit_web_stomp_listener:init(),
+    EMPid = case rabbit_event:start_link() of
+              {ok, Pid}                       -> Pid;
+              {error, {already_started, Pid}} -> Pid
+            end,
+    gen_event:add_handler(EMPid, rabbit_web_stomp_internal_event_handler, []),
     rabbit_web_stomp_sup:start_link().
 
 -spec stop(_) -> ok.
-stop(_State) ->
-    ok.
+stop(State) ->
+    rabbit_web_stomp_listener:stop(State).
