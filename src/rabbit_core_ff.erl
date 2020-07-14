@@ -9,7 +9,8 @@
 
 -export([quorum_queue_migration/3,
          implicit_default_bindings_migration/3,
-         virtual_host_metadata_migration/3]).
+         virtual_host_metadata_migration/3,
+         maintenance_mode_status_migration/3]).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -33,6 +34,14 @@
       stability     => stable,
       migration_fun => {?MODULE, virtual_host_metadata_migration}
      }}).
+
+-rabbit_feature_flag(
+    {maintenance_mode_status,
+     #{
+         desc          => "Maintenance mode status",
+         stability     => stable,
+         migration_fun => {?MODULE, maintenance_mode_status_migration}
+      }}).
 
 %% -------------------------------------------------------------------
 %% Quorum queues.
@@ -112,3 +121,20 @@ virtual_host_metadata_migration(_FeatureName, _FeatureProps, enable) ->
     end;
 virtual_host_metadata_migration(_FeatureName, _FeatureProps, is_enabled) ->
     mnesia:table_info(rabbit_vhost, attributes) =:= vhost:fields(vhost_v2).
+
+
+%%
+%% Maintenance mode
+%%
+
+maintenance_mode_status_migration(FeatureName, _FeatureProps, enable) ->
+    TableName = rabbit_maintenance:status_table_name(),
+    rabbit_log:info("Creating table ~s for feature flag `~s`", [TableName, FeatureName]),
+    try
+        _ = rabbit_table:create(TableName, rabbit_maintenance:status_table_definition()),
+        _ = rabbit_table:ensure_table_copy(TableName, node())
+    catch throw:Reason  ->
+        rabbit_log:error("Failed to create maintenance status table: ~p", [Reason])
+    end;
+maintenance_mode_status_migration(_FeatureName, _FeatureProps, is_enabled) ->
+    rabbit_table:exists(rabbit_maintenance:status_table_name()).

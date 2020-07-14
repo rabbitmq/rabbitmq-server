@@ -48,7 +48,7 @@
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
 -rabbit_upgrade({operator_policies,     mnesia, [slave_pids_pending_shutdown, internal_system_x]}).
 -rabbit_upgrade({vhost_limits,          mnesia, []}).
--rabbit_upgrade({queue_vhost_field,     mnesia, [operator_policies]}).
+-rabbit_upgrade({queue_vhost_field,      mnesia, [operator_policies]}).
 -rabbit_upgrade({topic_permission,      mnesia,  []}).
 -rabbit_upgrade({queue_options,         mnesia, [queue_vhost_field]}).
 -rabbit_upgrade({exchange_options,      mnesia, [operator_policies]}).
@@ -610,6 +610,7 @@ user_password_hashing() ->
       end,
       [username, password_hash, tags, hashing_algorithm]).
 
+-spec topic_permission() -> 'ok'.
 topic_permission() ->
     create(rabbit_topic_permission,
         [{record_name, topic_permission},
@@ -647,6 +648,7 @@ transform(TableName, Fun, FieldList, NewRecordName) ->
     ok.
 
 create(Tab, TabDef) ->
+    rabbit_log:debug("Will create a schema table named '~s'", [Tab]),
     {atomic, ok} = mnesia:create_table(Tab, TabDef),
     ok.
 

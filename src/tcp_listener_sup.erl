@@ -17,10 +17,7 @@
 -behaviour(supervisor).
 
 -export([start_link/10]).
-
 -export([init/1]).
-
-%%----------------------------------------------------------------------------
 
 -type mfargs() :: {atom(), atom(), [any()]}.
 
@@ -48,11 +45,16 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
                       {port, Port} |
                       SocketOpts]
      },
-    {ok, {{one_for_all, 10, 10}, [
-        ranch:child_spec({acceptor, IPAddress, Port},
-            Transport, RanchListenerOpts,
-            ProtoSup, ProtoOpts),
-        {tcp_listener, {tcp_listener, start_link,
-                        [IPAddress, Port,
-                         OnStartup, OnShutdown, Label]},
-         transient, 16#ffffffff, worker, [tcp_listener]}]}}.
+    Flags = #{strategy => one_for_all, intensity => 10, period => 10},
+    OurChildSpec = #{
+        id => tcp_listener,
+        start => {tcp_listener, start_link, [IPAddress, Port, OnStartup, OnShutdown, Label]},
+        restart => transient,
+        shutdown => 16#ffffffff,
+        type => worker,
+        modules => [tcp_listener]
+    },
+    RanchChildSpec = ranch:child_spec(rabbit_networking:ranch_ref(IPAddress, Port),
+        Transport, RanchListenerOpts,
+        ProtoSup, ProtoOpts),
+    {ok, {Flags, [RanchChildSpec, OurChildSpec]}}.

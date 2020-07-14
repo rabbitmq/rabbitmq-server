@@ -21,13 +21,16 @@
 
 -export([boot/0, start_tcp_listener/2, start_ssl_listener/3,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
-         node_listeners/1, register_connection/1, unregister_connection/1,
+         node_listeners/1, node_client_listeners/1,
+         register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, force_connection_event_refresh/1,
-         handshake/2, tcp_host/1]).
+         close_connection/2, close_connections/2,
+         force_connection_event_refresh/1, handshake/2, tcp_host/1,
+         ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
+         listener_of_protocol/1, stop_ranch_listener_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -37,8 +40,11 @@
 
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
-%% Internal
--export([connections_local/0]).
+-export([
+    local_connections/0,
+    %% prefer local_connections/0
+    connections_local/0
+]).
 
 -include("rabbit.hrl").
 
@@ -179,13 +185,63 @@ tcp_listener_addresses_auto(Port) ->
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
                   Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors, Label) ->
-    {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-     {tcp_listener_sup, start_link,
-      [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
-       {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
-       {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
-       NumAcceptors, Label]},
-     transient, infinity, supervisor, [tcp_listener_sup]}.
+    Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
+            {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
+            {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
+            NumAcceptors, Label],
+    #{
+        id => rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
+        start => {tcp_listener_sup, start_link, Args},
+        restart => transient,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [tcp_listener_sup]
+    }.
+
+-spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref() | undefined.
+ranch_ref(#listener{port = Port}) ->
+    [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
+    {acceptor, IPAddress, Port};
+ranch_ref(Listener) when is_list(Listener) ->
+    Port = rabbit_misc:pget(port, Listener),
+    [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
+    {acceptor, IPAddress, Port};
+ranch_ref(undefined) ->
+    undefined.
+
+-spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
+
+%% Returns a reference that identifies a TCP listener in Ranch.
+ranch_ref(IPAddress, Port) ->
+    {acceptor, IPAddress, Port}.
+
+-spec ranch_ref_of_protocol(atom()) -> ranch:ref() | undefined.
+ranch_ref_of_protocol(Protocol) ->
+    ranch_ref(listener_of_protocol(Protocol)).
+
+-spec listener_of_protocol(atom()) -> #listener{}.
+listener_of_protocol(Protocol) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun() ->
+            MatchSpec = #listener{
+                node = node(),
+                protocol = Protocol,
+                _ = '_'
+            },
+            case mnesia:match_object(rabbit_listener, MatchSpec, read) of
+                []    -> undefined;
+                [Row] -> Row
+            end
+        end).
+
+-spec stop_ranch_listener_of_protocol(atom()) -> ok | {error, not_found}.
+stop_ranch_listener_of_protocol(Protocol) ->
+    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
+        undefined -> ok;
+        Ref       ->
+            rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
+            ranch:stop_listener(Ref)
+    end.
 
 -spec start_tcp_listener(
         listener_config(), integer()) -> 'ok' | {'error', term()}.
@@ -297,6 +353,17 @@ active_listeners() ->
 node_listeners(Node) ->
     mnesia:dirty_read(rabbit_listener, Node).
 
+-spec node_client_listeners(node()) -> [rabbit_types:listener()].
+
+node_client_listeners(Node) ->
+    case node_listeners(Node) of
+        [] -> [];
+        Xs ->
+            lists:filter(fun (#listener{protocol = clustering}) -> false;
+                             (_) -> true
+                         end, Xs)
+    end.
+
 -spec on_node_down(node()) -> 'ok'.
 
 on_node_down(Node) ->
@@ -324,8 +391,13 @@ connections() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_networking, connections_local, []).
 
--spec connections_local() -> [rabbit_types:connection()].
+-spec local_connections() -> [rabbit_types:connection()].
+%% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.
+local_connections() ->
+    connections_local().
 
+-spec connections_local() -> [rabbit_types:connection()].
+%% @deprecated Prefer {@link local_connections}
 connections_local() -> pg_local:get_members(rabbit_connections).
 
 -spec connection_info_keys() -> rabbit_types:info_keys().
@@ -375,8 +447,12 @@ close_connection(Pid, Explanation) ->
             ok
     end.
 
--spec force_connection_event_refresh(reference()) -> 'ok'.
+-spec close_connections([pid()], string()) -> 'ok'.
+close_connections(Pids, Explanation) ->
+    [close_connection(Pid, Explanation) || Pid <- Pids],
+    ok.
 
+-spec force_connection_event_refresh(reference()) -> 'ok'.
 force_connection_event_refresh(Ref) ->
     [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.

@@ -654,6 +654,7 @@ status() ->
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
+          {is_under_maintenance, rabbit_maintenance:is_being_drained_local_read(node())},
           {listeners,            listeners()},
           {vm_memory_calculation_strategy, vm_memory_monitor:get_memory_calculation_strategy()}],
     S2 = rabbit_misc:filter_exit_map(
@@ -911,6 +912,9 @@ do_run_postlaunch_phase() ->
                   end
           end, Plugins),
 
+        rabbit_log_prelaunch:info("Resetting node maintenance status"),
+        %% successful boot resets node maintenance state
+        rabbit_maintenance:unmark_as_being_drained(),
         rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
         rabbit_boot_state:set(ready),
 

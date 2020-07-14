@@ -19,7 +19,7 @@ log_error(Error) ->
 
 format_error({error, {duplicate_node_name, NodeName, NodeHost}}) ->
     rabbit_misc:format(
-      "ERROR: node with name ~p already running on ~p",
+      "ERROR: node with name ~p is already running on host ~p",
       [NodeName, NodeHost]);
 format_error({error, {epmd_error, NodeHost, EpmdReason}}) ->
     rabbit_misc:format(
@@ -30,11 +30,11 @@ format_error({error, {invalid_dist_port_range, DistTcpPort}}) ->
       "Invalid Erlang distribution TCP port: ~b", [DistTcpPort]);
 format_error({error, {dist_port_already_used, Port, not_erlang, Host}}) ->
     rabbit_misc:format(
-      "ERROR: distribution port ~b in use on ~s "
+      "ERROR: distribution port ~b in use on host ~s "
       "(by non-Erlang process?)", [Port, Host]);
 format_error({error, {dist_port_already_used, Port, Name, Host}}) ->
     rabbit_misc:format(
-      "ERROR: distribution port ~b in use by ~s@~s", [Port, Name, Host]);
+      "ERROR: distribution port ~b in use by another node: ~s@~s", [Port, Name, Host]);
 format_error({error, {erlang_dist_running_with_unexpected_nodename,
                       Unexpected, Node}}) ->
     rabbit_misc:format(
