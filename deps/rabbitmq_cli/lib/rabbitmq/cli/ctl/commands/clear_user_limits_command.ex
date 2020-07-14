@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -24,7 +25,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
   def run([username, limit_type], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :clear_user_limits, [
       username,
-      limit_type
+      limit_type,
+      Helpers.cli_acting_user()
     ])
   end
 
@@ -35,6 +37,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
   def usage_additional() do
     [
       ["<limit_type>", "Limit type, must be max-connections or max-channels"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
     ]
   end
 

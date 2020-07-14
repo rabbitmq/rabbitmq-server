@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -25,7 +26,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
   def run([username, definition], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :set_user_limits, [
       username,
-      definition
+      definition,
+      Helpers.cli_acting_user()
     ])
   end
 
@@ -36,6 +38,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
   def usage_additional() do
     [
       ["<definition>", "Limit definitions, must be a valid JSON document"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
     ]
   end
 

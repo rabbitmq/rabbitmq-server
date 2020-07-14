@@ -508,7 +508,7 @@ defmodule TestHelper do
 
   def set_user_limits(user, limits) do
     :rpc.call(get_rabbit_hostname(),
-              :rabbit_auth_backend_internal, :set_user_limits, [user, limits])
+              :rabbit_auth_backend_internal, :set_user_limits, [user, limits, <<"acting-user">>])
   end
 
   def get_user_limits(user) do
@@ -522,7 +522,8 @@ defmodule TestHelper do
   end
 
   def clear_user_limits(user, limittype) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :clear_user_limits, [user, limittype])
+    :rpc.call(get_rabbit_hostname(),
+        :rabbit_auth_backend_internal, :clear_user_limits, [user, limittype, <<"acting-user">>])
   end
 
   def set_scope(scope) do

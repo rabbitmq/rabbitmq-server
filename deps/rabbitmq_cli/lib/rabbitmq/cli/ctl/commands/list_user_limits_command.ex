@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListUserLimitsCommand do
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -72,6 +73,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserLimitsCommand do
   def usage_additional() do
     [
       ["--global", "list limits for all the users"]
+    ]
+  end
+
+  def usage_doc_guides() do
+    [
+      DocGuide.access_control()
     ]
   end
 
