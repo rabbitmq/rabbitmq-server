@@ -27,8 +27,13 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    case os:getenv("SECONDARY_UMBRELLA") of
+        false ->
+            rabbit_ct_helpers:log_environment(),
+            rabbit_ct_helpers:run_setup_steps(Config);
+        _ ->
+            {skip, "growing and shrinking cannot be done in mixed mode"}
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
