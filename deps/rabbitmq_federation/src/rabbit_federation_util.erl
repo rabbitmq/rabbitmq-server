@@ -75,7 +75,8 @@ pgname(Name) ->
         {ok, false} -> Name;
         {ok, true}  -> {rabbit_nodes:cluster_name(), Name};
         %% default value is 'false', so do the same thing
-        undefined   -> Name
+        {ok, undefined} -> Name;
+        _               -> Name
     end.
 
 obfuscate_upstream(#upstream{uris = Uris} = Upstream) ->
