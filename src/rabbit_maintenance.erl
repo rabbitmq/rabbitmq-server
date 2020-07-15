@@ -165,7 +165,7 @@ is_being_drained_consistent_read(Node) ->
 
 -spec status_local_read(node()) -> maintenance_status().
 status_local_read(Node) ->
-    case mnesia:dirty_read(?TABLE, Node) of
+    case catch mnesia:dirty_read(?TABLE, Node) of
         []  -> ?DEFAULT_STATUS;
         [#node_maintenance_state{node = Node, status = Status}] ->
             Status;
