@@ -73,7 +73,9 @@ r(Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q).
 pgname(Name) ->
     case application:get_env(rabbitmq_federation, pgroup_name_cluster_id) of
         {ok, false} -> Name;
-        {ok, true}  -> {rabbit_nodes:cluster_name(), Name}
+        {ok, true}  -> {rabbit_nodes:cluster_name(), Name};
+        %% default value is 'false', so do the same thing
+        undefined   -> Name
     end.
 
 obfuscate_upstream(#upstream{uris = Uris} = Upstream) ->
