@@ -197,46 +197,50 @@ quorum_unaffected_after_vhost_failure(Config) ->
     ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
 
 recover_follower_after_standalone_restart(Config) ->
-    %% Tests that followers can be brought up standalone after forgetting the rest
-    %% of the cluster. Consensus won't be reached as there is only one node in the
-    %% new cluster.
-    Servers = [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    case os:getenv("SECONDARY_UMBRELLA") of
+      false ->
+            %% Tests that followers can be brought up standalone after forgetting the
+            %% rest of the cluster. Consensus won't be reached as there is only one node in the
+            %% new cluster.
+            Servers = [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+            Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    QName = ?config(queue_name, Config),
-    Args = ?config(queue_args, Config),
-    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
-                                           arguments = Args,
-                                           durable = true
-                                          }),
+            QName = ?config(queue_name, Config),
+            Args = ?config(queue_args, Config),
+            amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                   arguments = Args,
+                                                   durable = true
+                                                  }),
 
-    rabbit_ct_client_helpers:publish(Ch, QName, 15),
-    rabbit_ct_client_helpers:close_channel(Ch),
+            rabbit_ct_client_helpers:publish(Ch, QName, 15),
+            rabbit_ct_client_helpers:close_channel(Ch),
 
-    Name = ra_name(QName),
-    wait_for_messages_ready(Servers, Name, 15),
+            Name = ra_name(QName),
+            wait_for_messages_ready(Servers, Name, 15),
 
-    rabbit_ct_broker_helpers:stop_node(Config, C),
-    rabbit_ct_broker_helpers:stop_node(Config, B),
-    rabbit_ct_broker_helpers:stop_node(Config, A),
+            rabbit_ct_broker_helpers:stop_node(Config, C),
+            rabbit_ct_broker_helpers:stop_node(Config, B),
+            rabbit_ct_broker_helpers:stop_node(Config, A),
 
-    %% Restart one follower
-    forget_cluster_node(Config, B, C),
-    forget_cluster_node(Config, B, A),
+            %% Restart one follower
+            forget_cluster_node(Config, B, C),
+            forget_cluster_node(Config, B, A),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, B),
-    wait_for_messages_ready([B], Name, 15),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, B),
+            ok = rabbit_ct_broker_helpers:start_node(Config, B),
+            wait_for_messages_ready([B], Name, 15),
+            ok = rabbit_ct_broker_helpers:stop_node(Config, B),
 
-    %% Restart the other
-    forget_cluster_node(Config, C, B),
-    forget_cluster_node(Config, C, A),
+            %% Restart the other
+            forget_cluster_node(Config, C, B),
+            forget_cluster_node(Config, C, A),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, C),
-    wait_for_messages_ready([C], Name, 15),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, C),
-
-    ok.
+            ok = rabbit_ct_broker_helpers:start_node(Config, C),
+            wait_for_messages_ready([C], Name, 15),
+            ok = rabbit_ct_broker_helpers:stop_node(Config, C),
+            ok;
+        _ ->
+            {skip, "cannot be run in mixed mode"}
+    end.
 
 %%----------------------------------------------------------------------------
 forget_cluster_node(Config, Node, NodeToRemove) ->
