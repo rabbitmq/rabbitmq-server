@@ -145,6 +145,11 @@
 
     set_vhost_limit/5,
 
+    set_user_limits/3,
+    set_user_limits/4,
+    clear_user_limits/3,
+    clear_user_limits/4,
+
     enable_plugin/3,
     disable_plugin/3,
 
@@ -1344,6 +1349,39 @@ set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
         rabbit_vhost_limit,
         set,
         [VHost, Definition, <<"ct-tests">>]).
+
+set_user_limits(Config, Username, Limits) ->
+    set_user_limits(Config, 0, Username, Limits).
+
+set_user_limits(Config, Node, Username, Limits0) when is_map(Limits0) ->
+    Limits =
+        maps:fold(fun(Limit0, Val, Acc) ->
+                      Limit = case Limit0 of
+                          max_connections -> <<"max-connections">>;
+                          max_channels    -> <<"max-channels">>;
+                          Other -> rabbit_data_coercion:to_binary(Other)
+                      end,
+                      maps:merge(#{Limit => Val}, Acc)
+                  end, #{}, Limits0),
+    rpc(Config, Node,
+        rabbit_auth_backend_internal,
+        set_user_limits,
+        [Username, Limits, <<"ct-tests">>]).
+
+clear_user_limits(Config, Username, Limit) ->
+    clear_user_limits(Config, 0, Username, Limit).
+
+clear_user_limits(Config, Node, Username, Limit0) ->
+    Limit = case Limit0 of
+      all             -> <<"all">>;
+      max_connections -> <<"max-connections">>;
+      max_channels    -> <<"max-channels">>;
+      Other -> rabbit_data_coercion:to_binary(Other)
+    end,
+    rpc(Config, Node,
+        rabbit_auth_backend_internal,
+        clear_user_limits,
+        [Username, Limit, <<"ct-tests">>]).
 
 %% Functions to execute code on a remote node/broker.
 
