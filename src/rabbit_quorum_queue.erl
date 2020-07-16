@@ -124,7 +124,6 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout)
                        || ServerId <- members(NewQ)],
-            rabbit_log:info("quorum_queue starting cluster ~w", [RaConfs]),
             case ra:start_cluster(RaConfs) of
                 {ok, _, _} ->
                     %% TODO: handle error - what should be done if the

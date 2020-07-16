@@ -16,7 +16,8 @@
                              wait_for_messages_total/3,
                              wait_for_messages/2,
                              dirty_query/3,
-                             ra_name/1]).
+                             ra_name/1,
+                             is_mixed_versions/0]).
 
 -compile(export_all).
 
@@ -157,7 +158,12 @@ init_per_group(clustered, Config) ->
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
 init_per_group(clustered_with_partitions, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{net_ticktime, 10}]);
+    case is_mixed_versions() of
+        true ->
+            {skip, "clustered_with_partitions is too unreliable in mixed mode"};
+        false ->
+            rabbit_ct_helpers:set_config(Config, [{net_ticktime, 10}])
+    end;
 init_per_group(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
@@ -694,6 +700,14 @@ shrink_all(Config) ->
     ok.
 
 rebalance(Config) ->
+    case is_mixed_versions() of
+        true ->
+            {skip, "rebalance tests isn't mixed version compatible"};
+        false ->
+            rebalance0(Config)
+    end.
+
+rebalance0(Config) ->
     [Server0, _, _] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1108,6 +1122,14 @@ leadership_takeover(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 metrics_cleanup_on_leadership_takeover(Config) ->
+    case is_mixed_versions() of
+        true ->
+            {skip, "metrics_cleanup_on_leadership_takeover tests isn't mixed version compatible"};
+        false ->
+            metrics_cleanup_on_leadership_takeover0(Config)
+    end.
+
+metrics_cleanup_on_leadership_takeover0(Config) ->
     %% Queue core metrics should be deleted from a node once the leadership is transferred
     %% to another follower
     [Server, _, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1483,7 +1505,16 @@ node_removal_is_not_quorum_critical(Config) ->
     Qs = rpc:call(Server, rabbit_quorum_queue, list_with_minimum_quorum, []),
     ?assertEqual([], Qs).
 
+
 file_handle_reservations(Config) ->
+    case is_mixed_versions() of
+        true ->
+            {skip, "file_handle_reservations tests isn't mixed version compatible"};
+        false ->
+            file_handle_reservations0(Config)
+    end.
+
+file_handle_reservations0(Config) ->
     Servers = [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QQ = ?config(queue_name, Config),
