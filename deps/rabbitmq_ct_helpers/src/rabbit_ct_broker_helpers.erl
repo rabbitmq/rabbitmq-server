@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/inet.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -export([
     setup_steps/0,
@@ -937,12 +938,20 @@ configure_dist_proxy(Config) ->
       {erlang_dist_module, inet_tcp_proxy_dist}).
 
 block_traffic_between(NodeA, NodeB) ->
-    rpc:call(NodeA, inet_tcp_proxy_dist, block, [NodeB]),
-    rpc:call(NodeB, inet_tcp_proxy_dist, block, [NodeA]).
+    ct:pal(
+      ?LOW_IMPORTANCE,
+      "Blocking traffic between ~s and ~s",
+      [NodeA, NodeB]),
+    ?assertEqual(ok, rpc:call(NodeA, inet_tcp_proxy_dist, block, [NodeB])),
+    ?assertEqual(ok, rpc:call(NodeB, inet_tcp_proxy_dist, block, [NodeA])).
 
 allow_traffic_between(NodeA, NodeB) ->
-    rpc:call(NodeA, inet_tcp_proxy_dist, allow, [NodeB]),
-    rpc:call(NodeB, inet_tcp_proxy_dist, allow, [NodeA]).
+    ct:pal(
+      ?LOW_IMPORTANCE,
+      "Unblocking traffic between ~s and ~s",
+      [NodeA, NodeB]),
+    ?assertEqual(ok, rpc:call(NodeA, inet_tcp_proxy_dist, allow, [NodeB])),
+    ?assertEqual(ok, rpc:call(NodeB, inet_tcp_proxy_dist, allow, [NodeA])).
 
 set_partition_handling_mode_globally(Config, Mode) ->
     rpc_all(Config,
