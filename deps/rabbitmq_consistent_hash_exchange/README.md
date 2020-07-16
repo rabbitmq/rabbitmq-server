@@ -817,5 +817,5 @@ The state of the hash space is distributed across all cluster nodes.
 
 (c) 2013-2020 VMware, Inc. or its affiliates.
 
-Released under the Mozilla Public License 1.1, same as RabbitMQ.
+Released under the Mozilla Public License 2.0, same as RabbitMQ.
 See [LICENSE](./LICENSE) for details.
