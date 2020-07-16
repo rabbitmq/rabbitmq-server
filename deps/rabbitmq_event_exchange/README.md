@@ -165,5 +165,5 @@ TL;DR:
 
 ## License
 
-Released under the Mozilla Public License 1.1,
+Released under the Mozilla Public License 2.0,
 the same as RabbitMQ.
