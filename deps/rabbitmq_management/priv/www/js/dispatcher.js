@@ -291,6 +291,7 @@ dispatcher_add(function(sammy) {
             update_column_options(this);
         });
     path('#/limits', {'limits': '/vhost-limits',
+                      'user_limits': '/user-limits',
                       'vhosts': '/vhosts'}, 'limits');
 
     sammy.put('#/limits', function() {
@@ -307,11 +308,28 @@ dispatcher_add(function(sammy) {
             }
         }
     });
+    sammy.put('#/user-limits', function() {
+        var valAsInt = parseInt(this.params.value);
+        if (isNaN(valAsInt)) {
+            var e = 'Validation failed\n\n' +
+                this.params.name + ' should be a number, actually was "' +
+                this.params.value + '"';
+            show_popup('warn', fmt_escape_html(e));
+        } else {
+            this.params.value = valAsInt;
+            if (sync_put(this, '/user-limits/:user/:name')) {
+                update();
+            }
+        }
+    });
     sammy.post('#/restart_vhost', function(){
         if(sync_post(this, '/vhosts/:vhost/start/:node')) update();
     })
     sammy.del('#/limits', function() {
         if (sync_delete(this, '/vhost-limits/:vhost/:name')) update();
+    });
+    sammy.del('#/user-limits', function() {
+        if (sync_delete(this, '/user-limits/:user/:name')) update();
     });
     sammy.del("#/reset", function(){
             if(sync_delete(this, '/reset')){
