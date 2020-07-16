@@ -764,6 +764,40 @@ or:
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/user-limits</td>
+        <td>
+            Lists per-user limits for all users.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/user-limits/<i>user</i></td>
+        <td>
+            Lists per-user limits for a specific user.
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/user-limits/<i>user</i>/<i>name</i></td>
+        <td>
+          Set or delete per-user limit for <code>user</code>. The <code>name</code> URL path element
+          refers to the name of the limit (<code>max-connections</code>, <code>max-channels</code>).
+          Limits are set using a JSON document in the body: <pre>{"value": 100}</pre>. Example
+          request:</br>
+          <pre>curl -4u 'guest:guest' -H 'content-type:application/json' -X PUT localhost:15672/api/user-limits/guest/max-connections -d '{"value": 50}'</pre>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/whoami</td>
         <td>Details of the currently authenticated user.</td>
       </tr>
