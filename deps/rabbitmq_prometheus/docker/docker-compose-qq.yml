@@ -26,10 +26,14 @@ services:
     cap_add:
       - ALL
     hostname: rmq0-qq
-    # environment:
-    #   RABBITMQ_LOG: debug,+color
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
+      # Uncomment the following line if you want debug logs & colour
+      # RABBITMQ_LOG: debug,+color
     volumes:
-      - ./erlang.cookie:/var/lib/rabbitmq/.erlang.cookie
+      # This does not work that well on Windows
+      # https://github.com/rabbitmq/rabbitmq-prometheus/commit/c4b04ea9bae877ff7d22a7085475965016933d91#commitcomment-40660523
+      # - ./erlang.cookie:/var/lib/rabbitmq/.erlang.cookie
       - ./rabbitmq-qq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq-qq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./rabbitmq-qq-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
