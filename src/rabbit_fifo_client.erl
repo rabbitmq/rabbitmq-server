@@ -145,7 +145,7 @@ enqueue(Correlation, Msg,
                cfg = #cfg{timeout = Timeout}} = State0) ->
     %% it is the first enqueue, check the version
     {_, Node} = Server = pick_server(State0),
-    case rpc:call(Node, rabbit_fifo, version, []) of
+    case rpc:call(Node, ra_machine, version, [{machine, rabbit_fifo, #{}}]) of
         0 ->
             %% the leader is running the old version
             %% so we can't initialize the enqueuer session safely
