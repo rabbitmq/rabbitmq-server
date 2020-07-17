@@ -217,4 +217,4 @@ The default values are `rabbit_auth_cache_ets` and `[]`, respectively.
 
 (c) 2016-2020 VMware, Inc. or its affiliates.
 
-Released under the Mozilla Public License 1.1, same as RabbitMQ.
+Released under the same license as RabbitMQ, see `LICENSE`.
