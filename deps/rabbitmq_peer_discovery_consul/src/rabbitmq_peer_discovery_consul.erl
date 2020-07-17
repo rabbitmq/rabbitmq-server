@@ -2,6 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+%% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
 %% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
 %%
