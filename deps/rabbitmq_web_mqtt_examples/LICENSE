@@ -1,5 +1,5 @@
 This package, the rabbitmq-web-mqtt-examples, is licensed under the
-MPL. For the MPL, please see LICENSE-MPL-RabbitMQ.
+MPL 2.0. For the MPL 2.0, please see LICENSE-MPL-RabbitMQ.
 
 priv/mqttws31.js is a part of the Paho project
 (https://eclipse.org/paho/clients/js/) and is released under
