@@ -4,7 +4,7 @@
 Name: rabbitmq-server
 Version: %%VERSION%%
 Release: 1%{?dist}
-License: MPLv1.1 and MIT and ASL 2.0 and BSD
+License: MPLv2.0 and MIT and ASL 2.0 and BSD
 Group: %{group_tag}
 Source: https://www.rabbitmq.com/releases/rabbitmq-server/v%{upstream_version}/%{name}-%{upstream_version}.tar.xz
 Source1: rabbitmq-server.init

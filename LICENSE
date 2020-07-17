@@ -1,0 +1,8 @@
+RabbitMQ packaging source code is licensed under the MPL 2.0. For
+the MPL2, please see LICENSE-MPL-RabbitMQ.
+
+Some RabbitMQ server OCF files are licensed under the Apache Software License 2.0.
+For the ASL2, please see LICENSE-APACHE2.
+
+If you have any questions regarding licensing, please contact us at
+info@rabbitmq.com.
