@@ -1185,7 +1185,10 @@ function with_req(method, path, body, fun) {
     var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
-    req.setRequestHeader('authorization', auth_header());
+    var header = auth_header();
+    if (header !== null) {
+        req.setRequestHeader('authorization', header);
+    }
     req.setRequestHeader('x-vhost', current_vhost);
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
