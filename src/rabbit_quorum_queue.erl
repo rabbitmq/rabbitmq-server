@@ -304,7 +304,7 @@ filter_quorum_critical(Queues, ReplicaStates) ->
 is_policy_applicable(_Q, Policy) ->
     Applicable = [<<"max-length">>,
                   <<"max-length-bytes">>,
-                  <<"x-overflow">>,
+                  <<"overflow">>,
                   <<"max-in-memory-length">>,
                   <<"max-in-memory-bytes">>,
                   <<"delivery-limit">>,
