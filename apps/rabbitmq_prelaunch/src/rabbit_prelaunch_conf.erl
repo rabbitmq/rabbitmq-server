@@ -284,7 +284,9 @@ list_schemas_in_app(App) ->
     {Loaded, Unload} = case application:load(App) of
                            ok                           -> {true, true};
                            {error, {already_loaded, _}} -> {true, false};
-                           {error, _}                   -> {false, false}
+                           {error, Reason}              ->
+                               rabbit_log_prelaunch:error("Failed to load application ~s, reason: ~p", [App, Reason]),
+                               {false, false}
                        end,
     List = case Loaded of
                true ->
