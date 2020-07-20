@@ -185,7 +185,7 @@
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2020 VMware, Inc. or its affiliates.").
--define(INFORMATION_MESSAGE, "Licensed under the MPL 1.1. Website: https://rabbitmq.com").
+-define(INFORMATION_MESSAGE, "Licensed under the MPL 2.0. Website: https://rabbitmq.com").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
 %%  - 1 byte of frame type
