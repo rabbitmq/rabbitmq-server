@@ -1501,7 +1501,9 @@ machine_version_test(_) ->
                {3, rabbit_fifo_v0:make_checkout(Cid, {auto, 1, unsettled}, #{})}
               ],
     {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
-    {#rabbit_fifo{messages = Msgs}, ok, []} = apply(meta(Idx),
+    Self = self(),
+    {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
+                  messages = Msgs}, ok, []} = apply(meta(Idx),
                                                     {machine_version, 0, 1}, S1),
     %% validate message conversion to lqueue
     ?assertEqual(1, lqueue:len(Msgs)),
