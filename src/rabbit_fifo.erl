@@ -509,6 +509,13 @@ convert_v0_to_v1(V0State0) ->
     V0State = rabbit_fifo_v0:normalize_for_v1(V0State0),
     V0Msgs = rabbit_fifo_v0:get_field(messages, V0State),
     V1Msgs = lqueue:from_list(lists:sort(maps:to_list(V0Msgs))),
+    V0Enqs = rabbit_fifo_v0:get_field(enqueuers, V0State),
+    V1Enqs = maps:map(
+               fun (_EPid, E) ->
+                       #enqueuer{next_seqno = element(2, E),
+                                 pending = element(3, E),
+                                 status = element(4, E)}
+               end, V0Enqs), 
     Cfg = #cfg{name = rabbit_fifo_v0:get_cfg_field(name, V0State),
                resource = rabbit_fifo_v0:get_cfg_field(resource, V0State),
                release_cursor_interval = rabbit_fifo_v0:get_cfg_field(release_cursor_interval, V0State),
@@ -529,7 +536,7 @@ convert_v0_to_v1(V0State0) ->
              next_msg_num = rabbit_fifo_v0:get_field(next_msg_num, V0State),
              returns = rabbit_fifo_v0:get_field(returns, V0State),
              enqueue_count = rabbit_fifo_v0:get_field(enqueue_count, V0State),
-             enqueuers = rabbit_fifo_v0:get_field(enqueuers, V0State),
+             enqueuers = V1Enqs,
              ra_indexes = rabbit_fifo_v0:get_field(ra_indexes, V0State),
              release_cursors = rabbit_fifo_v0:get_field(release_cursors, V0State),
              consumers = rabbit_fifo_v0:get_field(consumers, V0State),
