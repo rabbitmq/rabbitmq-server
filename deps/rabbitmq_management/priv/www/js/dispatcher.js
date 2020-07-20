@@ -292,6 +292,7 @@ dispatcher_add(function(sammy) {
         });
     path('#/limits', {'limits': '/vhost-limits',
                       'user_limits': '/user-limits',
+                      'users': '/users',
                       'vhosts': '/vhosts'}, 'limits');
 
     sammy.put('#/limits', function() {
