@@ -250,6 +250,23 @@ defmodule TestHelper do
     end
   end
 
+  def await_condition(fun, timeout) do
+    retries = Integer.floor_div(timeout, 50)
+    await_condition_with_retries(fun, retries)
+  end
+
+  def await_condition_with_retries(_fun, 0) do
+    throw({:error, "Condition did not materialize"})
+  end
+  def await_condition_with_retries(fun, retries_left) do
+    case fun.() do
+      true -> :ok
+      _    ->
+          :timer.sleep(50)
+          await_condition_with_retries(fun, retries_left - 1)
+    end
+  end
+
   def is_rabbitmq_app_running() do
     :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :is_booted, [])
   end

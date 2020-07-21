@@ -50,8 +50,8 @@ defmodule ReviveCommandTest do
   test "run: puts target node into regular operating mode", context do
     assert not is_draining_node()
     drain_node()
-    assert is_draining_node()
+    await_condition(fn -> is_draining_node() end, 7000)
     assert :ok == @command.run([], context[:opts])
-    assert not is_draining_node()
+    await_condition(fn -> not is_draining_node() end, 7000)
   end
 end
