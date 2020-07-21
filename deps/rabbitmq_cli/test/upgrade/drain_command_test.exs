@@ -50,8 +50,8 @@ defmodule DrainCommandTest do
   test "run: puts target node into maintenance mode", context do
     assert not is_draining_node()
     assert :ok == @command.run([], context[:opts])
-    assert is_draining_node()
 
+    await_condition(fn -> is_draining_node() end, 7000)
     revive_node()
   end
 end
