@@ -322,8 +322,7 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
     catch
         _:#'v1_0.error'{} = Reason ->
             handle_exception(State, 0, Reason);
-        _:Reason ->
-            Trace = erlang:get_stacktrace(),
+        _:Reason:Trace ->
             handle_exception(State, 0, error_frame(
                                          ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                          "Reader error: ~p~n~p~n",
