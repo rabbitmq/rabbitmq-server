@@ -155,7 +155,7 @@ takeover_on(Config, Fun) ->
     ok = rabbit_ct_broker_helpers:Fun(Config, A),
 
     BCh = rabbit_ct_client_helpers:open_channel(Config, B),
-    #'queue.declare_ok'{message_count = 0} =
+    #'queue.declare_ok'{} =
         amqp_channel:call(
           BCh, #'queue.declare'{queue   = QName,
                                 arguments = Args,
