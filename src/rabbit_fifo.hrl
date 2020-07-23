@@ -110,7 +110,9 @@
          %% it is useful to have a record of when this was blocked
          %% so that we can retry sending the block effect if
          %% the publisher did not receive the initial one
-         blocked :: undefined | ra:index()
+         blocked :: undefined | ra:index(),
+         unused_1,
+         unused_2
         }).
 
 -record(cfg,
@@ -127,7 +129,9 @@
          %% the maximum number of unsuccessful delivery attempts permitted
          delivery_limit :: option(non_neg_integer()),
          max_in_memory_length :: option(non_neg_integer()),
-         max_in_memory_bytes :: option(non_neg_integer())
+         max_in_memory_bytes :: option(non_neg_integer()),
+         unused_1,
+         unused_2
         }).
 
 -type prefix_msgs() :: {list(), list()} |
@@ -138,10 +142,9 @@
         {cfg :: #cfg{},
          % unassigned messages
          messages = lqueue:new() :: lqueue:queue(),
-         % defines the next message in id to be added to the messages map
+         % defines the next message id
          next_msg_num = 1 :: msg_in_id(),
-         % list of returned msg_in_ids - when checking out it picks from
-         % this list first before taking low_msg_num
+         % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(prefix_msg() |
                                                  {msg_in_id(), indexed_msg()}),
          % a counter of enqueues - used to trigger shadow copy points
@@ -180,7 +183,9 @@
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_id(), consumer()}],
          msg_bytes_in_memory = 0 :: non_neg_integer(),
-         msgs_ready_in_memory = 0 :: non_neg_integer()
+         msgs_ready_in_memory = 0 :: non_neg_integer(),
+         unused_1,
+         unused_2
         }).
 
 -type config() :: #{name := atom(),
