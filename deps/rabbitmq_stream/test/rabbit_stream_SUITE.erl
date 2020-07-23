@@ -256,5 +256,6 @@ read_frame(S, Buffer) ->
             end
     after
         1000 ->
-            inet:setopts(S, [{active, false}])
+            inet:setopts(S, [{active, false}]),
+            Buffer
     end.
