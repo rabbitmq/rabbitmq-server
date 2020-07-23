@@ -7,7 +7,7 @@
 
 -module(amqp10_client_connection).
 
--behaviour(gen_fsm).
+-behaviour(gen_statem).
 
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
@@ -34,21 +34,19 @@
 
 %% gen_fsm callbacks.
 -export([init/1,
-         handle_event/3,
-         handle_sync_event/4,
-         handle_info/3,
+         callback_mode/0,
          terminate/3,
          code_change/4]).
 
 %% gen_fsm state callbacks.
--export([expecting_socket/2,
-         sasl_hdr_sent/2,
-         sasl_hdr_rcvds/2,
-         sasl_init_sent/2,
-         hdr_sent/2,
-         open_sent/2,
-         opened/2,
-         close_sent/2]).
+-export([expecting_socket/3,
+         sasl_hdr_sent/3,
+         sasl_hdr_rcvds/3,
+         sasl_init_sent/3,
+         hdr_sent/3,
+         open_sent/3,
+         opened/3,
+         close_sent/3]).
 
 -type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:sslsocket()}.
 
@@ -72,7 +70,10 @@
       % set to a negative value to allow a sender to "overshoot" the flow
       % control by this margin
       transfer_limit_margin => 0 | neg_integer(),
-      sasl => none | anon | {plain, User :: binary(), Pwd :: binary()}
+      sasl => none | anon | {plain, User :: binary(), Pwd :: binary()},
+      notify => pid(),
+      notify_when_opened => pid() | none,
+      notify_when_closed => pid() | none
   }.
 
 -record(state,
@@ -122,37 +123,39 @@ open(Config) ->
 -spec close(pid(), {amqp10_client_types:amqp_error()
                    | amqp10_client_types:connection_error(), binary()} | none) -> ok.
 close(Pid, Reason) ->
-    gen_fsm:send_event(Pid, {close, Reason}).
+    gen_statem:cast(Pid, {close, Reason}).
 
 %% -------------------------------------------------------------------
 %% Private API.
 %% -------------------------------------------------------------------
 
 start_link(Sup, Config) ->
-    gen_fsm:start_link(?MODULE, [Sup, Config], []).
+    gen_statem:start_link(?MODULE, [Sup, Config], []).
 
 set_other_procs(Pid, OtherProcs) ->
-    gen_fsm:send_all_state_event(Pid, {set_other_procs, OtherProcs}).
+    gen_statem:cast(Pid, {set_other_procs, OtherProcs}).
 
 -spec socket_ready(pid(), amqp10_socket()) -> ok.
 socket_ready(Pid, Socket) ->
-    gen_fsm:send_event(Pid, {socket_ready, Socket}).
+    gen_statem:cast(Pid, {socket_ready, Socket}).
 
 -spec protocol_header_received(pid(), 0 | 3, non_neg_integer(),
                                non_neg_integer(), non_neg_integer()) -> ok.
 protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
-    gen_fsm:send_event(Pid, {protocol_header_received, Protocol, Maj, Min, Rev}).
+    gen_statem:cast(Pid, {protocol_header_received, Protocol, Maj, Min, Rev}).
 
 -spec begin_session(pid()) -> supervisor:startchild_ret().
 begin_session(Pid) ->
-    gen_fsm:sync_send_all_state_event(Pid, begin_session).
+    gen_statem:call(Pid, begin_session, {dirty_timeout, ?TIMEOUT}).
 
 heartbeat(Pid) ->
-    gen_fsm:send_event(Pid, heartbeat).
+    gen_statem:cast(Pid, heartbeat).
 
 %% -------------------------------------------------------------------
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
+
+callback_mode() -> [state_functions].
 
 init([Sup, Config0]) ->
     process_flag(trap_exit, true),
@@ -160,7 +163,8 @@ init([Sup, Config0]) ->
     {ok, expecting_socket, #state{connection_sup = Sup,
                                   config = Config}}.
 
-expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
+expecting_socket(_EvtType, {socket_ready, Socket},
+                 State = #state{config = Cfg}) ->
     State1 = State#state{socket = Socket},
     case Cfg of
         #{sasl := none} ->
@@ -169,12 +173,25 @@ expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
         _ ->
             ok = socket_send(Socket, ?SASL_PROTOCOL_HEADER),
             {next_state, sasl_hdr_sent, State1}
-    end.
+    end;
+expecting_socket(_EvtType, {set_other_procs, OtherProcs}, State) ->
+    {keep_state, set_other_procs0(OtherProcs, State)};
+expecting_socket({call, From}, begin_session,
+                  #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    %% The caller already asked for a new session but the connection
+    %% isn't fully opened. Let's queue this request until the connection
+    %% is ready.
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    {keep_state, State1}.
 
-sasl_hdr_sent({protocol_header_received, 3, 1, 0, 0}, State) ->
-    {next_state, sasl_hdr_rcvds, State}.
+sasl_hdr_sent(_EvtType, {protocol_header_received, 3, 1, 0, 0}, State) ->
+    {next_state, sasl_hdr_rcvds, State};
+sasl_hdr_sent({call, From}, begin_session,
+               #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    {keep_state, State1}.
 
-sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{
+sasl_hdr_rcvds(_EvtType, #'v1_0.sasl_mechanisms'{
                   sasl_server_mechanisms = {array, symbol, Mechs}},
                State = #state{config = #{sasl := Sasl}}) ->
     SaslBin = {symbol, sasl_to_bin(Sasl)},
@@ -186,28 +203,41 @@ sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{
             {next_state, sasl_init_sent, State};
         false ->
             {stop, {sasl_not_supported, Sasl}, State}
-    end.
+    end;
+sasl_hdr_rcvds({call, From}, begin_session,
+               #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    {keep_state, State1}.
 
-sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 0}},
+sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
     ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
     {next_state, hdr_sent, State};
-sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, C}},
+sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, C}},
                #state{} = State) when C==1;C==2;C==3;C==4 ->
-    {stop, sasl_auth_failure, State}.
+    {stop, sasl_auth_failure, State};
+sasl_init_sent({call, From}, begin_session,
+               #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    {keep_state, State1}.
 
-hdr_sent({protocol_header_received, 0, 1, 0, 0}, State) ->
+hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
         ok    -> {next_state, open_sent, State};
         Error -> {stop, Error, State}
     end;
-hdr_sent({protocol_header_received, Protocol, Maj, Min,
+hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
     error_logger:warning_msg("Unsupported protocol version: ~b ~b.~b.~b~n",
                              [Protocol, Maj, Min, Rev]),
-    {stop, normal, State}.
+    {stop, normal, State};
+hdr_sent({call, From}, begin_session,
+         #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    {keep_state, State1}.
 
-open_sent(#'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
+open_sent(_EvtType, #'v1_0.open'{max_frame_size = MFSz,
+                                 idle_time_out = Timeout},
           #state{pending_session_reqs = PendingSessionReqs,
                  config = Config} = State0) ->
     State = case Timeout of
@@ -223,17 +253,21 @@ open_sent(#'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
     State2 = lists:foldr(
                fun(From, S0) ->
                        {Ret, S2} = handle_begin_session(From, S0),
-                       _ = gen_fsm:reply(From, Ret),
+                       _ = gen_statem:reply(From, Ret),
                        S2
                end, State1, PendingSessionReqs),
     ok = notify_opened(Config),
-    {next_state, opened, State2}.
+    {next_state, opened, State2};
+open_sent({call, From}, begin_session,
+          #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    {keep_state, State1}.
 
-opened(heartbeat, State = #state{idle_time_out = T}) ->
+opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
     ok = send_heartbeat(State),
     {ok, Tmr} = start_heartbeat_timer(T),
-    {next_state, opened, State#state{heartbeat_timer = Tmr}};
-opened({close, Reason}, State = #state{config = Config}) ->
+    {keep_state, State#state{heartbeat_timer = Tmr}};
+opened(_EvtType, {close, Reason}, State = #state{config = Config}) ->
     %% We send the first close frame and wait for the reply.
     %% TODO: stop all sessions writing
     %% We could still accept incoming frames (See: 2.4.6)
@@ -243,61 +277,39 @@ opened({close, Reason}, State = #state{config = Config}) ->
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
-opened(#'v1_0.close'{error = Error}, State = #state{config = Config}) ->
+opened(_EvtType, #'v1_0.close'{error = Error}, State = #state{config = Config}) ->
     %% We receive the first close frame, reply and terminate.
     ok = notify_closed(Config, translate_err(Error)),
     _ = send_close(State, none),
     {stop, normal, State};
-opened(Frame, State) ->
+opened({call, From}, begin_session, State) ->
+    {Ret, State1} = handle_begin_session(From, State),
+    {keep_state, State1, [{reply, From, Ret}]};
+opened(info, {'DOWN', MRef, _, _, _Info},
+            State = #state{reader_m_ref = MRef, config = Config}) ->
+    %% reader has gone down and we are not already shutting down
+    ok = notify_closed(Config, shutdown),
+    {stop, normal, State};
+opened(_EvtType, Frame, State) ->
     error_logger:warning_msg("Unexpected connection frame ~p when in state ~p ~n",
                              [Frame, State]),
-    {next_state, opened, State}.
+    {keep_state, State}.
 
-close_sent(heartbeat, State) ->
+close_sent(_EvtType, heartbeat, State) ->
     {next_state, close_sent, State};
-close_sent(#'v1_0.close'{}, State) ->
+close_sent(_EvtType, #'v1_0.close'{}, State) ->
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
     {stop, normal, State}.
 
-handle_event({set_other_procs, OtherProcs}, StateName, State) ->
+set_other_procs0(OtherProcs, State) ->
     #{sessions_sup := SessionsSup,
       reader := Reader} = OtherProcs,
     ReaderMRef = monitor(process, Reader),
     amqp10_client_frame_reader:set_connection(Reader, self()),
-    State1 = State#state{sessions_sup = SessionsSup,
-                         reader_m_ref = ReaderMRef,
-                         reader = Reader},
-    {next_state, StateName, State1};
-handle_event(_Event, StateName, State) ->
-    {next_state, StateName, State}.
-
-handle_sync_event(begin_session, From, opened, State) ->
-    {Ret, State1} = handle_begin_session(From, State),
-    {reply, Ret, opened, State1};
-handle_sync_event(begin_session, From, StateName,
-                  #state{pending_session_reqs = PendingSessionReqs} = State)
-  when StateName =/= close_sent ->
-    %% The caller already asked for a new session but the connection
-    %% isn't fully opened. Let's queue this request until the connection
-    %% is ready.
-    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
-    {next_state, StateName, State1};
-handle_sync_event(begin_session, _From, StateName, State) ->
-    {reply, {error, connection_closed}, StateName, State};
-handle_sync_event(_Event, _From, StateName, State) ->
-    Reply = ok,
-    {reply, Reply, StateName, State}.
-
-handle_info({'DOWN', MRef, _, _, _Info}, StateName, State = #state{reader_m_ref = MRef,
-                                                                  config = Config})
-  when StateName =/= close_sent ->
-    %% reader has gone down and we are not already shutting down
-    ok = notify_closed(Config, shutdown),
-    {stop, normal, State};
-handle_info(Info, StateName, State) ->
-    error_logger:info_msg("Conn handle_info ~p ~p~n", [Info, StateName]),
-    {next_state, StateName, State}.
+    State#state{sessions_sup = SessionsSup,
+                reader_m_ref = ReaderMRef,
+                reader = Reader}.
 
 terminate(Reason, _StateName, #state{connection_sup = Sup,
                                      config = Config}) ->

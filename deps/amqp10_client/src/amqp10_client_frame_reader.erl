@@ -196,13 +196,11 @@ maybe_close_socket(undefined) ->
 maybe_close_socket(Socket) ->
     close_socket(Socket).
 
--dialyzer({no_fail_call, close_socket/1}).
 close_socket({tcp, Socket}) ->
     gen_tcp:close(Socket);
 close_socket({ssl, Socket}) ->
     ssl:close(Socket).
 
--dialyzer({no_fail_call, set_active_once/1}).
 set_active_once(#state{socket = {tcp, Socket}}) ->
     ok = inet:setopts(Socket, [{active, once}]);
 set_active_once(#state{socket = {ssl, Socket}}) ->
@@ -283,8 +281,8 @@ route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
                                                State0),
     ?DBG("FRAME -> ~p ~p~n ~p~n", [Channel, DestinationPid, Performative]),
     case Payload of
-        <<>> -> ok = gen_fsm:send_event(DestinationPid, Performative);
-        _ -> ok = gen_fsm:send_event(DestinationPid, Frame)
+        <<>> -> ok = gen_statem:cast(DestinationPid, Performative);
+        _ -> ok = gen_statem:cast(DestinationPid, Frame)
     end,
     State.
 
