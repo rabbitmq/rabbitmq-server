@@ -67,7 +67,7 @@
     is_being_drained_local_read/3,
     is_being_drained_consistent_read/2,
     is_being_drained_consistent_read/3,
-    
+
     set_partition_handling_mode/3,
     set_partition_handling_mode_globally/2,
     configure_dist_proxy/1,
