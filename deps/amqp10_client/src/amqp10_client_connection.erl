@@ -50,7 +50,7 @@
          opened/2,
          close_sent/2]).
 
--type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:socket()}.
+-type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:sslsocket()}.
 
 -type milliseconds() :: non_neg_integer().
 
@@ -63,7 +63,9 @@
       address => address(),
       port => inet:port_number(),
       tls_opts => {secure_port, [ssl:ssl_option()]},
-      notify => pid(), % the pid to send connection events to
+      notify => pid() | none, % the pid to send connection events to
+      notify_when_opened => pid() | none,
+      notify_when_closed => pid() | none,
       max_frame_size => non_neg_integer(), % TODO: constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
       idle_time_out => milliseconds(),
@@ -395,10 +397,10 @@ socket_send({tcp, Socket}, Data) ->
 socket_send({ssl, Socket}, Data) ->
     ssl:send(Socket, Data).
 
-socket_shutdown({tcp, Socket}, Data) ->
-    gen_tcp:shutdown(Socket, Data);
-socket_shutdown({ssl, Socket}, Data) ->
-    ssl:shutdown(Socket, Data).
+socket_shutdown({tcp, Socket}, How) ->
+    gen_tcp:shutdown(Socket, How);
+socket_shutdown({ssl, Socket}, How) ->
+    ssl:shutdown(Socket, How).
 
 notify_opened(#{notify_when_opened := none}) ->
     ok;

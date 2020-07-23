@@ -284,14 +284,14 @@ body_bin_data(_) ->
             #'v1_0.data'{content = <<"one">>},
             #'v1_0.data'{content = <<"two">>}
            ],
-    Msg = amqp10_msg:new(55, Body),
+    Msg = amqp10_msg:new(<<55>>, Body),
     Bin = amqp10_msg:body_bin(Msg),
     Body = amqp10_framing:decode_bin(Bin),
     ok.
 
 body_bin_amqp_value(_) ->
     Body = #'v1_0.amqp_value'{content = {utf8, <<"one">>}},
-    Msg = amqp10_msg:new(55, Body),
+    Msg = amqp10_msg:new(<<55>>, Body),
     Bin = amqp10_msg:body_bin(Msg),
     [Body] = amqp10_framing:decode_bin(Bin),
     ok.
@@ -302,7 +302,7 @@ body_bin_amqp_sequence(_) ->
                                              {utf8, <<"blah">>}]},
             #'v1_0.amqp_sequence'{content = [{utf8, <<"two">>}]}
            ],
-    Msg = amqp10_msg:new(55, Body),
+    Msg = amqp10_msg:new(<<55>>, Body),
     Bin = amqp10_msg:body_bin(Msg),
     Body = amqp10_framing:decode_bin(Bin),
     ok.
