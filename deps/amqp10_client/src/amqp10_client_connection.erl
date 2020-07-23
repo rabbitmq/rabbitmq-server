@@ -50,7 +50,7 @@
          opened/2,
          close_sent/2]).
 
--type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:socket()}.
+-type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:sslsocket()}.
 
 -type milliseconds() :: non_neg_integer().
 
@@ -392,13 +392,11 @@ send_heartbeat(#state{socket = Socket}) ->
     Frame = amqp10_binary_generator:build_heartbeat_frame(),
     socket_send(Socket, Frame).
 
--dialyzer({no_fail_call, socket_send/2}).
 socket_send({tcp, Socket}, Data) ->
     gen_tcp:send(Socket, Data);
 socket_send({ssl, Socket}, Data) ->
     ssl:send(Socket, Data).
 
--dialyzer({no_match, socket_shutdown/2}).
 socket_shutdown({tcp, Socket}, How) ->
     gen_tcp:shutdown(Socket, How);
 socket_shutdown({ssl, Socket}, How) ->
