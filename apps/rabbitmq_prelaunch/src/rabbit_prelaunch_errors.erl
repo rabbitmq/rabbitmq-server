@@ -30,11 +30,13 @@ format_error({error, {invalid_dist_port_range, DistTcpPort}}) ->
       "Invalid Erlang distribution TCP port: ~b", [DistTcpPort]);
 format_error({error, {dist_port_already_used, Port, not_erlang, Host}}) ->
     rabbit_misc:format(
-      "ERROR: could not bind to distribution port ~b on host ~s. It could be in use "
-      "by another process or cannot be bound to (e.g. due to a security policy)", [Port, Host]);
+      "ERROR: could not bind to distribution port ~b on host ~s. It could "
+      "be in use by another process or cannot be bound to (e.g. due to a "
+      "security policy)", [Port, Host]);
 format_error({error, {dist_port_already_used, Port, Name, Host}}) ->
     rabbit_misc:format(
-      "ERROR: could not bind to distribution port ~b, it is in use by another node: ~s@~s", [Port, Name, Host]);
+      "ERROR: could not bind to distribution port ~b, it is in use by "
+      "another node: ~s@~s", [Port, Name, Host]);
 format_error({error, {erlang_dist_running_with_unexpected_nodename,
                       Unexpected, Node}}) ->
     rabbit_misc:format(
