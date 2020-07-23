@@ -91,7 +91,8 @@
                          role => attach_role(),
                          snd_settle_mode => snd_settle_mode(),
                          rcv_settle_mode => rcv_settle_mode(),
-                         filter => filter()
+                         filter => filter(),
+                         properties => properties()
                         }.
 
 -type link_ref() :: #link_ref{}.
@@ -183,7 +184,8 @@ begin_sync(Connection, Timeout) ->
 
 -spec attach(pid(), attach_args()) -> {ok, link_ref()}.
 attach(Session, Args) ->
-    gen_fsm:sync_send_event(Session, {attach, Args}).
+  {ok, LinkRef} = gen_fsm:sync_send_event(Session, {attach, Args}),
+  {ok, LinkRef}.
 
 -spec detach(pid(), link_handle()) -> ok | {error, link_not_found | half_attached}.
 detach(Session, Handle) ->
@@ -982,6 +984,7 @@ socket_send(Sock, Data) ->
         {error, Reason} -> exit({socket_closed, Reason})
     end.
 
+-dialyzer({no_fail_call, socket_send0/2}).
 socket_send0({tcp, Socket}, Data) ->
     gen_tcp:send(Socket, Data);
 socket_send0({ssl, Socket}, Data) ->

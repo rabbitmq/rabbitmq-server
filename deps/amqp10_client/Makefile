@@ -13,7 +13,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+	      rabbit_common/mk/rabbitmq-tools.mk \
+	      rabbit_common/mk/rabbitmq-github-actions.mk
 
 DEP_PLUGINS += elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master

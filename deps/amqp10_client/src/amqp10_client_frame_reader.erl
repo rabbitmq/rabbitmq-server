@@ -59,7 +59,7 @@
          buffer = <<>> :: binary(),
          frame_state :: #frame_state{} | undefined,
          connection :: pid() | undefined,
-         heartbeat_timer_ref :: timer:tref() | undefined,
+         heartbeat_timer_ref :: reference() | undefined,
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          outgoing_channels = #{},
          incoming_channels = #{}}).
@@ -218,11 +218,13 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
+-dialyzer({no_fail_call, close_socket/1}).
 close_socket({tcp, Socket}) ->
     gen_tcp:close(Socket);
 close_socket({ssl, Socket}) ->
     ssl:close(Socket).
 
+-dialyzer({no_fail_call, set_active_once/1}).
 set_active_once(#state{socket = {tcp, Socket}}) ->
     ok = inet:setopts(Socket, [{active, once}]);
 set_active_once(#state{socket = {ssl, Socket}}) ->
