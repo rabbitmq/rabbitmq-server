@@ -53,11 +53,11 @@ groups() ->
           calculate_random,
           calculate_client_local
         ]},
-        
+
       {maintenance_mode, [], [
           declare_with_min_masters_and_some_nodes_under_maintenance,
           declare_with_min_masters_and_all_nodes_under_maintenance,
-          
+
           declare_with_random_and_some_nodes_under_maintenance,
           declare_with_random_and_all_nodes_under_maintenance
       ]}
@@ -101,9 +101,26 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+    FFEnabled = case Group of
+                    maintenance_mode ->
+                        rabbit_ct_broker_helpers:enable_feature_flag(
+                          Config2,
+                          maintenance_mode_status);
+                    _ ->
+                        ok
+                end,
+    case FFEnabled of
+        ok ->
+            Config2;
+        Skip ->
+            end_per_testcase(Testcase, Config2),
+            Skip
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
@@ -226,7 +243,7 @@ declare_with_min_masters_and_some_nodes_under_maintenance(Config) ->
     set_location_policy(Config, ?POLICY, <<"min-masters">>),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 1),
-    
+
     QName = <<"qm.tests.min_masters.maintenance.case1">>,
     Resource = rabbit_misc:r(<<"/">>, queue, QName),
     Record = declare(Config, Resource, false, false, _Args = [], none),
@@ -244,7 +261,7 @@ declare_with_random_and_some_nodes_under_maintenance(Config) ->
     set_location_policy(Config, ?POLICY, <<"random">>),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
-    
+
     QName = <<"qm.tests.random.maintenance.case1">>,
     Resource = rabbit_misc:r(<<"/">>, queue, QName),
     Record = declare(Config, Resource, false, false, _Args = [], none),
@@ -263,7 +280,7 @@ declare_with_all_nodes_under_maintenance(Config, Locator) ->
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 1),
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
-    
+
     QName = rabbit_data_coercion:to_binary(
         rabbit_misc:format("qm.tests.~s.maintenance.case2", [Locator])),
     Resource = rabbit_misc:r(<<"/">>, queue, QName),

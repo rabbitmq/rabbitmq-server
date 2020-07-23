@@ -57,11 +57,21 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps() ++ [
-        fun rabbit_ct_broker_helpers:set_ha_policy_all/1
-      ]).
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps() ++
+                [fun rabbit_ct_broker_helpers:set_ha_policy_all/1]),
+    FFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
+                  Config2,
+                  maintenance_mode_status),
+    case FFEnabled of
+        ok ->
+            Config2;
+        Skip ->
+            end_per_testcase(Testcase, Config2),
+            Skip
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
@@ -75,12 +85,12 @@ end_per_testcase(Testcase, Config) ->
 
 maintenance_mode_status(Config) ->
     Nodes = [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    
+
     [begin
          ?assertNot(rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Node)),
          ?assertNot(rabbit_ct_broker_helpers:is_being_drained_consistent_read(Config, Node))
      end || Node <- Nodes],
-    
+
     [begin
         [begin
              ?assertNot(rabbit_ct_broker_helpers:is_being_drained_consistent_read(Config, TargetNode, NodeToCheck))
@@ -91,38 +101,38 @@ maintenance_mode_status(Config) ->
     rabbit_ct_helpers:await_condition(
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, B) end,
         10000),
-    
+
     [begin
          ?assert(rabbit_ct_broker_helpers:is_being_drained_consistent_read(Config, TargetNode, B))
      end || TargetNode <- Nodes],
-    
+
     ?assertEqual(
         lists:usort([A, C]),
         lists:usort(rabbit_ct_broker_helpers:rpc(Config, B,
                         rabbit_maintenance, primary_replica_transfer_candidate_nodes, []))),
-    
+
     rabbit_ct_broker_helpers:unmark_as_being_drained(Config, B),
     rabbit_ct_helpers:await_condition(
         fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, B) end,
         10000),
-    
+
     [begin
          ?assertNot(rabbit_ct_broker_helpers:is_being_drained_local_read(Config, TargetNode, B)),
          ?assertNot(rabbit_ct_broker_helpers:is_being_drained_consistent_read(Config, TargetNode, B))
      end || TargetNode <- Nodes],
-    
+
     ?assertEqual(
         lists:usort([A, C]),
         lists:usort(rabbit_ct_broker_helpers:rpc(Config, B,
                         rabbit_maintenance, primary_replica_transfer_candidate_nodes, []))),
-    
+
     ok.
 
 
 listener_suspension_status(Config) ->
     Nodes = [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ct:pal("Picked node ~s for maintenance tests...", [A]),
-    
+
     rabbit_ct_helpers:await_condition(
         fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
 
@@ -208,14 +218,14 @@ quorum_queue_leadership_transfer(Config) ->
     amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true, arguments = [
         {<<"x-queue-type">>, longstr, <<"quorum">>}
     ]}),
-    
+
     %% we cannot assert on the number of local leaders here: declaring a QQ on node A
     %% does not guarantee that the leader will be hosted on node A
-    
+
     rabbit_ct_broker_helpers:drain_node(Config, A),
     rabbit_ct_helpers:await_condition(
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
-    
+
     %% quorum queue leader election is asynchronous
     rabbit_ct_helpers:await_condition(
         fun () ->
