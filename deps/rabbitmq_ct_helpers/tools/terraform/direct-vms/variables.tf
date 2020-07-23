@@ -110,11 +110,6 @@ variable "erlang_version_to_system" {
 variable "ec2_instance_types" {
   type = map
   default = {
-    "sles-11"      = "t2.medium" # Need more than 2 GiB of RAM
-    "ubuntu-14.04" = "m3.medium" # `t2.micro` unsupported
-    "ubuntu-16.10" = "m3.medium" # `t2.micro` unsupported
-    "ubuntu-17.04" = "m3.medium" # `t2.micro` unsupported
-    "ubuntu-17.10" = "m3.medium" # `t2.micro` unsupported
   }
 }
 

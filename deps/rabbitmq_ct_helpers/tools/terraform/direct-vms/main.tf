@@ -9,7 +9,7 @@ locals {
 
   resource_prefix   = "rabbitmq-testing-"
   distribution      = lookup(var.erlang_version_to_system, var.erlang_version)
-  ec2_instance_type = lookup(var.ec2_instance_types, local.distribution, "t2.micro")
+  ec2_instance_type = lookup(var.ec2_instance_types, local.distribution, "m4.large")
   ami               = lookup(var.amis, local.distribution)
   username          = lookup(var.usernames, local.distribution, "ec2-user")
 }
