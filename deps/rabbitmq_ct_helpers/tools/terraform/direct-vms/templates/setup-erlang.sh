@@ -39,12 +39,7 @@ case "$erlang_version" in
       erlang_git_ref='master'
     fi
     ;;
-  23.*)
-    if test -z "$erlang_git_ref"; then
-      erlang_git_ref='maint-23'
-    fi
-    ;;
-  22.*|21.*|20.*|19.3)
+  23.*|22.*|21.*|20.*|19.3)
     readonly erlang_package_version="1:$erlang_version-1"
     ;;
   R16B03)
