@@ -1,6 +1,6 @@
 # vim:sw=2:et:
 # https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow
-name: "Test - Erlang 22.3"
+name: "Test - Erlang 23.0"
 on:
   push:
   repository_dispatch:
@@ -18,7 +18,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: CHECK RABBITMQ COMPONENTS
@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v1
         with:
           path: umbrellas
-          key: secondary-umbrellas-v3.7.27-rc.1-v3.8.5-erlang-22.3-rev4
+          key: secondary-umbrellas-v3.7.27-rc.1-v3.8.5-erlang-23.0-rev4
       - name: PREPARE SECONDARY UMBRELLA COPIES
         if: success() && 'latest' == 'oldest'
         run: |
@@ -122,7 +122,7 @@ jobs:
         if: success() && 'latest' == 'latest'
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -156,7 +156,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -190,7 +190,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -205,7 +205,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-amqqueue_backward_compatibility \
             base_rmq_ref=master \
@@ -285,7 +285,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -300,7 +300,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-backing_queue \
             base_rmq_ref=master \
@@ -380,7 +380,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -395,7 +395,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-channel_interceptor \
             base_rmq_ref=master \
@@ -475,7 +475,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -490,7 +490,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-channel_operation_timeout \
             base_rmq_ref=master \
@@ -570,7 +570,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -585,7 +585,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-cluster \
             base_rmq_ref=master \
@@ -665,7 +665,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -680,7 +680,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-cluster_rename \
             base_rmq_ref=master \
@@ -760,7 +760,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -775,7 +775,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-clustering_management \
             base_rmq_ref=master \
@@ -855,7 +855,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -870,7 +870,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-config_schema \
             base_rmq_ref=master \
@@ -950,7 +950,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -965,7 +965,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-confirms_rejects \
             base_rmq_ref=master \
@@ -1045,7 +1045,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1060,7 +1060,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-consumer_timeout \
             base_rmq_ref=master \
@@ -1140,7 +1140,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1155,7 +1155,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-crashing_queues \
             base_rmq_ref=master \
@@ -1235,7 +1235,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1250,7 +1250,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-dead_lettering \
             base_rmq_ref=master \
@@ -1330,7 +1330,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1345,7 +1345,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-definition_import \
             base_rmq_ref=master \
@@ -1425,7 +1425,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1440,7 +1440,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-disconnect_detected_during_alarm \
             base_rmq_ref=master \
@@ -1520,7 +1520,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1535,7 +1535,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-dynamic_ha \
             base_rmq_ref=master \
@@ -1615,7 +1615,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1630,7 +1630,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-dynamic_qq \
             base_rmq_ref=master \
@@ -1710,7 +1710,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1725,7 +1725,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-eager_sync \
             base_rmq_ref=master \
@@ -1805,7 +1805,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1820,7 +1820,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-feature_flags \
             base_rmq_ref=master \
@@ -1900,7 +1900,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1915,7 +1915,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-lazy_queue \
             base_rmq_ref=master \
@@ -1995,7 +1995,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2010,7 +2010,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-list_consumers_sanity_check \
             base_rmq_ref=master \
@@ -2090,7 +2090,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2105,7 +2105,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-list_queues_online_and_offline \
             base_rmq_ref=master \
@@ -2185,7 +2185,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2200,7 +2200,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-maintenance_mode \
             base_rmq_ref=master \
@@ -2280,7 +2280,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2295,7 +2295,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-many_node_ha \
             base_rmq_ref=master \
@@ -2375,7 +2375,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2390,7 +2390,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-message_size_limit \
             base_rmq_ref=master \
@@ -2470,7 +2470,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2485,7 +2485,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-metrics \
             base_rmq_ref=master \
@@ -2565,7 +2565,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2580,7 +2580,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-mirrored_supervisor \
             base_rmq_ref=master \
@@ -2660,7 +2660,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2675,7 +2675,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-msg_store \
             base_rmq_ref=master \
@@ -2755,7 +2755,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2770,7 +2770,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-peer_discovery_classic_config \
             base_rmq_ref=master \
@@ -2850,7 +2850,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2865,7 +2865,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-peer_discovery_dns \
             base_rmq_ref=master \
@@ -2945,7 +2945,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -2960,7 +2960,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-per_user_connection_tracking \
             base_rmq_ref=master \
@@ -3040,7 +3040,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3055,7 +3055,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_connection_limit \
             base_rmq_ref=master \
@@ -3135,7 +3135,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3150,7 +3150,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_connection_limit_partitions \
             base_rmq_ref=master \
@@ -3230,7 +3230,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3245,7 +3245,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_msg_store \
             base_rmq_ref=master \
@@ -3325,7 +3325,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3340,7 +3340,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_queue_limit \
             base_rmq_ref=master \
@@ -3420,7 +3420,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3435,7 +3435,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-policy \
             base_rmq_ref=master \
@@ -3515,7 +3515,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3530,7 +3530,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-priority_queue \
             base_rmq_ref=master \
@@ -3610,7 +3610,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3625,7 +3625,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-priority_queue_recovery \
             base_rmq_ref=master \
@@ -3705,7 +3705,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3720,7 +3720,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-product_info \
             base_rmq_ref=master \
@@ -3800,7 +3800,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3815,7 +3815,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-proxy_protocol \
             base_rmq_ref=master \
@@ -3895,7 +3895,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -3910,7 +3910,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-publisher_confirms_parallel \
             base_rmq_ref=master \
@@ -3990,7 +3990,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4005,7 +4005,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-queue_length_limits \
             base_rmq_ref=master \
@@ -4085,7 +4085,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4100,7 +4100,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-queue_master_location \
             base_rmq_ref=master \
@@ -4180,7 +4180,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4195,7 +4195,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-queue_parallel \
             base_rmq_ref=master \
@@ -4275,7 +4275,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4290,7 +4290,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-quorum_queue \
             base_rmq_ref=master \
@@ -4370,7 +4370,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4385,7 +4385,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbit_core_metrics_gc \
             base_rmq_ref=master \
@@ -4465,7 +4465,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4480,7 +4480,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbit_fifo \
             base_rmq_ref=master \
@@ -4560,7 +4560,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4575,7 +4575,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbit_fifo_int \
             base_rmq_ref=master \
@@ -4655,7 +4655,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4670,7 +4670,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbit_fifo_prop \
             base_rmq_ref=master \
@@ -4750,7 +4750,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4765,7 +4765,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbitmq_queues_cli_integration \
             base_rmq_ref=master \
@@ -4845,7 +4845,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4860,7 +4860,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbitmqctl_integration \
             base_rmq_ref=master \
@@ -4940,7 +4940,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -4955,7 +4955,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-rabbitmqctl_shutdown \
             base_rmq_ref=master \
@@ -5035,7 +5035,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5050,7 +5050,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-signal_handling \
             base_rmq_ref=master \
@@ -5130,7 +5130,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5145,7 +5145,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-simple_ha \
             base_rmq_ref=master \
@@ -5225,7 +5225,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5240,7 +5240,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-single_active_consumer \
             base_rmq_ref=master \
@@ -5320,7 +5320,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5335,7 +5335,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-sup_delayed_restart \
             base_rmq_ref=master \
@@ -5415,7 +5415,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5430,7 +5430,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-sync_detection \
             base_rmq_ref=master \
@@ -5510,7 +5510,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5525,7 +5525,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-term_to_binary_compat_prop \
             base_rmq_ref=master \
@@ -5605,7 +5605,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5620,7 +5620,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-topic_permission \
             base_rmq_ref=master \
@@ -5700,7 +5700,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5715,7 +5715,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_access_control \
             base_rmq_ref=master \
@@ -5795,7 +5795,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5810,7 +5810,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_access_control_authn_authz_context_propagation \
             base_rmq_ref=master \
@@ -5890,7 +5890,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -5905,7 +5905,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_access_control_credential_validation \
             base_rmq_ref=master \
@@ -5985,7 +5985,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6000,7 +6000,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_amqp091_content_framing \
             base_rmq_ref=master \
@@ -6080,7 +6080,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6095,7 +6095,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_amqp091_server_properties \
             base_rmq_ref=master \
@@ -6175,7 +6175,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6190,7 +6190,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_app_management \
             base_rmq_ref=master \
@@ -6270,7 +6270,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6285,7 +6285,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_cluster_formation_locking_mocks \
             base_rmq_ref=master \
@@ -6365,7 +6365,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6380,7 +6380,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_collections \
             base_rmq_ref=master \
@@ -6460,7 +6460,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6475,7 +6475,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_config_value_encryption \
             base_rmq_ref=master \
@@ -6555,7 +6555,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6570,7 +6570,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_connection_tracking \
             base_rmq_ref=master \
@@ -6650,7 +6650,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6665,7 +6665,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_credit_flow \
             base_rmq_ref=master \
@@ -6745,7 +6745,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6760,7 +6760,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_disk_monitor \
             base_rmq_ref=master \
@@ -6840,7 +6840,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6855,7 +6855,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_disk_monitor_mocks \
             base_rmq_ref=master \
@@ -6935,7 +6935,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -6950,7 +6950,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_file_handle_cache \
             base_rmq_ref=master \
@@ -7030,7 +7030,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7045,7 +7045,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_gen_server2 \
             base_rmq_ref=master \
@@ -7125,7 +7125,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7140,7 +7140,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_gm \
             base_rmq_ref=master \
@@ -7220,7 +7220,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7235,7 +7235,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_log_config \
             base_rmq_ref=master \
@@ -7315,7 +7315,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7330,7 +7330,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_log_management \
             base_rmq_ref=master \
@@ -7410,7 +7410,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7425,7 +7425,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_operator_policy \
             base_rmq_ref=master \
@@ -7505,7 +7505,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7520,7 +7520,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_pg_local \
             base_rmq_ref=master \
@@ -7600,7 +7600,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7615,7 +7615,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_plugin_directories \
             base_rmq_ref=master \
@@ -7695,7 +7695,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7710,7 +7710,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_plugin_versioning \
             base_rmq_ref=master \
@@ -7790,7 +7790,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7805,7 +7805,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_policy_validators \
             base_rmq_ref=master \
@@ -7885,7 +7885,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7900,7 +7900,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_priority_queue \
             base_rmq_ref=master \
@@ -7980,7 +7980,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -7995,7 +7995,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_queue_consumers \
             base_rmq_ref=master \
@@ -8075,7 +8075,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -8090,7 +8090,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_stats_and_metrics \
             base_rmq_ref=master \
@@ -8170,7 +8170,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -8185,7 +8185,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_supervisor2 \
             base_rmq_ref=master \
@@ -8265,7 +8265,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -8280,7 +8280,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-unit_vm_memory_monitor \
             base_rmq_ref=master \
@@ -8360,7 +8360,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -8375,7 +8375,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-upgrade_preparation \
             base_rmq_ref=master \
@@ -8455,7 +8455,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
@@ -8470,7 +8470,7 @@ jobs:
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
-          export ERLANG_VERSION=22.3
+          export ERLANG_VERSION=23.0
           export ELIXIR_VERSION=1.8.0
           make ct-vhost \
             base_rmq_ref=master \
@@ -8653,4 +8653,4 @@ jobs:
          AWS_REGION: ${{ secrets.AWS_REGION }}
          FILE: rabbit-rabbitmq-deps.mk
          S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-         S3_KEY: rabbitmq-server/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-22.3/rabbit-rabbitmq-deps.mk
+         S3_KEY: rabbitmq-server/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-23.0/rabbit-rabbitmq-deps.mk
