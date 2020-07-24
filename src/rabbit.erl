@@ -684,7 +684,7 @@ status() ->
            {log_files, log_locations()},
            {data_directory, rabbit_mnesia:dir()},
            {raft_data_directory, ra_env:data_dir()}],
-    Totals = case rabbit:is_running() of
+    Totals = case is_running() of
                  true ->
                      [{virtual_host_count, rabbit_vhost:count()},
                       {connection_count,
@@ -912,26 +912,31 @@ do_run_postlaunch_phase() ->
                   end
           end, Plugins),
 
+        %% Successful boot resets node maintenance state.
         rabbit_log_prelaunch:info("Resetting node maintenance status"),
-        %% successful boot resets node maintenance state
-        rabbit_maintenance:unmark_as_being_drained(),
-        rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
-        rabbit_boot_state:set(ready),
+        _ = rabbit_maintenance:unmark_as_being_drained(),
 
-        ok = rabbit_lager:broker_is_started(),
-        ok = log_broker_started(
-               rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
-        %% export definitions after all plugins have been enabled,
+        %% Export definitions after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2384
         case rabbit_definitions:maybe_load_definitions() of
-            ok -> ok;
+            ok           -> ok;
             DefLoadError -> throw(DefLoadError)
         end,
 
-        %% start listeners after all plugins have been enabled,
-        %% see rabbitmq/rabbitmq-server#2405
-        rabbit_log_prelaunch:info("Ready to start client connection listeners"),
-        ok = rabbit_networking:boot()
+        %% Start listeners after all plugins have been enabled,
+        %% see rabbitmq/rabbitmq-server#2405.
+        rabbit_log_prelaunch:info(
+          "Ready to start client connection listeners"),
+        ok = rabbit_networking:boot(),
+
+        %% The node is ready: mark it as such and log it.
+        %% NOTE: PLEASE DO NOT ADD CRITICAL NODE STARTUP CODE AFTER THIS.
+        ok = rabbit_lager:broker_is_started(),
+        ok = log_broker_started(
+               rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
+
+        rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
+        rabbit_boot_state:set(ready)
     catch
         throw:{error, _} = Error ->
             rabbit_prelaunch_errors:log_error(Error),
