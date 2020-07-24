@@ -259,6 +259,7 @@ open_connection_plain_sasl_failure(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 basic_roundtrip(Config) ->
+    application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpenConf = #{address => Hostname, port => Port, sasl => anon},
@@ -473,6 +474,7 @@ transfer_unsettled(Config) ->
     DeliveryTag = <<"my-tag">>,
     Msg = amqp10_msg:new(DeliveryTag, Data, false),
     ok = amqp10_client:send_msg(Sender, Msg),
+    ct:pal("test pid ~w", [self()]),
     ok = await_disposition(DeliveryTag),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"data-receiver">>,
@@ -506,7 +508,8 @@ subscribe(Config) ->
         {amqp10_event, {link, Receiver, credit_exhausted}} ->
             ok
     after 5000 ->
-          exit(credit_exhausted_assert)
+              flush(),
+              exit(credit_exhausted_assert)
     end,
 
     ok = amqp10_client:end_session(Session),
@@ -708,7 +711,9 @@ receive_one(Receiver) ->
 await_disposition(DeliveryTag) ->
     receive
         {amqp10_disposition, {accepted, DeliveryTag}} -> ok
-    after 3000 -> exit(dispostion_timeout)
+    after 3000 ->
+              flush(),
+              exit(dispostion_timeout)
     end.
 
 await_link(Who, What, Err) ->
@@ -717,8 +722,19 @@ await_link(Who, What, Err) ->
             ok;
         {amqp10_event, {link, Who, {detached, Why}}} ->
             exit(Why)
-    after 5000 -> exit(Err)
+    after 5000 ->
+              flush(),
+              exit(Err)
     end.
 
 to_bin(X) when is_list(X) ->
     list_to_binary(X).
+
+flush() ->
+    receive
+        Any ->
+            ct:pal("flush ~p", [Any]),
+            flush()
+    after 0 ->
+              ok
+    end.
