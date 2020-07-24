@@ -67,12 +67,7 @@
 -type protocol() :: atom().
 -type label() :: string().
 
-%% @todo Remove once Dialyzer only runs on Erlang/OTP 21.3 or above.
--dialyzer({nowarn_function, boot/0}).
--dialyzer({nowarn_function, boot_listeners/3}).
--dialyzer({nowarn_function, record_distribution_listener/0}).
-
--spec boot() -> 'ok'.
+-spec boot() -> 'ok' | no_return().
 
 boot() ->
     ok = record_distribution_listener(),
@@ -338,10 +333,16 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                      port = Port,
                      opts = Opts}).
 
+-spec record_distribution_listener() -> ok | no_return().
+
 record_distribution_listener() ->
     {Name, Host} = rabbit_nodes:parts(node()),
-    {port, Port, _Version} = erl_epmd:port_please(Name, Host),
-    tcp_listener_started(clustering, [], {0,0,0,0,0,0,0,0}, Port).
+    case erl_epmd:port_please(Name, Host, infinity) of
+        {port, Port, _Version} ->
+            tcp_listener_started(clustering, [], {0,0,0,0,0,0,0,0}, Port);
+        noport ->
+            throw({error, no_epmd_port})
+    end.
 
 -spec active_listeners() -> [rabbit_types:listener()].
 
