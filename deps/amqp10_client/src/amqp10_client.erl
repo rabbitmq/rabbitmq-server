@@ -10,11 +10,6 @@
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--ifdef(nowarn_deprecated_gen_fsm).
--compile({nowarn_deprecated_function,
-          [{gen_fsm, send_event, 2}]}).
--endif.
-
 -export([open_connection/1,
          open_connection/2,
          close_connection/1,
@@ -158,7 +153,7 @@ begin_session_sync(Connection, Timeout) when is_pid(Connection) ->
 %% {amqp10_event, {session, SessionPid, {ended, Why}}}
 -spec end_session(pid()) -> ok.
 end_session(Pid) ->
-    gen_fsm:send_event(Pid, 'end').
+    amqp10_client_session:'end'(Pid).
 
 %% @doc Synchronously attach a link on 'Session'.
 %% This is a convenience function that awaits attached event

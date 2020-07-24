@@ -11,6 +11,7 @@
 -define(MAX_MAX_FRAME_SIZE, 1024 * 1024).
 -define(FRAME_HEADER_SIZE, 8).
 
+-define(TIMEOUT, 5000).
 
 % -define(debug, true).
 -ifdef(debug).
