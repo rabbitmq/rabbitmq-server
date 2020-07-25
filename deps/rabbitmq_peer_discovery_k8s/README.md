@@ -1,15 +1,21 @@
 # RabbitMQ Peer Discovery Kubernetes
 
-This is an K8s-based implementation of RabbitMQ [peer discovery interface](https://www.rabbitmq.com/blog/2018/02/12/peer-discovery-subsystem-in-rabbitmq-3-7/)
-(new in 3.7.0, previously available in the [rabbitmq-autocluster plugin](https://github.com/rabbitmq/rabbitmq-autocluster)
-by Gavin Roy).
+## Overview
 
-This plugin only performs peer discovery using Kubernetes API as a data source.
+This is an implementation of RabbitMQ [peer discovery interface](https://www.rabbitmq.com/blog/2018/02/12/peer-discovery-subsystem-in-rabbitmq-3-7/)
+for Kubernetes.
+
+This plugin only performs peer discovery using Kubernetes API as the source of data on running cluster pods.
 Please get familiar with [RabbitMQ clustering fundamentals](https://rabbitmq.com/clustering.html) before attempting
 to use it.
 
 Cluster provisioning and most of Day 2 operations such as [proper monitoring](https://rabbitmq.com/monitoring.html)
 are not in scope for this plugin.
+
+For a more comprehensive open source RabbitMQ on Kubernetes deployment solution,
+see [RabbitMQ Cluster Operator for Kubernetes](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html).
+The Operator is developed [on GitHub](https://github.com/rabbitmq/cluster-operator/) and contains its
+own [set of examples](https://github.com/rabbitmq/cluster-operator/tree/master/docs/examples).
 
 
 ## Supported RabbitMQ Versions
