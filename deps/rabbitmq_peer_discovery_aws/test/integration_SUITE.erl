@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([all/0,
+         suite/0,
          groups/0,
          init_per_suite/1, end_per_suite/1,
          init_per_group/2, end_per_group/2,
@@ -23,6 +24,11 @@ all() ->
     [
      {group, using_tags},
      {group, using_autoscaling_group}
+    ].
+
+suite() ->
+    [
+     {timetrap, {hours, 1}}
     ].
 
 groups() ->
