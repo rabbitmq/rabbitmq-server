@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Queues.Commands.SetStreamRetentionPolicyCommand
+  @command RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

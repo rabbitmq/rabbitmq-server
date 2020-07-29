@@ -1,20 +1,12 @@
-## The contents of this file are subject to the Mozilla Public License
-## Version 1.1 (the "License"); you may not use this file except in
-## compliance with the License. You may obtain a copy of the License
-## at https://www.mozilla.org/MPL/
+## This Source Code Form is subject to the terms of the Mozilla Public
+## License, v. 2.0. If a copy of the MPL was not distributed with this
+## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Software distributed under the License is distributed on an "AS IS"
-## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-## the License for the specific language governing rights and
-## limitations under the License.
-##
-## The Original Code is RabbitMQ.
-##
-## Copyright (c) 2012-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommand do
   alias RabbitMQ.CLI.Core.DocGuide
-  import Rabbitmq.Atom.Coerce
+  import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -32,10 +24,10 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommand do
            to_atom(node)
          ]) do
       {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot delete replicas on a classic queue"}
+        {:error, "Cannot delete replicas from a classic queue"}
 
       {:error, :quorum_queue_not_supported} ->
-        {:error, "Cannot delete replicas on a quorum queue"}
+        {:error, "Cannot delete replicas from a quorum queue"}
 
       other ->
         other
@@ -49,7 +41,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommand do
   def usage_additional do
     [
       ["<queue>", "stream queue name"],
-      ["<node>", "node to remove a new replica on"]
+      ["<node>", "node to remove a replica from"]
     ]
   end
 
