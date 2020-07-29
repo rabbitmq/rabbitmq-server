@@ -316,21 +316,21 @@ prepare-dist::
 # Umbrella-specific settings.
 # --------------------------------------------------------------------
 
-# If this project is under the Umbrella project, we override $(DEPS_DIR)
-# to point to the Umbrella's one. We also disable `make distclean` so
-# $(DEPS_DIR) is not accidentally removed.
+# If the top-level project is a RabbitMQ component, we override
+# $(DEPS_DIR) for this project to point to the top-level's one. We also
+# disable `make distclean` so $(DEPS_DIR) is not accidentally removed.
 
-ifneq ($(wildcard ../../UMBRELLA.md),)
-UNDER_UMBRELLA = 1
+ifneq ($(wildcard ../../rabbitmq-components.mk),)
+DISABLE_DISTCLEAN = 1
 DEPS_DIR ?= $(abspath ..)
-else ifneq ($(wildcard ../../../../UMBRELLA.md),)
-UNDER_UMBRELLA = 1
+else ifneq ($(wildcard ../../../../rabbitmq-components.mk),)
+DISABLE_DISTCLEAN = 1
 DEPS_DIR ?= $(abspath ../../..)
 else ifneq ($(wildcard UMBRELLA.md),)
-UNDER_UMBRELLA = 1
+DISABLE_DISTCLEAN = 1
 endif
 
-ifeq ($(UNDER_UMBRELLA),1)
+ifeq ($(DISABLE_DISTCLEAN),1)
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
 endif
