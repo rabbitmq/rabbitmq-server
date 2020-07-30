@@ -20,7 +20,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: CHECK RABBITMQ COMPONENTS
         # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
         id: ref
@@ -59,12 +59,12 @@ jobs:
         uses: actions/cache@v1
         with:
           path: umbrellas
-          key: secondary-umbrellas-v3.7.26-v3.8.5-erlang-21.3-rev4
+          key: secondary-umbrellas-v3.7.27-rc.1-v3.8.5-erlang-21.3-rev4
       - name: PREPARE SECONDARY UMBRELLA COPIES
         if: success() && 'oldest' == 'oldest'
         run: |
           set -ex
-          for version in v3.7.26 v3.8.5; do
+          for version in v3.7.27-rc.1 v3.8.5; do
             umbrella="umbrellas/$version"
             if ! test -d "$umbrella"  ||
                ! make -C "$umbrella/deps/rabbit" test-dist; then
@@ -124,7 +124,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         if: success() && 'oldest' == 'latest'
         uses: actions/download-artifact@v2
@@ -158,7 +158,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -192,7 +192,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -206,7 +206,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-amqqueue_backward_compatibility \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -271,7 +271,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-backing_queue:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -286,7 +287,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -300,7 +301,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-backing_queue \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -365,7 +366,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-channel_interceptor:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -380,7 +382,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -394,7 +396,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-channel_interceptor \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -459,7 +461,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-channel_operation_timeout:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -474,7 +477,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -488,7 +491,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-channel_operation_timeout \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -553,7 +556,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-cluster:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -568,7 +572,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -582,7 +586,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-cluster \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -647,7 +651,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-cluster_rename:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -662,7 +667,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -676,7 +681,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-cluster_rename \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -741,7 +746,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-clustering_management:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -756,7 +762,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -770,7 +776,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-clustering_management \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -835,7 +841,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-config_schema:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -850,7 +857,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -864,7 +871,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-config_schema \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -929,7 +936,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-confirms_rejects:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -944,7 +952,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -958,7 +966,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-confirms_rejects \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1023,7 +1031,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-consumer_timeout:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1038,7 +1047,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1052,7 +1061,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-consumer_timeout \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1117,7 +1126,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-crashing_queues:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1132,7 +1142,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1146,7 +1156,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-crashing_queues \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1211,7 +1221,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-dead_lettering:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1226,7 +1237,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1240,7 +1251,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-dead_lettering \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1305,7 +1316,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-definition_import:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1320,7 +1332,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1334,7 +1346,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-definition_import \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1399,7 +1411,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-disconnect_detected_during_alarm:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1414,7 +1427,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1428,7 +1441,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-disconnect_detected_during_alarm \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1493,7 +1506,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-dynamic_ha:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1508,7 +1522,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1522,7 +1536,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-dynamic_ha \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1587,7 +1601,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-dynamic_qq:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1602,7 +1617,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1616,7 +1631,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-dynamic_qq \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1681,7 +1696,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-eager_sync:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1696,7 +1712,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1710,7 +1726,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-eager_sync \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1775,7 +1791,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-feature_flags:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1790,7 +1807,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1804,7 +1821,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-feature_flags \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -1869,101 +1886,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
-  ct-health_check:
-    needs: [checks]
-    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
-    name: ct-health_check
-    runs-on: ubuntu-18.04
-    steps:
-      - name: CHECKOUT REPOSITORY
-        uses: actions/checkout@v2
-      # https://github.com/marketplace/actions/setup-elixir
-      - name: CONFIGURE OTP & ELIXIR
-        uses: actions/setup-elixir@v1
-        with:
-          otp-version: 21.3
-          # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
-      - name: DOWNLOAD DEPS ARCHIVE
-        uses: actions/download-artifact@v2
-        with:
-          name: deps.tar.xz
-      - name: UNPACK DEPS ARCHIVE
-        run: |
-          tar Jxf deps.tar.xz
-      - name: RUN TESTS
-        run: |
-          branch_or_tag_name=${GITHUB_REF#refs/*/}
-          ! test -d ebin || touch ebin/*
-          export BASE_RMQ_REF=master
-          export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
-          make ct-health_check \
-            base_rmq_ref=master \
-            current_rmq_ref=$branch_or_tag_name \
-            FULL= \
-            FAIL_FAST=1 \
-            SKIP_AS_ERROR=1 \
-            CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
-      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
-        uses: actions/download-artifact@v2
-        with:
-          name: secondary-umbrellas.tar.xz
-      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
-        run: |
-          set -ex
-          tar Jxf secondary-umbrellas.tar.xz
-          rm secondary-umbrellas.tar.xz
-      - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
-        run: |
-          set -ex
-          branch_or_tag_name=${GITHUB_REF#refs/*/}
-          for umbrella in umbrellas/*; do
-            test -d "$umbrella"
-            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
-              $(basename "$umbrella")
-            make distclean-ct ct-health_check \
-              base_rmq_ref=master \
-              current_rmq_ref=$branch_or_tag_name \
-              FULL= \
-              FAIL_FAST=1 \
-              SKIP_AS_ERROR=1 \
-              SECONDARY_UMBRELLA=$PWD/$umbrella \
-              RABBITMQ_FEATURE_FLAGS= \
-              CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
           done
-      - name: ON FAILURE ARCHIVE TESTS LOGS
-        if: failure()
-        run: |
-          make ct-logs-archive
-      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-        # https://github.com/marketplace/actions/upload-artifact
-        uses: actions/upload-artifact@v2-preview
-        if: failure()
-        with:
-          name: ct-health_check-logs
-          path: "*-ct-logs-*.tar.xz"
-      - name: HONEYCOMB
-        if: success() || failure()
-        run: |
-          echo "$(ls honeycomb | wc -l) events recorded"
-          for f in honeycomb/*; do
-            RC=$(curl --silent \
-                -H 'X-Honeycomb-Team: ${{ secrets.HONEYCOMB_TEAM }}' \
-                -d @${f} \
-                -o /dev/null \
-                -w "%{http_code}" \
-                "https://api.honeycomb.io/1/events/rabbitmq-ci")
-            if [ "$RC" != "200" ]; then
-              echo "Honeycomb returned ${RC}"
-              cat ${f}
-              printf "\n\n"
-            fi
-          done  # vim:sw=2:et:
+  # vim:sw=2:et:
   ct-lazy_queue:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -1978,7 +1902,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -1992,7 +1916,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-lazy_queue \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2057,7 +1981,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-list_consumers_sanity_check:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2072,7 +1997,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2086,7 +2011,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-list_consumers_sanity_check \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2151,7 +2076,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-list_queues_online_and_offline:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2166,7 +2092,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2180,7 +2106,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-list_queues_online_and_offline \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2245,7 +2171,103 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
+  ct-maintenance_mode:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-maintenance_mode
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 21.3
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.8.0
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          export BASE_RMQ_REF=master
+          export ERLANG_VERSION=21.3
+          export ELIXIR_VERSION=1.8.0
+          make ct-maintenance_mode \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1 \
+            CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'oldest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'oldest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'oldest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-maintenance_mode \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS= \
+              CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-maintenance_mode-logs
+          path: "*-ct-logs-*.tar.xz"
+      - name: HONEYCOMB
+        if: success() || failure()
+        run: |
+          echo "$(ls honeycomb | wc -l) events recorded"
+          for f in honeycomb/*; do
+            RC=$(curl --silent \
+                -H 'X-Honeycomb-Team: ${{ secrets.HONEYCOMB_TEAM }}' \
+                -d @${f} \
+                -o /dev/null \
+                -w "%{http_code}" \
+                "https://api.honeycomb.io/1/events/rabbitmq-ci")
+            if [ "$RC" != "200" ]; then
+              echo "Honeycomb returned ${RC}"
+              cat ${f}
+              printf "\n\n"
+            fi
+          done
+  # vim:sw=2:et:
   ct-many_node_ha:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2260,7 +2282,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2274,7 +2296,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-many_node_ha \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2339,7 +2361,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-message_size_limit:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2354,7 +2377,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2368,7 +2391,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-message_size_limit \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2433,7 +2456,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-metrics:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2448,7 +2472,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2462,7 +2486,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-metrics \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2527,7 +2551,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-mirrored_supervisor:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2542,7 +2567,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2556,7 +2581,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-mirrored_supervisor \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2621,7 +2646,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-msg_store:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2636,7 +2662,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2650,7 +2676,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-msg_store \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2715,7 +2741,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-peer_discovery_classic_config:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2730,7 +2757,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2744,7 +2771,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-peer_discovery_classic_config \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2809,7 +2836,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-peer_discovery_dns:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2824,7 +2852,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2838,7 +2866,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-peer_discovery_dns \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2903,7 +2931,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-per_user_connection_tracking:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -2918,7 +2947,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -2932,7 +2961,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-per_user_connection_tracking \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -2997,7 +3026,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-per_vhost_connection_limit:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3012,7 +3042,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3026,7 +3056,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_connection_limit \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3091,7 +3121,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-per_vhost_connection_limit_partitions:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3106,7 +3137,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3120,7 +3151,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_connection_limit_partitions \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3185,7 +3216,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-per_vhost_msg_store:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3200,7 +3232,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3214,7 +3246,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_msg_store \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3279,7 +3311,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-per_vhost_queue_limit:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3294,7 +3327,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3308,7 +3341,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-per_vhost_queue_limit \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3373,7 +3406,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-policy:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3388,7 +3422,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3402,7 +3436,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-policy \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3467,7 +3501,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-priority_queue:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3482,7 +3517,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3496,7 +3531,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-priority_queue \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3561,7 +3596,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-priority_queue_recovery:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3576,7 +3612,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3590,7 +3626,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-priority_queue_recovery \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3655,7 +3691,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-product_info:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3670,7 +3707,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3684,7 +3721,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-product_info \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3749,7 +3786,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-proxy_protocol:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3764,7 +3802,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3778,7 +3816,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-proxy_protocol \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3843,7 +3881,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-publisher_confirms_parallel:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3858,7 +3897,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3872,7 +3911,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-publisher_confirms_parallel \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -3937,7 +3976,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-queue_length_limits:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -3952,7 +3992,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -3966,7 +4006,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-queue_length_limits \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4031,7 +4071,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-queue_master_location:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4046,7 +4087,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4060,7 +4101,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-queue_master_location \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4125,7 +4166,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-queue_parallel:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4140,7 +4182,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4154,7 +4196,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-queue_parallel \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4219,7 +4261,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-quorum_queue:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4234,7 +4277,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4248,7 +4291,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-quorum_queue \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4313,7 +4356,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbit_core_metrics_gc:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4328,7 +4372,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4342,7 +4386,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbit_core_metrics_gc \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4407,7 +4451,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbit_fifo:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4422,7 +4467,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4436,7 +4481,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbit_fifo \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4501,7 +4546,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbit_fifo_int:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4516,7 +4562,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4530,7 +4576,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbit_fifo_int \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4595,7 +4641,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbit_fifo_prop:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4610,7 +4657,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4624,7 +4671,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbit_fifo_prop \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4689,7 +4736,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbitmq_queues_cli_integration:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4704,7 +4752,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4718,7 +4766,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbitmq_queues_cli_integration \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4783,7 +4831,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbitmqctl_integration:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4798,7 +4847,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4812,7 +4861,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbitmqctl_integration \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4877,7 +4926,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-rabbitmqctl_shutdown:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4892,7 +4942,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -4906,7 +4956,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-rabbitmqctl_shutdown \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -4971,7 +5021,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-signal_handling:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -4986,7 +5037,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5000,7 +5051,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-signal_handling \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5065,7 +5116,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-simple_ha:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5080,7 +5132,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5094,7 +5146,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-simple_ha \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5159,7 +5211,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-single_active_consumer:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5174,7 +5227,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5188,7 +5241,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-single_active_consumer \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5253,7 +5306,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-sup_delayed_restart:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5268,7 +5322,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5282,7 +5336,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-sup_delayed_restart \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5347,7 +5401,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-sync_detection:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5362,7 +5417,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5376,7 +5431,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-sync_detection \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5441,7 +5496,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-term_to_binary_compat_prop:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5456,7 +5512,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5470,7 +5526,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-term_to_binary_compat_prop \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5535,7 +5591,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-topic_permission:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5550,7 +5607,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5564,7 +5621,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-topic_permission \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5629,7 +5686,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_access_control:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5644,7 +5702,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5658,7 +5716,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_access_control \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5723,7 +5781,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_access_control_authn_authz_context_propagation:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5738,7 +5797,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5752,7 +5811,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_access_control_authn_authz_context_propagation \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5817,7 +5876,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_access_control_credential_validation:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5832,7 +5892,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5846,7 +5906,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_access_control_credential_validation \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -5911,7 +5971,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_amqp091_content_framing:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -5926,7 +5987,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -5940,7 +6001,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_amqp091_content_framing \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6005,7 +6066,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_amqp091_server_properties:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6020,7 +6082,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6034,7 +6096,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_amqp091_server_properties \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6099,7 +6161,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_app_management:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6114,7 +6177,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6128,7 +6191,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_app_management \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6193,7 +6256,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_cluster_formation_locking_mocks:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6208,7 +6272,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6222,7 +6286,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_cluster_formation_locking_mocks \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6287,7 +6351,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_collections:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6302,7 +6367,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6316,7 +6381,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_collections \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6381,7 +6446,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_config_value_encryption:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6396,7 +6462,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6410,7 +6476,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_config_value_encryption \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6475,7 +6541,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_connection_tracking:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6490,7 +6557,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6504,7 +6571,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_connection_tracking \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6569,7 +6636,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_credit_flow:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6584,7 +6652,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6598,7 +6666,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_credit_flow \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6663,7 +6731,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_disk_monitor:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6678,7 +6747,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6692,7 +6761,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_disk_monitor \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6757,7 +6826,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_disk_monitor_mocks:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6772,7 +6842,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6786,7 +6856,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_disk_monitor_mocks \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6851,7 +6921,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_file_handle_cache:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6866,7 +6937,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6880,7 +6951,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_file_handle_cache \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -6945,7 +7016,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_gen_server2:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -6960,7 +7032,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -6974,7 +7046,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_gen_server2 \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7039,7 +7111,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_gm:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7054,7 +7127,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7068,7 +7141,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_gm \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7133,7 +7206,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_log_config:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7148,7 +7222,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7162,7 +7236,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_log_config \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7227,7 +7301,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_log_management:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7242,7 +7317,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7256,7 +7331,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_log_management \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7321,7 +7396,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_operator_policy:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7336,7 +7412,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7350,7 +7426,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_operator_policy \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7415,7 +7491,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_pg_local:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7430,7 +7507,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7444,7 +7521,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_pg_local \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7509,7 +7586,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_plugin_directories:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7524,7 +7602,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7538,7 +7616,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_plugin_directories \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7603,7 +7681,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_plugin_versioning:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7618,7 +7697,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7632,7 +7711,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_plugin_versioning \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7697,7 +7776,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_policy_validators:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7712,7 +7792,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7726,7 +7806,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_policy_validators \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7791,7 +7871,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_priority_queue:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7806,7 +7887,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7820,7 +7901,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_priority_queue \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7885,7 +7966,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_queue_consumers:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7900,7 +7982,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -7914,7 +7996,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_queue_consumers \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -7979,7 +8061,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_stats_and_metrics:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -7994,7 +8077,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -8008,7 +8091,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_stats_and_metrics \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -8073,7 +8156,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_supervisor2:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -8088,7 +8172,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -8102,7 +8186,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_supervisor2 \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -8167,7 +8251,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-unit_vm_memory_monitor:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -8182,7 +8267,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -8196,7 +8281,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-unit_vm_memory_monitor \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -8261,7 +8346,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-upgrade_preparation:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -8276,7 +8362,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -8290,7 +8376,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-upgrade_preparation \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -8355,7 +8441,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   ct-vhost:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -8370,7 +8457,7 @@ jobs:
         with:
           otp-version: 21.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.10.3
+          elixir-version: 1.8.0
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -8384,7 +8471,7 @@ jobs:
           ! test -d ebin || touch ebin/*
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=21.3
-          export ELIXIR_VERSION=1.10.3
+          export ELIXIR_VERSION=1.8.0
           make ct-vhost \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
@@ -8449,7 +8536,8 @@ jobs:
               cat ${f}
               printf "\n\n"
             fi
-          done  # vim:sw=2:et:
+          done
+  # vim:sw=2:et:
   capture-tested-deps-versions:
     needs:
       - dialyzer
@@ -8472,10 +8560,10 @@ jobs:
       - ct-dynamic_qq
       - ct-eager_sync
       - ct-feature_flags
-      - ct-health_check
       - ct-lazy_queue
       - ct-list_consumers_sanity_check
       - ct-list_queues_online_and_offline
+      - ct-maintenance_mode
       - ct-many_node_ha
       - ct-message_size_limit
       - ct-metrics

@@ -284,7 +284,7 @@ list_schemas_in_app(App) ->
     {Loaded, Unload} = case application:load(App) of
                            ok                           -> {true, true};
                            {error, {already_loaded, _}} -> {true, false};
-                           {error, _}                   -> {false, false}
+                           {error, Reason}              -> {Reason, false}
                        end,
     List = case Loaded of
                true ->
@@ -297,9 +297,10 @@ list_schemas_in_app(App) ->
                            SchemaDir = filename:join([PrivDir, "schema"]),
                            do_list_schemas_in_app(App, SchemaDir)
                    end;
-               false ->
+               Reason1 ->
                    rabbit_log_prelaunch:debug(
-                     "  [ ] ~s (failed to load application)", [App]),
+                     "  [ ] ~s (failed to load application: ~p)",
+                     [App, Reason1]),
                    []
            end,
     case Unload of
