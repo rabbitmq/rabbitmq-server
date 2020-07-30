@@ -321,13 +321,20 @@ prepare-dist::
 # disable `make distclean` so $(DEPS_DIR) is not accidentally removed.
 
 ifneq ($(wildcard ../../rabbitmq-components.mk),)
-DISABLE_DISTCLEAN = 1
-DEPS_DIR ?= $(abspath ..)
+supposed_deps_dir = $(abspath ..)
 else ifneq ($(wildcard ../../../../rabbitmq-components.mk),)
-DISABLE_DISTCLEAN = 1
-DEPS_DIR ?= $(abspath ../../..)
+supposed_deps_dir = $(abspath ../../..)
 else ifneq ($(wildcard UMBRELLA.md),)
 DISABLE_DISTCLEAN = 1
+endif
+
+# We also verify that the guessed DEPS_DIR is actually named `deps`, to rule
+# out any situation where it is a coincidence that we found a
+# `rabbitmq-components.mk` up upper directories.
+
+ifeq ($(notdir $(supposed_deps_dir)),deps)
+DISABLE_DISTCLEAN = 1
+DEPS_DIR ?= $(supposed_deps_dir)
 endif
 
 ifeq ($(DISABLE_DISTCLEAN),1)
