@@ -7,7 +7,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.InformationUnit, as: IU
-  import RabbitMQ.CLI.Core.{Alarms, ANSI, Listeners, Memory, Platform}
+  import RabbitMQ.CLI.Core.{Alarms, ANSI, DataCoercion, Listeners, Memory, Platform}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -126,6 +126,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
          end
 
     breakdown = compute_relative_values(m[:memory])
+    memory_calculation_strategy = to_atom(m[:vm_memory_calculation_strategy])
+    total_memory = get_in(m[:memory], [:total, memory_calculation_strategy])
 
     readable_watermark_setting = case m[:vm_memory_high_watermark_setting] do
       %{:relative => val} -> "#{val} of available memory"
@@ -134,8 +136,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     end
     memory_section = [
       "\n#{bright("Memory")}\n",
-      "Calculation strategy: #{m[:vm_memory_calculation_strategy]}",
-      "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{IU.convert(m[:vm_memory_high_watermark_limit], unit)} #{unit}"
+      "Total memory used: #{IU.convert(total_memory, unit)} #{unit}",
+      "Calculation strategy: #{memory_calculation_strategy}",
+      "Memory high watermark setting: #{readable_watermark_setting}, computed to: #{IU.convert(m[:vm_memory_high_watermark_limit], unit)} #{unit}\n"
     ] ++ Enum.map(breakdown, fn({category, val}) -> "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)" end)
 
     file_descriptors = [
