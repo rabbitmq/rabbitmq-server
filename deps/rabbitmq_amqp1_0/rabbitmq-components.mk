@@ -116,7 +116,7 @@ dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.11.0
 dep_lager = hex 3.8.0
 dep_prometheus = hex 4.6.0
-dep_ra = hex 1.1.5
+dep_ra = hex 1.1.6
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.1
 dep_observer_cli = hex 1.5.4
@@ -316,21 +316,28 @@ prepare-dist::
 # Umbrella-specific settings.
 # --------------------------------------------------------------------
 
-# If this project is under the Umbrella project, we override $(DEPS_DIR)
-# to point to the Umbrella's one. We also disable `make distclean` so
-# $(DEPS_DIR) is not accidentally removed.
+# If the top-level project is a RabbitMQ component, we override
+# $(DEPS_DIR) for this project to point to the top-level's one. We also
+# disable `make distclean` so $(DEPS_DIR) is not accidentally removed.
 
-ifneq ($(wildcard ../../UMBRELLA.md),)
-UNDER_UMBRELLA = 1
-DEPS_DIR ?= $(abspath ..)
-else ifneq ($(wildcard ../../../../UMBRELLA.md),)
-UNDER_UMBRELLA = 1
-DEPS_DIR ?= $(abspath ../../..)
+ifneq ($(wildcard ../../rabbitmq-components.mk),)
+supposed_deps_dir = $(abspath ..)
+else ifneq ($(wildcard ../../../../rabbitmq-components.mk),)
+supposed_deps_dir = $(abspath ../../..)
 else ifneq ($(wildcard UMBRELLA.md),)
-UNDER_UMBRELLA = 1
+DISABLE_DISTCLEAN = 1
 endif
 
-ifeq ($(UNDER_UMBRELLA),1)
+# We also verify that the guessed DEPS_DIR is actually named `deps`, to rule
+# out any situation where it is a coincidence that we found a
+# `rabbitmq-components.mk` up upper directories.
+
+ifeq ($(notdir $(supposed_deps_dir)),deps)
+DISABLE_DISTCLEAN = 1
+DEPS_DIR ?= $(supposed_deps_dir)
+endif
+
+ifeq ($(DISABLE_DISTCLEAN),1)
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
 endif
