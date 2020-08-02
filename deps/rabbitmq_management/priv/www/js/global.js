@@ -481,7 +481,7 @@ var HELP = {
 
     'io-operations':
     'Rate of I/O operations. Only operations performed by the message \
-      persister are shown here (e.g. metadata changes in Mnesia or writes \
+      persister are shown here (e.g. changes in the schema data store or writes \
       to the log files are not shown).\
       <dl>\
         <dt>Read</dt>\
@@ -492,25 +492,25 @@ var HELP = {
         <dd>Rate at which the broker switches position while reading or \
          writing to disk.</dd>\
         <dt>Sync</dt>\
-        <dd>Rate at which the broker invokes <code>fsync()</code> to ensure \
+        <dd>Rate at which the node invokes <code>fsync()</code> to ensure \
          data is flushed to disk.</dd>\
         <dt>Reopen</dt>\
-        <dd>Rate at which the broker recycles file handles in order to support \
+        <dd>Rate at which the node recycles file handles in order to support \
          more queues than it has file handles. If this operation is occurring \
          frequently you may get a performance boost from increasing the number \
          of file handles available.</dd>\
       </dl>',
 
     'mnesia-transactions':
-    'Rate at which Mnesia transactions are initiated on this node (this node \
-     will also take part in Mnesia transactions initiated on other nodes).\
+    'Rate at which schema data store transactions are initiated on this node (this node \
+     will also take part in the transactions initiated on other nodes).\
       <dl>\
         <dt>RAM only</dt>\
-        <dd>Rate at which RAM-only transactions take place (e.g. creation / \
+        <dd>Rate at which RAM-only schema data store transactions take place (e.g. creation or \
             deletion of transient queues).</dd>\
         <dt>Disk</dt>\
-        <dd>Rate at which disk (and RAM) transactions take place (e.g. \
-            creation / deletion of durable queues).</dd>\
+        <dd>Rate at which all schema data store transactions take place (e.g. \
+            creation or deletion of durable queues).</dd>\
       </dl>',
 
     'persister-operations-msg':

@@ -149,7 +149,7 @@
   <%= rates_chart_or_text('mnesia-stats-count', node,
       [['RAM only', 'mnesia_ram_tx_count'],
        ['Disk', 'mnesia_disk_tx_count']],
-      fmt_rate, fmt_rate_axis, true, 'Mnesia transactions', 'mnesia-transactions') %>
+      fmt_rate, fmt_rate_axis, true, 'Schema data store transactions', 'mnesia-transactions') %>
 
   <%= rates_chart_or_text('persister-msg-stats-count', node,
       [['QI Journal', 'queue_index_journal_write_count'],
