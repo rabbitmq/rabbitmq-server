@@ -509,7 +509,7 @@ var HELP = {
         <dd>Rate at which RAM-only transactions take place (e.g. creation / \
             deletion of transient queues).</dd>\
         <dt>Disk</dt>\
-        <dd>Rate at which disk (and RAM) transactions take place (.e.g \
+        <dd>Rate at which disk (and RAM) transactions take place (e.g. \
             creation / deletion of durable queues).</dd>\
       </dl>',
 
