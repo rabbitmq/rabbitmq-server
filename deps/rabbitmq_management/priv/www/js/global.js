@@ -198,6 +198,12 @@ var HELP = {
     'queue-max-in-memory-bytes':
       'Total body size for ready messages a quorum queue can contain in memory before it starts storing them on disk only.<br/>(Sets the x-max-in-memory-bytes argument.)',
 
+    'queue-max-age':
+      'How long a message published to a stream queue can live before it is discarded.',
+
+    'queue-max-segment-size':
+      'Total segment size for stream segments on disk.',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
