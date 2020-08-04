@@ -386,7 +386,6 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
 mapped(cast, #'v1_0.disposition'{role = true, settled = true, first = {uint, First},
                            last = Last0, state = DeliveryState},
        #state{unsettled = Unsettled0} = State) ->
-    ct:pal("DISPOSITION in SESS ~p", [Unsettled0]),
     Last = case Last0 of
                undefined -> First;
                {uint, L} -> L
@@ -869,7 +868,6 @@ notify_session_ended(#state{notify = Pid}, Reason) ->
     ok.
 
 notify_disposition({Pid, _}, SessionDeliveryTag) ->
-    ct:pal("notify_disposition to ~w", [ Pid]),
     Pid ! {amqp10_disposition, SessionDeliveryTag},
     ok.
 
