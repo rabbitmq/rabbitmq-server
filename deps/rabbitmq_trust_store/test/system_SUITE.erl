@@ -14,6 +14,11 @@
 
 -define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
 -define(SERVER_REJECT_CLIENT_NEW, {tls_alert, {unknown_ca, _}}).
+-define(SERVER_REJECT_CLIENT_ERLANG24,
+        {tls_alert,
+         {handshake_failure,
+          "TLS client: In state cipher received SERVER ALERT: Fatal - "
+          "Handshake Failure\n"}}).
 
 all() ->
     [
@@ -189,7 +194,7 @@ validation_success_for_AMQP_client1(Config) ->
     %% Note that when this test is executed together with the HTTP provider group
     %% it runs into unexpected interference and fails, even if TLS app PEM cache is force
     %% cleared. That's why originally each group was made to use a separate node.
-    AuthorityInfo = {Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
+    AuthorityInfo = {Root, _AuthorityKey} = erl_make_certs:make_cert([]),
     {Certificate, Key} = chain(AuthorityInfo),
     {Certificate2, Key2} = chain(AuthorityInfo),
     Port = port(Config),
@@ -247,6 +252,7 @@ validation_failure_for_AMQP_client1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% With Erlang 18.3, there is a regression which causes the SSL
         %% connection to crash with the following exception:
@@ -307,12 +313,12 @@ validate_longer_chain1(Config) ->
     %% AND a certificate `CertUntrusted` that is not whitelisted with the same root as `CertTrusted`
     %% AND `CertInter` intermediate CA
     %% AND `RootTrusted` CA
-    AuthorityInfo = {RootCA, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
-    Inter = {CertInter, {KindInter, KeyDataInter, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, AuthorityInfo}]),
+    AuthorityInfo = {RootCA, _AuthorityKey} = erl_make_certs:make_cert([]),
+    Inter = {CertInter, {KindInter, KeyDataInter, _}} = erl_make_certs:make_cert([{issuer, AuthorityInfo}]),
     KeyInter = {KindInter, KeyDataInter},
-    {CertUntrusted, {KindUntrusted, KeyDataUntrusted, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, Inter}]),
+    {CertUntrusted, {KindUntrusted, KeyDataUntrusted, _}} = erl_make_certs:make_cert([{issuer, Inter}]),
     KeyUntrusted = {KindUntrusted, KeyDataUntrusted},
-    {CertTrusted, {Kind, KeyData, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, Inter}]),
+    {CertTrusted, {Kind, KeyData, _}} = erl_make_certs:make_cert([{issuer, Inter}]),
     KeyTrusted = {Kind, KeyData},
 
     Port = port(Config),
@@ -366,6 +372,7 @@ validate_longer_chain1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -385,6 +392,7 @@ validate_longer_chain1(Config) ->
         %% Expected error from amqp_client.
         {error, {tls_alert, "bad certificate"}} -> ok;
         {error, {tls_alert, {bad_certificate, _}}} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -428,6 +436,7 @@ validate_chain_without_whitelisted1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -507,6 +516,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -605,6 +615,7 @@ whitelist_directory_DELTA1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -663,6 +674,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -690,6 +702,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
         %% Expected error from amqp_client.
         {error, ?SERVER_REJECT_CLIENT} -> ok;
         {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
+        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
@@ -882,7 +895,7 @@ cfg() ->
 
 chain(Issuer) ->
     %% Theses are DER encoded.
-    {Certificate, {Kind, Key, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, Issuer}]),
+    {Certificate, {Kind, Key, _}} = erl_make_certs:make_cert([{issuer, Issuer}]),
     {Certificate, {Kind, Key}}.
 
 change_configuration(App, Props) ->
