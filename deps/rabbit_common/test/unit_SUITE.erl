@@ -37,7 +37,8 @@ groups() ->
             platform_and_version,
             frame_encoding_does_not_fail_with_empty_binary_payload,
             amqp_table_conversion,
-            name_type
+            name_type,
+            get_erl_path
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -432,4 +433,14 @@ name_type(_) ->
     ?assertEqual(shortnames, rabbit_nodes_common:name_type(rabbit)),
     ?assertEqual(shortnames, rabbit_nodes_common:name_type(rabbit@localhost)),
     ?assertEqual(longnames, rabbit_nodes_common:name_type('rabbit@localhost.example.com')),
+    ok.
+
+get_erl_path(_) ->
+    Exe = rabbit_runtime:get_erl_path(),
+    case os:type() of
+        {win32, _} ->
+            ?assertNotMatch(nomatch, string:find(Exe, "erl.exe"));
+        _ ->
+            ?assertNotMatch(nomatch, string:find(Exe, "erl"))
+    end,
     ok.
