@@ -141,6 +141,7 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, Sta
                     frame(Transport, Connection1, TuneFrame),
                     listen_loop_pre_auth(Transport, Connection1#stream_connection{connection_step = tuning}, State1, Configuration);
                 opened ->
+                    pg_local:join(rabbit_stream_connections, self()),
                     listen_loop_post_auth(Transport, Connection1, State1, Configuration);
                 failure ->
                     close(Transport, S);
@@ -163,7 +164,7 @@ close(Transport, S) ->
 
 listen_loop_post_auth(Transport, #stream_connection{socket = S,
     stream_subscriptions = StreamSubscriptions, credits = Credits,
-    heartbeater = Heartbeater, monitors = Monitors} = Connection,
+    heartbeater = Heartbeater, monitors = Monitors, client_properties = ClientProperties} = Connection,
     #stream_connection_state{consumers = Consumers, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
@@ -288,6 +289,9 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             rabbit_log:info("Heartbeat timeout, closing connection~n"),
             C1 = demonitor_all_streams(Connection),
             close(Transport, C1);
+        {infos, From} ->
+            From ! {self(), ClientProperties},
+            listen_loop_post_auth(Transport, Connection, State, Configuration);
         {Closed, S} ->
             demonitor_all_streams(Connection),
             rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
