@@ -16,7 +16,7 @@
 
 -export([guess_number_of_cpu_cores/0, msacc_stats/1]).
 -export([get_gc_info/1, gc_all_processes/0]).
-
+-export([get_erl_path/0]).
 
 -spec guess_number_of_cpu_cores() -> pos_integer().
 guess_number_of_cpu_cores() ->
@@ -52,3 +52,15 @@ msacc_stats(TimeInMs) ->
     S = msacc:stats(),
     msacc:stop(),
     S.
+
+% get the full path to the erl executable used to start this VM
+-spec get_erl_path() -> file:filename_all().
+get_erl_path() ->
+    {ok, [[Root]]} = init:get_argument(root),
+    Bin = filename:join(Root, "bin"),
+    case os:type() of
+        {win32, _} ->
+            filename:join(Bin, "erl.exe");
+        _ ->
+            filename:join(Bin, "erl")
+    end.
