@@ -140,6 +140,7 @@ handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
                                       Acc
                               end
                                                     end, undefined, [LeaderPid] ++ ReplicaPids),
+                          %% FIXME: if no local member, maybe return not_available response code
                           case LocalMember of
                               undefined ->
                                   {error, not_found};

@@ -17,7 +17,7 @@
 -module(rabbit_stream).
 -behaviour(application).
 
--export([start/2, host/0, port/0]).
+-export([start/2, host/0, port/0, kill_connection/1]).
 -export([stop/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -53,3 +53,17 @@ port_from_listener() ->
 
 stop(_State) ->
     ok.
+
+kill_connection(ConnectionName) ->
+    ConnectionNameBin = rabbit_data_coercion:to_binary(ConnectionName),
+    lists:foreach(fun(ConnectionPid) ->
+        ConnectionPid ! {infos, self()},
+        receive
+            {ConnectionPid, #{<<"name">> := ConnectionNameBin}} ->
+                exit(ConnectionPid, kill);
+            {ConnectionPid, _ClientProperties} ->
+                ok
+        after 1000 ->
+            ok
+        end
+                  end, pg_local:get_members(rabbit_stream_connections)).
