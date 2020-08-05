@@ -37,7 +37,7 @@ defmodule RabbitMQCtl do
 
     # this invocation is considered to be invalid. curl and grep do the
     # same thing.
-    {:error, ExitCodes.exit_usage(), HelpCommand.all_usage(parsed_options)};
+    {:error, ExitCodes.exit_usage(), Enum.join(HelpCommand.all_usage(parsed_options), "")};
   end
   def exec_command(["--help"] = unparsed_command, _) do
     {_args, parsed_options, _} = Parser.parse_global(unparsed_command)
