@@ -17,6 +17,7 @@
 package com.rabbitmq.stream;
 
 import com.rabbitmq.stream.codec.WrapperMessageBuilder;
+import com.rabbitmq.stream.impl.Client;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -78,7 +79,8 @@ public class FailureTest {
                 .publishConfirmListener(publishingId -> confirmLatch.get().countDown()));
         String message = "all nodes available";
         messages.add(message);
-        publisher.publish(stream, message.getBytes(StandardCharsets.UTF_8));
+        publisher.publish(stream,
+                Collections.singletonList(publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
         assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
         confirmLatch.set(null);
 
@@ -102,7 +104,8 @@ public class FailureTest {
             confirmLatch.set(new CountDownLatch(1));
             message = "2 nodes available";
             messages.add(message);
-            publisher.publish(stream, message.getBytes(StandardCharsets.UTF_8));
+            publisher.publish(stream, Collections.singletonList(publisher.messageBuilder()
+                    .addData(message.getBytes(StandardCharsets.UTF_8)).build()));
             assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
             confirmLatch.set(null);
         } finally {
@@ -118,7 +121,8 @@ public class FailureTest {
         confirmLatch.set(new CountDownLatch(1));
         message = "all nodes are back";
         messages.add(message);
-        publisher.publish(stream, message.getBytes(StandardCharsets.UTF_8));
+        publisher.publish(stream, Collections.singletonList(publisher.messageBuilder()
+                .addData(message.getBytes(StandardCharsets.UTF_8)).build()));
         assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
         confirmLatch.set(null);
 
@@ -222,7 +226,7 @@ public class FailureTest {
                             .messageBuilder().applicationProperties().entry("generation", generation.get())
                             .messageBuilder().build();
                     try {
-                        long publishingId = publisher.get().publish(stream, message);
+                        long publishingId = publisher.get().publish(stream, Collections.singletonList(message)).get(0);
                         published.put(publishingId, message);
                     } catch (Exception e) {
                         // keep going
@@ -345,7 +349,7 @@ public class FailureTest {
                         .messageBuilder().applicationProperties().entry("generation", generation.get())
                         .messageBuilder().build();
                 try {
-                    long publishingId = publisher.publish(stream, message);
+                    long publishingId = publisher.publish(stream, Collections.singletonList(message)).get(0);
                     published.put(publishingId, message);
                 } catch (Exception e) {
                     // keep going
