@@ -18,8 +18,8 @@ These examples have been created for a `DIY RabbitMQ on Kubernetes` blog post so
 
 The example uses, targets or assumes:
 
- * A [GKE cluster]()
- * Kubernetes 1.16
+ * A [GKE cluster](https://cloud.google.com/kubernetes-engine). At the time of writing, we used version v1.16.13-gke.1.
+ * The Kubectl Cli. At the time of writing, we were on version v1.18.0.
  * RabbitMQ [Docker image](https://hub.docker.com/_/rabbitmq/) (maintained [by Docker, Inc](https://hub.docker.com/_/rabbitmq/))
 
 ## Namespace and RBAC
