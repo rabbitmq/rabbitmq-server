@@ -16,6 +16,7 @@
 
 package com.rabbitmq.stream;
 
+import com.rabbitmq.stream.impl.Client;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,10 +24,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -73,7 +71,8 @@ public class StreamTest {
                 .port(publisherBroker.apply(streamMetadata).getPort())
                 .publishConfirmListener(publishingId -> publishingLatch.countDown()));
 
-        IntStream.range(0, messageCount).forEach(i -> publisher.publish(stream, ("hello " + i).getBytes(StandardCharsets.UTF_8)));
+        IntStream.range(0, messageCount).forEach(i -> publisher.publish(stream, Collections.singletonList(
+                publisher.messageBuilder().addData(("hello " + i).getBytes(StandardCharsets.UTF_8)).build())));
 
         assertThat(publishingLatch.await(10, TimeUnit.SECONDS)).isTrue();
 

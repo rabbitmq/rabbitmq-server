@@ -16,6 +16,7 @@
 
 package com.rabbitmq.stream;
 
+import com.rabbitmq.stream.impl.Client;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import org.junit.jupiter.api.extension.*;
