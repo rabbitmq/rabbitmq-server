@@ -141,8 +141,3 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 60
           timeoutSeconds: 10
-
-
-
-
-
