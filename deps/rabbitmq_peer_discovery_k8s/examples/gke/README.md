@@ -298,7 +298,7 @@ even when pods are restarted one by one, in order.
 This is covered in a dedicated section of the RabbitMQ clustering guide: [Restarts and Health Checks (Readiness Probes)](https://www.rabbitmq.com/clustering.html#restarting-readiness-probes).
 
 The [readiness probe section](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/gke/statefulset.yaml#L132-L143)
-in the Stateful Set definition file demonstrates how to configure the probe.
+in the Stateful Set definition file demonstrates how to configure a readiness probe.
 
 
 ## Liveness Probe
@@ -338,6 +338,9 @@ rabbitmq-diagnostics -q check_local_alarms
 ```
 
 Note, however, that they will fail for the nodes [paused by the "pause minority" partition handliner strategy](https://www.rabbitmq.com/partitions.html).
+
+The [liveness probe section](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/gke/statefulset.yaml#L119-L131)
+in the Stateful Set definition file demonstrates how to configure a liveness probe.
 
 
 ## Plugins
