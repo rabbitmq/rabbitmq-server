@@ -5,10 +5,12 @@ CLI_SCRIPTS_DIR = sbin
 CLI_ESCRIPTS_DIR = escript
 MIX = echo y | mix
 
+# Set $(DIST_AS_EZS) to a non-empty value to enable the packaging of
+# plugins as .ez archives.
 ifeq ($(USE_RABBIT_BOOT_SCRIPT),)
-DIST_AS_EZS ?= true
-else
 DIST_AS_EZS ?=
+else
+DIST_AS_EZS =
 endif
 
 dist_verbose_0 = @echo " DIST  " $@;
