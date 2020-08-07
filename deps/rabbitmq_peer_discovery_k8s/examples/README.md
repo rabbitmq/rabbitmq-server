@@ -1,10 +1,11 @@
 # Deploy RabbitMQ on Kubernetes with the Kubernetes Peer Discovery Plugin
 
 This directory contains **examples** that demonstrates a minimalistic RabbitMQ deployment on Kubernetes
-with peer discovery via `rabbitmq-peer-discovery-k8s` plugin. There are two examples:
+with peer discovery via `rabbitmq-peer-discovery-k8s` plugin. There are several examples:
 
  * [One that targets Minikube](./minikube)
- * [Another that targets Kind](./kind)
+ * [Another one that targets Kind](./kind)
+ * [Another one that targets the Google Kubernetes Engine (GKE)](./gke)
 
 For a more comprehensive open source RabbitMQ on Kubernetes deployment solution,
 see [RabbitMQ Cluster Operator for Kubernetes](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html).
