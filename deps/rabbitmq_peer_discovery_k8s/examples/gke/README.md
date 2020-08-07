@@ -4,17 +4,26 @@ This is an **example** that demonstrates a RabbitMQ deployment on the Google Kub
 via `rabbitmq-peer-discovery-k8s` plugin. This example is meant to be more detailed compared to its Minikube and Kind
 counterparts. We cover several key aspects of a manual RabbitMQ deployment on Kubernetes, such as
 
- * Namespacing
- * Access control (RBAC)
- * Using a stateful set for RabbitMQ nodes
- * A headless service for inter-node communication
- * Ensuring durable storage is used by node data directories
+ * A [Kubernetes namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/)
+ * A [stateful set](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) for RabbitMQ cluter nodes
+ * Ensuring durable storage is used by [node data directories](https://www.rabbitmq.com/relocate.html)
+ * A Kubernetes Secret for [initial RabbitMQ user credentials](https://www.rabbitmq.com/access-control.html#default-state)
+ * A Kubernetes Secret for [inter-node and CLI tool authentication](https://www.rabbitmq.com/clustering.html#erlang-cookie)
+ * A [headless service](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services) for inter-node communication
  * Permissions for RabbitMQ node data directory and configuration file(s)
- * How to configure a node
- * Secret management for initial RabbitMQ user credentials
- * A load balancer service for external client connections
- * How to deploy a PerfTest instance to do basic functional and load testing of the cluster
+ * Node [configuration files](https://www.rabbitmq.com/configure.html#configuration-files)
+ * [Pre-enabled plugin file](https://www.rabbitmq.com/plugins.html#enabled-plugins-file)
+ * [Peer discovery](https://www.rabbitmq.com/cluster-formation.html) settings
+ * Kubernetes [access control (RBAC)](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) rules
+ * [Liveness and readiness](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes) probes
+ * A [load balancer service](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer) for external client connections
+
+In this example, we will try to cover the key parts as well as mention a couple
+more steps that are not technically required to run RabbitMQ on Kubernetes, but every
+production system operator will have to worry about sooner rather than later:
+
  * How to set up cluster monitoring with Prometheus and Grafana
+ * How to deploy a PerfTest instance to do basic functional and load testing of the cluster
 
 ## Production (Non-)Suitability
 
