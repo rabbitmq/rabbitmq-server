@@ -35,33 +35,51 @@ The example uses, targets or assumes:
  * The `kubectl` CLI tool. Version `v1.18.0` was used at the time of writing.
  * RabbitMQ [community Docker image](https://hub.docker.com/_/rabbitmq/)
 
-## Namespace and RBAC
+## Kubernetes Namespace and Permissions (RBAC)
 
-We recommend using a dedicated [Kubernetes Namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/) to keep the RabbitMQ cluster separate from other services that may be deployed in the Kubernetes cluster. Having a dedicated namespace, also allows the specification of fine-grained [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) rules. 
+Every set of Kubernetes objects belongs to a [Kubernetes Namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/).
+RabbitMQ cluster resources are no exception.
 
-RabbitMQ requires the `rabbitmq-peer-discovery-k8s` plugin for clustering. This plugin uses the Kubernetes API as a data source to discover and cluster RabbitMQ nodes. The plugin requires the following access to Kubernetes resources:
-* `get` access to the `endpoints` resource
-* `create` access to the `events` resource
+We recommend using a dedicated Namespace to keep the RabbitMQ cluster separate from other services that may be deployed
+in the Kubernetes cluster.
+Having a dedicated namespace makes logical sense but also allows the specification of
+fine-grained [role-based access rules](https://kubernetes.io/docs/reference/access-authn-authz/rbac/).
 
-Specify a [Role, Role Binding and a Service Account](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) to configure this access.
+RabbitMQ's Kubernetes peer discovery plugin relies on the Kubernetes API as a data source. On first boot, every nodes
+will try to discover their peer pods using the API and attempt to join them. When a node comes online, it also
+emits a [Kubernetes event](https://kubernetes.io/docs/tasks/debug-application-cluster/debug-application-introspection/).
 
-An example namespace, along with RBAC rules can be seen in the rabbitmq-peer-discovery-k8s [plugin examples](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/minikube/rbac.yaml).
+The plugin requires the following access to Kubernetes resources:
 
-If following from the example, use the following command to create a namespace and the required RBAC rules. Note that this creates a namespace called `test-rabbitmq`.
+ * `get` access to the `endpoints` resource
+ * `create` access to the `events` resource
+
+Specify a [Role, Role Binding and a Service Account](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+to configure this access.
+
+An example namespace, along with RBAC rules can be seen in the [rbac.yaml exanple file](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/minikube/rbac.yaml).
+
+If following from the example, use the following command to create a namespace and the required RBAC rules.
+Note that this creates a namespace called `test-rabbitmq`.
 
 ```shell
 kubectl apply -f namespace.yaml
 kubectl apply -f rbac.yaml
 ```
 
-This example will use the `test-rabbitmq` namespace. Set this as the namespace using
+The `kubectl`  examples below will use the `test-rabbitmq` namespace. This namespace can be set to be the default
+one for convenience:
 
 ```shell
-# set namespace
+# set the namespace to be the current (default) one
 kubectl config set-context --current --namespace=test-rabbitmq
 # verify
 kubectl config view --minify | grep namespace:
 ```
+
+Alternatively, `--namespace="test-rabbitmq"` can be appended to all `kubectl` commands
+demonstrated below.
+
 
 ## Use a Stateful Set
 
