@@ -55,10 +55,8 @@ spec:
             # and intrusive health checks.
             # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
             #
-            # Stage 2 check:
-            command: ["rabbitmq-diagnostics", "status"]
-            # To use a stage 4 check:
-            # command: ["rabbitmq-diagnostics", "check_port_connectivity"]
+            # Stage 1 check:
+            command: ["rabbitmq-diagnostics", "ping"]
           initialDelaySeconds: 20
           periodSeconds: 60
           timeoutSeconds: 10

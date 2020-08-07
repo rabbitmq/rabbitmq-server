@@ -131,13 +131,13 @@ spec:
           timeoutSeconds: 15
         readinessProbe: # probe to know when RMQ is ready to accept traffic
           exec:
-              # This is just an example. There is no "one true health check" but rather
-              # several rabbitmq-diagnostics commands that can be combined to form increasingly comprehensive
-              # and intrusive health checks.
-              # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
-              #
-              # Stage 4 check:
-              command: ["rabbitmq-diagnostics", "check_port_connectivity"]
+            # This is just an example. There is no "one true health check" but rather
+            # several rabbitmq-diagnostics commands that can be combined to form increasingly comprehensive
+            # and intrusive health checks.
+            # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
+            #
+            # Stage 1 check:
+            command: ["rabbitmq-diagnostics", "ping"]
           initialDelaySeconds: 20
           periodSeconds: 60
           timeoutSeconds: 10
