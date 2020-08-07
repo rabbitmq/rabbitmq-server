@@ -1,0 +1,22 @@
+kind: Service
+apiVersion: v1
+metadata:
+  namespace: test-rabbitmq
+  name: rabbitmq-client
+  labels:
+    app: rabbitmq
+    type: LoadBalancer
+spec:
+  type: LoadBalancer
+  ports:
+   - name: http
+     protocol: TCP
+     port: 15672
+   - name: prometheus
+     protocol: TCP
+     port: 15692
+   - name: amqp
+     protocol: TCP
+     port: 5672
+  selector:
+    app: rabbitmq
