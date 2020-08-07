@@ -98,16 +98,22 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
     end;
 handle_call({delete, VirtualHost, Reference, Username}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
+    rabbit_log:debug("Trying to delete stream ~p~n", [Reference]),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
+            rabbit_log:debug("Found queue record ~p, checking if it is a stream~n", [Reference]),
             case is_stream_queue(Q) of
                 true ->
+                    rabbit_log:debug("Queue record ~p is a stream, trying to delete it~n", [Reference]),
                     {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
+                    rabbit_log:debug("Stream ~p deleted~n", [Reference]),
                     {reply, {ok, deleted}, State};
                 _ ->
+                    rabbit_log:debug("Queue record ~p is NOT a stream, returning error~n", [Reference]),
                     {reply, {error, reference_not_found}, State}
             end;
         {error, not_found} ->
+            rabbit_log:debug("Stream ~p not found, cannot delete it~n", [Reference]),
             {reply, {error, reference_not_found}, State}
     end;
 handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
