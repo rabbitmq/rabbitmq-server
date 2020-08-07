@@ -132,68 +132,9 @@ for all persistent data of a node.
 
 A description of [default file paths for RabbitMQ](https://www.rabbitmq.com/relocate.html) can be found in the RabbitMQ documentation.
 
-You may also modify the `RABBITMQ_MNESIA_BASE` variable and mount the Persistent Volume at the changed path.
+Node's data directory base can be changed using the `RABBITMQ_MNESIA_BASE` variable if needed. Make sure
+to mount a Persistent Volume at the updated path.
 
-## Node Configuration
-
-There are [several ways](https://www.rabbitmq.com/configure.html) to configure a RabbitMQ node. The recommended way is to use configuration files.
-
-Configuration files can be expressed as [Config Maps](https://kubernetes.io/docs/concepts/configuration/configmap/),
-and mounted as a Volume onto the RabbitMQ pods.
-
-To create a Config Map with RabbitMQ configuration, apply our [minimal configmap.yaml example](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/configmap.yaml):
-
-```shell
-kubectl apply -f configmap.yaml
-```
-
-### Use an Init Container
-
-Since Kubernetes 1.9.4, Config Maps are mounted as read-only volumes onto Pods. This is problematic for the RabbitMQ community Docker image:
-the image can try to update the config file on container start up.
-
-Thus, the path at which the RabbitMQ config is mounted must be read-write. If a read-only file is detected by the Docker image,
-you'll see the following warning:
-
-```
-touch: cannot touch '/etc/rabbitmq/rabbitmq.conf': Permission denied
-
-WARNING: '/etc/rabbitmq/rabbitmq.conf' is not writable, but environment variables have been provided which request that we write to it
-  We have copied it to '/tmp/rabbitmq.conf' so it can be amended to work around the problem, but it is recommended that the read-only
-  source file should be modified and the environment variables removed instead.
-```
-
-While the Docker image does work around the issue, it is not ideal to store the configuration file in `/tmp` and we recommend instead
-making the mount path read-write.
-
-As a few other projects in the Kubernetes community, we use an [init container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) to overcome this.
-
-Examples:
-
-* [The Config Map](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/minikube/configmap.yaml)
-* [Using an Init Container to mount the Config Map](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yml#L30-L64)
-
-### Run The Pod As the `rabbitmq` User
-
-The Docker image [runs as the `rabbitmq` user with uid 999]([https://github.com/docker-library/rabbitmq/blob/38bc089c287d05d22b03a4d619f7ad9d9a4501bc/3.8/ubuntu/Dockerfile#L186-L187](https://github.com/docker-library/rabbitmq/blob/38bc089c287d05d22b03a4d619f7ad9d9a4501bc/3.8/ubuntu/Dockerfile#L186-L187)) and writes to the `rabbitmq.conf` file.
-Thus, the file permissions on `rabbitmq.conf` must allow this. A [Pod Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) can be
-added to the Stateful Set definition to achieve this.
-Set the [`runAsUser`, `runAsGroup` and the `fsGroup`](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L66-L75) to 999 in the Security Context.
-
-See [Security Context](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/gke-examples/examples/gke/statefulset.yaml#L72-L75)
-in the Stateful Set definition file.
-
-### Importing Definitions
-
-RabbitMQ nodes can [importi definitions](https://www.rabbitmq.com/definitions.html) exported from another RabbitMQ cluster.
-This may also be done at [node boot time](https://www.rabbitmq.com/definitions.html#import-on-boot).
-
-Following from the RabbitMQ documentation, this can be done using the following steps:
-
-1. Export definitions from the RabbitMQ cluster you wish to replicate and save the file
-1. Create a Config Map with the key being the file name, and the value being the contents of the file (See the `rabbitmq.conf` Config Map [example]())
-1. Mount the Config Map as a Volume on the RabbitMQ Pod in the Stateful Set definition
-1. Update the `rabbitmq.conf` Config Map with `load_definitions = /path/to/definitions/file`
 
 ## Node Authentication Secret: the Erlang Cookie
 
@@ -263,21 +204,160 @@ Users can be create explicitly using CLI tools as well.
 See [RabbitMQ doc section on user management](https://www.rabbitmq.com/access-control.html#seeding) to learn more.
 
 
+
+## Node Configuration
+
+There are [several ways](https://www.rabbitmq.com/configure.html) to configure a RabbitMQ node. The recommended way is to use configuration files.
+
+Configuration files can be expressed as [Config Maps](https://kubernetes.io/docs/concepts/configuration/configmap/),
+and mounted as a Volume onto the RabbitMQ pods.
+
+To create a Config Map with RabbitMQ configuration, apply our [minimal configmap.yaml example](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/configmap.yaml):
+
+```shell
+kubectl apply -f configmap.yaml
+```
+
+### Use an Init Container
+
+Since Kubernetes 1.9.4, Config Maps are mounted as read-only volumes onto Pods. This is problematic for the RabbitMQ community Docker image:
+the image can try to update the config file on container start up.
+
+Thus, the path at which the RabbitMQ config is mounted must be read-write. If a read-only file is detected by the Docker image,
+you'll see the following warning:
+
+```
+touch: cannot touch '/etc/rabbitmq/rabbitmq.conf': Permission denied
+
+WARNING: '/etc/rabbitmq/rabbitmq.conf' is not writable, but environment variables have been provided which request that we write to it
+  We have copied it to '/tmp/rabbitmq.conf' so it can be amended to work around the problem, but it is recommended that the read-only
+  source file should be modified and the environment variables removed instead.
+```
+
+While the Docker image does work around the issue, it is not ideal to store the configuration file in `/tmp` and we recommend instead
+making the mount path read-write.
+
+As a few other projects in the Kubernetes community, we use an [init container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) to overcome this.
+
+Examples:
+
+* [The Config Map](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/minikube/configmap.yaml)
+* [Using an Init Container to mount the Config Map](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yml#L30-L64)
+
+### Run The Pod As the `rabbitmq` User
+
+The Docker image [runs as the `rabbitmq` user with uid 999]([https://github.com/docker-library/rabbitmq/blob/38bc089c287d05d22b03a4d619f7ad9d9a4501bc/3.8/ubuntu/Dockerfile#L186-L187](https://github.com/docker-library/rabbitmq/blob/38bc089c287d05d22b03a4d619f7ad9d9a4501bc/3.8/ubuntu/Dockerfile#L186-L187)) and writes to the `rabbitmq.conf` file.
+Thus, the file permissions on `rabbitmq.conf` must allow this. A [Pod Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) can be
+added to the Stateful Set definition to achieve this.
+Set the [`runAsUser`, `runAsGroup` and the `fsGroup`](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L66-L75) to 999 in the Security Context.
+
+See [Security Context](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/gke-examples/examples/gke/statefulset.yaml#L72-L75)
+in the Stateful Set definition file.
+
+### Importing Definitions
+
+RabbitMQ nodes can [importi definitions](https://www.rabbitmq.com/definitions.html) exported from another RabbitMQ cluster.
+This may also be done at [node boot time](https://www.rabbitmq.com/definitions.html#import-on-boot).
+
+Following from the RabbitMQ documentation, this can be done using the following steps:
+
+1. Export definitions from the RabbitMQ cluster you wish to replicate and save the file
+1. Create a Config Map with the key being the file name, and the value being the contents of the file (See the `rabbitmq.conf` Config Map [example]())
+1. Mount the Config Map as a Volume on the RabbitMQ Pod in the Stateful Set definition
+1. Update the `rabbitmq.conf` Config Map with `load_definitions = /path/to/definitions/file`
+
+
+## Readiness Probe
+
+Kubernetes uses a check known as the [readiness probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) to determine if a pod is ready to serve client traffic.
+This is effectively a specialized [health check](https://www.rabbitmq.com/monitoring.html#health-checks) defined
+by the system operator.
+
+When an [ordered pod deployment policy](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#pod-management-policies) is used — and this is the commended option for RabbitMQ clusters —
+the probe controls when the Kubernetes controller will consider the currently deployed pod to be ready
+and proceed to deploy the next one. This check, if not chosen appropriately, can deadlock a rolling
+cluster node restart.
+
+RabbitMQ nodes that belong to a clsuter will [attempt to sync schema from their peers on startup](https://www.rabbitmq.com/clustering.html#restarting-schema-sync). If no peer comes online within a configurable time window (five minutes by default),
+the node will give up and voluntarily stop. Before the sync is complete, the node won't mark itself as fully booted.
+
+Therefore, if a readiness probe assumes that a node is fully booted and running,
+**a rolling restart of RabbitMQ node pods using such probe will deadlock**: the probe will never succeed,
+and will never proceed to deploy the next pod, which must come online for the original pod to be considered
+ready by the deployment.
+
+It is therefore recommended to use a very basic RabbitMQ health check for readiness probe:
+
+``` shell
+rabbitmq-diagnostics ping
+```
+
+While this check is not thorough, it allows all pods to be started and re-join the cluster within a certain time period,
+even when pods are restarted one by one, in order.
+
+This is covered in a dedicated section of the RabbitMQ clustering guide: [Restarts and Health Checks (Readiness Probes)](https://www.rabbitmq.com/clustering.html#restarting-readiness-probes).
+
+The [readiness probe section](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/blob/master/examples/gke/statefulset.yaml#L132-L143)
+in the Stateful Set definition file demonstrates how to configure the probe.
+
+
+## Liveness Probe
+
+Similarly to the readiness probe described above, Kubernetes allows for pod health checks using a different health check
+called the [liveness probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/).
+The check determines if a pod must be restarted.
+
+As with all [health checks](https://www.rabbitmq.com/monitoring.html#health-checks), there is no single solution that can be
+recommended for all deployments. Health checks can produce false positives, which means reasonably healthy, operational nodes
+will be restarted or even destroyed and re-created for no reason, reducing system availability.
+
+Moreover, a RabbitMQ node restart won't necessarily address the issue. For example, restarting a node
+that is in an [alarmed state](https://www.rabbitmq.com/alarms.html) because it is low on available disk space won't help.
+
+All this is to say that **liveness probes must be chosen wisely** and with false positives and "recoverability by a restart"
+taken into account. Liveness probes also must [use node-local health checks instead of cluster-wide ones](https://www.rabbitmq.com/monitoring.html#health-checks).
+
+RabbitMQ CLI tools provie a number of [pre-defined health checks](https://www.rabbitmq.com/monitoring.html#health-checks) that
+vary in how thorough they are, how intrusive they are and how likely they are to produce false positives in different
+scenarios, e.g. when the system is under load. The checks are composable and can be combined.
+The right liveness probe choice is a system-specific decision. When in doubt, start with a simpler, less intrusive
+and less thorough option such as
+
+``` shell
+rabbitmq-diagnostics -q ping
+```
+
+The following checks can be reasonable liveness probe candidates:
+
+``` shell
+rabbitmq-diagnostics -q check_port_connectivity
+```
+
+``` shell
+rabbitmq-diagnostics -q check_local_alarms
+```
+
+Note, however, that they will fail for the nodes [paused by the "pause minority" partition handliner strategy](https://www.rabbitmq.com/partitions.html).
+
+
 ## Plugins
 
-RabbitMQ [supports plugins](https://www.rabbitmq.com/plugins.html).
+RabbitMQ [supports plugins](https://www.rabbitmq.com/plugins.html). Some plugins are essential when running RabbitMQ on Kubernetes,
+e.g. the Kubernetes-specific peer discovery implementation.
 
-The [`rabbitmq_peer_discovery_k8s` plugin](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s) is required to deploy RabbitMQ on Kubernetes.
-You may also wish to enable the [`rabbitmq_management` plugin](https://www.rabbitmq.com/management.html) in order to get a browser-based UI and an HTTP API to manage and monitor the RabbitMQ nodes.
+The [`rabbitmq_peer_discovery_k8s` plugin](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s) is required
+to deploy RabbitMQ on Kubernetes.
+It is quite common to also enable [`rabbitmq_management` plugin](https://www.rabbitmq.com/management.html) in order to get a browser-based management UI
+and an HTTP API, and [`rabbitmq_prometheus`](https://www.rabbitmq.com/prometheus.html) for monitoring.
 
 Plugins can be enabled in [different ways](https://www.rabbitmq.com/plugins.html#ways-to-enable-plugins).
 We recommend mounting the plugins file, `enabled_plugins`, to the node configuration directory, `/etc/rabbitmq`.
 A Config Map can be used to express the value of the `enabled_plugins` file. It can then be mounted
 as a Volume onto each RabbitMQ container in the Stateful Set definition.
 
-In our [example Config Map](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/configmap.yaml),
-two keys are used in a single Config Map object to store both the `enabled_plugins` and `rabbitmq.conf`.
-Both files are then mounted to `/etc/rabbitmq`.
+In our [configmap.yaml example](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/configmap.yaml) file,
+we demonstrate how to popular the the `enabled_plugins` file and mount it under the `/etc/rabbitmq` directory.
+
 
 ## Ports
 
@@ -285,9 +365,14 @@ The final consideration for the Stateful Set is the ports to open on the RabbitM
 Protocols supported by RabbitMQ are all TCP-based and require the [protocol ports](https://www.rabbitmq.com/networking.html#ports) to be opened on the RabbitMQ nodes.
 Depending on the plugins that are enabled on a node, the list of required ports can vary.
 
-Using the example `enabled_plugins` file (see above) contains the plugins `rabbitmq_peer_discovery_k8s` (mandatory), `rabbitmq_management` and `rabbitmq_prometheus`,
-[several ports are opened](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L106-L118): `5672` (used by AMQP 0-9-1 and AMQP 1.0 clients),
-`15672` (management HTTP API) and `15692`(Prometheus scraping endpoint).
+The example `enabled_plugins` file mentioned above enables a few plugins: `rabbitmq_peer_discovery_k8s` (mandatory), `rabbitmq_management`
+and `rabbitmq_prometheus`.
+Therefore, the service must [open several ports](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L106-L118) relevant for the core server and the enabled plugins:
+
+ * `5672`: used by AMQP 0-9-1 and AMQP 1.0 clients
+ * `15672`: management UI and  HTTP API)
+ * `15692`: Prometheus scraping endpoint)
+
 
 ## Deploy the Stateful Set
 
