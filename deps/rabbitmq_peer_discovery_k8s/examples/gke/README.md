@@ -186,37 +186,60 @@ a RabbitMQ cluster since it is needed by the nodes to [form a cluster](https://g
 With the community Docker image, RabbitMQ nodes will expect the cookie to be at `/var/lib/rabbitmq/.erlang.cookie`.
 We recommend creating a Secret and mounting it as a Volume on the Pods at this path.
 
-See [cookie section in the statefulset.yaml example](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L101-L105) file.
+This is demonstrated in the [statefulset.yaml example](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L101-L105) file.
 
-To create the Secret itself, run
+The secret is expected to have the following key/value pair:
+
+```
+cookie: {value}
+```
+
+To create a cookie Secret, run
 
 ```shell
 echo -n "this secret value is JUST AN EXAMPLE. Replace it!" > cookie
 kubectl create secret generic erlang-cookie --from-file=./cookie
 ```
 
+This will create a Secret with a single key, `cookie`, taken from the file name,
+and the file contents as its value.
+
+
 ## Administrator Credentials
 
-RabbitMQ will seed a [default user](https://www.rabbitmq.com/access-control.html#default-state) with well-known credentials on first boot. The username and password
-of this user are both `guest`.
+RabbitMQ will seed a [default user](https://www.rabbitmq.com/access-control.html#default-state) with well-known credentials on first boot.
+The username and password of this user are both `guest`.
 
 This default user can [only connect from localhost](https://www.rabbitmq.com/access-control.html#loopback-users) by default.
 It is possible to lift this restriction by opting in. This may be useful for testing but **very insecure**.
 Instead, an administrative user must be created using generated credentials.
 
-W recommend storing the admin credentials in a Kubernetes Secret, and mounting them onto the RabbitMQ Pods.
-The `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS` environment variables can be set to the Secret values.
+The administrative user credentials should be stored in a [Kubernetes Secret](https://kubernetes.io/docs/concepts/configuration/secret/),
+and mounting them onto the RabbitMQ Pods.
+The `RABBITMQ_DEFAULT_USER` and `RABBITMQ_DEFAULT_PASS` environment variables then can be set to the Secret values.
 The community Docker image will use them to [override default user credentials](https://www.rabbitmq.com/access-control.html#seeding).
 
 [Example for reference](https://github.com/rabbitmq/rabbitmq-peer-discovery-k8s/tree/master/examples/gke/statefulset.yaml#L91-L100).
 
+The secret is expected to have the following key/value pair:
+
+```
+user: {username}
+pass: {password}
+```
+
 To create an administrative user Secret, use
 
 ```shell
-echo -n "admin" > user
-echo -n "password" > pass
+# this is merely an example, you are welcome to use a different username
+echo -n "administrator" > user
+# this is merely an example, you MUST use a different, generated password value!
+echo -n "g3N3rAtED-Pa$$w0rd" > pass
 kubectl create secret generic rabbitmq-admin --from-file=./user --from-file=./pass
 ```
+
+This will create a Secret with two keys, `user` and `pass`, taken from the file names,
+and file contents as their respective values.
 
 Users can be create explicitly using CLI tools as well.
 See [RabbitMQ doc section on user management](https://www.rabbitmq.com/access-control.html#seeding) to learn more.
@@ -315,7 +338,14 @@ kubectl run perf-test --image=pivotalrabbitmq/perf-test -- --uri amqp://{usernam
 Here the `{username}` and `{password}` are the user credentials, e.g. those set up in the `rabbitmq-admin` Secret.
 The `{serivce}` is the hostname to connect to. We use the name of the client service that will resolve as a hostname when deployed.
 
-For a functioning RabbitMQ cluster, running `kubectl logs -f perf-test`  will produce output similar to this:
+The above `kubectl run` command will start a PerfTest pod which can be observed in
+
+``` shell
+kubectl get pods
+```
+
+For a functioning RabbitMQ cluster, running `kubectl logs -f {perf-test-pod-name}` where `{perf-test-pod-name}`
+is the name of the pod as reported by `kubectl get pods`,  will produce output similar to this:
 
 ```
 id: test-110102-976, time: 263.100s, sent: 21098 msg/s, received: 21425 msg/s, min/median/75th/95th/99th consumer latency: 1481452/1600817/1636996/1674410/1682972 μs
