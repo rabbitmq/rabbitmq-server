@@ -14,6 +14,7 @@ counterparts. We cover several key aspects of a manual RabbitMQ deployment on Ku
  * Secret management for initial RabbitMQ user credentials
  * A load balancer service for external client connections
  * How to deploy a PerfTest instance to do basic functional and load testing of the cluster
+ * How to set up cluster monitoring with Prometheus and Grafana
 
 ## Production (Non-)Suitability
 
