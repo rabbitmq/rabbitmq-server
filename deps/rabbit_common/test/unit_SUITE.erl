@@ -44,7 +44,8 @@ groups() ->
             version_equivalence,
             pid_decompose_compose,
             platform_and_version,
-            frame_encoding_does_not_fail_with_empty_binary_payload
+            frame_encoding_does_not_fail_with_empty_binary_payload,
+            get_erl_path
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -419,3 +420,19 @@ set_stats_interval(Interval) ->
 reset_stats_interval() ->
     application:unset_env(rabbit, collect_statistics),
     application:unset_env(rabbit, collect_statistics_interval).
+
+name_type(_) ->
+    ?assertEqual(shortnames, rabbit_nodes_common:name_type(rabbit)),
+    ?assertEqual(shortnames, rabbit_nodes_common:name_type(rabbit@localhost)),
+    ?assertEqual(longnames, rabbit_nodes_common:name_type('rabbit@localhost.example.com')),
+    ok.
+
+get_erl_path(_) ->
+    Exe = rabbit_runtime:get_erl_path(),
+    case os:type() of
+        {win32, _} ->
+            ?assertNotMatch(nomatch, string:find(Exe, "erl.exe"));
+        _ ->
+            ?assertNotMatch(nomatch, string:find(Exe, "erl"))
+    end,
+    ok.

@@ -74,14 +74,7 @@ epmd_port() ->
     end.
 
 ensure_epmd() ->
-    {ok, [[Prog]]} = init:get_argument(progname),
-    Exe = os:find_executable(Prog),
-    do_ensure_epmd(Exe, Prog).
-
-do_ensure_epmd(false, Prog) ->
-    Path = os:getenv("PATH"),
-    rabbit_log:error("ensure_epmd: unable to find executable '~s' in PATH: '~s'", [Prog, Path]);
-do_ensure_epmd(Exe, _) ->
+    Exe = rabbit_runtime:get_erl_path(),
     ID = rabbit_misc:random(1000000000),
     Port = open_port(
              {spawn_executable, Exe},
