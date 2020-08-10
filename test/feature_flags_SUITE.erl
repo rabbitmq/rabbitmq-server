@@ -1061,8 +1061,9 @@ list_my_plugin_plugins(PluginSrcDir) ->
       end, Files).
 
 remove_other_plugins(PluginSrcDir, OtherPlugins) ->
-    [ok = file:delete(filename:join(PluginSrcDir, Filename))
-     || Filename <- OtherPlugins].
+    ok = rabbit_file:recursive_delete(
+           [filename:join(PluginSrcDir, OtherPlugin)
+            || OtherPlugin <- OtherPlugins]).
 
 work_around_cli_and_rabbit_circular_dep(Config) ->
     %% FIXME: We also need to copy `rabbit` in `my_plugins` plugins
@@ -1090,7 +1091,7 @@ work_around_cli_and_rabbit_circular_dep(Config) ->
                         ?LOW_IMPORTANCE,
                         "Copy `~s` to `~s` to fix CLI erroneous "
                         "dependency on `rabbit`", [Path, Dest]),
-                      {ok, _} = file:copy(Path, Dest);
+                      ok = rabbit_file:recursive_copy(Path, Dest);
                   false ->
                       ok
               end
