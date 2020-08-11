@@ -175,6 +175,7 @@ $(ERLANGMK_DIST_EZS):
 	$(verbose) rm -rf $(EZ_DIR) $(EZ)
 	$(verbose) mkdir -p $(EZ_DIR)
 	$(dist_verbose) $(RSYNC) -a $(RSYNC_V) \
+		--exclude '/ebin/dep_built' \
 		--exclude '/ebin/test' \
 		--include '/ebin/***' \
 		--include '/include/***' \
