@@ -38,7 +38,8 @@ groups() ->
                                import_case9,
                                import_case10,
                                import_case11,
-                               import_case12
+                               import_case12,
+                               import_case13
                               ]},
         {boot_time_import, [], [
             import_on_a_booting_node
@@ -114,6 +115,25 @@ import_case5(Config) ->
 
 import_case11(Config) -> import_file_case(Config, "case11").
 import_case12(Config) -> import_invalid_file_case(Config, "failing_case12").
+
+import_case13(Config) ->
+    import_file_case(Config, "case13"),
+    VHost = <<"/">>,
+    QueueName = <<"definitions.import.case13.qq.1">>,
+    QueueIsImported = fun () ->
+        case queue_lookup(Config, VHost, QueueName) of
+            {ok, _} -> true;
+            _       -> false
+        end
+    end,
+    rabbit_ct_helpers:await_condition(QueueIsImported, 20000),
+    {ok, Q} = queue_lookup(Config, VHost, QueueName),
+
+    %% see rabbitmq/rabbitmq-server#2400, rabbitmq/rabbitmq-server#2426
+    ?assert(amqqueue:is_quorum(Q)),
+    ?assertEqual([{<<"x-max-length">>, long, 991},
+                  {<<"x-queue-type">>, longstr, <<"quorum">>}],
+                 amqqueue:get_arguments(Q)).
 
 export_import_round_trip_case1(Config) ->
     %% case 6 has runtime parameters that do not depend on any plugins
@@ -226,3 +246,6 @@ run_invalid_import_case(Path) ->
        ct:fail({failure, Path});
      {error, _E} -> ok
    end.
+
+queue_lookup(Config, VHost, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [rabbit_misc:r(VHost, queue, Name)]).
