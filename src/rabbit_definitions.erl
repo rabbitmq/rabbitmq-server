@@ -663,14 +663,13 @@ queue_definition(Q) ->
                rabbit_quorum_queue -> quorum;
                T -> T
            end,
-    Arguments = [{Key, Value} || {Key, _Type, Value} <- amqqueue:get_arguments(Q)],
     #{
         <<"vhost">> => VHost,
         <<"name">> => Name,
         <<"type">> => Type,
         <<"durable">> => amqqueue:is_durable(Q),
         <<"auto_delete">> => amqqueue:is_auto_delete(Q),
-        <<"arguments">> => rabbit_misc:amqp_table(Arguments)
+        <<"arguments">> => rabbit_misc:amqp_table(amqqueue:get_arguments(Q))
     }.
 
 list_bindings() ->
