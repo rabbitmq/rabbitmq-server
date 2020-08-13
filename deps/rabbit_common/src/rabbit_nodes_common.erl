@@ -30,6 +30,11 @@
 -spec diagnostics([node()]) -> string().
 -spec cookie_hash() -> string().
 
+%% net_adm:name/1 returns a new value, 'noport', in Erlang 24. This value being
+%% absent in the function spec in previous versions of Erlang, we get a warning
+%% from Dialyzer until we start to the yet-to-be-release Erlang 24 in CI.
+%% Therefore we disable this specific warning.
+-dialyzer({nowarn_function, diagnostics_node/1}).
 
 names(Hostname) ->
     Self = self(),
