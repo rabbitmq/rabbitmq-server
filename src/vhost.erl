@@ -149,7 +149,7 @@ get_limits(VHost) -> vhost_v1:get_limits(VHost).
 
 -spec get_metadata(vhost()) -> metadata().
 get_metadata(#vhost{metadata = Value}) -> Value;
-get_metadata(VHost) -> vhost_v1:get_limits(VHost).
+get_metadata(VHost) -> vhost_v1:get_metadata(VHost).
 
 -spec get_description(vhost()) -> binary().
 get_description(#vhost{} = VHost) ->
