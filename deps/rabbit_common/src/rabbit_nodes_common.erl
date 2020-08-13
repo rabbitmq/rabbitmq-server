@@ -122,6 +122,10 @@ diagnostics_node(Node) ->
          {error, Reason} ->
              [{"  * unable to connect to epmd (port ~s) on ~s: ~s~n",
                [epmd_port(), Host, rabbit_misc:format_inet_error(Reason)]}];
+         noport ->
+             [{"  * unable to connect to epmd (port ~s) on ~s: "
+               "couldn't resolve hostname~n",
+               [epmd_port(), Host]}];
          {ok, NamePorts} ->
              [{"  * connected to epmd (port ~s) on ~s",
                [epmd_port(), Host]}] ++
