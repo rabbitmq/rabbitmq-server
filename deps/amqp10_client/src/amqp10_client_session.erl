@@ -294,8 +294,7 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
 mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
                             closed = Closed,
                             error = Err},
-        #state{links = Links, link_handle_index = LHI} = State0)
-  when Closed =:= true orelse Closed =:= undefined ->
+        #state{links = Links, link_handle_index = LHI} = State0) ->
     with_link(InHandle, State0,
               fun (#link{output_handle = OutHandle} = Link, State) ->
                       Reason = case Err of
