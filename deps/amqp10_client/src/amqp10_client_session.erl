@@ -292,7 +292,6 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                          link_handle_index = LHI#{InHandle => OutHandle}},
     {next_state, mapped, State};
 mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
-                            closed = Closed,
                             error = Err},
         #state{links = Links, link_handle_index = LHI} = State0) ->
     with_link(InHandle, State0,
