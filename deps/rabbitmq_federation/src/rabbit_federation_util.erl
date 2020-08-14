@@ -76,12 +76,12 @@ obfuscate_upstream(#upstream{uris = Uris} = Upstream) ->
 obfuscate_upstream_params(#upstream_params{uri = Uri, params = #amqp_params_network{password = Password} = Params} = UParams) ->
     UParams#upstream_params{
         uri = credentials_obfuscation:encrypt(Uri),
-        params = Params#amqp_params_network{password = credentials_obfuscation:encrypt(Password)}
+        params = Params#amqp_params_network{password = credentials_obfuscation:encrypt(rabbit_data_coercion:to_binary(Password))}
     };
 obfuscate_upstream_params(#upstream_params{uri = Uri, params = #amqp_params_direct{password = Password} = Params} = UParams) ->
     UParams#upstream_params{
         uri = credentials_obfuscation:encrypt(Uri),
-        params = Params#amqp_params_direct{password = credentials_obfuscation:encrypt(Password)}
+        params = Params#amqp_params_direct{password = credentials_obfuscation:encrypt(rabbit_data_coercion:to_binary(Password))}
     }.
 
 deobfuscate_upstream(#upstream{uris = EncryptedUris} = Upstream) ->
