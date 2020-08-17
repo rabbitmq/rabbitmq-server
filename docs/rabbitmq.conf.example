@@ -34,6 +34,11 @@
 ##
 # listeners.ssl.default = 5671
 
+## It is possible to disable regular TCP (non-TLS) listeners. Clients
+## not configured to use TLS and the correct TLS-enabled port won't be able
+## to connect to this node.
+# listeners.tcp = none
+
 ## Number of Erlang processes that will accept connections for the TCP
 ## and TLS listeners.
 ##
