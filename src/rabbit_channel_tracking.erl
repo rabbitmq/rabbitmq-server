@@ -98,7 +98,7 @@ handle_cast({connection_closed, ConnDetails}) ->
     case pget(node, ConnDetails) of
         ThisNode ->
             TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
-            rabbit_log_connection:info(
+            rabbit_log_connection:debug(
                 "Closing all channels from connection '~p' "
                 "because it has been closed", [pget(name, ConnDetails)]),
             shutdown_tracked_items(TrackedChs, undefined),
