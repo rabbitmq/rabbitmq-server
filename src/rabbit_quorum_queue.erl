@@ -19,7 +19,7 @@
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
--export([become_leader/2, handle_tick/3]).
+-export([become_leader/2, handle_tick/3, spawn_deleter/1]).
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
 -export([open_files/1]).
@@ -165,6 +165,9 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
     MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
     DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
+    Expires = args_policy_lookup(<<"expires">>,
+                                 fun (A, _B) -> A end,
+                                 Q),
     #{name => Name,
       queue_resource => QName,
       dead_letter_handler => dlx_mfa(Q),
@@ -175,7 +178,9 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       max_in_memory_bytes => MaxMemoryBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
       delivery_limit => DeliveryLimit,
-      overflow_strategy => overflow(Overflow, drop_head)
+      overflow_strategy => overflow(Overflow, drop_head),
+      created => erlang:system_time(millisecond),
+      expires => Expires
      }.
 
 single_active_consumer_on(Q) ->
@@ -305,6 +310,7 @@ is_policy_applicable(_Q, Policy) ->
     Applicable = [<<"max-length">>,
                   <<"max-length-bytes">>,
                   <<"overflow">>,
+                  <<"expires">>,
                   <<"max-in-memory-length">>,
                   <<"max-in-memory-bytes">>,
                   <<"delivery-limit">>,
@@ -318,6 +324,12 @@ rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),
     ets:delete(queue_metrics, QName),
     ok.
+
+spawn_deleter(QName) ->
+    spawn(fun () ->
+                  {ok, Q} = rabbit_amqqueue:lookup(QName),
+                  delete(Q, false, false, <<"expired">>)
+          end).
 
 handle_tick(QName,
             {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack},
@@ -1351,7 +1363,7 @@ maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 check_invalid_arguments(QueueName, Args) ->
-    Keys = [<<"x-expires">>, <<"x-message-ttl">>,
+    Keys = [<<"x-message-ttl">>,
             <<"x-max-priority">>, <<"x-queue-mode">>],
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;

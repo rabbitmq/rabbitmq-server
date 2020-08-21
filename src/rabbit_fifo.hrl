@@ -101,6 +101,8 @@
 
 -type consumer_strategy() :: competing | single_active.
 
+-type milliseconds() :: non_neg_integer().
+
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
@@ -130,6 +132,7 @@
          delivery_limit :: option(non_neg_integer()),
          max_in_memory_length :: option(non_neg_integer()),
          max_in_memory_bytes :: option(non_neg_integer()),
+         expires :: undefined | milliseconds(),
          unused_1,
          unused_2
         }).
@@ -184,6 +187,7 @@
          waiting_consumers = [] :: [{consumer_id(), consumer()}],
          msg_bytes_in_memory = 0 :: non_neg_integer(),
          msgs_ready_in_memory = 0 :: non_neg_integer(),
+         last_active :: undefined | non_neg_integer(),
          unused_1,
          unused_2
         }).
@@ -199,4 +203,7 @@
                     max_in_memory_bytes => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
-                    delivery_limit => non_neg_integer()}.
+                    delivery_limit => non_neg_integer(),
+                    expires => non_neg_integer(),
+                    created => non_neg_integer()
+                   }.

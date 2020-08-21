@@ -1081,7 +1081,7 @@ do_apply(Cmd, #t{effects = Effs,
             %% down
             T;
         _ ->
-            {St, Effects} = case rabbit_fifo:apply(#{index => Index}, Cmd, S0) of
+            {St, Effects} = case rabbit_fifo:apply(meta(Index), Cmd, S0) of
                                 {S, _, E} when is_list(E) ->
                                     {S, E};
                                 {S, _, E} ->
@@ -1196,7 +1196,7 @@ test_init(Conf) ->
     rabbit_fifo:init(maps:merge(Default, Conf)).
 
 meta(Idx) ->
-    #{index => Idx, term => 1}.
+    #{index => Idx, term => 1, system_time => 0}.
 
 make_checkout(Cid, Spec) ->
     rabbit_fifo:make_checkout(Cid, Spec, #{}).

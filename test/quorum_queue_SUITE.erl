@@ -130,7 +130,8 @@ all_tests() ->
      consumer_metrics,
      invalid_policy,
      delete_if_empty,
-     delete_if_unused
+     delete_if_unused,
+     queue_ttl
     ].
 
 memory_tests() ->
@@ -336,11 +337,6 @@ declare_invalid_args(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     LQ = ?config(queue_name, Config),
 
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-expires">>, long, 2000}])),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -2461,6 +2457,29 @@ delete_if_unused(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
                                                       if_unused = true})).
+
+queue_ttl(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-expires">>, long, 1000}])),
+    timer:sleep(5500),
+    %% check queue no longer exists
+    ?assertExit(
+       {{shutdown,
+         {server_initiated_close,404,
+          <<"NOT_FOUND - no queue 'queue_ttl' in vhost '/'">>}},
+        _},
+       amqp_channel:call(Ch, #'queue.declare'{queue = QQ,
+                                              passive = true,
+                                              durable = true,
+                                              auto_delete = false,
+                                              arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                                           {<<"x-expires">>, long, 1000}]})),
+    ok.
 
 %%----------------------------------------------------------------------------
 
