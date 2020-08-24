@@ -72,7 +72,7 @@ function fmt_timestamp_mini(ts) {
 }
 
 function fmt_time(t, suffix) {
-    if (t == undefined || t == 0) return '';
+    if (typeof t === "undefined") return '';
     return t + suffix;
 }
 
