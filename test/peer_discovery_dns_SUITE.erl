@@ -40,9 +40,10 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
--define(DISCOVERY_ENDPOINT_RECORD_A, "peer_discovery.tests.ipv4.rabbitmq.com").
-
--define(DISCOVERY_ENDPOINT_RECORD_AAAA, "www.v6.facebook.com").
+%% These are stable, publicly resolvable hostnames that
+%% both return A and AAAA records that reverse resolve.
+-define(DISCOVERY_ENDPOINT_RECORD_A,    "dns.google").
+-define(DISCOVERY_ENDPOINT_RECORD_AAAA, "dns.google").
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -84,20 +85,20 @@ end_per_testcase(_Testcase, Config) ->
 
 test_aaaa_record_hostname_discovery(_) ->
     Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT_RECORD_AAAA, true),
-    ?assert(string:str(lists:flatten(Result), "facebook.com") > 0).
+    ?assert(string:str(lists:flatten(Result), "dns.google") > 0).
 
 hostname_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT_RECORD_A, true),
-    ?assert(lists:member("www.rabbitmq.com", Result)).
+    ?assert(lists:member("dns.google", Result)).
 
 hostname_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT_RECORD_A, false),
-    ?assert(lists:member("www", Result)).
+    ?assert(lists:member("dns", Result)).
 
 node_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, true),
-    ?assert(lists:member('ct_rabbit@www.rabbitmq.com', Result)).
+    ?assert(lists:member('ct_rabbit@dns.google', Result)).
 
 node_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, false),
-    ?assert(lists:member(ct_rabbit@www, Result)).
+    ?assert(lists:member(ct_rabbit@dns, Result)).
