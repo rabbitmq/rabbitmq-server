@@ -173,6 +173,21 @@ Scopes should be prefixed with `resource_server_id`. For example,
 if `resource_server_id` is "my_rabbit", a scope to enable read from any vhost will
 be `my_rabbit.read:*/*`.
 
+### Using a different token field for the Scope
+
+By default the plugin will look for the `scope` key in the token, you can configure the plugin to also look in other fields using the `additional_rabbitmq_scopes` setting.
+
+```erlang
+[
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>},
+    {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
+    ...
+    ]}
+  ]},
+].
+```
+
 ### Using Tokens with Clients
 
 A client must present a valid `access_token` acquired from an OAuth 2.0 provider (UAA) as the **password**
