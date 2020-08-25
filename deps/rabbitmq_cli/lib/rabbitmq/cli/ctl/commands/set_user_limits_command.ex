@@ -23,10 +23,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "set_user_limits username <definition>"
+  def usage, do: "set_user_limits <username> <definition>"
 
   def usage_additional() do
     [
+      ["<username>", "Self-explanatory"],
       ["<definition>", "Limit definitions as a JSON document"]
     ]
   end
