@@ -10,7 +10,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
-
   use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
@@ -28,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserLimitsCommand do
 
   def usage_additional() do
     [
-      ["<definition>", "Limit definitions, must be a valid JSON document"]
+      ["<definition>", "Limit definitions as a JSON document"]
     ]
   end
 

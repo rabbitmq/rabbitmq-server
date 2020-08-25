@@ -29,7 +29,6 @@ defmodule SetUserLimitsCommandTest do
   end
 
   setup context do
-
     user = context[:user] || @user
 
     clear_user_limits(user)
@@ -92,7 +91,7 @@ defmodule SetUserLimitsCommandTest do
     assert match?({:badrpc, _}, @command.run([@user, @conn_definition], opts))
   end
 
-  @tag user: "bad-user"
+  @tag user: "non-existent-user"
   test "run: providing a non-existent user reports an error", context do
 
     assert @command.run(
@@ -106,7 +105,7 @@ defmodule SetUserLimitsCommandTest do
     assert match?({:error_string, _},
       @command.run(
         [context[:user],
-        ["bad_value"]],
+        ["this_is_not_json"]],
         context[:opts]))
 
     assert get_user_limits(context[:user]) == %{}
@@ -127,7 +126,11 @@ defmodule SetUserLimitsCommandTest do
       == "Setting user limits to \"#{context[:conn_definition]}\" for user \"#{context[:user]}\" ..."
   end
 
-defp assert_limits(context, definition) do
+  #
+  # Implementation
+  #
+
+  defp assert_limits(context, definition) do
     limits = get_user_limits(context[:user])
     assert {:ok, limits} == JSON.decode(definition)
   end
