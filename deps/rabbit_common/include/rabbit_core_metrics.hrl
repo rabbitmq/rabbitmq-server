@@ -24,7 +24,8 @@
                       {node_node_metrics, set},
                       {connection_churn_metrics, set}]).
 
--define(CORE_EXTRA_TABLES, [{gen_server2_metrics, set}]).
+-define(CORE_EXTRA_TABLES, [{gen_server2_metrics, set},
+                            {auth_attempt_metrics, set}]).
 
 -define(CONNECTION_CHURN_METRICS, {node(), 0, 0, 0, 0, 0, 0, 0}).
 
