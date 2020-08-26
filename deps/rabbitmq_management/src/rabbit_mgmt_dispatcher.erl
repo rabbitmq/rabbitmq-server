@@ -179,5 +179,6 @@ dispatcher() ->
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
      {"/rebalance/queues",                                     rabbit_mgmt_wm_rebalance_queues, [{queues, all}]},
      {"/auth",                                                 rabbit_mgmt_wm_auth, []},
+     {"/auth-attempts/:node",                                  rabbit_mgmt_wm_auth_attempts, []},
      {"/login",                                                rabbit_mgmt_wm_login, []}
     ].

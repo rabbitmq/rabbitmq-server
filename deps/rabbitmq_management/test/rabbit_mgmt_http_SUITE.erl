@@ -148,7 +148,8 @@ all_tests() -> [
     oauth_test,
     disable_basic_auth_test,
     login_test,
-    csp_headers_test
+    csp_headers_test,
+    auth_attempts_test
 ].
 
 %% -------------------------------------------------------------------
@@ -3385,6 +3386,38 @@ disable_basic_auth_test(Config) ->
                                  [rabbitmq_management, disable_basic_auth, 50]),
     %% Defaults to 'false' when config is invalid
     http_get(Config, "/overview", ?OK).
+
+auth_attempts_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    {Conn, _Ch} = open_connection_and_channel(Config),
+    close_connection(Conn),
+    [NodeData] = http_get(Config, "/nodes"),
+    Node = binary_to_atom(maps:get(name, NodeData), utf8),
+    Map = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node), ?OK),
+    [Attempt] = maps:get(auth_attempts, Map),
+    ?assertEqual(<<>>, maps:get(ip, Attempt)),
+    ?assertEqual(<<>>, maps:get(username, Attempt)),
+    ?assertEqual(1, maps:get(auth_attempts, Attempt)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Attempt)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Attempt)),
+
+    http_delete(Config, "/auth-attempts/" ++ atom_to_list(Node), {group, '2xx'}),
+    Map2 = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node), ?OK),
+    ?assertEqual([], maps:get(auth_attempts, Map2)),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, return_per_user_auth_attempt_metrics, true]),
+    {Conn2, _Ch2} = open_connection_and_channel(Config),
+    close_connection(Conn2),
+    Map3 = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node), ?OK),
+    [Attempt3] = maps:get(auth_attempts, Map3),
+    ?assertEqual(true, <<>> =/= maps:get(ip, Attempt3)),
+    ?assertEqual(<<"guest">>, maps:get(username, Attempt3)),
+    ?assertEqual(1, maps:get(auth_attempts, Attempt3)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Attempt3)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Attempt3)),
+
+    passed.
 
 %% -------------------------------------------------------------------
 %% Helpers.
