@@ -926,7 +926,7 @@ create_channel(Channel,
             {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
         {true, Limit} ->
             {error, rabbit_misc:amqp_error(not_allowed,
-                        "number of channels opened for user (~s) has reached "
+                        "number of channels opened for user '~s' has reached "
                         "the maximum allowed user limit of (~w)",
                         [Username, Limit], 'none')}
     end.

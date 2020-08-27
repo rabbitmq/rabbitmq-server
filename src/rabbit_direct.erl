@@ -220,8 +220,8 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
         {true, Limit} ->
             rabbit_log_connection:error(
                 "Error on direct connection ~p~n"
-                "number of channels opened for user (~s) has reached the "
-                "maximum allowed limit of (~p)",
+                "number of channels opened for user '~s' has reached the "
+                "maximum allowed limit of (~w)",
                 [ConnPid, Username, Limit]),
             {error, not_allowed}
     end.
