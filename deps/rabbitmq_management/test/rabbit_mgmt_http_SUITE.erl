@@ -3251,7 +3251,7 @@ user_limit_set_test(Config) ->
         }],
     ?assertEqual(Limits3, http_get(Config, "/user-limits/limit_test_user_1", Vhost1User, Vhost1User, ?OK)),
 
-    %% Clear a limit (with default 'guest' - admin)
+    %% Clear a limit
     http_delete(Config, "/user-limits/limit_test_user_1/max-connections", ?NO_CONTENT),
     Limits4 = [#{user => User1, value => #{'max-channels' => 100}}],
     ?assertEqual(Limits4, http_get(Config, "/user-limits/limit_test_user_1", ?OK)),
