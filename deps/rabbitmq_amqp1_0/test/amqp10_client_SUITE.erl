@@ -8,20 +8,25 @@
 -module(amqp10_client_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -compile(export_all).
 
 all() ->
     [
-      {group, tests}
+      {group, tests},
+      {group, metrics}
     ].
 
 groups() ->
     [
      {tests, [], [
                   roundtrip_quorum_queue_with_drain
-                 ]}
+                 ]},
+     {metrics, [], [
+                    auth_attempt_metrics
+                   ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -146,6 +151,34 @@ roundtrip_quorum_queue_with_drain(Config) ->
     ok = amqp10_client:close_connection(Connection),
     ok.
 
+auth_attempt_metrics(Config) ->
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    % create a configuration map
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => atom_to_binary(?FUNCTION_NAME, utf8),
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    open_and_close_connection(OpnConf),
+    [Attempt] =
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
+    ?assertEqual(proplists:get_value(ip, Attempt), <<>>),
+    ?assertEqual(proplists:get_value(username, Attempt), <<>>),
+    ?assertEqual(proplists:get_value(auth_attempts, Attempt), 1),
+    ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 0),
+    ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 1),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, return_per_user_auth_attempt_metrics, true]),
+    open_and_close_connection(OpnConf),
+    [Attempt1] =
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
+    ?assertEqual(proplists:get_value(ip, Attempt1), <<>>),
+    ?assertEqual(proplists:get_value(username, Attempt1), <<"guest">>),
+    ?assertEqual(proplists:get_value(auth_attempts, Attempt1), 1),
+    ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt1), 0),
+    ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt1), 1),
+    ok.
 
 %% internal
 %%
@@ -158,3 +191,8 @@ flush(Prefix) ->
     after 1 ->
               ok
     end.
+
+open_and_close_connection(OpnConf) ->
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, _} = amqp10_client:begin_session(Connection),
+    ok = amqp10_client:close_connection(Connection).

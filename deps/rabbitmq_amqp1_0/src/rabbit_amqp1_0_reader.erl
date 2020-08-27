@@ -648,10 +648,11 @@ auth_phase_1_0(Response,
                                               auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
-        {refused, _User, Msg, Args} ->
+        {refused, User, Msg, Args} ->
             %% We don't trust the client at this point - force them to wait
             %% for a bit before sending the sasl outcome frame
             %% so they can't DOS us with repeated failed logins etc.
+            rabbit_core_metrics:auth_attempt_failed(<<"">>, User),
             timer:sleep(?SILENT_CLOSE_DELAY * 1000),
             Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 1}},
             ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
@@ -659,19 +660,25 @@ auth_phase_1_0(Response,
               ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~s login refused: ~s",
               [Name, io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
+            rabbit_core_metrics:auth_attempt_failed(<<"">>, ""),
             protocol_error(?V_1_0_AMQP_ERROR_DECODE_ERROR, Msg, Args);
         {challenge, Challenge, AuthState1} ->
+            rabbit_core_metrics:auth_attempt_succeeded(<<"">>, ""),
             Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
             ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
             State#v1{connection = Connection =
                          #v1_connection{auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
-                ok          -> ok;
-                not_allowed -> protocol_error(
-                                 ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                 "user '~s' can only connect via localhost",
-                                 [Username])
+                ok ->
+                    rabbit_core_metrics:auth_attempt_succeeded(<<"">>, Username),
+                    ok;
+                not_allowed ->
+                    rabbit_core_metrics:auth_attempt_failed(<<"">>, Username),
+                    protocol_error(
+                      ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                      "user '~s' can only connect via localhost",
+                      [Username])
             end,
             Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 0}},
             ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
