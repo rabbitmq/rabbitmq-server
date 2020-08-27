@@ -177,7 +177,7 @@ clear_all_table_data() ->
 get_channel_name(Config, Node) ->
     [{_, ChData}|_] = rabbit_ct_broker_helpers:rpc(Config, Node, ets, tab2list,
                                                  [channel_created]),
-    http_uri:encode(binary_to_list(pget(name, ChData))).
+    uri_string:recompose(#{path => binary_to_list(pget(name, ChData))}).
 
 consume(Channel, Queue) ->
     #'basic.consume_ok'{consumer_tag = Tag} =

@@ -449,7 +449,7 @@ channel(Config) ->
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [channel_created]),
 
-    ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
+    ChName = uri_string:recompose(#{path => binary_to_list(pget(name, ChData))}),
     timer:sleep(5100),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),
@@ -466,7 +466,7 @@ channel_other_node(Config) ->
     {ok, Chan} = amqp_connection:open_channel(Conn),
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list,
                                                  [channel_created]),
-    ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
+    ChName = uri_string:recompose(#{path => binary_to_list(pget(name, ChData))}),
     consume(Chan, Q),
     publish(Chan, Q),
 
@@ -743,7 +743,7 @@ clear_all_table_data() ->
 get_channel_name(Config, Node) ->
     [{_, ChData}|_] = rabbit_ct_broker_helpers:rpc(Config, Node, ets, tab2list,
                                                  [channel_created]),
-    http_uri:encode(binary_to_list(pget(name, ChData))).
+    uri_string:recompose(#{path => binary_to_list(pget(name, ChData))}).
 
 consume(Channel, Queue) ->
     #'basic.consume_ok'{consumer_tag = Tag} =
