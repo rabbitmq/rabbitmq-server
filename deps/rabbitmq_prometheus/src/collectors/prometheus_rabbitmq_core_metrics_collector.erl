@@ -188,8 +188,13 @@
         {2, undefined, queue_messages_paged_out_bytes, gauge, "Size in bytes of messages paged out to disk", message_bytes_paged_out},
         {2, undefined, queue_disk_reads_total, counter, "Total number of times queue read messages from disk", disk_reads},
         {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes}
-    ]}
+    ]},
 
+    {auth_attempt_metrics, [
+        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts on a node"},
+        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authorization attempts on a node"},
+        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authorization attempts on a node"}
+    ]}
 ]).
 
 -define(TOTALS, [
@@ -334,6 +339,8 @@ label({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
     [{channel, P}, {queue_vhost, QVHost}, {queue, QName},
      {exchange_vhost, EVHost}, {exchange, EName}];
+label({B1, B2}) when is_binary(B1), is_binary(B2) ->
+    [{ip, B1}, {username, B2}];
 label({I1, I2}) ->
     label(I1) ++ label(I2);
 label(P) when is_pid(P) ->
@@ -439,6 +446,7 @@ get_data(Table, false) when Table == channel_exchange_metrics;
                            Table == queue_coarse_metrics;
                            Table == channel_queue_metrics;
                            Table == connection_coarse_metrics;
+                           Table == auth_attempt_metrics;
                            Table == channel_queue_exchange_metrics;
                            Table == ra_metrics;
                            Table == channel_process_metrics ->
@@ -446,6 +454,8 @@ get_data(Table, false) when Table == channel_exchange_metrics;
                        {T, V1 + A1};
                   ({_, V1, _}, {T, A1}) ->
                        {T, V1 + A1};
+                  ({_, V1, V2, V3}, {T, A1, A2, A3}) ->
+                       {T, V1 + A1, V2 + A2, V3 + A3};
                   ({_, V1, V2, V3, _}, {T, A1, A2, A3}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3};
                   ({_, V1, V2, V3, V4, _}, {T, A1, A2, A3, A4}) ->
@@ -479,7 +489,7 @@ accumulate_count_and_sum(Value, {Count, Sum}) ->
 
 empty(T) when T == channel_queue_exchange_metrics; T == channel_process_metrics ->
     {T, 0};
-empty(T) when T == connection_coarse_metrics ->
+empty(T) when T == connection_coarse_metrics; T == auth_attempt_metrics ->
     {T, 0, 0, 0};
 empty(T) when T == channel_exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
     {T, 0, 0, 0, 0};
