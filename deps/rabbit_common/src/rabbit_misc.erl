@@ -1124,14 +1124,14 @@ format_message_queue_entry(_V) ->
 %% its return value will be wrapped in a list.
 -spec append_rpc_all_nodes([node()], atom(), atom(), [any()]) -> [any()].
 append_rpc_all_nodes(Nodes, M, F, A) ->
-    do_append_rpc_all_nodes(Nodes, M, F, A, infinity).
+    do_append_rpc_all_nodes(Nodes, M, F, A, ?RPC_INFINITE_TIMEOUT).
 
 -spec append_rpc_all_nodes([node()], atom(), atom(), [any()], timeout()) -> [any()].
 append_rpc_all_nodes(Nodes, M, F, A, Timeout) ->
     do_append_rpc_all_nodes(Nodes, M, F, A, Timeout).
 
-do_append_rpc_all_nodes(Nodes, M, F, A, infinity) ->
-    {ResL, _} = rpc:multicall(Nodes, M, F, A, infinity),
+do_append_rpc_all_nodes(Nodes, M, F, A, ?RPC_INFINITE_TIMEOUT) ->
+    {ResL, _} = rpc:multicall(Nodes, M, F, A, ?RPC_INFINITE_TIMEOUT),
     process_rpc_multicall_result(ResL);
 do_append_rpc_all_nodes(Nodes, M, F, A, Timeout) ->
     {ResL, _} = try
@@ -1387,8 +1387,9 @@ escape_html_tags([C | Rest], Acc) ->
 %% our connection lasts a while, we could get disconnected because of
 %% a timeout unless we set our ticktime to be the same. So let's do
 %% that.
+%% TODO: do not use an infinite timeout!
 rpc_call(Node, Mod, Fun, Args) ->
-    rpc_call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+    rpc_call(Node, Mod, Fun, Args, ?RPC_INFINITE_TIMEOUT).
 
 rpc_call(Node, Mod, Fun, Args, Timeout) ->
     case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of

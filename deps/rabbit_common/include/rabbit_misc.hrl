@@ -6,3 +6,4 @@
 %%
 
 -define(RPC_TIMEOUT, 15000).
+-define(RPC_INFINITE_TIMEOUT, infinity).
