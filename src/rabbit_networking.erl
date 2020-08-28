@@ -47,6 +47,7 @@
 ]).
 
 -include("rabbit.hrl").
+-include("rabbit_misc.hrl").
 
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).
@@ -389,8 +390,9 @@ unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 -spec connections() -> [rabbit_types:connection()].
 
 connections() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
-                                     rabbit_networking, connections_local, []).
+    Running = rabbit_mnesia:cluster_nodes(running),
+    rabbit_misc:append_rpc_all_nodes(Running,
+                                     rabbit_networking, connections_local, [], ?RPC_TIMEOUT).
 
 -spec local_connections() -> [rabbit_types:connection()].
 %% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.
