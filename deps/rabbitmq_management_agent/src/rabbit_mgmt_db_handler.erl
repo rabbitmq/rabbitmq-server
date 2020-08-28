@@ -29,7 +29,7 @@
 %%----------------------------------------------------------------------------
 
 add_handler() ->
-    ensure_statistics_enabled(),
+    ok = ensure_statistics_enabled(),
     gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 gc() ->
