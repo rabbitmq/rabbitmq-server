@@ -312,7 +312,7 @@ single_node_multiple_users_connection_and_channel_count(Config) ->
             count_channels_of_user(Config, Username1) =:= 10
         end),
 
-    abruptly_terminate_client_connections([Conn4]),
+    close_connections([Conn4]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username1) =:= 1 andalso
@@ -1408,9 +1408,8 @@ close_connections(Conns) ->
       end, Conns).
 
 abruptly_terminate_client_connections(Conns) ->
-    lists:foreach(fun
-      (Conn) ->
-          (catch exit(Conn, please_terminate))
+    lists:foreach(fun (Conn) ->
+        (catch exit(Conn, please_terminate))
       end, Conns).
 
 open_channels(Conn, N) ->
