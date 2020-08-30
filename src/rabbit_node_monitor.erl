@@ -162,7 +162,7 @@ notify_node_up() ->
 -spec notify_joined_cluster() -> 'ok'.
 
 notify_joined_cluster() ->
-    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    Nodes = rabbit_nodes:all_running() -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_mnesia:node_type()}),
     ok.
@@ -170,7 +170,7 @@ notify_joined_cluster() ->
 -spec notify_left_cluster(node()) -> 'ok'.
 
 notify_left_cluster(Node) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Nodes = rabbit_nodes:all_running(),
     gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
@@ -375,7 +375,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(notify_node_up, State = #state{guid = GUID}) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
+    Nodes = rabbit_nodes:all_running() -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
                       {node_up, node(), rabbit_mnesia:node_type(), GUID}),
     %% register other active rabbits with this rabbit
@@ -425,7 +425,7 @@ handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
 handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
-    case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
+    case lists:member(Node, rabbit_nodes:all_running()) andalso
         maps:find(Node, GUIDs) =:= {ok, NodeGUID} of
         true  -> spawn_link( %%[1]
                    fun () ->
@@ -572,7 +572,7 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                              Node, node(), DownGUID, CheckGUID, MyGUID})
             end,
     case maps:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
+        {ok, DownGUID} -> Alive = rabbit_nodes:all_running()
                               -- [node(), Node],
                           [case maps:find(N, GUIDs) of
                                {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
@@ -771,7 +771,7 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
     Down = Partitions -- alive_rabbit_nodes(),
-    NoLongerPartitioned = rabbit_mnesia:cluster_nodes(running),
+    NoLongerPartitioned = rabbit_nodes:all_running(),
     Partitions1 = case Partitions -- Down -- NoLongerPartitioned of
                       [] -> [];
                       _  -> Partitions
@@ -853,7 +853,7 @@ disconnect(Node) ->
 %%--------------------------------------------------------------------
 
 %% mnesia:system_info(db_nodes) (and hence
-%% rabbit_mnesia:cluster_nodes(running)) does not return all nodes
+%% rabbit_nodes:all_running()) does not return all nodes
 %% when partitioned, just those that we are sharing Mnesia state
 %% with. So we have a small set of replacement functions
 %% here. "rabbit" in a function's name implies we test if the rabbit
@@ -917,7 +917,7 @@ ping_all() ->
     ok.
 
 possibly_partitioned_nodes() ->
-    alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
+    alive_rabbit_nodes() -- rabbit_nodes:all_running().
 
 startup_log([]) ->
     rabbit_log:info("Starting rabbit_node_monitor~n", []);

@@ -152,7 +152,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
 slaves_to_start_on_failure(Q, DeadGMPids) ->
     %% In case Mnesia has not caught up yet, filter out nodes we know
     %% to be dead..
-    ClusterNodes = rabbit_mnesia:cluster_nodes(running) --
+    ClusterNodes = rabbit_nodes:all_running() --
         [node(P) || P <- DeadGMPids],
     {_, OldNodes, _} = actual_queue_nodes(Q),
     {_, NewNodes} = suggested_queue_nodes(Q, ClusterNodes),
@@ -234,16 +234,16 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
                     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, MirrorNode) of
                         {ok, _} ->
-                            try 
+                            try
                                 SPid = rabbit_amqqueue_sup_sup:start_queue_process(
                                        MirrorNode, Q, slave),
                                 log_info(QName, "Adding mirror on node ~p: ~p~n",
                                      [MirrorNode, SPid]),
                                 rabbit_mirror_queue_slave:go(SPid, SyncMode)
-                            of 
+                            of
                                 _ -> ok
                             catch
-                                error:QError -> 
+                                error:QError ->
                                     log_warning(QName,
                                         "Unable to start queue mirror on node '~p'. "
                                         "Target queue supervisor is not running: ~p~n",
@@ -320,7 +320,7 @@ store_updated_slaves(Q0) when ?is_amqqueue(Q0) ->
 %% a long time without being removed.
 update_recoverable(SPids, RS) ->
     SNodes = [node(SPid) || SPid <- SPids],
-    RunningNodes = rabbit_mnesia:cluster_nodes(running),
+    RunningNodes = rabbit_nodes:all_running(),
     AddNodes = SNodes -- RS,
     DelNodes = RunningNodes -- SNodes, %% i.e. running with no slave
     (RS -- DelNodes) ++ AddNodes.
@@ -384,7 +384,7 @@ suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, rabbit_nodes:all_runni
 suggested_queue_nodes(Q, All) -> suggested_queue_nodes(Q, node(), All).
 
 %% The third argument exists so we can pull a call to
-%% rabbit_mnesia:cluster_nodes(running) out of a loop or transaction
+%% rabbit_nodes:all_running() out of a loop or transaction
 %% or both.
 suggested_queue_nodes(Q, DefNode, All) when ?is_amqqueue(Q) ->
     Owner = amqqueue:get_exclusive_owner(Q),

@@ -43,7 +43,7 @@ list_local() ->
 -spec list() -> [pid()].
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
+    rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
                                      rabbit_direct, list_local, []).
 
 %%----------------------------------------------------------------------------
