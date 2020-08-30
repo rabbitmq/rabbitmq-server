@@ -529,7 +529,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~s' and queues matching '~s'",
                     [Type, VhostSpec, QueueSpec]),
-    Running = rabbit_mnesia:cluster_nodes(running),
+    Running = rabbit_nodes:all_running(),
     NumRunning = length(Running),
     ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
                         filter_per_type(Type, Q),
@@ -1308,7 +1308,7 @@ emit_info_all(Nodes, VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:await_emitters_termination(Pids).
 
 collect_info_all(VHostPath, Items) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Nodes = rabbit_nodes:all_running(),
     Ref = make_ref(),
     Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, self()]) || Node <- Nodes ],
     rabbit_control_misc:await_emitters_termination(Pids),
@@ -1896,7 +1896,7 @@ node_permits_offline_promotion(Node) ->
     case node() of
         Node -> not rabbit:is_running(); %% [1]
         _    -> All = rabbit_mnesia:cluster_nodes(all),
-                Running = rabbit_mnesia:cluster_nodes(running),
+                Running = rabbit_nodes:all_running(),
                 lists:member(Node, All) andalso
                     not lists:member(Node, Running) %% [2]
     end.

@@ -862,7 +862,7 @@ add_member(VHost, Name, Node, Timeout) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             QNodes = get_nodes(Q),
-            case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
+            case lists:member(Node, rabbit_nodes:all_running()) of
                 false ->
                     {error, node_not_running};
                 true ->
@@ -993,7 +993,7 @@ shrink_all(Node) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
-    Running = rabbit_mnesia:cluster_nodes(running),
+    Running = rabbit_nodes:all_running(),
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),

@@ -331,7 +331,7 @@ get_all_tracked_connection_table_names_for_node(Node) ->
 -spec lookup(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
 
 lookup(Name) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Nodes = rabbit_nodes:all_running(),
     lookup(Name, Nodes).
 
 lookup(_, []) ->
@@ -350,7 +350,7 @@ list() ->
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
               Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
-      end, [], rabbit_mnesia:cluster_nodes(running)).
+      end, [], rabbit_nodes:all_running()).
 
 -spec count() -> non_neg_integer().
 
@@ -359,7 +359,7 @@ count() ->
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
               Acc + mnesia:table_info(Tab, size)
-      end, 0, rabbit_mnesia:cluster_nodes(running)).
+      end, 0, rabbit_nodes:all_running()).
 
 -spec list(rabbit_types:vhost()) -> [rabbit_types:tracked_connection()].
 
