@@ -178,7 +178,7 @@ list() ->
       fun (Node, Acc) ->
               Tab = tracked_channel_table_name_for(Node),
               Acc ++ mnesia:dirty_match_object(Tab, #tracked_channel{_ = '_'})
-      end, [], rabbit_mnesia:cluster_nodes(running)).
+      end, [], rabbit_nodes:all_running()).
 
 -spec list_of_user(rabbit_types:username()) -> [rabbit_types:tracked_channel()].
 
