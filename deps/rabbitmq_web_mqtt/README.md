@@ -9,7 +9,7 @@ Like all plugins, it [must be enabled](https://www.rabbitmq.com/plugins.html) be
 
 ``` bash
 # this might require sudo
-rabbitmq-plugins enable rabbitmq_web_stomp
+rabbitmq-plugins enable rabbitmq_web_mqtt
 ```
 
 ## Documentation
