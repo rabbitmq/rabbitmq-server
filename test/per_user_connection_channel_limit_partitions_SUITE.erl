@@ -2,10 +2,10 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(per_vhost_connection_limit_partitions_SUITE).
+-module(per_user_connection_channel_limit_partitions_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -15,7 +15,6 @@
 
 -import(rabbit_ct_client_helpers, [open_unmanaged_connection/2,
                                    open_unmanaged_connection/3]).
-
 
 all() ->
     [
@@ -81,10 +80,10 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 cluster_full_partition_with_autoheal(Config) ->
-    VHost = <<"/">>,
+    Username = proplists:get_value(rmq_username, Config),
     rabbit_ct_broker_helpers:set_partition_handling_mode_globally(Config, autoheal),
 
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?assertEqual(0, count_connections_in(Config, Username)),
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     %% 6 connections, 2 per node
@@ -94,7 +93,12 @@ cluster_full_partition_with_autoheal(Config) ->
     Conn4 = open_unmanaged_connection(Config, B),
     Conn5 = open_unmanaged_connection(Config, C),
     Conn6 = open_unmanaged_connection(Config, C),
-    wait_for_count_connections_in(Config, VHost, 6, 60000),
+
+    _Chans1 = [_|_] = open_channels(Conn1, 5),
+    _Chans3 = [_|_] = open_channels(Conn3, 5),
+    _Chans5 = [_|_] = open_channels(Conn5, 5),
+    wait_for_count_connections_in(Config, Username, 6, 60000),
+    ?assertEqual(15, count_channels_in(Config, Username)),
 
     %% B drops off the network, non-reachable by either A or C
     rabbit_ct_broker_helpers:block_traffic_between(A, B),
@@ -102,19 +106,24 @@ cluster_full_partition_with_autoheal(Config) ->
     timer:sleep(?DELAY),
 
     %% A and C are still connected, so 4 connections are tracked
-    wait_for_count_connections_in(Config, VHost, 4, 60000),
+    %% All connections to B are dropped
+    wait_for_count_connections_in(Config, Username, 4, 60000),
+    ?assertEqual(10, count_channels_in(Config, Username)),
 
     rabbit_ct_broker_helpers:allow_traffic_between(A, B),
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
     timer:sleep(?DELAY),
 
     %% during autoheal B's connections were dropped
-    wait_for_count_connections_in(Config, VHost, 4, 60000),
+    wait_for_count_connections_in(Config, Username, 4, 60000),
+    ?assertEqual(10, count_channels_in(Config, Username)),
 
     lists:foreach(fun (Conn) ->
                           (catch rabbit_ct_client_helpers:close_connection(Conn))
                   end, [Conn1, Conn2, Conn3, Conn4,
                         Conn5, Conn6]),
+    ?assertEqual(0, count_connections_in(Config, Username)),
+    ?assertEqual(0, count_channels_in(Config, Username)),
 
     passed.
 
@@ -122,29 +131,44 @@ cluster_full_partition_with_autoheal(Config) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
-wait_for_count_connections_in(Config, VHost, Expected, Time) when Time =< 0 ->
+wait_for_count_connections_in(Config, Username, Expected, Time) when Time =< 0 ->
     ?assertMatch(Connections when length(Connections) == Expected,
-                                  connections_in(Config, VHost));
-wait_for_count_connections_in(Config, VHost, Expected, Time) ->
-    case connections_in(Config, VHost) of
+                                  connections_in(Config, Username));
+wait_for_count_connections_in(Config, Username, Expected, Time) ->
+    case connections_in(Config, Username) of
         Connections when length(Connections) == Expected ->
             ok;
         _ ->
             Sleep = 3000,
             timer:sleep(Sleep),
-            wait_for_count_connections_in(Config, VHost, Expected, Time - Sleep)
+            wait_for_count_connections_in(Config, Username, Expected, Time - Sleep)
     end.
 
-count_connections_in(Config, VHost) ->
-    count_connections_in(Config, VHost, 0).
-count_connections_in(Config, VHost, NodeIndex) ->
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                 rabbit_connection_tracking,
-                                 count_tracked_items_in, [{vhost, VHost}]).
+open_channels(Conn, N) ->
+    [begin
+        {ok, Ch} = amqp_connection:open_channel(Conn),
+        Ch
+     end || _ <- lists:seq(1, N)].
 
-connections_in(Config, VHost) ->
-    connections_in(Config, 0, VHost).
-connections_in(Config, NodeIndex, VHost) ->
+count_connections_in(Config, Username) ->
+    length(connections_in(Config, Username)).
+
+connections_in(Config, Username) ->
+    connections_in(Config, 0, Username).
+connections_in(Config, NodeIndex, Username) ->
+    tracked_list_of_user(Config, NodeIndex, rabbit_connection_tracking, Username).
+
+count_channels_in(Config, Username) ->
+    Channels = channels_in(Config, Username),
+    length([Ch || Ch = #tracked_channel{username = Username0} <- Channels,
+                  Username =:= Username0]).
+
+channels_in(Config, Username) ->
+    channels_in(Config, 0, Username).
+channels_in(Config, NodeIndex, Username) ->
+    tracked_list_of_user(Config, NodeIndex, rabbit_channel_tracking, Username).
+
+tracked_list_of_user(Config, NodeIndex, TrackingMod, Username) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                 rabbit_connection_tracking,
-                                 list, [VHost]).
+                                 TrackingMod,
+                                 list_of_user, [Username]).

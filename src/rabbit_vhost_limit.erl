@@ -90,7 +90,8 @@ is_over_connection_limit(VirtualHost) ->
         %% with limit = 0, no connections are allowed
         {ok, 0}                                              -> {true, 0};
         {ok, Limit} when is_integer(Limit) andalso Limit > 0 ->
-            ConnectionCount = rabbit_connection_tracking:count_connections_in(VirtualHost),
+            ConnectionCount =
+                rabbit_connection_tracking:count_tracked_items_in({vhost, VirtualHost}),
             case ConnectionCount >= Limit of
                 false -> false;
                 true  -> {true, Limit}

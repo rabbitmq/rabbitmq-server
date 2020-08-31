@@ -352,7 +352,7 @@ send_drained(Pid, CTagCredit) ->
 -spec list() -> [pid()].
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
+    rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
                                      rabbit_channel, list_local, []).
 
 -spec list_local() -> [pid()].

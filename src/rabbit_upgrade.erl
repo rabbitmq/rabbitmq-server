@@ -145,7 +145,7 @@ run_mnesia_upgrades(Upgrades, AllNodes) ->
 upgrade_mode(AllNodes) ->
     case nodes_running(AllNodes) of
         [] ->
-            AfterUs = rabbit_mnesia:cluster_nodes(running) -- [node()],
+            AfterUs = rabbit_nodes:all_running() -- [node()],
             case {node_type_legacy(), AfterUs} of
                 {disc, []}  ->
                     primary;

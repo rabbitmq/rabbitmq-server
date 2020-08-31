@@ -43,7 +43,7 @@ list_local() ->
 -spec list() -> [pid()].
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
+    rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
                                      rabbit_direct, list_local, []).
 
 %%----------------------------------------------------------------------------
@@ -80,7 +80,7 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
                 undefined ->
                     {error, broker_is_booting};
                 _ ->
-                    case is_over_connection_limit(VHost, Creds, Pid) of
+                    case is_over_vhost_connection_limit(VHost, Creds, Pid) of
                         true  ->
                             {error, not_allowed};
                         false ->
@@ -100,7 +100,7 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
                                             {error, {auth_failure, "Refused"}}
                                     end %% AuthFun()
                             end %% is_vhost_alive
-                    end %% is_over_connection_limit
+                    end %% is_over_vhost_connection_limit
             end;
         false -> {error, broker_not_found_on_node}
     end.
@@ -146,7 +146,7 @@ is_vhost_alive(VHost, {Username, _Password}, Pid) ->
             false
     end.
 
-is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
+is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
     PrintedUsername = case Username of
         none -> "";
         _    -> Username
@@ -157,7 +157,7 @@ is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
             rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
                 "access to vhost '~s' refused for user '~s': "
-                "connection limit (~p) is reached",
+                "vhost connection limit (~p) is reached",
                 [Pid, VHost, PrintedUsername, Limit]),
             true
     catch
@@ -174,19 +174,30 @@ notify_auth_result(Username, AuthResult, ExtraProps) ->
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
-connect1(User, VHost, Protocol, Pid, Infos) ->
-    % Note: peer_host can be either a tuple or
-    % a binary if reverse_dns_lookups is enabled
-    PeerHost = proplists:get_value(peer_host, Infos),
-    AuthzContext = proplists:get_value(variable_map, Infos, #{}),
-    try rabbit_access_control:check_vhost_access(User, VHost, {ip, PeerHost}, AuthzContext) of
-        ok -> ok = pg_local:join(rabbit_direct, Pid),
-	      rabbit_core_metrics:connection_created(Pid, Infos),
-              rabbit_event:notify(connection_created, Infos),
-              {ok, {User, rabbit_reader:server_properties(Protocol)}}
-    catch
-        exit:#amqp_error{name = Reason = not_allowed} ->
-            {error, Reason}
+connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
+    case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
+        false ->
+            % Note: peer_host can be either a tuple or
+            % a binary if reverse_dns_lookups is enabled
+            PeerHost = proplists:get_value(peer_host, Infos),
+            AuthzContext = proplists:get_value(variable_map, Infos, #{}),
+            try rabbit_access_control:check_vhost_access(User, VHost,
+                                               {ip, PeerHost}, AuthzContext) of
+                ok -> ok = pg_local:join(rabbit_direct, Pid),
+                      rabbit_core_metrics:connection_created(Pid, Infos),
+                      rabbit_event:notify(connection_created, Infos),
+                      {ok, {User, rabbit_reader:server_properties(Protocol)}}
+            catch
+                exit:#amqp_error{name = Reason = not_allowed} ->
+                    {error, Reason}
+            end;
+        {true, Limit} ->
+            rabbit_log_connection:error(
+                "Error on Direct connection ~p~n"
+                "access refused for user '~s': "
+                "user connection limit (~p) is reached",
+                [Pid, Username, Limit]),
+            {error, not_allowed}
     end.
 
 -spec start_channel
@@ -195,14 +206,25 @@ connect1(User, VHost, Protocol, Pid, Infos) ->
          rabbit_framing:amqp_table(), pid(), any()) ->
             {'ok', pid()}.
 
-start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
-              VHost, Capabilities, Collector, AmqpParams) ->
-    {ok, _, {ChannelPid, _}} =
-        supervisor2:start_child(
-          rabbit_direct_client_sup,
-          [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
-            User, VHost, Capabilities, Collector, AmqpParams}]),
-    {ok, ChannelPid}.
+start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+              User = #user{username = Username}, VHost, Capabilities,
+              Collector, AmqpParams) ->
+    case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
+        false ->
+            {ok, _, {ChannelPid, _}} =
+                supervisor2:start_child(
+                  rabbit_direct_client_sup,
+                  [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+                    User, VHost, Capabilities, Collector, AmqpParams}]),
+            {ok, ChannelPid};
+        {true, Limit} ->
+            rabbit_log_connection:error(
+                "Error on direct connection ~p~n"
+                "number of channels opened for user '~s' has reached the "
+                "maximum allowed limit of (~w)",
+                [ConnPid, Username, Limit]),
+            {error, not_allowed}
+    end.
 
 -spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
 

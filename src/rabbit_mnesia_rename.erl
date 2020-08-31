@@ -233,7 +233,7 @@ update_term(_NodeMap, Term) ->
 
 rename_in_running_mnesia(FromNode, ToNode) ->
     All = rabbit_mnesia:cluster_nodes(all),
-    Running = rabbit_mnesia:cluster_nodes(running),
+    Running = rabbit_nodes:all_running(),
     case {lists:member(FromNode, Running), lists:member(ToNode, All)} of
         {false, true}  -> ok;
         {true,  _}     -> exit({old_node_running,        FromNode});
