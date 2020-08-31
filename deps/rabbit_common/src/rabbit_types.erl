@@ -16,12 +16,14 @@
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
               binding/0, binding_source/0, binding_destination/0,
               exchange/0,
-              connection/0, protocol/0, auth_user/0, user/0, internal_user/0,
+              connection/0, connection_name/0, channel/0, channel_name/0,
+              protocol/0, auth_user/0, user/0,
               username/0, password/0, password_hash/0,
               ok/1, error/1, error/2, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
-              proc_type_and_name/0, timestamp/0,
-              tracked_connection/0, node_type/0, topic_access_context/0,
+              proc_type_and_name/0, timestamp/0, tracked_connection_id/0,
+              tracked_connection/0, tracked_channel_id/0, tracked_channel/0,
+              node_type/0, topic_access_context/0,
               authz_data/0, authz_context/0]).
 
 -type(maybe(T) :: T | 'none').
@@ -117,17 +119,35 @@
 -type(connection() :: pid()).
 
 %% used e.g. by rabbit_connection_tracking
+-type(tracked_connection_id() :: {node(), connection_name()}).
+
 -type(tracked_connection() ::
-        #tracked_connection{id           :: {node(), connection_name()},
+        #tracked_connection{id           :: tracked_connection_id(),
                             node         :: node(),
                             vhost        :: vhost(),
                             name         :: connection_name(),
-                            pid          :: pid(),
+                            pid          :: connection(),
                             protocol     :: protocol_name(),
                             peer_host    :: rabbit_networking:hostname(),
                             peer_port    :: rabbit_networking:ip_port(),
                             username     :: username(),
                             connected_at :: integer()}).
+
+-type(channel_name() :: binary()).
+
+-type(channel() :: pid()).
+
+%% used e.g. by rabbit_channel_tracking
+-type(tracked_channel_id() :: {node(), channel_name()}).
+
+-type(tracked_channel() ::
+        #tracked_channel{ id          :: tracked_channel_id(),
+                          node        :: node(),
+                          vhost       :: vhost(),
+                          name        :: channel_name(),
+                          pid         :: channel(),
+                          username    :: username(),
+                          connection  :: connection()}).
 
 %% old AMQP 0-9-1-centric type, avoid when possible
 -type(protocol() :: rabbit_framing:protocol()).
@@ -149,11 +169,6 @@
         #user{username       :: username(),
               tags           :: [atom()],
               authz_backends :: [{atom(), any()}]}).
-
--type(internal_user() ::
-        #internal_user{username      :: username(),
-                       password_hash :: password_hash(),
-                       tags          :: [atom()]}).
 
 -type(username() :: binary()).
 -type(password() :: binary()).
