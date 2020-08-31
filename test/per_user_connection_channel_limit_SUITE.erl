@@ -17,7 +17,6 @@ all() ->
     [
      {group, cluster_size_1_network},
      {group, cluster_size_2_network},
-     {group, cluster_size_1_direct},
      {group, cluster_size_2_direct}
     ].
 
@@ -51,8 +50,7 @@ groups() ->
     [
       {cluster_size_1_network, [], ClusterSize1Tests},
       {cluster_size_2_network, [], ClusterSize2Tests},
-      {cluster_size_1_direct, [], ClusterSize1Tests},
-      {cluster_size_2_direct, [], ClusterSize2Tests}
+      {cluster_size_2_direct,  [], ClusterSize2Tests}
     ].
 
 suite() ->
@@ -78,9 +76,6 @@ init_per_group(cluster_size_1_network, Config) ->
 init_per_group(cluster_size_2_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_2_network, Config1, 2);
-init_per_group(cluster_size_1_direct, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
-    init_per_multinode_group(cluster_size_1_direct, Config1, 1);
 init_per_group(cluster_size_2_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_2_direct, Config1, 2);
@@ -218,7 +213,7 @@ single_node_single_user_connection_and_channel_count(Config) ->
             count_channels_of_user(Config, Username) =:= 15
         end),
 
-    abruptly_terminate_client_connections([Conn4]),
+    close_connections([Conn4]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username) =:= 2 andalso
@@ -385,7 +380,7 @@ single_node_list_in_user(Config) ->
 
     [Conn4] = open_connections(Config, [{0, Username1}]),
     [_Chan4] = open_channels(Conn4, 1),
-    abruptly_terminate_client_connections([Conn4]),
+    close_connections([Conn4]),
     [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
     [#tracked_channel{username = Username1}] = channels_in(Config, Username1),
 
@@ -412,7 +407,7 @@ most_basic_cluster_connection_and_channel_count(Config) ->
     Username = proplists:get_value(rmq_username, Config),
     rabbit_ct_helpers:await_condition(
         fun () ->
-            count_connections_of_user(Config, Username) =:= 0,
+            count_connections_of_user(Config, Username) =:= 0 andalso
             count_channels_of_user(Config, Username) =:= 0
         end),
 
@@ -420,7 +415,7 @@ most_basic_cluster_connection_and_channel_count(Config) ->
     Chans1 = [_|_] = open_channels(Conn1, 5),
     rabbit_ct_helpers:await_condition(
         fun () ->
-            count_connections_of_user(Config, Username) =:= 1,
+            count_connections_of_user(Config, Username) =:= 1 andalso
             count_channels_of_user(Config, Username) =:= 5
         end),
     ?assertEqual(1, count_connections_of_user(Config, Username)),
@@ -489,7 +484,7 @@ cluster_single_user_connection_and_channel_count(Config) ->
             count_channels_of_user(Config, Username) =:= 15
         end),
 
-    abruptly_terminate_client_connections([Conn4]),
+    close_connections([Conn4]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username) =:= 2 andalso
@@ -523,157 +518,257 @@ cluster_multiple_users_connection_and_channel_count(Config) ->
     set_up_user(Config, Username1),
     set_up_user(Config, Username2),
 
-    ?assertEqual(0, count_connections_of_user(Config, Username1)),
-    ?assertEqual(0, count_connections_of_user(Config, Username2)),
-    ?assertEqual(0, count_channels_of_user(Config, Username1)),
-    ?assertEqual(0, count_channels_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 0 andalso
+            count_connections_of_user(Config, Username2) =:= 0
+        end),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_channels_of_user(Config, Username1) =:= 0 andalso
+            count_channels_of_user(Config, Username2) =:= 0
+        end),
 
     [Conn1] = open_connections(Config, [{0, Username1}]),
     _Chans1 = [_|_] = open_channels(Conn1, 5),
-    ?assertEqual(1, count_connections_of_user(Config, Username1)),
-    ?assertEqual(5, count_channels_of_user(Config, Username1)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 1 andalso
+            count_channels_of_user(Config, Username1) =:= 5
+        end),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_of_user(Config, Username1)),
-    ?assertEqual(0, count_channels_of_user(Config, Username1)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 0 andalso
+            count_channels_of_user(Config, Username1) =:= 0
+        end),
 
     [Conn2] = open_connections(Config, [{1, Username2}]),
     Chans2 = [_|_] = open_channels(Conn2, 5),
-    ?assertEqual(1, count_connections_of_user(Config, Username2)),
-    ?assertEqual(5, count_channels_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username2) =:= 1 andalso
+            count_channels_of_user(Config, Username2) =:= 5
+        end),
 
     [Conn3] = open_connections(Config, [{1, Username1}]),
     Chans3 = [_|_] = open_channels(Conn3, 5),
-    ?assertEqual(1, count_connections_of_user(Config, Username1)),
-    ?assertEqual(5, count_channels_of_user(Config, Username1)),
-    ?assertEqual(1, count_connections_of_user(Config, Username2)),
-    ?assertEqual(5, count_channels_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 1 andalso
+            count_channels_of_user(Config, Username1) =:= 5
+        end),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username2) =:= 1 andalso
+            count_channels_of_user(Config, Username2) =:= 5
+        end),
 
     [Conn4] = open_connections(Config, [{0, Username1}]),
     _Chans4 = [_|_] = open_channels(Conn4, 5),
-    ?assertEqual(2, count_connections_of_user(Config, Username1)),
-    ?assertEqual(10, count_channels_of_user(Config, Username1)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 2 andalso
+            count_channels_of_user(Config, Username1) =:= 10
+        end),
 
-    abruptly_terminate_client_connections([Conn4]),
-    ?assertEqual(1, count_connections_of_user(Config, Username1)),
-    ?assertEqual(5, count_channels_of_user(Config, Username1)),
+    close_connections([Conn4]),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 1 andalso
+            count_channels_of_user(Config, Username1) =:= 5
+        end),
 
     [Conn5] = open_connections(Config, [{1, Username2}]),
     Chans5 = [_|_] = open_channels(Conn5, 5),
-    ?assertEqual(2, count_connections_of_user(Config, Username2)),
-    ?assertEqual(10, count_channels_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username2) =:= 2 andalso
+            count_channels_of_user(Config, Username2) =:= 10
+        end),
 
     [Conn6] = open_connections(Config, [{0, Username2}]),
     Chans6 = [_|_] = open_channels(Conn6, 5),
-    ?assertEqual(3, count_connections_of_user(Config, Username2)),
-    ?assertEqual(15, count_channels_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username2) =:= 3 andalso
+            count_channels_of_user(Config, Username2) =:= 15
+        end),
 
     close_channels(Chans2 ++ Chans3 ++ Chans5 ++ Chans6),
-    ?assertEqual(0, count_channels_of_user(Config, Username1)),
-    ?assertEqual(0, count_channels_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_channels_of_user(Config, Username1) =:= 0 andalso
+            count_channels_of_user(Config, Username2) =:= 0
+        end),
 
     close_connections([Conn2, Conn3, Conn5, Conn6]),
-    ?assertEqual(0, count_connections_of_user(Config, Username1)),
-    ?assertEqual(0, count_connections_of_user(Config, Username2)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username1) =:= 0 andalso
+            count_connections_of_user(Config, Username2) =:= 0
+        end),
 
     rabbit_ct_broker_helpers:delete_user(Config, Username1),
     rabbit_ct_broker_helpers:delete_user(Config, Username2).
 
 cluster_node_restart_connection_and_channel_count(Config) ->
     Username = proplists:get_value(rmq_username, Config),
-    ?assertEqual(0, count_connections_of_user(Config, Username)),
-    ?assertEqual(0, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 0 andalso
+            count_channels_of_user(Config, Username) =:= 0
+        end),
 
     [Conn1] = open_connections(Config, [0]),
     _Chans1 = [_|_] = open_channels(Conn1, 5),
-    ?assertEqual(1, count_connections_of_user(Config, Username)),
-    ?assertEqual(5, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 1 andalso
+            count_channels_of_user(Config, Username) =:= 5
+        end),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)),
-    ?assertEqual(0, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 0 andalso
+            count_channels_of_user(Config, Username) =:= 0
+        end),
 
     [Conn2] = open_connections(Config, [1]),
     Chans2 = [_|_] = open_channels(Conn2, 5),
-    ?assertEqual(1, count_connections_of_user(Config, Username)),
-    ?assertEqual(5, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 1 andalso
+            count_channels_of_user(Config, Username) =:= 5
+        end),
 
     [Conn3] = open_connections(Config, [0]),
     Chans3 = [_|_] = open_channels(Conn3, 5),
-    ?assertEqual(2, count_connections_of_user(Config, Username)),
-    ?assertEqual(10, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 2 andalso
+            count_channels_of_user(Config, Username) =:= 10
+        end),
 
     [Conn4] = open_connections(Config, [1]),
     _Chans4 = [_|_] = open_channels(Conn4, 5),
-    ?assertEqual(3, count_connections_of_user(Config, Username)),
-    ?assertEqual(15, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 3 andalso
+            count_channels_of_user(Config, Username) =:= 15
+        end),
 
     [Conn5] = open_connections(Config, [1]),
     Chans5 = [_|_] = open_channels(Conn5, 5),
-    ?assertEqual(4, count_connections_of_user(Config, Username)),
-    ?assertEqual(20, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 4 andalso
+            count_channels_of_user(Config, Username) =:= 20
+        end),
 
     rabbit_ct_broker_helpers:restart_broker(Config, 1),
-    ?assertEqual(1, count_connections_of_user(Config, Username)),
-    ?assertEqual(5, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 1 andalso
+            count_channels_of_user(Config, Username) =:= 5
+        end),
 
     close_channels(Chans2 ++ Chans3 ++ Chans5),
-    ?assertEqual(0, count_channels_of_user(Config, Username)),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_channels_of_user(Config, Username) =:= 0
+        end),
 
     close_connections([Conn2, Conn3, Conn4, Conn5]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)).
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            count_connections_of_user(Config, Username) =:= 0
+        end).
 
 cluster_node_list_on_node(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    ?assertEqual(0, length(all_connections(Config))),
-    ?assertEqual(0, length(all_channels(Config))),
-    ?assertEqual(0, length(connections_on_node(Config, 0))),
-    ?assertEqual(0, length(channels_on_node(Config, 0))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(all_connections(Config)) =:= 0 andalso
+            length(all_channels(Config)) =:= 0 andalso
+            length(connections_on_node(Config, 0)) =:= 0 andalso
+            length(channels_on_node(Config, 0)) =:= 0
+        end),
 
     [Conn1] = open_connections(Config, [0]),
     _Chans1 = [_|_] = open_channels(Conn1, 5),
     [#tracked_connection{node = A}] = connections_on_node(Config, 0),
-    ?assertEqual(5, length([Ch || Ch <- channels_on_node(Config, 0),
-                                  Ch#tracked_channel.node =:= A])),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length([Ch || Ch <- channels_on_node(Config, 0), Ch#tracked_channel.node =:= A]) =:= 5
+        end),
     close_connections([Conn1]),
-    ?assertEqual(0, length(connections_on_node(Config, 0))),
-    ?assertEqual(0, length(channels_on_node(Config, 0))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(connections_on_node(Config, 0)) =:= 0 andalso
+            length(channels_on_node(Config, 0)) =:= 0
+        end),
 
     [Conn2] = open_connections(Config, [1]),
     _Chans2 = [_|_] = open_channels(Conn2, 5),
     [#tracked_connection{node = B}] = connections_on_node(Config, 1),
-    ?assertEqual(5, length([Ch || Ch <- channels_on_node(Config, 1),
-                                  Ch#tracked_channel.node =:= B])),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length([Ch || Ch <- channels_on_node(Config, 1), Ch#tracked_channel.node =:= B]) =:= 5
+        end),
 
     [Conn3] = open_connections(Config, [0]),
     Chans3 = [_|_] = open_channels(Conn3, 5),
-    ?assertEqual(1, length(connections_on_node(Config, 0))),
-    ?assertEqual(5, length(channels_on_node(Config, 0))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(connections_on_node(Config, 0)) =:= 1 andalso
+            length(channels_on_node(Config, 0)) =:= 5
+        end),
 
     [Conn4] = open_connections(Config, [1]),
     _Chans4 = [_|_] = open_channels(Conn4, 5),
-    ?assertEqual(2, length(connections_on_node(Config, 1))),
-    ?assertEqual(10, length(channels_on_node(Config, 1))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(connections_on_node(Config, 1)) =:= 2 andalso
+            length(channels_on_node(Config, 1)) =:= 10
+        end),
 
-    abruptly_terminate_client_connections([Conn4]),
-    ?assertEqual(1, length(connections_on_node(Config, 1))),
-    ?assertEqual(5, length(channels_on_node(Config, 1))),
+    close_connections([Conn4]),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(connections_on_node(Config, 1)) =:= 1 andalso
+            length(channels_on_node(Config, 1)) =:= 5
+        end),
 
     [Conn5] = open_connections(Config, [0]),
     Chans5 = [_|_] = open_channels(Conn5, 5),
-    ?assertEqual(2, length(connections_on_node(Config, 0))),
-    ?assertEqual(10, length(channels_on_node(Config, 0))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(connections_on_node(Config, 0)) =:= 2 andalso
+            length(channels_on_node(Config, 0)) =:= 10
+        end),
 
     rabbit_ct_broker_helpers:stop_broker(Config, 1),
     await_running_node_refresh(Config, 0),
 
-    ?assertEqual(2, length(all_connections(Config))),
-    ?assertEqual(10, length(all_channels(Config))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(all_connections(Config)) =:= 2 andalso
+            length(all_channels(Config)) =:= 10
+        end),
 
     close_channels(Chans3 ++ Chans5),
-    ?assertEqual(0, length(all_channels(Config))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(all_channels(Config)) =:= 0
+        end),
 
     close_connections([Conn3, Conn5]),
-    ?assertEqual(0, length(all_connections(Config, 0))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(all_connections(Config)) =:= 0
+        end),
 
     rabbit_ct_broker_helpers:start_broker(Config, 1).
 
@@ -741,7 +836,7 @@ single_node_single_user_zero_limit(Config) ->
     expect_that_client_channel_is_rejected(ConnA),
     rabbit_ct_helpers:await_condition(
         fun () ->
-            is_process_alive(ConnA) =:= false,
+            is_process_alive(ConnA) =:= false andalso
             count_connections_of_user(Config, Username) =:= 0 andalso
             count_channels_of_user(Config, Username) =:= 0
         end),
@@ -1271,7 +1366,7 @@ cluster_multiple_users_clear_limits(Config) ->
             count_channels_of_user(Config, Username1) =:= 0 andalso
             count_channels_of_user(Config, Username2) =:= 0
         end),
-    abruptly_terminate_client_connections([ConnB]),
+    close_connections([ConnB]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username2) =:= 0 andalso
@@ -1351,7 +1446,7 @@ cluster_multiple_users_zero_limit(Config) ->
         end),
     ?assertEqual(false, is_process_alive(ConnA)),
     ?assertEqual(true, is_process_alive(ConnB)),
-    abruptly_terminate_client_connections([ConnB]),
+    close_connections([ConnB]),
         rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username2) =:= 0 andalso
@@ -1405,11 +1500,6 @@ close_connections(Conns) ->
     lists:foreach(fun
       (Conn) ->
           rabbit_ct_client_helpers:close_connection(Conn)
-      end, Conns).
-
-abruptly_terminate_client_connections(Conns) ->
-    lists:foreach(fun (Conn) ->
-        (catch exit(Conn, please_terminate))
       end, Conns).
 
 open_channels(Conn, N) ->
