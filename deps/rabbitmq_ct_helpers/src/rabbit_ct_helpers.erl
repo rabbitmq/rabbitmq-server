@@ -41,6 +41,7 @@
     convert_to_unicode_binary/1,
     cover_work_factor/2,
 
+    await_condition/1,
     await_condition/2,
     await_condition_with_retries/2
   ]).
@@ -948,6 +949,9 @@ convert_to_unicode_binary(Arg) when is_binary(Arg) ->
 %% -------------------------------------------------------------------
 %% Assertions that retry
 %% -------------------------------------------------------------------
+
+await_condition(ConditionFun) ->
+    await_condition(ConditionFun, 10000).
 
 await_condition(ConditionFun, Timeout) ->
     Retries = ceil(Timeout / 50),
