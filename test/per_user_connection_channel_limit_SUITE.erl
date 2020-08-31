@@ -477,35 +477,20 @@ cluster_single_user_connection_and_channel_count(Config) ->
         end),
 
     [Conn4] = open_connections(Config, [1]),
-    _Chans4 = [_|_] = open_channels(Conn4, 5),
+    Chans4 = [_|_] = open_channels(Conn4, 5),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username) =:= 3 andalso
             count_channels_of_user(Config, Username) =:= 15
         end),
 
-    close_connections([Conn4]),
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            count_connections_of_user(Config, Username) =:= 2 andalso
-            count_channels_of_user(Config, Username) =:= 10
-        end),
-
-    [Conn5] = open_connections(Config, [1]),
-    Chans5 = [_|_] = open_channels(Conn5, 5),
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            count_connections_of_user(Config, Username) =:= 3 andalso
-            count_channels_of_user(Config, Username) =:= 15
-        end),
-
-    close_channels(Chans2 ++ Chans3 ++ Chans5),
+    close_channels(Chans2 ++ Chans3 ++ Chans4),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_channels_of_user(Config, Username) =:= 0
         end),
 
-    close_connections([Conn2, Conn3, Conn5]),
+    close_connections([Conn2, Conn3, Conn4]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username) =:= 0
