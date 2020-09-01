@@ -15,6 +15,7 @@
 ## Installation
 
  * [Installation guides](https://rabbitmq.com/download.html) for various platforms
+ * [Kubernetes Cluster Operator](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html)
  * [Changelog](https://www.rabbitmq.com/changelog.html)
  * [Releases](https://github.com/rabbitmq/rabbitmq-server/releases) on GitHub
  * [Supported and unsupported series](https://www.rabbitmq.com/versions.html)
