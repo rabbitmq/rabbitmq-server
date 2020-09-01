@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_mqtt_sup).
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -16,7 +16,7 @@
 -define(TLS_PROTOCOL, 'mqtt/ssl').
 
 start_link(Listeners, []) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
+    supervisor2:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
 init([{Listeners, SslListeners0}]) ->
     NumTcpAcceptors = application:get_env(rabbitmq_mqtt, num_tcp_acceptors, 10),
@@ -31,21 +31,10 @@ init([{Listeners, SslListeners0}]) ->
                          danger -> []
                      end}
           end,
-    Flags = #{
-        strategy => one_for_all,
-        period => 10,
-        intensity => 10
-    },
-    RetainerSpec = #{
-        id       => rabbit_mqtt_retainer_sup,
-        start    => {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
-        restart  => transient,
-        shutdown => ?SUPERVISOR_WAIT,
-        type     => supervisor,
-        modules  => [rabbit_mqtt_retainer_sup]
-    },
-    {ok, {Flags,
-          [RetainerSpec |
+    {ok, {{one_for_all, 10, 10},
+          [{rabbit_mqtt_retainer_sup,
+            {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
+             transient, ?SUPERVISOR_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts, NumTcpAcceptors], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
