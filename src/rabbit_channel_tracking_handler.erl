@@ -40,20 +40,20 @@ init([]) ->
     {ok, []}.
 
 handle_event(#event{type = channel_created, props = Details}, State) ->
-    _Pid = rabbit_channel_tracking:update_tracked({channel_created, Details}),
+    ok = rabbit_channel_tracking:update_tracked({channel_created, Details}),
     {ok, State};
 handle_event(#event{type = channel_closed, props = Details}, State) ->
-    _Pid = rabbit_channel_tracking:update_tracked({channel_closed, Details}),
+    ok = rabbit_channel_tracking:update_tracked({channel_closed, Details}),
     {ok, State};
 handle_event(#event{type = connection_closed, props = Details}, State) ->
-    _Pid = rabbit_channel_tracking:update_tracked({connection_closed, Details}),
+    ok = rabbit_channel_tracking:update_tracked({connection_closed, Details}),
     {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
-    _Pid = rabbit_channel_tracking:update_tracked({user_deleted, Details}),
+    ok = rabbit_channel_tracking:update_tracked({user_deleted, Details}),
     {ok, State};
 %% A node had been deleted from the cluster.
 handle_event(#event{type = node_deleted, props = Details}, State) ->
-    _Pid = rabbit_channel_tracking:update_tracked({node_deleted, Details}),
+    ok = rabbit_channel_tracking:update_tracked({node_deleted, Details}),
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.

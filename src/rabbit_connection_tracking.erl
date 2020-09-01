@@ -85,7 +85,8 @@ boot() ->
 -spec update_tracked(term()) -> ok.
 
 update_tracked(Event) ->
-    spawn(?MODULE, handle_cast, [Event]).
+    spawn(?MODULE, handle_cast, [Event]),
+    ok.
 
 %% Asynchronously handle update events
 -spec handle_cast(term()) -> ok.
@@ -283,7 +284,8 @@ ensure_per_user_tracked_connections_table_for_node(Node) ->
 
 clear_tracked_connection_tables_for_this_node() ->
     [rabbit_tracking:clear_tracking_table(T)
-        || T <- get_all_tracked_connection_table_names_for_node(node())].
+        || T <- get_all_tracked_connection_table_names_for_node(node())],
+    ok.
 
 -spec delete_tracked_connections_table_for_node(node()) -> ok.
 

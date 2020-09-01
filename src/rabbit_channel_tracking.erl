@@ -56,7 +56,8 @@ boot() ->
 -spec update_tracked(term()) -> ok.
 
 update_tracked(Event) ->
-    spawn(?MODULE, handle_cast, [Event]).
+    spawn(?MODULE, handle_cast, [Event]),
+    ok.
 
 %% Asynchronously handle update events
 -spec handle_cast(term()) -> ok.
@@ -163,7 +164,8 @@ count_tracked_items_in({user, Username}) ->
 -spec clear_tracking_tables() -> ok.
 
 clear_tracking_tables() ->
-    clear_tracked_channel_tables_for_this_node().
+    clear_tracked_channel_tables_for_this_node(),
+    ok.
 
 -spec shutdown_tracked_items(list(), term()) -> ok.
 
