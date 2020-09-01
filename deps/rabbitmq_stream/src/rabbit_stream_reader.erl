@@ -685,7 +685,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = Connection,
             {Connection, State#stream_connection_state{consumers = Consumers#{SubscriptionId => Consumer1}}, Rest};
         _ ->
             rabbit_log:warning("Giving credit to unknown subscription: ~p~n", [SubscriptionId]),
-            Frame = <<?COMMAND_CREDIT:16, ?VERSION_0:16, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST:16, SubscriptionId:32>>,
+            Frame = <<?COMMAND_CREDIT:16, ?VERSION_0:16, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST:16, SubscriptionId:8>>,
             FrameSize = byte_size(Frame),
             Transport:send(S, [<<FrameSize:32>>, Frame]),
             {Connection, State, Rest}
