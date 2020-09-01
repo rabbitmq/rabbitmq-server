@@ -184,14 +184,9 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
             {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
             {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
             NumAcceptors, Label],
-    #{
-        id => rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
-        start => {tcp_listener_sup, start_link, Args},
-        restart => transient,
-        shutdown => infinity,
-        type => supervisor,
-        modules => [tcp_listener_sup]
-    }.
+    {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
+     {tcp_listener_sup, start_link, Args},
+     transient, infinity, supervisor, [tcp_listener_sup]}.
 
 -spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref() | undefined.
 ranch_ref(#listener{port = Port}) ->
