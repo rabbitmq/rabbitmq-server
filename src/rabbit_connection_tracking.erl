@@ -295,14 +295,14 @@ delete_tracked_connections_table_for_node(Node) ->
 
 delete_per_vhost_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_per_vhost_table_name_for(Node),
-    rabbit_tracking:delete_tracked_table(TableName, Node,
+    rabbit_tracking:delete_tracking_table(TableName, Node,
         "per-vhost tracked connection").
 
 -spec delete_per_user_tracked_connections_table_for_node(node()) -> ok.
 
 delete_per_user_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_per_user_table_name_for(Node),
-    rabbit_tracking:delete_tracked_table(TableName, Node,
+    rabbit_tracking:delete_tracking_table(TableName, Node,
         "per-user tracked connection").
 
 -spec tracked_connection_table_name_for(node()) -> atom().
