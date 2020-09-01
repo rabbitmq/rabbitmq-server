@@ -212,15 +212,8 @@ post_process_payload_keycloak(#{<<"authorization">> := Authorization} = Payload)
         undefined   -> [];
         Permissions -> extract_scopes_from_keycloak_permissions([], Permissions)
     end,
-    case AdditionalScopes of
-        [] -> Payload;
-        _  ->
-            TokenScopes = maps:get(<<"scope">>, Payload),
-            case TokenScopes of
-                [] -> maps:put(<<"scope">>, AdditionalScopes, Payload);
-                _  -> maps:put(<<"scope">>, AdditionalScopes ++ TokenScopes, Payload)
-            end
-    end.
+    ExistingScopes = maps:get(<<"scope">>, Payload),
+    maps:put(<<"scope">>, AdditionalScopes ++ ExistingScopes, Payload).
 
 extract_scopes_from_keycloak_permissions(Acc, []) ->
     Acc;
