@@ -7,7 +7,7 @@
 
 -module(rabbit_mqtt_connection_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 -behaviour(ranch_protocol).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -19,29 +19,21 @@
 %%----------------------------------------------------------------------------
 
 start_link(Ref, _Sock, _Transport, []) ->
-    {ok, SupPid} = supervisor:start_link(?MODULE, []),
-    {ok, KeepaliveSup} = supervisor:start_child(SupPid,
-                          #{
-                              id       => rabbit_mqtt_keepalive_sup,
-                              start    => {rabbit_mqtt_connection_sup, start_keepalive_link, []},
-                              restart  => transient,
-                              shutdown => infinity,
-                              type     => supervisor,
-                              modules  => [rabbit_keepalive_sup]
-                          }),
-    {ok, ReaderPid} = supervisor:start_child(SupPid,
-                        #{
-                            id       => rabbit_mqtt_reader,
-                            start    => {rabbit_mqtt_reader, start_link, [KeepaliveSup, Ref]},
-                            restart  => transient,
-                            shutdown => ?WORKER_WAIT,
-                            type     => worker,
-                            modules  => [rabbit_mqtt_reader]
-                        }),
+    {ok, SupPid} = supervisor2:start_link(?MODULE, []),
+    {ok, KeepaliveSup} = supervisor2:start_child(
+                          SupPid,
+                          {rabbit_mqtt_keepalive_sup,
+                           {rabbit_mqtt_connection_sup, start_keepalive_link, []},
+                           intrinsic, infinity, supervisor, [rabbit_keepalive_sup]}),
+    {ok, ReaderPid} = supervisor2:start_child(
+                        SupPid,
+                        {rabbit_mqtt_reader,
+                         {rabbit_mqtt_reader, start_link, [KeepaliveSup, Ref]},
+                         intrinsic, ?WORKER_WAIT, worker, [rabbit_mqtt_reader]}),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
-    supervisor:start_link(?MODULE, []).
+    supervisor2:start_link(?MODULE, []).
 
 %%----------------------------------------------------------------------------
 
