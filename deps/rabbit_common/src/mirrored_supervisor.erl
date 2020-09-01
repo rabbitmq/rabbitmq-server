@@ -149,10 +149,10 @@
 %%--------------------------------------------------------------------------
 
 -callback init(Args :: term()) ->
-    {ok, {{RestartStrategy :: supervisor2:strategy(),
+    {ok, {{RestartStrategy :: ?SUPERVISOR:strategy(),
            MaxR :: non_neg_integer(),
            MaxT :: non_neg_integer()},
-           [ChildSpec :: supervisor2:child_spec()]}}
+           [ChildSpec :: ?SUPERVISOR:child_spec()]}}
     | ignore.
 
 %%--------------------------------------------------------------------------
@@ -174,7 +174,7 @@
 
 -spec start_link(SupName, GroupName, TxFun, Module, Args) ->
                         startlink_ret() when
-      SupName :: supervisor2:sup_name(),
+      SupName :: ?SUPERVISOR:sup_name(),
       GroupName :: group_name(),
       TxFun :: tx_fun(),
       Module :: module(),
@@ -183,7 +183,7 @@
 -spec start_internal(Group, TxFun, ChildSpecs) -> Result when
       Group :: group_name(),
       TxFun :: tx_fun(),
-      ChildSpecs :: [supervisor2:child_spec()],
+      ChildSpecs :: [?SUPERVISOR:child_spec()],
       Result :: {'ok', pid()} | {'error', term()}.
 
 -spec create_tables() -> Result when
