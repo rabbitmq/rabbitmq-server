@@ -49,10 +49,10 @@
     limits = #{} :: map() | '_'}).
 
 -type(internal_user_v2() ::
-        #internal_user{username          :: username(),
-                       password_hash     :: password_hash(),
-                       tags              :: [atom()],
-                       hashing_algorithm :: atom(),
+        #internal_user{username          :: username() | '_',
+                       password_hash     :: password_hash() | '_',
+                       tags              :: [atom()] | '_',
+                       hashing_algorithm :: atom() | '_',
                        limits            :: map()}).
 
 -type internal_user_pattern() :: internal_user_v1:internal_user_v1_pattern() |
@@ -77,7 +77,11 @@
 new() ->
     case record_version_to_use() of
         ?record_version ->
-            #internal_user{};
+            #internal_user{
+                username = <<"">>,
+                password_hash = <<"">>,
+                tags = []
+            };
         _ ->
             internal_user_v1:new()
     end.
@@ -86,14 +90,23 @@ new() ->
 new({hashing_algorithm, HashingAlgorithm}) ->
     case record_version_to_use() of
         ?record_version ->
-            #internal_user{hashing_algorithm = HashingAlgorithm};
+            #internal_user{
+                username = <<"">>,
+                password_hash = <<"">>,
+                tags = [],
+                hashing_algorithm = HashingAlgorithm
+            };
         _ ->
             internal_user_v1:new({hashing_algorithm, HashingAlgorithm})
     end;
 new({tags, Tags}) ->
     case record_version_to_use() of
 	?record_version ->
-	    #internal_user{tags = Tags};
+	    #internal_user{
+            username = <<"">>,
+            password_hash = <<"">>,
+            tags = Tags
+        };
 	_ ->
 	    internal_user_v1:new({tags, Tags})
     end.

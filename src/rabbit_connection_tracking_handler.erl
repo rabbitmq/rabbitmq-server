@@ -40,26 +40,26 @@ init([]) ->
     {ok, []}.
 
 handle_event(#event{type = connection_created, props = Details}, State) ->
-    _Pid = rabbit_connection_tracking:update_tracked({connection_created, Details}),
+    ok = rabbit_connection_tracking:update_tracked({connection_created, Details}),
     {ok, State};
 handle_event(#event{type = connection_closed, props = Details}, State) ->
-    _Pid = rabbit_connection_tracking:update_tracked({connection_closed, Details}),
+    ok = rabbit_connection_tracking:update_tracked({connection_closed, Details}),
     {ok, State};
 handle_event(#event{type = vhost_deleted, props = Details}, State) ->
-    _Pid = rabbit_connection_tracking:update_tracked({vhost_deleted, Details}),
+    ok = rabbit_connection_tracking:update_tracked({vhost_deleted, Details}),
     {ok, State};
 %% Note: under normal circumstances this will be called immediately
 %% after the vhost_deleted above. Therefore we should be careful about
 %% what we log and be more defensive.
 handle_event(#event{type = vhost_down, props = Details}, State) ->
-    _Pid = rabbit_connection_tracking:update_tracked({vhost_down, Details}),
+    ok = rabbit_connection_tracking:update_tracked({vhost_down, Details}),
     {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
-    _Pid = rabbit_connection_tracking:update_tracked({user_deleted, Details}),
+    ok = rabbit_connection_tracking:update_tracked({user_deleted, Details}),
     {ok, State};
 %% A node had been deleted from the cluster.
 handle_event(#event{type = node_deleted, props = Details}, State) ->
-    _Pid = rabbit_connection_tracking:update_tracked({node_deleted, Details}),
+    ok = rabbit_connection_tracking:update_tracked({node_deleted, Details}),
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
