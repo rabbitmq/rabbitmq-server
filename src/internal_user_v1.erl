@@ -69,13 +69,26 @@ record_version_to_use() ->
 
 -spec new() -> internal_user().
 new() ->
-    #internal_user{}.
+    #internal_user{
+        username = <<"">>,
+        password_hash = <<"">>,
+        tags = []
+    }.
 
 -spec new(tuple()) -> internal_user().
 new({hashing_algorithm, HashingAlgorithm}) ->
-    #internal_user{hashing_algorithm = HashingAlgorithm};
+    #internal_user{
+        username = <<"">>,
+        password_hash = <<"">>,
+        hashing_algorithm = HashingAlgorithm,
+        tags = []
+    };
 new({tags, Tags}) ->
-    #internal_user{tags = Tags}.
+    #internal_user{
+        username = <<"">>,
+        password_hash = <<"">>,
+        tags = Tags
+    }.
 
 -spec fields() -> list().
 fields() -> fields(?record_version).
