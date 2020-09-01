@@ -568,7 +568,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
     stream_subscriptions = StreamSubscriptions, virtual_host = VirtualHost, user = User} = Connection,
     #stream_connection_state{consumers = Consumers} = State,
-    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary,
+    <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:8/unsigned, StreamSize:16, Stream:StreamSize/binary,
         OffsetType:16/signed, OffsetAndCredit/binary>>, Rest) ->
     case check_read_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
         ok ->
@@ -634,7 +634,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
 handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = StreamSubscriptions,
     stream_leaders = StreamLeaders} = Connection,
     #stream_connection_state{consumers = Consumers} = State,
-    <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:32>>, Rest) ->
+    <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:8/unsigned>>, Rest) ->
     case subscription_exists(StreamSubscriptions, SubscriptionId) of
         false ->
             response(Transport, Connection, ?COMMAND_UNSUBSCRIBE, CorrelationId, ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
@@ -669,7 +669,7 @@ handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = Stre
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S} = Connection,
     #stream_connection_state{consumers = Consumers} = State,
-    <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:32, Credit:16/signed>>, Rest) ->
+    <<?COMMAND_CREDIT:16, ?VERSION_0:16, SubscriptionId:8/unsigned, Credit:16/signed>>, Rest) ->
 
     case Consumers of
         #{SubscriptionId := Consumer} ->
@@ -957,8 +957,8 @@ subscription_exists(StreamSubscriptions, SubscriptionId) ->
 
 send_file_callback(Transport, #consumer{socket = S, subscription_id = SubscriptionId}) ->
     fun(Size) ->
-        FrameSize = 2 + 2 + 4 + Size,
-        FrameBeginning = <<FrameSize:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:32>>,
+        FrameSize = 2 + 2 + 1 + Size,
+        FrameBeginning = <<FrameSize:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8/unsigned>>,
         Transport:send(S, FrameBeginning)
     end.
 

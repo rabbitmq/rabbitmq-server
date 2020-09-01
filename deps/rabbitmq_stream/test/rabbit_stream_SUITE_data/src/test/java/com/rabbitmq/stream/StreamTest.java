@@ -87,7 +87,7 @@ public class StreamTest {
                 })
         );
 
-        consumer.subscribe(1, stream, OffsetSpecification.first(), 10);
+        consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
 
         assertThat(consumingLatch.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(bodies).hasSize(messageCount);
