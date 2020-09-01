@@ -135,7 +135,7 @@ public class FailureTest {
                     consumeLatch.countDown();
                 }));
 
-        Client.Response response = consumer.subscribe(1, stream, OffsetSpecification.first(), 10);
+        Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
         assertThat(response.isOk()).isTrue();
         assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(bodies).hasSize(3).contains("all nodes available", "2 nodes available", "all nodes are back");
@@ -290,7 +290,7 @@ public class FailureTest {
                 })
         );
 
-        Client.Response response = consumer.subscribe(1, stream, OffsetSpecification.first(), 10);
+        Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
         assertThat(response.isOk()).isTrue();
 
         assertThat(consumedLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -392,7 +392,7 @@ public class FailureTest {
                             .messageListener(messageListener)
                     );
 
-                    newConsumer.subscribe(1, stream, OffsetSpecification.offset(lastProcessedOffset.get() + 1), 10);
+                    newConsumer.subscribe((byte) 1, stream, OffsetSpecification.offset(lastProcessedOffset.get() + 1), 10);
 
                     generation.incrementAndGet();
                     reconnectionLatch.countDown();
@@ -408,7 +408,7 @@ public class FailureTest {
                 .messageListener(messageListener)
         );
 
-        Client.Response response = consumer.subscribe(1, stream, OffsetSpecification.first(), 10);
+        Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
         assertThat(response.isOk()).isTrue();
 
         // let's publish for a bit of time

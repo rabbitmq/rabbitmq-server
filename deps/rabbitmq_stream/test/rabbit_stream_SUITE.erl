@@ -206,7 +206,7 @@ test_publish_confirm(S, Stream, Body) ->
 
 test_subscribe(S, SubscriptionId, Stream) ->
     StreamSize = byte_size(Stream),
-    SubscribeFrame = <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, 1:32, SubscriptionId:32, StreamSize:16, Stream:StreamSize/binary,
+    SubscribeFrame = <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, 1:32, SubscriptionId:8, StreamSize:16, Stream:StreamSize/binary,
         ?OFFSET_TYPE_OFFSET:16, 0:64, 10:16>>,
     FrameSize = byte_size(SubscribeFrame),
     gen_tcp:send(S, <<FrameSize:32, SubscribeFrame/binary>>),
@@ -217,7 +217,7 @@ test_subscribe(S, SubscriptionId, Stream) ->
 test_deliver(S, Rest, SubscriptionId, Body) ->
     BodySize = byte_size(Body),
     Frame = read_frame(S, Rest),
-    <<56:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:32, 5:4/unsigned, 0:4/unsigned, 1:16, 1:32,
+    <<53:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8, 5:4/unsigned, 0:4/unsigned, 1:16, 1:32,
         _Timestamp:64, _Epoch:64, 0:64, _Crc:32, _DataLength:32,
         0:1, BodySize:31/unsigned, Body/binary>> = Frame.
 
