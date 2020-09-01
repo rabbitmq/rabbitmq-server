@@ -200,4 +200,4 @@ update_limits(Action, User, Term) ->
 clear_limits(#internal_user{} = User) ->
     User#internal_user{limits = #{}};
 clear_limits(User) ->
-    internal_user_v1:update_limits(User).
+    internal_user_v1:clear_limits(User).
