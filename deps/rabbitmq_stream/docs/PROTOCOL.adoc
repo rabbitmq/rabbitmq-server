@@ -171,7 +171,7 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
   Key => int16 // 2
   Version => int16
   CorrelationId => int32 // correlation id to correlate the response
-  SubscriptionId => int32 // client-supplied id to identify the subscription
+  SubscriptionId => int8 // client-supplied id to identify the subscription
   Stream => string // the name of the stream
   OffsetSpecification => OffsetType Offset
   OffsetType => int16 // 0 (first), 1 (last), 2 (next), 3 (offset), 4 (timestamp)
@@ -185,7 +185,7 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
 Deliver => Key Version SubscriptionId OsirisChunk
   Key => int16 // 3
   Version => int32
-  SubscriptionId => int32
+  SubscriptionId => int8
   OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
   MagicVersion => int8
   NumEntries => uint16
@@ -208,14 +208,14 @@ for details on the structure of messages.
 Credit => Key Version SubscriptionId Credit
   Key => int16 // 4
   Version => int16
-  SubscriptionId => int32
+  SubscriptionId => int8
   Credit => int16 // the number of chunks that can be sent
 
 CreditResponse => Key Version ResponseCode SubscriptionId
   Key => int16 // 4
   Version => int16
   ResponseCode => int16
-  SubscriptionId => int32
+  SubscriptionId => int8
 ```
 
 NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
@@ -227,7 +227,7 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
   Key => int16 // 5
   Version => int16
   CorrelationId => int32
-  SubscriptionId => int32
+  SubscriptionId => int8
 ```
 
 === PublishError
