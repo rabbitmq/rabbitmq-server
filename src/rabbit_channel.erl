@@ -42,6 +42,8 @@
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_misc.hrl").
+
 -include("amqqueue.hrl").
 
 -behaviour(gen_server2).
@@ -352,8 +354,8 @@ send_drained(Pid, CTagCredit) ->
 -spec list() -> [pid()].
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
-                                     rabbit_channel, list_local, []).
+    Nodes = rabbit_nodes:all_running(),
+    rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_channel, list_local, [], ?RPC_TIMEOUT).
 
 -spec list_local() -> [pid()].
 

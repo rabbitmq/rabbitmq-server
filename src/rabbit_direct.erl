@@ -19,6 +19,7 @@
 -export([extract_extra_auth_props/4]).
 
 -include("rabbit.hrl").
+-include("rabbit_misc.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -43,8 +44,8 @@ list_local() ->
 -spec list() -> [pid()].
 
 list() ->
-    rabbit_misc:append_rpc_all_nodes(rabbit_nodes:all_running(),
-                                     rabbit_direct, list_local, []).
+    Nodes = rabbit_nodes:all_running(),
+    rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_direct, list_local, [], ?RPC_TIMEOUT).
 
 %%----------------------------------------------------------------------------
 
