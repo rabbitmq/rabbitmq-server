@@ -3148,7 +3148,10 @@ user_limits_list_test(Config) ->
         end,
         Expected),
 
-    Expected = http_get(Config, "/user-limits", ?OK),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            Expected =:= http_get(Config, "/user-limits", ?OK)
+        end),
     Limits1 = http_get(Config, "/user-limits/limit_test_user_1", ?OK),
     Limits2 = http_get(Config, "/user-limits/limit_test_user_2", ?OK),
 
