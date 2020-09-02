@@ -150,6 +150,7 @@ Publish => Key Version Stream PublishedMessages
   Key => int16 // 0
   Version => int16
   Stream => string // the name of the stream
+  PublisherId => int8
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
   Message => bytes
@@ -161,6 +162,7 @@ Publish => Key Version Stream PublishedMessages
 PublishConfirm => Key Version PublishingIds
   Key => int16 // 1
   Version => int16
+  PublisherId => int8
   PublishingIds => [int64] // to correlate with the messages sent
 ```
 
@@ -236,6 +238,7 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
 PublishError => Key Version [PublishingError]
   Key => int16 // 6
   Version => int16
+  PublisherId => int8
   PublishingError => PublishingId Code
   PublishingId => int64
   Code => int16 // code to identify the problem

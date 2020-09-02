@@ -221,13 +221,27 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                                             {Connection, State}
                                     end,
             listen_loop_post_auth(Transport, Connection1, State1, Configuration);
-        {'$gen_cast', {queue_event, _QueueResource, {osiris_written, _QueueResource, CorrelationIdList}}} ->
-            CorrelationIdBinaries = [<<CorrelationId:64>> || CorrelationId <- CorrelationIdList],
-            CorrelationIdCount = length(CorrelationIdList),
-            FrameSize = 2 + 2 + 4 + CorrelationIdCount * 8,
-            %% FIXME enforce max frame size
-            %% in practice, this should be necessary only for very large chunks and for very small frame size limits
-            Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>, <<CorrelationIdCount:32>>, CorrelationIdBinaries]),
+        {'$gen_cast', {queue_event, _QueueResource, {osiris_written, _QueueResource, CorrelationList}}} ->
+            {FirstPublisherId, _FirstPublishingId} = lists:nth(1, CorrelationList),
+            {LastPublisherId, LastPublishingIds, LastCount} = lists:foldl(fun({PublisherId, PublishingId}, {CurrentPublisherId, PublishingIds, Count}) ->
+                case PublisherId of
+                    CurrentPublisherId ->
+                        {CurrentPublisherId, [PublishingIds, <<PublishingId:64>>], Count + 1};
+                    OtherPublisherId ->
+                        FrameSize = 2 + 2 + 1 + 4 + Count * 8,
+                        %% FIXME enforce max frame size
+                        %% in practice, this should be necessary only for very large chunks and for very small frame size limits
+                        Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>,
+                            <<CurrentPublisherId:8>>,
+                            <<Count:32>>, PublishingIds]),
+                        {OtherPublisherId, <<PublishingId:64>>, 1}
+                end
+                                                                          end, {FirstPublisherId, <<>>, 0}, CorrelationList),
+            FrameSize = 2 + 2 + 1 + 4 + LastCount * 8,
+            Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>,
+                <<LastPublisherId:8>>,
+                <<LastCount:32>>, LastPublishingIds]),
+            CorrelationIdCount = length(CorrelationList),
             add_credits(Credits, CorrelationIdCount),
             State1 = case Blocked of
                          true ->
@@ -364,16 +378,16 @@ handle_inbound_data(Transport, Connection, #stream_connection_state{data = Lefto
     %% see osiris_replica:parse_chunk/3
     handle_inbound_data(Transport, Connection, State1, <<Leftover/binary, Data/binary>>, HandleFrameFun).
 
-write_messages(_ClusterLeader, <<>>) ->
+write_messages(_ClusterLeader, _PublisherId, <<>>) ->
     ok;
-write_messages(ClusterLeader, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
+write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
     % FIXME handle write error
-    ok = osiris:write(ClusterLeader, PublishingId, Message),
-    write_messages(ClusterLeader, Rest);
-write_messages(ClusterLeader, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
+    ok = osiris:write(ClusterLeader, {PublisherId, PublishingId}, Message),
+    write_messages(ClusterLeader, PublisherId, Rest);
+write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
     % FIXME handle write error
-    ok = osiris:write(ClusterLeader, PublishingId, {batch, MessageCount, CompressionType, Batch}),
-    write_messages(ClusterLeader, Rest).
+    ok = osiris:write(ClusterLeader, {PublisherId, PublishingId}, {batch, MessageCount, CompressionType, Batch}),
+    write_messages(ClusterLeader, PublisherId, Rest).
 
 generate_publishing_error_details(Acc, _Code, <<>>) ->
     Acc;
@@ -543,25 +557,28 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
     virtual_host = VirtualHost, user = User} = Connection, State,
     <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
         StreamSize:16, Stream:StreamSize/binary,
+        PublisherId:8/unsigned,
         MessageCount:32, Messages/binary>>, Rest) ->
     case check_write_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
         ok ->
             case lookup_leader(Stream, Connection) of
                 cluster_not_found ->
-                    FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
+                    FrameSize = 2 + 2 + 1 + 4 + (8 + 2) * MessageCount,
                     Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, Messages),
                     Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
+                        PublisherId:8,
                         MessageCount:32, Details/binary>>]),
                     {Connection, State, Rest};
                 {ClusterLeader, Connection1} ->
-                    write_messages(ClusterLeader, Messages),
+                    write_messages(ClusterLeader, PublisherId, Messages),
                     sub_credits(Credits, MessageCount),
                     {Connection1, State, Rest}
             end;
         error ->
-            FrameSize = 2 + 2 + 4 + (8 + 2) * MessageCount,
+            FrameSize = 2 + 2 + 1 + 4 + (8 + 2) * MessageCount,
             Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_ACCESS_REFUSED, Messages),
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
+                PublisherId:8,
                 MessageCount:32, Details/binary>>]),
             {Connection, State, Rest}
     end;
