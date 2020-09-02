@@ -3,7 +3,7 @@
 ifneq ($(filter github-actions,$(MAKECMDGOALS)),)
 
 # All versions of Erlang we want to test against.
-ERLANG_VERSIONS ?= 21.3 \
+ERLANG_VERSIONS ?= 22.3 \
 		   23.0
 
 ELIXIR_VERSION ?= 1.8.0
