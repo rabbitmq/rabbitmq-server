@@ -385,7 +385,7 @@ unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 -spec connections() -> [rabbit_types:connection()].
 
 connections() ->
-    Running = rabbit_mnesia:cluster_nodes(running),
+    Running = rabbit_nodes:all_running(),
     rabbit_misc:append_rpc_all_nodes(Running,
                                      rabbit_networking, connections_local, [], ?RPC_TIMEOUT).
 

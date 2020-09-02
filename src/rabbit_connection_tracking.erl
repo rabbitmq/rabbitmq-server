@@ -284,7 +284,7 @@ unregister_connection(ConnId = {Node, _Name}) when Node =:= node() ->
 -spec lookup(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
 
 lookup(Name) ->
-    Nodes = rabbit_mnesia:cluster_nodes(running),
+    Nodes = rabbit_nodes:all_running(),
     lookup(Name, Nodes).
 
 lookup(_, []) ->
@@ -303,7 +303,7 @@ list() ->
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
               Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
-      end, [], rabbit_mnesia:cluster_nodes(running)).
+      end, [], rabbit_nodes:all_running()).
 
 -spec count() -> non_neg_integer().
 
@@ -312,7 +312,7 @@ count() ->
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
               Acc + mnesia:table_info(Tab, size)
-      end, 0, rabbit_mnesia:cluster_nodes(running)).
+      end, 0, rabbit_nodes:all_running()).
 
 -spec list(rabbit_types:vhost()) -> [rabbit_types:tracked_connection()].
 
@@ -321,7 +321,7 @@ list(VHost) ->
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
               Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{vhost = VHost, _ = '_'})
-      end, [], rabbit_mnesia:cluster_nodes(running)).
+      end, [], rabbit_nodes:all_running()).
 
 
 -spec list_on_node(node()) -> [rabbit_types:tracked_connection()].
@@ -352,7 +352,7 @@ list_of_user(Username) ->
               Acc ++ mnesia:dirty_match_object(
                        Tab,
                        #tracked_connection{username = Username, _ = '_'})
-      end, [], rabbit_mnesia:cluster_nodes(running)).
+      end, [], rabbit_nodes:all_running()).
 
 -spec count_connections_in(rabbit_types:vhost()) -> non_neg_integer().
 
@@ -371,7 +371,7 @@ count_connections_in(VirtualHost) ->
                                   [VirtualHost, Err, Node]),
                                 Acc
                         end
-                end, 0, rabbit_mnesia:cluster_nodes(running)).
+                end, 0, rabbit_nodes:all_running()).
 
 %% Returns a #tracked_connection from connection_created
 %% event details.
