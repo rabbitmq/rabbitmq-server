@@ -58,7 +58,7 @@
 -export([is_process_alive/1]).
 -export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([format_message_queue/2]).
--export([append_rpc_all_nodes/4]).
+-export([append_rpc_all_nodes/4, append_rpc_all_nodes/5]).
 -export([os_cmd/1]).
 -export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
@@ -226,7 +226,6 @@
 -spec plmerge([term()], [term()]) -> [term()].
 -spec pset(term(), term(), [term()]) -> [term()].
 -spec format_message_queue(any(), priority_queue:q()) -> term().
--spec append_rpc_all_nodes([node()], atom(), atom(), [any()]) -> [any()].
 -spec os_cmd(string()) -> string().
 -spec is_os_process_alive(non_neg_integer()) -> boolean().
 -spec gb_sets_difference(gb_sets:set(), gb_sets:set()) -> gb_sets:set().
@@ -1123,8 +1122,26 @@ format_message_queue_entry(_V) ->
 %% Same as rpc:multicall/4 but concatenates all results.
 %% M, F, A is expected to return a list. If it does not,
 %% its return value will be wrapped in a list.
+-spec append_rpc_all_nodes([node()], atom(), atom(), [any()]) -> [any()].
 append_rpc_all_nodes(Nodes, M, F, A) ->
-    {ResL, _} = rpc:multicall(Nodes, M, F, A),
+    do_append_rpc_all_nodes(Nodes, M, F, A, ?RPC_INFINITE_TIMEOUT).
+
+-spec append_rpc_all_nodes([node()], atom(), atom(), [any()], timeout()) -> [any()].
+append_rpc_all_nodes(Nodes, M, F, A, Timeout) ->
+    do_append_rpc_all_nodes(Nodes, M, F, A, Timeout).
+
+do_append_rpc_all_nodes(Nodes, M, F, A, ?RPC_INFINITE_TIMEOUT) ->
+    {ResL, _} = rpc:multicall(Nodes, M, F, A, ?RPC_INFINITE_TIMEOUT),
+    process_rpc_multicall_result(ResL);
+do_append_rpc_all_nodes(Nodes, M, F, A, Timeout) ->
+    {ResL, _} = try
+                    rpc:multicall(Nodes, M, F, A, Timeout)
+                catch
+                    error:internal_error -> {[], Nodes}
+                end,
+    process_rpc_multicall_result(ResL).
+
+process_rpc_multicall_result(ResL) ->
     lists:append([case Res of
                       {badrpc, _}         -> [];
                       Xs when is_list(Xs) -> Xs;
@@ -1370,8 +1387,9 @@ escape_html_tags([C | Rest], Acc) ->
 %% our connection lasts a while, we could get disconnected because of
 %% a timeout unless we set our ticktime to be the same. So let's do
 %% that.
+%% TODO: do not use an infinite timeout!
 rpc_call(Node, Mod, Fun, Args) ->
-    rpc_call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+    rpc_call(Node, Mod, Fun, Args, ?RPC_INFINITE_TIMEOUT).
 
 rpc_call(Node, Mod, Fun, Args, Timeout) ->
     case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
