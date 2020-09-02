@@ -69,9 +69,9 @@ public class StreamTest {
         CountDownLatch publishingLatch = new CountDownLatch(messageCount);
         Client publisher = cf.get(new Client.ClientParameters()
                 .port(publisherBroker.apply(streamMetadata).getPort())
-                .publishConfirmListener(publishingId -> publishingLatch.countDown()));
+                .publishConfirmListener((publisherId, publishingId) -> publishingLatch.countDown()));
 
-        IntStream.range(0, messageCount).forEach(i -> publisher.publish(stream, Collections.singletonList(
+        IntStream.range(0, messageCount).forEach(i -> publisher.publish(stream, (byte) 1, Collections.singletonList(
                 publisher.messageBuilder().addData(("hello " + i).getBytes(StandardCharsets.UTF_8)).build())));
 
         assertThat(publishingLatch.await(10, TimeUnit.SECONDS)).isTrue();

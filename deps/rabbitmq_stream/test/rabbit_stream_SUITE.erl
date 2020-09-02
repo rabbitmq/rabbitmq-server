@@ -199,10 +199,10 @@ test_delete_stream(S, Stream) ->
 test_publish_confirm(S, Stream, Body) ->
     BodySize = byte_size(Body),
     StreamSize = byte_size(Stream),
-    PublishFrame = <<?COMMAND_PUBLISH:16, ?VERSION_0:16, StreamSize:16, Stream:StreamSize/binary, 1:32, 1:64, BodySize:32, Body:BodySize/binary>>,
+    PublishFrame = <<?COMMAND_PUBLISH:16, ?VERSION_0:16, StreamSize:16, Stream:StreamSize/binary, 42:8, 1:32, 1:64, BodySize:32, Body:BodySize/binary>>,
     FrameSize = byte_size(PublishFrame),
     gen_tcp:send(S, <<FrameSize:32, PublishFrame/binary>>),
-    {ok, <<_Size:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16, 1:32, 1:64>>} = gen_tcp:recv(S, 0, 5000).
+    {ok, <<_Size:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16, 42:8, 1:32, 1:64>>} = gen_tcp:recv(S, 0, 5000).
 
 test_subscribe(S, SubscriptionId, Stream) ->
     StreamSize = byte_size(Stream),

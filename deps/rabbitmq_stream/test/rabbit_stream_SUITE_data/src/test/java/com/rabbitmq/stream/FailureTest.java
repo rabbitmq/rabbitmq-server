@@ -76,10 +76,10 @@ public class FailureTest {
         Client publisher = cf.get(new Client.ClientParameters()
                 .port(replica.getPort())
                 .metadataListener((stream, code) -> metadataLatch.countDown())
-                .publishConfirmListener(publishingId -> confirmLatch.get().countDown()));
+                .publishConfirmListener((publisherId, publishingId) -> confirmLatch.get().countDown()));
         String message = "all nodes available";
         messages.add(message);
-        publisher.publish(stream,
+        publisher.publish(stream, (byte) 1,
                 Collections.singletonList(publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
         assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
         confirmLatch.set(null);
@@ -104,7 +104,7 @@ public class FailureTest {
             confirmLatch.set(new CountDownLatch(1));
             message = "2 nodes available";
             messages.add(message);
-            publisher.publish(stream, Collections.singletonList(publisher.messageBuilder()
+            publisher.publish(stream, (byte) 1, Collections.singletonList(publisher.messageBuilder()
                     .addData(message.getBytes(StandardCharsets.UTF_8)).build()));
             assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
             confirmLatch.set(null);
@@ -121,7 +121,7 @@ public class FailureTest {
         confirmLatch.set(new CountDownLatch(1));
         message = "all nodes are back";
         messages.add(message);
-        publisher.publish(stream, Collections.singletonList(publisher.messageBuilder()
+        publisher.publish(stream, (byte) 1, Collections.singletonList(publisher.messageBuilder()
                 .addData(message.getBytes(StandardCharsets.UTF_8)).build()));
         assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
         confirmLatch.set(null);
@@ -157,7 +157,7 @@ public class FailureTest {
         Map<Long, Message> published = new ConcurrentHashMap<>();
         Set<Message> confirmed = ConcurrentHashMap.newKeySet();
 
-        Client.PublishConfirmListener publishConfirmListener = publishingId -> {
+        Client.PublishConfirmListener publishConfirmListener = (publisherId, publishingId) -> {
             Message confirmedMessage;
             int attempts = 0;
             while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
@@ -226,7 +226,7 @@ public class FailureTest {
                             .messageBuilder().applicationProperties().entry("generation", generation.get())
                             .messageBuilder().build();
                     try {
-                        long publishingId = publisher.get().publish(stream, Collections.singletonList(message)).get(0);
+                        long publishingId = publisher.get().publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
                         published.put(publishingId, message);
                     } catch (Exception e) {
                         // keep going
@@ -321,7 +321,7 @@ public class FailureTest {
         Map<Long, Message> published = new ConcurrentHashMap<>();
         Set<Message> confirmed = ConcurrentHashMap.newKeySet();
         Set<Long> confirmedIds = ConcurrentHashMap.newKeySet();
-        Client.PublishConfirmListener publishConfirmListener = publishingId -> {
+        Client.PublishConfirmListener publishConfirmListener = (publisherId, publishingId) -> {
             Message confirmedMessage;
             int attempts = 0;
             while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
@@ -349,7 +349,7 @@ public class FailureTest {
                         .messageBuilder().applicationProperties().entry("generation", generation.get())
                         .messageBuilder().build();
                 try {
-                    long publishingId = publisher.publish(stream, Collections.singletonList(message)).get(0);
+                    long publishingId = publisher.publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
                     published.put(publishingId, message);
                 } catch (Exception e) {
                     // keep going
