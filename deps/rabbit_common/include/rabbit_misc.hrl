@@ -5,4 +5,5 @@
 %% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(RPC_TIMEOUT, infinity).
+-define(RPC_TIMEOUT, 15000).
+-define(RPC_INFINITE_TIMEOUT, infinity).
