@@ -39,13 +39,18 @@
 all() ->
     [
      {group, all_tests_with_prefix},
-     {group, all_tests_without_prefix}
+     {group, all_tests_without_prefix},
+     {group, user_limits_ff}
     ].
 
 groups() ->
     [
      {all_tests_with_prefix, [], all_tests()},
-     {all_tests_without_prefix, [], all_tests()}
+     {all_tests_without_prefix, [], all_tests()},
+     {user_limits_ff, [], [
+        user_limits_list_test,
+        user_limit_set_test
+     ]}
     ].
 
 all_tests() -> [
@@ -176,6 +181,26 @@ finish_init(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, NodeConf),
     merge_app_env(Config1).
 
+enable_feature_flag_or_skip(FFName, Group, Config0) ->
+    Config1 = finish_init(Group, Config0),
+    Config2 = start_broker(Config1),
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(
+              Config2, nodename),
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config2, 0,
+            rabbit_feature_flags,
+            is_supported_remotely,
+            [Nodes, [FFName], 60000]),
+    case Ret of
+        true ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                    Config2, 0, rabbit_feature_flags, enable, [FFName]),
+            Config2;
+        false ->
+            end_per_group(Group, Config2),
+            {skip, rabbit_misc:format("Feature flag '~s' is not supported", [FFName])}
+    end.
+
 init_per_group(all_tests_with_prefix=Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
@@ -197,25 +222,10 @@ init_per_group(all_tests_with_prefix=Group, Config0) ->
             end_per_group(Group, Config3),
             {skip, "Quorum queues are unsupported"}
     end;
+init_per_group(user_limits_ff = Group, Config0) ->
+    enable_feature_flag_or_skip(user_limits, Group, Config0);
 init_per_group(Group, Config0) ->
-    Config1 = finish_init(Group, Config0),
-    Config2 = start_broker(Config1),
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(
-              Config2, nodename),
-    Ret = rabbit_ct_broker_helpers:rpc(
-            Config2, 0,
-            rabbit_feature_flags,
-            is_supported_remotely,
-            [Nodes, [quorum_queue], 60000]),
-    case Ret of
-        true ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                    Config2, 0, rabbit_feature_flags, enable, [quorum_queue]),
-            Config2;
-        false ->
-            end_per_group(Group, Config2),
-            {skip, "Quorum queues are unsupported"}
-    end.
+    enable_feature_flag_or_skip(quorum_queue, Group, Config0).
 
 end_per_group(_, Config) ->
     inets:stop(),
