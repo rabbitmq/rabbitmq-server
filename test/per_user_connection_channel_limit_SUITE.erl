@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -891,7 +892,7 @@ single_node_single_user_clear_limits(Config) ->
         end),
 
     close_connections([Conn2, Conn3, Conn4, Conn5, Conn6, Conn7]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)),
+    ?awaitMatch(0, count_connections_of_user(Config, Username), 5000),
 
     set_user_connection_and_channel_limit(Config, Username,  -1, -1).
 
@@ -1199,7 +1200,7 @@ cluster_single_user_limit2(Config) ->
         end),
 
     close_connections([Conn2, Conn3, Conn4, Conn5, Conn6]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)),
+    ?awaitMatch(0, count_connections_of_user(Config, Username), 5000),
 
     set_user_connection_and_channel_limit(Config, Username,  -1, -1).
 
