@@ -2933,6 +2933,291 @@ jobs:
             fi
           done
   # vim:sw=2:et:
+  ct-per_user_connection_channel_limit:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-per_user_connection_channel_limit
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.8.0
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          export BASE_RMQ_REF=master
+          export ERLANG_VERSION=23.0
+          export ELIXIR_VERSION=1.8.0
+          make ct-per_user_connection_channel_limit \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1 \
+            CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-per_user_connection_channel_limit \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS= \
+              CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-per_user_connection_channel_limit-logs
+          path: "*-ct-logs-*.tar.xz"
+      - name: HONEYCOMB
+        if: success() || failure()
+        run: |
+          echo "$(ls honeycomb | wc -l) events recorded"
+          for f in honeycomb/*; do
+            RC=$(curl --silent \
+                -H 'X-Honeycomb-Team: ${{ secrets.HONEYCOMB_TEAM }}' \
+                -d @${f} \
+                -o /dev/null \
+                -w "%{http_code}" \
+                "https://api.honeycomb.io/1/events/rabbitmq-ci")
+            if [ "$RC" != "200" ]; then
+              echo "Honeycomb returned ${RC}"
+              cat ${f}
+              printf "\n\n"
+            fi
+          done
+  # vim:sw=2:et:
+  ct-per_user_connection_channel_limit_partitions:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-per_user_connection_channel_limit_partitions
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.8.0
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          export BASE_RMQ_REF=master
+          export ERLANG_VERSION=23.0
+          export ELIXIR_VERSION=1.8.0
+          make ct-per_user_connection_channel_limit_partitions \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1 \
+            CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-per_user_connection_channel_limit_partitions \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS= \
+              CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-per_user_connection_channel_limit_partitions-logs
+          path: "*-ct-logs-*.tar.xz"
+      - name: HONEYCOMB
+        if: success() || failure()
+        run: |
+          echo "$(ls honeycomb | wc -l) events recorded"
+          for f in honeycomb/*; do
+            RC=$(curl --silent \
+                -H 'X-Honeycomb-Team: ${{ secrets.HONEYCOMB_TEAM }}' \
+                -d @${f} \
+                -o /dev/null \
+                -w "%{http_code}" \
+                "https://api.honeycomb.io/1/events/rabbitmq-ci")
+            if [ "$RC" != "200" ]; then
+              echo "Honeycomb returned ${RC}"
+              cat ${f}
+              printf "\n\n"
+            fi
+          done
+  # vim:sw=2:et:
+  ct-per_user_connection_channel_tracking:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-per_user_connection_channel_tracking
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.8.0
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          export BASE_RMQ_REF=master
+          export ERLANG_VERSION=23.0
+          export ELIXIR_VERSION=1.8.0
+          make ct-per_user_connection_channel_tracking \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1 \
+            CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-per_user_connection_channel_tracking \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS= \
+              CT_OPTS="-ct_hooks honeycomb_cth '[{directory,\"$PWD/honeycomb\"}]'"
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-per_user_connection_channel_tracking-logs
+          path: "*-ct-logs-*.tar.xz"
+      - name: HONEYCOMB
+        if: success() || failure()
+        run: |
+          echo "$(ls honeycomb | wc -l) events recorded"
+          for f in honeycomb/*; do
+            RC=$(curl --silent \
+                -H 'X-Honeycomb-Team: ${{ secrets.HONEYCOMB_TEAM }}' \
+                -d @${f} \
+                -o /dev/null \
+                -w "%{http_code}" \
+                "https://api.honeycomb.io/1/events/rabbitmq-ci")
+            if [ "$RC" != "200" ]; then
+              echo "Honeycomb returned ${RC}"
+              cat ${f}
+              printf "\n\n"
+            fi
+          done
+  # vim:sw=2:et:
   ct-per_user_connection_tracking:
     needs: [checks]
     # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
@@ -8571,6 +8856,9 @@ jobs:
       - ct-msg_store
       - ct-peer_discovery_classic_config
       - ct-peer_discovery_dns
+      - ct-per_user_connection_channel_limit
+      - ct-per_user_connection_channel_limit_partitions
+      - ct-per_user_connection_channel_tracking
       - ct-per_user_connection_tracking
       - ct-per_vhost_connection_limit
       - ct-per_vhost_connection_limit_partitions
