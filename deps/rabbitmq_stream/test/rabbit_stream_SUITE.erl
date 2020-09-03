@@ -217,7 +217,8 @@ test_subscribe(S, SubscriptionId, Stream) ->
 test_deliver(S, Rest, SubscriptionId, Body) ->
     BodySize = byte_size(Body),
     Frame = read_frame(S, Rest),
-    <<53:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8, 5:4/unsigned, 0:4/unsigned, 1:16, 1:32,
+    <<54:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8, 5:4/unsigned, 0:4/unsigned, 0:8,
+        1:16, 1:32,
         _Timestamp:64, _Epoch:64, 0:64, _Crc:32, _DataLength:32,
         0:1, BodySize:31/unsigned, Body/binary>> = Frame.
 
