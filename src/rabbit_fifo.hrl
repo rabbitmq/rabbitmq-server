@@ -67,7 +67,7 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(RELEASE_CURSOR_EVERY, 64000).
+-define(RELEASE_CURSOR_EVERY, 2048).
 -define(RELEASE_CURSOR_EVERY_MAX, 3200000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit

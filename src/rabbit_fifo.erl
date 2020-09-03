@@ -142,12 +142,7 @@ update_config(Conf, State) ->
                                competing
                        end,
     Cfg = State#?MODULE.cfg,
-    RCISpec = case State#?MODULE.cfg of
-              #cfg{release_cursor_interval = undefined} ->
-                  {RCI, RCI};
-              #cfg{release_cursor_interval = {_, C}} ->
-                  {RCI, C}
-          end,
+    RCISpec = {RCI, RCI},
 
     LastActive = maps:get(created, Conf, undefined),
     State#?MODULE{cfg = Cfg#cfg{release_cursor_interval = RCISpec,
@@ -367,12 +362,9 @@ apply(#{index := Index}, #purge{},
                             msgs_ready_in_memory = 0},
     Effects0 = [garbage_collection],
     Reply = {purge, Total},
-    case evaluate_limit(Index, false, State0, State1, Effects0) of
-        {State, true, Effects} ->
-            update_smallest_raft_index(Index, Reply, State, Effects);
-        {State, false, Effects} ->
-            {State, Reply, Effects}
-    end;
+    {State, _, Effects} = evaluate_limit(Index, false, State0,
+                                            State1, Effects0),
+    update_smallest_raft_index(Index, Reply, State, Effects);
 apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
@@ -720,6 +712,7 @@ overview(#?MODULE{consumers = Cons,
       num_ready_messages => messages_ready(State),
       num_messages => messages_total(State),
       num_release_cursors => lqueue:len(Cursors),
+      release_cursors => [I || {_, I, _} <- lqueue:to_list(Cursors)],
       release_cursor_enqueue_counter => EnqCount,
       enqueue_message_bytes => EnqueueBytes,
       checkout_message_bytes => CheckoutBytes}.
@@ -1118,9 +1111,9 @@ append_to_master_index(RaftIdx,
     State#?MODULE{ra_indexes = Indexes}.
 
 
-incr_enqueue_count(#?MODULE{enqueue_count = C,
+incr_enqueue_count(#?MODULE{enqueue_count = EC,
                             cfg = #cfg{release_cursor_interval = {_Base, C}}
-                            } = State0) ->
+                            } = State0) when EC >= C->
     %% this will trigger a dehydrated version of the state to be stored
     %% at this raft index for potential future snapshot generation
     %% Q: Why don't we just stash the release cursor here?
@@ -1146,8 +1139,7 @@ maybe_store_dehydrated_state(RaftIdx,
                            0 -> 0;
                            _ ->
                                Total = messages_total(State0),
-                               min(max(Total, Base),
-                                   ?RELEASE_CURSOR_EVERY_MAX)
+                               min(max(Total, Base), ?RELEASE_CURSOR_EVERY_MAX)
                        end,
             State = State0#?MODULE{cfg = Cfg#cfg{release_cursor_interval =
                                                  {Base, Interval}}},
@@ -1307,7 +1299,8 @@ update_smallest_raft_index(Idx, State, Effects) ->
     update_smallest_raft_index(Idx, ok, State, Effects).
 
 update_smallest_raft_index(IncomingRaftIdx, Reply,
-                           #?MODULE{ra_indexes = Indexes,
+                           #?MODULE{cfg = Cfg,
+                                    ra_indexes = Indexes,
                                     release_cursors = Cursors0} = State0,
                            Effects) ->
     case rabbit_fifo_index:size(Indexes) of
@@ -1315,7 +1308,12 @@ update_smallest_raft_index(IncomingRaftIdx, Reply,
             % there are no messages on queue anymore and no pending enqueues
             % we can forward release_cursor all the way until
             % the last received command, hooray
-            State = State0#?MODULE{release_cursors = lqueue:new()},
+            %% reset the release cursor interval
+            #cfg{release_cursor_interval = {Base, _}} = Cfg,
+            RCI = {Base, Base},
+            State = State0#?MODULE{cfg = Cfg#cfg{release_cursor_interval = RCI},
+                                   release_cursors = lqueue:new(),
+                                   enqueue_count = 0},
             {State, Reply, Effects ++ [{release_cursor, IncomingRaftIdx, State}]};
         _ ->
             Smallest = rabbit_fifo_index:smallest(Indexes),
