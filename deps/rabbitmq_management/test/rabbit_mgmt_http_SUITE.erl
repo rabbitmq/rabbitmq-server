@@ -143,8 +143,6 @@ all_tests() -> [
     cors_test,
     vhost_limits_list_test,
     vhost_limit_set_test,
-    user_limits_list_test,
-    user_limit_set_test,
     rates_test,
     single_active_consumer_cq_test,
     single_active_consumer_qq_test,
