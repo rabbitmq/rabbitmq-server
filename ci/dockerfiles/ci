@@ -1,0 +1,27 @@
+ARG ERLANG_VERSION
+
+FROM eu.gcr.io/cf-rabbitmq-core/ci-base:${ERLANG_VERSION}
+
+ARG GITHUB_RUN_ID
+ARG BUILDEVENT_APIKEY
+
+ARG GITHUB_SHA
+
+ARG base_rmq_ref
+ARG current_rmq_ref
+
+ENV GITHUB_RUN_ID $GITHUB_RUN_ID
+ENV GITHUB_SHA $GITHUB_SHA
+
+ENV base_rmq_ref $base_rmq_ref
+ENV current_rmq_ref $current_rmq_ref
+
+ENV BUILDEVENT_CIPROVIDER GitHubActions
+
+WORKDIR /workspace/rabbitmq
+
+COPY . .
+
+RUN BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
+    buildevents cmd ${GITHUB_RUN_ID} prepare deps -- \
+            make deps test-deps

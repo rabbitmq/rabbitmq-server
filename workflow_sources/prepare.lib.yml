@@ -1,0 +1,69 @@
+#@ load("@ytt:data", "data")
+#@ load("util.lib.yml", "to_build_args")
+#@ load("helpers.lib.yml", "ci_image", "ci_image_tag")
+
+#@ def prepare_jobs():
+#!base_image:
+#!  name: base_image
+#!  runs-on: ubuntu-18.04
+#!  #@yaml/text-templated-strings
+#!  steps:
+#!    - name: CHECKOUT REPOSITORY
+#!      uses: actions/checkout@v2
+#!    - name: CREATE BASE CI IMAGE
+#!      uses: docker/build-push-action@v1
+#!      with:
+#!        username: _json_key
+#!        password: ${{ secrets.GCR_JSON_KEY }}
+#!        registry: eu.gcr.io
+#!        repository: cf-rabbitmq-core/ci-base
+#!        dockerfile: ci_dockerfiles/(@= data.values.versions.erlang @)/base
+#!        tags: #@ data.values.versions.erlang
+prepare:
+  name: prepare
+#!  needs: [base_image]
+  runs-on: ubuntu-18.04
+  outputs:
+    build_start: ${{ steps.buildevents.outputs.build_start }}
+    branch_or_tag_name: ${{ steps.buildevents.outputs.branch_or_tag_name }}
+  #@yaml/text-templated-strings
+  steps:
+    - name: RECORD BUILD START
+      id: buildevents
+      run: |
+        echo "::set-output name=build_start::$(date +%s)"
+        branch_or_tag_name=${GITHUB_REF#refs/*/}
+        echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - name: PREPARE BUILD IMAGE
+      uses: docker/build-push-action@v1
+      with:
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
+        registry: eu.gcr.io
+        repository: cf-rabbitmq-core/ci
+        dockerfile: ci/dockerfiles/ci
+        #@ build_args = {}
+        #@ build_args["ERLANG_VERSION"] = data.values.versions.erlang
+        #@ build_args["GITHUB_RUN_ID"] = '${{ github.run_id }}'
+        #@ build_args["BUILDEVENT_APIKEY"] = '${{ secrets.HONEYCOMB_API_KEY }}'
+        #@ build_args["GITHUB_SHA"] = '${{ github.sha }}'
+        #@ build_args["base_rmq_ref"] = data.values.base_rmq_ref
+        #@ build_args["current_rmq_ref"] = '${{ steps.buildevents.outputs.branch_or_tag_name }}'
+        build_args: #@ to_build_args(build_args)
+        tags: (@= ci_image_tag() @)
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RECORD STEP FINISH
+      run: |
+        docker run \
+          --env project=prepare \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.build_start }} \
+          (@= ci_image() @) \
+          ci/scripts/collect.sh
+#@ end

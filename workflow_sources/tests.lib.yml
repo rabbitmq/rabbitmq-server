@@ -1,0 +1,41 @@
+#@ load("@ytt:data", "data")
+#@ load("util.lib.yml", "to_build_args")
+#@ load("helpers.lib.yml", "should_skip_dialyze", "ci_image")
+
+#@ def tests_job(dep):
+name: #@ dep.name
+needs: [prepare]
+runs-on: ubuntu-18.04
+#@yaml/text-templated-strings
+steps:
+  - name: RECORD STEP START
+    id: buildevents
+    run: |
+      echo "::set-output name=step_start::$(date +%s)"
+  - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    with:
+      service_account_key: ${{ secrets.GCR_JSON_KEY }}
+      export_default_credentials: true
+  - name: RUN TESTS
+    run: |
+      gcloud auth configure-docker
+      docker pull (@= ci_image() @)
+      docker run \
+        --env project=(@= dep.name @) \
+        --env SKIP_DIALYZE=(@= str(should_skip_dialyze(dep)) @) \
+        --env SKIP_XREF=(@= str(hasattr(dep, "skip_xref") and dep.skip_xref) @) \
+        --env GITHUB_RUN_ID=${{ github.run_id }} \
+        --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+        --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+        --volume /tmp/ct-logs:/ct-logs \
+        --oom-kill-disable \
+        (@= ci_image() @) \
+        ci/scripts/tests.sh
+  - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+    #! https://github.com/marketplace/actions/upload-artifact
+    uses: actions/upload-artifact@v2-preview
+    if: failure()
+    with:
+      name: (@= dep.name @)-ct-logs
+      path: "/tmp/ct-logs/*-ct-logs-*.tar.xz"
+#@ end

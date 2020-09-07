@@ -12,7 +12,12 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1
 
+MIX_TEST_OPTS ?= ""
 MIX_TEST = mix test --max-cases=$(MAX_CASES)
+
+ifneq ("",$(MIX_TEST_OPTS))
+MIX_TEST := $(MIX_TEST) $(MIX_TEST_OPTS)
+endif
 
 ifeq ($(VERBOSE_TEST),true)
 MIX_TEST := $(MIX_TEST) --trace

@@ -1,0 +1,59 @@
+#@ load("@ytt:data", "data")
+#@ load("helpers.lib.yml", "ci_image")
+
+#@ def finish_jobs():
+package-generic-unix:
+  name: package-generic-unix
+  needs: [prepare]
+  runs-on: ubuntu-18.04
+  #@yaml/text-templated-strings
+  steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PACKAGE GENERIC UNIX
+      run: |
+        gcloud auth configure-docker
+        docker pull (@= ci_image() @)
+        docker run \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --volume /tmp/PACKAGES:/workspace/rabbitmq/PACKAGES \
+          (@= ci_image() @) \
+          ci/scripts/package_generic_unix.sh
+    - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
+      #! https://github.com/marketplace/actions/upload-artifact
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: rabbitmq-server-generic-unix.tar.xz
+        path: "/tmp/PACKAGES/rabbitmq-server-generic-unix-*.tar.xz"
+finish:
+  name: finish
+  needs: #@ ["prepare"] + [dep.name for dep in data.values.deps if not hasattr(dep, "skip_tests") or not dep.skip_tests]
+  runs-on: ubuntu-18.04
+  if: always()
+  #@yaml/text-templated-strings
+  steps:
+    - uses: technote-space/workflow-conclusion-action@v1
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RECORD BUILD FINISH
+      run: |
+        gcloud auth configure-docker
+        docker pull (@= ci_image() @)
+        docker run \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env BUILD_START=${{ needs.prepare.outputs.build_start }} \
+          --env BUILD_RESULT=${{ env.WORKFLOW_CONCLUSION }} \
+          (@= ci_image() @) \
+          ci/scripts/finish.sh
+#@ end
