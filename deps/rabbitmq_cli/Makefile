@@ -10,11 +10,17 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 VERBOSE_TEST ?= true
+MAX_CASES ?= 1
+
+MIX_TEST_OPTS ?= ""
+MIX_TEST = mix test --max-cases=$(MAX_CASES)
+
+ifneq ("",$(MIX_TEST_OPTS))
+MIX_TEST := $(MIX_TEST) $(MIX_TEST_OPTS)
+endif
 
 ifeq ($(VERBOSE_TEST),true)
-MIX_TEST = mix test --trace
-else
-MIX_TEST = mix test --max-cases=1
+MIX_TEST := $(MIX_TEST) --trace
 endif
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
