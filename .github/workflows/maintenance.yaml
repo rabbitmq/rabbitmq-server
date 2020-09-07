@@ -23,7 +23,7 @@ jobs:
             set -x
             echo gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
           )
-          C=C+1
+          C=$(expr $C + 1)
         done
         echo "Deleted ${C} images in ${IMAGE}." >&2
     - name: CLEAN OLD BUILD IMAGES
@@ -38,6 +38,6 @@ jobs:
             set -x
             echo gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
           )
-          C=C+1
+          C=$(expr $C + 1)
         done
         echo "Deleted ${C} images in ${IMAGE}." >&2

@@ -39,6 +39,524 @@ jobs:
           --env STEP_START=${{ steps.buildevents.outputs.build_start }} \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
           ci/scripts/collect.sh
+  xref:
+    name: xref
+    runs-on: ubuntu-18.04
+    steps:
+    - name: RECORD XREF START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN XREF rabbit_common
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbit_common \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbit
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbit \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF amqp_client
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=amqp_client \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF amqp10_client
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=amqp10_client \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF amqp10_common
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=amqp10_common \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_amqp1_0
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_amqp1_0 \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_auth_backend_cache
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_auth_backend_cache \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_auth_backend_http
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_auth_backend_http \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_auth_backend_ldap
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_auth_backend_ldap \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_auth_backend_oauth2
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_auth_backend_oauth2 \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_auth_mechanism_ssl
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_auth_mechanism_ssl \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_aws
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_aws \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_cli
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_cli \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_consistent_hash_exchange
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_consistent_hash_exchange \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_event_exchange
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_event_exchange \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_federation
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_federation \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_federation_management
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_federation_management \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_jms_topic_exchange
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_jms_topic_exchange \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_management
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_management \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_management_agent
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_management_agent \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_mqtt
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_mqtt \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_peer_discovery_common
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_peer_discovery_common \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_peer_discovery_aws
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_peer_discovery_aws \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_peer_discovery_k8s
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_peer_discovery_k8s \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_peer_discovery_consul
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_peer_discovery_consul \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_peer_discovery_etcd
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_peer_discovery_etcd \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_prometheus
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_prometheus \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_random_exchange
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_random_exchange \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_recent_history_exchange
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_recent_history_exchange \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_sharding
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_sharding \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_shovel
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_shovel \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_shovel_management
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_shovel_management \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_stomp
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_stomp \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_top
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_top \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_tracing
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_tracing \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_trust_store
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_trust_store \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_web_dispatch
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_web_dispatch \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_web_mqtt
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_web_mqtt \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_web_mqtt_examples
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_web_mqtt_examples \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_web_stomp
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_web_stomp \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_web_stomp_examples
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:22.3
+        docker run \
+          --env project=rabbitmq_web_stomp_examples \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
+    - name: RECORD STEP FINISH
+      if: always()
+      run: |
+        docker run \
+          --env project=xref \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --volume ${PWD}/ci/scripts:/workspace/rabbitmq/ci/scripts \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/collect.sh
   rabbit_common:
     name: rabbit_common
     needs:

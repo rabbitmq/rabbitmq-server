@@ -1,7 +1,12 @@
 #@ load("@ytt:data", "data")
 
 #@ def should_skip_dialyze(dep):
-#@   return data.values.versions.erlang != "23.0" or hasattr(dep, "skip_dialyzer") and dep.skip_dialyzer
+#@   return (data.values.versions.erlang != "23.0"
+#@           or (hasattr(dep, "skip_dialyzer") and dep.skip_dialyzer))
+#@ end
+
+#@ def should_skip_xref(dep):
+#@   return hasattr(dep, "skip_xref") and dep.skip_xref
 #@ end
 
 #@ def ci_image_tag():
