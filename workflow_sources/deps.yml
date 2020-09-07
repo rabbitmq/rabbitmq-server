@@ -269,6 +269,7 @@ deps:
 - name: rabbitmq_cli
   suites: []
 - name: rabbitmq_codegen
+  skip_xref: true
   skip_tests: true
   suites: []
 - name: rabbitmq_consistent_hash_exchange

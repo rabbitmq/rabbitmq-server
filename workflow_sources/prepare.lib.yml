@@ -1,6 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("util.lib.yml", "to_build_args")
-#@ load("helpers.lib.yml", "ci_image", "ci_image_tag")
+#@ load("helpers.lib.yml", "ci_image", "ci_image_tag", "should_skip_xref")
 
 #@ def prepare_jobs():
 #!base_image:
@@ -65,5 +65,47 @@ prepare:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.build_start }} \
           (@= ci_image() @) \
+          ci/scripts/collect.sh
+xref:
+  name: xref
+  runs-on: ubuntu-18.04
+  #@yaml/text-templated-strings
+  steps:
+    - name: RECORD XREF START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    #@ base_image = "eu.gcr.io/cf-rabbitmq-core/ci-base:" + data.values.versions.erlang
+    #@ for dep in [d for d in data.values.deps if not should_skip_xref(d)]:
+    - name: RUN XREF (@= dep.name @)
+      run: |
+        gcloud auth configure-docker
+        docker pull (@= base_image @)
+        docker run \
+          --env project=(@= dep.name @) \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          (@= base_image @) \
+          ci/scripts/xref.sh
+    #@ end
+    - name: RECORD STEP FINISH
+      if: always()
+      run: |
+        docker run \
+          --env project=xref \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --volume ${PWD}/ci/scripts:/workspace/rabbitmq/ci/scripts \
+          --workdir /workspace/rabbitmq \
+          (@= base_image @) \
           ci/scripts/collect.sh
 #@ end
