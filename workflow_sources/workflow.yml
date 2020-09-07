@@ -1,0 +1,11 @@
+#@ load("@ytt:data", "data")
+#@ load("@ytt:template", "template")
+#@ load("util.lib.yml", "merge")
+#@ load("prepare.lib.yml", "prepare_jobs")
+#@ load("dep.lib.yml", "dep_jobs")
+#@ load("finish.lib.yml", "finish_jobs")
+---
+name: #@ "Test - Erlang " + data.values.versions.erlang
+#! https://github.com/k14s/ytt/issues/189
+a_magic_string_that_we_will_sed_to_on: push
+jobs: #@ merge([prepare_jobs()] + [dep_jobs(dep) for dep in data.values.deps] + [finish_jobs()])

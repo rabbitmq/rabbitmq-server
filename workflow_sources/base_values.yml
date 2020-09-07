@@ -1,0 +1,6 @@
+#@data/values
+---
+base_rmq_ref: master
+versions:
+    erlang: "23.0"
+    elixir: "1.8.0"

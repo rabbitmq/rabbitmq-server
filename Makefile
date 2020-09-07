@@ -27,6 +27,7 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
+include mk/github-actions.mk
 
 # --------------------------------------------------------------------
 # Distribution.
