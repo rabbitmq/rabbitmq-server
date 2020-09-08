@@ -33,6 +33,7 @@ include rabbitmq-components.mk
 include erlang.mk
 include mk/stats.mk
 include mk/github-actions.mk
+include mk/topic-branches.mk
 
 # --------------------------------------------------------------------
 # Mix Hex cache management.
