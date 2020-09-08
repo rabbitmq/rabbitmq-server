@@ -1,0 +1,34 @@
+name: Base Images
+on:
+- workflow_dispatch
+jobs:
+  ci-base-22_3:
+    name: ci-base-22_3
+    runs-on: ubuntu-18.04
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - name: CREATE BASE CI IMAGE
+      uses: docker/build-push-action@v1
+      with:
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
+        registry: eu.gcr.io
+        repository: cf-rabbitmq-core/ci-base
+        dockerfile: ci/dockerfiles/22.3/base
+        tags: "22.3"
+  ci-base-23_0:
+    name: ci-base-23_0
+    runs-on: ubuntu-18.04
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - name: CREATE BASE CI IMAGE
+      uses: docker/build-push-action@v1
+      with:
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
+        registry: eu.gcr.io
+        repository: cf-rabbitmq-core/ci-base
+        dockerfile: ci/dockerfiles/23.0/base
+        tags: "23.0"

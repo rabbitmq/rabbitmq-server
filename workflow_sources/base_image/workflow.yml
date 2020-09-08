@@ -1,0 +1,30 @@
+#@ def jobs_map_from_list(list_of_jobs):
+#@   jobs = {}
+#@   for job in list_of_jobs:
+#@     name = job['name']
+#@     jobs[name] = job
+#@   end
+#@   return jobs
+#@ end
+
+#@ def base_image_job(erlang_version):
+name: #@ ("ci-base-" + erlang_version).replace(".", "_")
+runs-on: ubuntu-18.04
+steps:
+  - name: CHECKOUT REPOSITORY
+    uses: actions/checkout@v2
+  - name: CREATE BASE CI IMAGE
+    uses: docker/build-push-action@v1
+    with:
+      username: _json_key
+      password: ${{ secrets.GCR_JSON_KEY }}
+      registry: eu.gcr.io
+      repository: cf-rabbitmq-core/ci-base
+      dockerfile: #@ "ci/dockerfiles/" + erlang_version + "/base"
+      tags: #@ erlang_version
+#@ end
+---
+name: Base Images
+#! https://github.com/k14s/ytt/issues/189
+a_magic_string_that_we_will_sed_to_on: [workflow_dispatch]
+jobs: #@ jobs_map_from_list([base_image_job(v) for v in ["22.3", "23.0"]])
