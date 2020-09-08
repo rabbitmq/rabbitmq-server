@@ -21,7 +21,7 @@ jobs:
           --filter="timestamp.datetime < '${DATE}'" --format='get(digest)'); do
           (
             set -x
-            echo gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
+            gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
           )
           C=$(expr $C + 1)
         done
@@ -36,7 +36,7 @@ jobs:
           --filter="timestamp.datetime < '${DATE}'" --format='get(digest)'); do
           (
             set -x
-            echo gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
+            gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
           )
           C=$(expr $C + 1)
         done
