@@ -46,7 +46,7 @@ VENDORED_COMPONENTS = rabbit_common \
 	rabbitmq_web_stomp \
 	rabbitmq_web_stomp_examples
 
-DEPS_YAML_FILE = workflow_sources/deps.yml
+DEPS_YAML_FILE = workflow_sources/test/deps.yml
 
 define dep_yaml_chunk
 $(eval SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(wildcard deps/$(1)/test/*_SUITE.erl)))))
@@ -60,13 +60,17 @@ $(DEPS_YAML_FILE):
 
 .PHONY: monorepo-actions
 monorepo-actions: $(YTT) $(DEPS_YAML_FILE)
-	ytt -f workflow_sources \
+	ytt -f workflow_sources/base_image \
+	| sed s/a_magic_string_that_we_will_sed_to_on/on/ \
+	> .github/workflows/base-images.yaml
+
+	ytt -f workflow_sources/test \
 	--data-value versions.erlang=23.0 \
 	--data-value versions.elixir=1.8.0 \
 	| sed s/a_magic_string_that_we_will_sed_to_on/on/ \
 	> .github/workflows/test-erlang-otp-23.0.yaml
 
-	ytt -f workflow_sources \
+	ytt -f workflow_sources/test \
 	--data-value versions.erlang=22.3 \
 	--data-value versions.elixir=1.10.3 \
 	| sed s/a_magic_string_that_we_will_sed_to_on/on/ \

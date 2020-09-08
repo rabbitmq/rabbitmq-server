@@ -3,25 +3,8 @@
 #@ load("helpers.lib.yml", "ci_image", "ci_image_tag", "should_skip_xref")
 
 #@ def prepare_jobs():
-#!base_image:
-#!  name: base_image
-#!  runs-on: ubuntu-18.04
-#!  #@yaml/text-templated-strings
-#!  steps:
-#!    - name: CHECKOUT REPOSITORY
-#!      uses: actions/checkout@v2
-#!    - name: CREATE BASE CI IMAGE
-#!      uses: docker/build-push-action@v1
-#!      with:
-#!        username: _json_key
-#!        password: ${{ secrets.GCR_JSON_KEY }}
-#!        registry: eu.gcr.io
-#!        repository: cf-rabbitmq-core/ci-base
-#!        dockerfile: ci_dockerfiles/(@= data.values.versions.erlang @)/base
-#!        tags: #@ data.values.versions.erlang
 prepare:
   name: prepare
-#!  needs: [base_image]
   runs-on: ubuntu-18.04
   outputs:
     build_start: ${{ steps.buildevents.outputs.build_start }}
