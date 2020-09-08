@@ -427,6 +427,8 @@ key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
+    
+    log_link_startup_attempt(Upstream, DownXName),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               {ok, CmdCh} = open_cmd_channel(Conn, Upstream, UParams, DownXName, S0),
@@ -474,6 +476,10 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
+
+log_link_startup_attempt(OUpstream, DownXName) ->
+    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s'",
+                                [rabbit_misc:rs(DownXName), OUpstream#upstream.name]).
 
 open_cmd_channel(Conn, Upstream, UParams, DownXName, S0) ->
     case amqp_connection:open_channel(Conn) of
@@ -575,7 +581,7 @@ ensure_internal_exchange(IntXNameBin,
                                auto_delete = true},
     Purpose = [{<<"x-internal-purpose">>, longstr, <<"federation">>}],
     XFUArgs = [{?MAX_HOPS_ARG,  long,    MaxHops},
-               {?NODE_NAME_ARG, longstr, rabbit_nodes:cluster_name()}
+               {?NODE_NAME_ARG, longstr, cycle_detection_node_identifier()}
                | Purpose],
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
                                   arguments = XFUArgs},
@@ -599,7 +605,7 @@ check_internal_exchange(IntXNameBin,
                                auto_delete = true},
     Purpose = [{<<"x-internal-purpose">>, longstr, <<"federation">>}],
     XFUArgs = [{?MAX_HOPS_ARG,  long,    MaxHops},
-               {?NODE_NAME_ARG, longstr, rabbit_nodes:cluster_name()}
+               {?NODE_NAME_ARG, longstr, cycle_detection_node_identifier()}
                | Purpose],
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
                                   arguments = XFUArgs},
@@ -628,6 +634,9 @@ upstream_queue_name(XNameBin, VHost, #resource{name         = DownXNameBin,
                               ":", DownXNameBin/binary>>
                end,
     <<"federation: ", XNameBin/binary, " -> ", Node/binary, DownPart/binary>>.
+
+cycle_detection_node_identifier() ->
+    rabbit_nodes:cluster_name().
 
 upstream_exchange_name(UpstreamQName, Suffix) ->
     <<UpstreamQName/binary, " ", Suffix/binary>>.
