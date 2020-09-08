@@ -30,10 +30,15 @@
          safe_uri,
          table}).
 
+%% Name of the message header used to collect the hop (forwarding) path
+%% metadata as the message is forwarded by exchange federation.
 -define(ROUTING_HEADER, <<"x-received-from">>).
 -define(BINDING_HEADER, <<"x-bound-from">>).
 -define(MAX_HOPS_ARG,   <<"x-max-hops">>).
--define(NODE_NAME_ARG,  <<"x-downstream-name">>).
+%% Identifies a cluster, used by exchange federation cycle detection
+-define(DOWNSTREAM_NAME_ARG,  <<"x-downstream-name">>).
+%% Identifies a virtual host, used by exchange federation cycle detection
+-define(DOWNSTREAM_VHOST_ARG, <<"x-downstream-vhost">>).
 -define(DEF_PREFETCH, 1000).
 
 -define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/federation.html">>).

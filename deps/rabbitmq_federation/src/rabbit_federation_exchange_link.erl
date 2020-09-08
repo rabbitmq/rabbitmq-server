@@ -138,21 +138,20 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                               redelivered  = Redelivered} = DeliverMethod, Msg},
             State = #state{
               upstream            = Upstream = #upstream{max_hops = MaxH},
-              upstream_params     = UParams,
+              upstream_params     = UParams = #upstream_params{x_or_q = #exchange{name = #resource{virtual_host = UVhost}}},
               upstream_name       = UName,
-              downstream_exchange = #resource{name = XNameBin},
+              downstream_exchange = #resource{name = XNameBin, virtual_host = DVhost},
               downstream_channel  = DCh,
               channel             = Ch,
               unacked             = Unacked}) ->
     PublishMethod = #'basic.publish'{exchange    = XNameBin,
                                      routing_key = Key},
-    %% TODO add user information here?
-    HeadersFun = fun (H) -> update_headers(UParams, UName, Redelivered, H) end,
+    HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
     %% We need to check should_forward/2 here in case the upstream
     %% does not have federation and thus is using a fanout exchange.
     ForwardFun = fun (H) ->
                          DName = rabbit_nodes:cluster_name(),
-                         rabbit_federation_util:should_forward(H, MaxH, DName)
+                         rabbit_federation_util:should_forward(H, MaxH, DName, DVhost)
                  end,
     Unacked1 = rabbit_federation_link_util:forward(
                  Upstream, DeliverMethod, Ch, DCh, PublishMethod,
@@ -427,7 +426,7 @@ key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
-    
+
     log_link_startup_attempt(Upstream, DownXName),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
@@ -569,10 +568,11 @@ ensure_upstream_exchange(#state{upstream_params = UParams,
       end).
 
 ensure_internal_exchange(IntXNameBin,
-                         #state{upstream        = #upstream{max_hops = MaxHops},
-                                upstream_params = UParams,
-                                connection      = Conn,
-                                channel         = Ch}) ->
+                         #state{upstream            = #upstream{max_hops = MaxHops},
+                                upstream_params     = UParams,
+                                connection          = Conn,
+                                channel             = Ch,
+                                downstream_exchange = #resource{virtual_host = DVhost}}) ->
     #upstream_params{params = Params} = rabbit_federation_util:deobfuscate_upstream_params(UParams),
     delete_upstream_exchange(Conn, IntXNameBin),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
@@ -581,7 +581,8 @@ ensure_internal_exchange(IntXNameBin,
                                auto_delete = true},
     Purpose = [{<<"x-internal-purpose">>, longstr, <<"federation">>}],
     XFUArgs = [{?MAX_HOPS_ARG,  long,    MaxHops},
-               {?NODE_NAME_ARG, longstr, cycle_detection_node_identifier()}
+               {?DOWNSTREAM_NAME_ARG,  longstr, cycle_detection_node_identifier()},
+               {?DOWNSTREAM_VHOST_ARG, longstr, DVhost}
                | Purpose],
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
                                   arguments = XFUArgs},
@@ -595,7 +596,7 @@ ensure_internal_exchange(IntXNameBin,
 check_internal_exchange(IntXNameBin,
                          #state{upstream        = #upstream{max_hops = MaxHops},
                                 upstream_params = UParams,
-                                downstream_exchange = XName}) ->
+                                downstream_exchange = XName = #resource{virtual_host = DVhost}}) ->
     #upstream_params{params = Params} =
         rabbit_federation_util:deobfuscate_upstream_params(UParams),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
@@ -605,7 +606,8 @@ check_internal_exchange(IntXNameBin,
                                auto_delete = true},
     Purpose = [{<<"x-internal-purpose">>, longstr, <<"federation">>}],
     XFUArgs = [{?MAX_HOPS_ARG,  long,    MaxHops},
-               {?NODE_NAME_ARG, longstr, cycle_detection_node_identifier()}
+               {?DOWNSTREAM_NAME_ARG,  longstr, cycle_detection_node_identifier()},
+               {?DOWNSTREAM_VHOST_ARG, longstr, DVhost}
                | Purpose],
     XFU = Base#'exchange.declare'{type      = <<"x-federation-upstream">>,
                                   arguments = XFUArgs},
@@ -649,14 +651,18 @@ delete_upstream_queue(Conn, Queue) ->
     rabbit_federation_link_util:disposable_channel_call(
       Conn, #'queue.delete'{queue = Queue}).
 
-update_headers(#upstream_params{table = Table}, UName, Redelivered, Headers) ->
-    rabbit_basic:prepend_table_header(
-      ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered}] ++
-          header_for_name(UName),
-      Headers).
+update_routing_headers(#upstream_params{table = Table}, UpstreamName, UVhost, Redelivered, Headers) ->
+    NewValue = Table ++
+        [{<<"redelivered">>, bool, Redelivered}] ++
+        header_for_upstream_name(UpstreamName) ++
+        header_for_upstream_vhost(UVhost),
+    rabbit_basic:prepend_table_header(?ROUTING_HEADER, NewValue, Headers).
 
-header_for_name(unknown) -> [];
-header_for_name(Name)    -> [{<<"cluster-name">>, longstr, Name}].
+header_for_upstream_name(unknown) -> [];
+header_for_upstream_name(Name)    -> [{<<"cluster-name">>, longstr, Name}].
+
+header_for_upstream_vhost(unknown) -> [];
+header_for_upstream_vhost(Name)    -> [{<<"vhost">>, longstr, Name}].
 
 get_hops(Table) ->
   case rabbit_misc:table_lookup(Table, <<"hops">>) of

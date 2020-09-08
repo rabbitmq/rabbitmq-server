@@ -43,13 +43,18 @@ route(X = #exchange{arguments = Args},
     %% This arg was introduced in the same release as this exchange type;
     %% it must be set
     {long, MaxHops} = rabbit_misc:table_lookup(Args, ?MAX_HOPS_ARG),
-    %% This was introduced later; it might be missing
-    DName = case rabbit_misc:table_lookup(Args, ?NODE_NAME_ARG) of
-                {longstr, N} -> N;
-                _            -> unknown
+    %% Will be missing for pre-3.3.0 versions
+    DName = case rabbit_misc:table_lookup(Args, ?DOWNSTREAM_NAME_ARG) of
+                {longstr, Val0} -> Val0;
+                _               -> unknown
+            end,
+    %% Will be missing for pre-3.8.9 versions
+    DVhost = case rabbit_misc:table_lookup(Args, ?DOWNSTREAM_VHOST_ARG) of
+                {longstr, Val1} -> Val1;
+                _               -> unknown
             end,
     Headers = rabbit_basic:extract_headers(Content),
-    case rabbit_federation_util:should_forward(Headers, MaxHops, DName) of
+    case rabbit_federation_util:should_forward(Headers, MaxHops, DName, DVhost) of
         true  -> rabbit_exchange_type_fanout:route(X, D);
         false -> []
     end.
