@@ -2,6 +2,7 @@
 .sw?
 .*.sw?
 /.erlang.mk/
+/bin/
 /deps/*
 !/deps/rabbit/
 !/deps/rabbit_common/
@@ -52,6 +53,8 @@
 /sbin/
 /sbin.lock
 .envrc
+
+/topic-branch-scratch/
 
 PACKAGES/
 
