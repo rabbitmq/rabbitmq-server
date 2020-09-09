@@ -50,9 +50,10 @@ to_json(ReqData, Context) ->
     end.
 
 failure(Message, ReqData, Context) ->
-    rabbit_mgmt_util:reply([{status, failed},
-                            {reason, Message}],
-                           ReqData, Context).
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
+                                                            {reason, Message}],
+                                                           ReqData, Context),
+    {stop, cowboy_req:reply(500, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
