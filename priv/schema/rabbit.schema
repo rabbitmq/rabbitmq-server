@@ -1646,6 +1646,34 @@ end}.
     end
 }.
 
+{mapping, "raft.wal_max_entries", "ra.wal_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.wal_max_entries",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.wal_max_entries", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
+{mapping, "raft.wal_hibernate_after", "ra.wal_hibernate_after", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "ra.wal_hibernate_after",
+    fun(Conf) ->
+        case cuttlefish:conf_get("raft.wal_hibernate_after", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
 {mapping, "raft.wal_max_batch_size", "ra.wal_max_batch_size", [
   {datatype, integer},
   {validators, ["non_zero_positive_integer"]}
