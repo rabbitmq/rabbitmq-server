@@ -138,6 +138,9 @@ set_any(VHost, Component, Name, Term, User) ->
     end.
 
 set_any0(VHost, Component, Name, Term, User) ->
+    rabbit_log:debug("Asked to set or update runtime parameter '~s' in vhost '~s' "
+                     "for component '~s', value: ~p",
+                     [Name, VHost, Component, Term]),
     case lookup_component(Component) of
         {ok, Mod} ->
             case flatten_errors(
