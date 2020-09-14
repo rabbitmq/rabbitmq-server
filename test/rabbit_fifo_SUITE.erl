@@ -1135,7 +1135,8 @@ active_flag_updated_when_consumer_suspected_unsuspected_test(_) ->
     State1 = lists:foldl(AddConsumer, State0,
         [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
 
-    {State2, _, Effects2} = apply(#{index => 3}, {down, Pid1, noconnection}, State1),
+    {State2, _, Effects2} = apply(#{index => 3,
+                                    system_time => 1500}, {down, Pid1, noconnection}, State1),
     % 1 effect to update the metrics of each consumer (they belong to the same node), 1 more effect to monitor the node
     ?assertEqual(4 + 1, length(Effects2)),
 
