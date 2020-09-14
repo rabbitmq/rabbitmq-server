@@ -131,7 +131,8 @@ all_tests() ->
      invalid_policy,
      delete_if_empty,
      delete_if_unused,
-     queue_ttl
+     queue_ttl,
+     peek
     ].
 
 memory_tests() ->
@@ -2396,6 +2397,37 @@ queue_length_in_memory_purge(Config) ->
 
     ?assertEqual([{0, 0}],
                  dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
+
+peek(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-in-memory-length">>, long, 2}])),
+
+    Msg1 = <<"msg1">>,
+    Msg2 = <<"msg11">>,
+
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertMatch({error, no_message_at_pos},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              peek, [1, QName])),
+    publish(Ch, QQ, Msg1),
+    publish(Ch, QQ, Msg2),
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+
+    ?assertMatch({ok, [_|_]},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              peek, [1, QName])),
+    ?assertMatch({ok, [_|_]},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              peek, [2, QName])),
+    ?assertMatch({error, no_message_at_pos},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              peek, [3, QName])),
+    ok.
 
 in_memory(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

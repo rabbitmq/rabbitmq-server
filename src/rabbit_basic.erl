@@ -15,7 +15,8 @@
          header_routes/1, parse_expiration/1, header/2, header/3]).
 -export([build_content/2, from_content/1, msg_size/1,
          maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
--export([add_header/4]).
+-export([add_header/4,
+         peek_fmt_message/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -319,3 +320,34 @@ add_header(Name, Type, Value, #basic_message{content = Content0} = Msg) ->
                         rabbit_misc:set_table_value(Headers, Name, Type, Value)
                 end, Content0),
     Msg#basic_message{content = Content}.
+
+peek_fmt_message(#basic_message{exchange_name = Ex,
+                                routing_keys = RKeys,
+                                content =
+                                #content{payload_fragments_rev = Payl0,
+                                         properties = Props}}) ->
+    Fields = [atom_to_binary(F, utf8) || F <- record_info(fields, 'P_basic')],
+    T = lists:zip(Fields, tl(tuple_to_list(Props))),
+    lists:foldl(
+      fun ({<<"headers">>, Hdrs}, Acc) ->
+              case Hdrs of
+                  [] ->
+                      Acc;
+                  _ ->
+                      Acc ++ [{header_key(H), V} || {H, _T, V} <- Hdrs]
+              end;
+          ({_, undefined}, Acc) ->
+              Acc;
+          (KV, Acc) ->
+              [KV | Acc]
+      end, [], [{<<"payload (max 64 bytes)">>,
+                 %% restric payload to 64 bytes
+                 binary_prefix_64(iolist_to_binary(lists:reverse(Payl0)), 64)},
+                {<<"exchange">>, Ex#resource.name},
+                {<<"routing_keys">>, RKeys} | T]).
+
+header_key(A) ->
+    <<"header.", A/binary>>.
+
+binary_prefix_64(Bin, Len) ->
+    binary:part(Bin, 0, min(byte_size(Bin), Len)).

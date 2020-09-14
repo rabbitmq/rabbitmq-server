@@ -23,6 +23,7 @@
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
 -export([open_files/1]).
+-export([peek/2, peek/3]).
 -export([add_member/4]).
 -export([delete_member/3]).
 -export([requeue/3]).
@@ -1344,6 +1345,35 @@ leader(Q) when ?is_amqqueue(Q) ->
         true -> Leader;
         false -> ''
     end.
+
+peek(Vhost, Queue, Pos) ->
+    peek(Pos, rabbit_misc:r(Vhost, queue, Queue)).
+
+peek(Pos, #resource{} = QName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            peek(Pos, Q);
+        Err ->
+            Err
+    end;
+peek(Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_quorum(Q) ->
+    LeaderPid = amqqueue:get_pid(Q),
+    case ra:aux_command(LeaderPid, {peek, Pos}) of
+        {ok, {MsgHeader, Msg0}} ->
+            Count = case MsgHeader of
+                        #{delivery_count := C} -> C;
+                       _ -> 0
+                    end,
+            Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long,
+                                          Count, Msg0),
+            {ok, rabbit_basic:peek_fmt_message(Msg)};
+        {error, Err} ->
+            {error, Err};
+        Err ->
+            Err
+    end;
+peek(_Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_classic(Q) ->
+    {error, classic_queue_not_supported}.
 
 online(Q) when ?is_amqqueue(Q) ->
     Nodes = get_nodes(Q),
