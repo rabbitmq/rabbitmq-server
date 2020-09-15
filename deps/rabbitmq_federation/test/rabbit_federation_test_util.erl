@@ -194,6 +194,13 @@ set_upstream(Config, Node, Name, URI, Extra) ->
     rabbit_ct_broker_helpers:set_parameter(Config, Node,
       <<"federation-upstream">>, Name, [{<<"uri">>, URI} | Extra]).
 
+set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI) ->
+    set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI, []).
+
+set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI, Extra) ->
+    rabbit_ct_broker_helpers:set_parameter(Config, Node, VirtualHost,
+      <<"federation-upstream">>, Name, [{<<"uri">>, URI} | Extra]).
+
 clear_upstream(Config, Node, Name) ->
     rabbit_ct_broker_helpers:clear_parameter(Config, Node,
       <<"federation-upstream">>, Name).
@@ -252,6 +259,15 @@ no_plugins(Cfg) ->
          end} || {K, V} <- Cfg].
 
 %%----------------------------------------------------------------------------
+
+federation_status(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_federation_status, status, []).
+
+status_fields(Prop, Statuses) ->
+    lists:usort(
+        lists:map(
+            fun(Upstream) -> proplists:get_value(Prop, Upstream) end,
+            Statuses)).
 
 assert_status(Config, Node, XorQs, Names) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,

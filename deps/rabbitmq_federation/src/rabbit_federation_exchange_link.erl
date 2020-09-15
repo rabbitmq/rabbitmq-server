@@ -480,7 +480,9 @@ log_link_startup_attempt(OUpstream, DownXName) ->
     rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s'",
                                 [rabbit_misc:rs(DownXName), OUpstream#upstream.name]).
 
-open_cmd_channel(Conn, Upstream, UParams, DownXName, S0) ->
+open_cmd_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
+    rabbit_log_federation:debug("Will open a command channel to upstream '~s' for downstream federated ~s",
+                                [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of
         {ok, CCh} ->
             erlang:monitor(process, CCh),
@@ -568,13 +570,17 @@ ensure_upstream_exchange(#state{upstream_params = UParams,
       end).
 
 ensure_internal_exchange(IntXNameBin,
-                         #state{upstream            = #upstream{max_hops = MaxHops},
+                         #state{upstream            = #upstream{max_hops = MaxHops, name = UName},
                                 upstream_params     = UParams,
                                 connection          = Conn,
                                 channel             = Ch,
                                 downstream_exchange = #resource{virtual_host = DVhost}}) ->
+    rabbit_log_federation:debug("Exchange federation will set up exchange '~s' in upstream '~s'",
+                                [IntXNameBin, UName]),
     #upstream_params{params = Params} = rabbit_federation_util:deobfuscate_upstream_params(UParams),
+    rabbit_log_federation:debug("Will delete upstream exchange '~s'", [IntXNameBin]),
     delete_upstream_exchange(Conn, IntXNameBin),
+    rabbit_log_federation:debug("Will declare an internal upstream exchange '~s'", [IntXNameBin]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                durable     = true,
                                internal    = true,
@@ -594,11 +600,13 @@ ensure_internal_exchange(IntXNameBin,
                    end).
 
 check_internal_exchange(IntXNameBin,
-                         #state{upstream        = #upstream{max_hops = MaxHops},
+                         #state{upstream        = #upstream{max_hops = MaxHops, name = UName},
                                 upstream_params = UParams,
                                 downstream_exchange = XName = #resource{virtual_host = DVhost}}) ->
     #upstream_params{params = Params} =
         rabbit_federation_util:deobfuscate_upstream_params(UParams),
+    rabbit_log_federation:debug("Exchange federation will check on exchange '~s' in upstream '~s'",
+                                [IntXNameBin, UName]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                passive     = true,
                                durable     = true,
