@@ -11,7 +11,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
--export([should_forward/4, find_upstreams/2, already_seen/2, already_seen/3]).
+-export([should_forward/4, find_upstreams/2, already_seen/3]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1, pgname/1]).
 -export([obfuscate_upstream/1, deobfuscate_upstream/1, obfuscate_upstream_params/1, deobfuscate_upstream_params/1]).
 
@@ -27,13 +27,7 @@ should_forward(Headers, MaxHops, DName, DVhost) ->
         _          -> true
     end.
 
-%% Used to detect binding propagation cycles.
-already_seen(Name, Array) ->
-    lists:any(fun ({table, T}) -> {longstr, Name} =:= rabbit_misc:table_lookup(T, <<"cluster-name">>);
-                  (_)          -> false
-              end, Array).
-
-%% Used to detect message forwarding cycles.
+%% Used to detect message and binding forwarding cycles.
 already_seen(UpstreamID, UpstreamVhost, Array) ->
     lists:any(fun ({table, T}) ->
                     {longstr, UpstreamID} =:= rabbit_misc:table_lookup(T, <<"cluster-name">>) andalso
@@ -64,7 +58,7 @@ name(Q) when ?is_amqqueue(Q) -> #resource{name = QName} = amqqueue:get_name(Q), 
 vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost;
 vhost(Q) when ?is_amqqueue(Q) -> #resource{virtual_host = VHost} = amqqueue:get_name(Q), VHost;
-vhost( #amqp_params_direct{virtual_host = VHost}) -> VHost;
+vhost(#amqp_params_direct{virtual_host = VHost})  -> VHost;
 vhost(#amqp_params_network{virtual_host = VHost}) -> VHost.
 
 r(#exchange{name = XName}) -> XName;

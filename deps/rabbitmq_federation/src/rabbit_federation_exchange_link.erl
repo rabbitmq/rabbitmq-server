@@ -138,12 +138,13 @@ handle_info({#'basic.deliver'{routing_key  = Key,
                               redelivered  = Redelivered} = DeliverMethod, Msg},
             State = #state{
               upstream            = Upstream = #upstream{max_hops = MaxH},
-              upstream_params     = UParams = #upstream_params{x_or_q = #exchange{name = #resource{virtual_host = UVhost}}},
+              upstream_params     = UParams = #upstream_params{x_or_q = UpstreamX},
               upstream_name       = UName,
               downstream_exchange = #resource{name = XNameBin, virtual_host = DVhost},
               downstream_channel  = DCh,
               channel             = Ch,
               unacked             = Unacked}) ->
+    UVhost = vhost(UpstreamX),
     PublishMethod = #'basic.publish'{exchange    = XNameBin,
                                      routing_key = Key},
     HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
@@ -394,14 +395,16 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments, Nowait) ->
 
 update_binding(Args, #state{downstream_exchange = X,
                             upstream            = Upstream,
+                            upstream_params     = #upstream_params{x_or_q = UpstreamX},
                             upstream_name       = UName}) ->
     #upstream{max_hops = MaxHops} = Upstream,
+    UVhost = vhost(UpstreamX),
     Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
                undefined    -> MaxHops;
                {array, All} -> [{table, Prev} | _] = All,
                                PrevHops = get_hops(Prev),
                                case rabbit_federation_util:already_seen(
-                                      UName, All) of
+                                      UName, UVhost, All) of
                                    true  -> 0;
                                    false -> lists:min([PrevHops - 1, MaxHops])
                                end
@@ -411,10 +414,11 @@ update_binding(Args, #state{downstream_exchange = X,
         _ -> Cluster = rabbit_nodes:cluster_name(),
              ABSuffix = rabbit_federation_db:get_active_suffix(
                           X, Upstream, <<"A">>),
-             DVHost = vhost(X),
+             DVhost = vhost(X),
              DName = name(X),
-             Down = <<DVHost/binary,":", DName/binary, " ", ABSuffix/binary>>,
+             Down = <<DVhost/binary,":", DName/binary, " ", ABSuffix/binary>>,
              Info = [{<<"cluster-name">>, longstr, Cluster},
+                     {<<"vhost">>,        longstr, DVhost},
                      {<<"exchange">>,     longstr, Down},
                      {<<"hops">>,         short,   Hops}],
              rabbit_basic:prepend_table_header(?BINDING_HEADER, Info, Args)
