@@ -132,6 +132,16 @@ doest not contain a correlation ID.
 |15
 |Yes
 
+|<<commitoffset>>
+|Client
+|16
+|No
+
+|<<queryoffset>>
+|Client
+|17
+|Yes
+
 |<<create>>
 |Client
 |998
@@ -387,6 +397,35 @@ SaslAuthenticateResponse => Key Version CorrelationId ResponseCode PeerPropertie
   PeerProperty => Key Value
   Key => string
   Value => string
+```
+
+=== CommitOffset
+
+```
+CommitOffset => Key Version Reference Stream Offset
+  Key => int16 // 16
+  Version => int16
+  Reference => string // max 256 characters
+  Stream => string
+  Offset => int64
+```
+
+=== QueryOffset
+
+```
+QueryOffsetRequest => Key Version CorrelationId Reference Stream
+  Key => int16 // 17
+  Version => int16
+  CorrelationId => int32
+  Reference => string // max 256 characters
+  Stream => string
+
+QueryOffsetResponse => Key Version CorrelationId Reference Stream
+  Key => int16 // 17
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+  Offset => int64
 ```
 
 === Create

@@ -707,6 +707,52 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = Connection,
             Transport:send(S, [<<FrameSize:32>>, Frame]),
             {Connection, State, Rest}
     end;
+handle_frame_post_auth(_Transport, #stream_connection{virtual_host = VirtualHost, user = User} = Connection,
+    State,
+    <<?COMMAND_COMMIT_OFFSET:16, ?VERSION_0:16, ReferenceSize:16, Reference:ReferenceSize/binary,
+      StreamSize:16, Stream:StreamSize/binary, Offset:64>>, Rest) ->
+
+    case check_write_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+        ok ->
+            case lookup_leader(Stream, Connection) of
+                cluster_not_found ->
+                    rabbit_log:info("Could not find leader to commit offset on ~p~n", [Stream]),
+                    %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
+                    {Connection, State, Rest};
+                {ClusterLeader, Connection1} ->
+                    osiris:write_tracking(ClusterLeader, Reference, Offset),
+                    {Connection1, State, Rest}
+            end;
+        error ->
+            %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
+            rabbit_log:info("Not authorized to commit offset on ~p~n", [Stream]),
+            {Connection, State, Rest}
+    end;
+handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost, user = User} = Connection,
+    State,
+    <<?COMMAND_QUERY_OFFSET:16, ?VERSION_0:16, CorrelationId:32,
+        ReferenceSize:16, Reference:ReferenceSize/binary,
+        StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
+    FrameSize = ?RESPONSE_FRAME_SIZE + 8,
+    {ResponseCode, Offset} = case check_read_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+        ok ->
+            case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
+                {error, not_found} ->
+                    {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
+                {ok, LocalMemberPid} ->
+                    {?RESPONSE_CODE_OK, case osiris:read_tracking(LocalMemberPid, Reference) of
+                        undefined ->
+                            0;
+                        Offt ->
+                            Offt
+                    end}
+            end;
+        error ->
+            {?RESPONSE_CODE_ACCESS_REFUSED, 0}
+    end,
+    Transport:send(S, [<<FrameSize:32, ?COMMAND_QUERY_OFFSET:16, ?VERSION_0:16>>,
+        <<CorrelationId:32>>, <<ResponseCode:16>>, <<Offset:64>>]),
+    {Connection, State, Rest};
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username} = User} = Connection,
     State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
