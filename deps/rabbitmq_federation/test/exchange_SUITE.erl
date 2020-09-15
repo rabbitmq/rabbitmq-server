@@ -16,7 +16,7 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [wait_for_federation/2, expect/3, expect_empty/2,
+        [wait_for_federation/2, expect/3, expect/4, expect_empty/2,
          set_upstream/4, set_upstream/5, set_upstream_in_vhost/5, set_upstream_in_vhost/6,
          clear_upstream/3, set_upstream_set/4,
          set_policy/5, set_policy_pattern/5, clear_policy/3,
@@ -37,7 +37,6 @@ groups() ->
       {without_disambiguate, [], [
           {cluster_size_1, [], [
               simple,
-              message_cycle_detection_case2,
               multiple_upstreams,
               multiple_upstreams_pattern,
               multiple_uris,
@@ -54,7 +53,8 @@ groups() ->
               dynamic_plugin_cleanup_stop_start,
               dynamic_policy_cleanup,
               delete_federated_exchange_upstream,
-              delete_federated_queue_upstream
+              delete_federated_queue_upstream,
+              message_cycle_detection_case2
             ]}
         ]},
       {with_disambiguate, [], [
@@ -635,8 +635,9 @@ message_cycle_detection_case2(Config) ->
     {ok, VH3Ch} = amqp_connection:open_channel(VH3Conn),
 
     X = <<"federated.x">>,
-    declare_exchange(VH2Ch, x(X, <<"fanout">>)),
     declare_exchange(VH3Ch, x(X, <<"fanout">>)),
+    declare_exchange(VH2Ch, x(X, <<"fanout">>)),
+    declare_exchange(VH1Ch, x(X, <<"fanout">>)),
     
     rabbit_ct_helpers:await_condition(
         fun () ->
@@ -646,7 +647,6 @@ message_cycle_detection_case2(Config) ->
         end),
     
     Statuses = federation_status(Config, 0),
-    ct:pal("Link statuses: ~p", [Statuses]),
     
     ?assertEqual(lists:usort([URI1, URI2]),
                  status_fields(uri, Statuses)),
@@ -656,30 +656,39 @@ message_cycle_detection_case2(Config) ->
                  status_fields(vhost, Statuses)),
     ?assertEqual(lists:usort([exchange]),
                  status_fields(type, Statuses)),
-
+    
+    %% give links some time to set up their topology
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
+            ExchangesInB = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH2]),
+            length(ExchangesInA) >= 1 andalso
+            length(ExchangesInB) >= 1
+        end),
+    
+    declare_exchange(VH1Ch, x(X, <<"fanout">>)),
     ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
     ct:pal("ExchangesInA: ~p", [ExchangesInA]),
     
     QueuesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, [VH1]),
     ct:pal("QueuesInA: ~p", [QueuesInA]),
     
-    %% give links some time to set up their topology
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
-            length(ExchangesInA) >= 1
-        end),
-    
-    BindingsInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [rabbit_misc:r(VH1, exchange, X)]),
+    BindingsInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [VH1]),
     ct:pal("BindingsInA: ~p", [BindingsInA]),
-    BindingsInB = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [rabbit_misc:r(VH2, exchange, X)]),
+    BindingsInB = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [VH2]),
     ct:pal("BindingsInB: ~p", [BindingsInB]),
-
+    
     
     RK = <<"doesn't matter">>,
     Q  = bind_queue(VH3Ch, X, RK),
-
-    timer:sleep(6000),
+    
+    rabbit_ct_helpers:await_condition(
+    fun () ->
+        ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
+        lists:any(fun(#exchange{name = XName}) ->
+                    XName =:= rabbit_misc:r(VH1, exchange, X)
+                  end, ExchangesInA)
+    end),
     
     Payload1 = <<"msg1">>,
     Payload2 = <<"msg2">>,
@@ -687,13 +696,15 @@ message_cycle_detection_case2(Config) ->
     publish(VH1Ch, X, RK, Payload2),
 
     Msgs = [Payload1, Payload2],
-    %% payloads published to a federated exchange in A reach a queue in C
-    expect(VH3Ch, Q, Msgs),
-    %% the messages have been consumed
-    expect_empty(VH3Ch, Q),
-
-    [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
-
+    try
+        %% payloads published to a federated exchange in A reach a queue in C
+        expect(VH3Ch, Q, Msgs, 20000),
+        %% the messages have been consumed
+        expect_empty(VH3Ch, Q)
+    catch _:_ ->
+        [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
+        [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]],
+    end,
     ok.
 
 %% Arrows indicate message flow. Numbers indicate max_hops.
@@ -912,14 +923,12 @@ delete_federated_queue_upstream(Config) ->
                                            <<"federation-upstream">>, <<"upstream">>,
                                            [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
 
-    ?assertMatch([_, _], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                                      status, [])),
+    ?assertEqual(2, length(federation_status(Config, 0))),
 
     rabbit_ct_broker_helpers:clear_parameter(Config, 0, <<"federation-downstream2">>,
                                              <<"federation-upstream">>, <<"upstream">>),
 
-    Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                          status, []),
+    Status = federation_status(Config, 0),
     %% one link is still around
     ?assertEqual(1, length(Status)),
     ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
