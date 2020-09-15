@@ -67,7 +67,7 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(RELEASE_CURSOR_EVERY, 2048).
+-define(RELEASE_CURSOR_EVERY, 64000).
 -define(RELEASE_CURSOR_EVERY_MAX, 3200000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
@@ -75,7 +75,7 @@
 -define(GC_MEM_LIMIT_B, 2000000).
 
 -define(MB, 1048576).
--define(LOW_LIMIT, 0.8).
+-define(STATE, rabbit_fifo).
 
 -record(consumer,
         {meta = #{} :: consumer_meta(),
@@ -101,29 +101,21 @@
 
 -type consumer_strategy() :: competing | single_active.
 
--type milliseconds() :: non_neg_integer().
-
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
          pending = [] :: [{msg_seqno(), ra:index(), raw_msg()}],
-         status = up :: up |
-                        suspected_down,
-         %% it is useful to have a record of when this was blocked
-         %% so that we can retry sending the block effect if
-         %% the publisher did not receive the initial one
-         blocked :: undefined | ra:index(),
-         unused_1,
-         unused_2
+         status = up :: up | suspected_down
         }).
 
 -record(cfg,
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
-         release_cursor_interval :: option({non_neg_integer(), non_neg_integer()}),
+         release_cursor_interval ::
+             undefined | non_neg_integer() |
+             {non_neg_integer(), non_neg_integer()},
          dead_letter_handler :: option(applied_mfa()),
          become_leader_handler :: option(applied_mfa()),
-         overflow_strategy = drop_head :: drop_head | reject_publish,
          max_length :: option(non_neg_integer()),
          max_bytes :: option(non_neg_integer()),
          %% whether single active consumer is on or not for this queue
@@ -131,23 +123,24 @@
          %% the maximum number of unsuccessful delivery attempts permitted
          delivery_limit :: option(non_neg_integer()),
          max_in_memory_length :: option(non_neg_integer()),
-         max_in_memory_bytes :: option(non_neg_integer()),
-         expires :: undefined | milliseconds(),
-         unused_1,
-         unused_2
+         max_in_memory_bytes :: option(non_neg_integer())
         }).
 
 -type prefix_msgs() :: {list(), list()} |
                        {non_neg_integer(), list(),
                         non_neg_integer(), list()}.
 
--record(rabbit_fifo,
+-record(?STATE,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = lqueue:new() :: lqueue:queue(),
-         % defines the next message id
+         messages = #{} :: #{msg_in_id() => indexed_msg()},
+         % defines the lowest message in id available in the messages map
+         % that isn't a return
+         low_msg_num :: option(msg_in_id()),
+         % defines the next message in id to be added to the messages map
          next_msg_num = 1 :: msg_in_id(),
-         % queue of returned msg_in_ids - when checking out it picks from
+         % list of returned msg_in_ids - when checking out it picks from
+         % this list first before taking low_msg_num
          returns = lqueue:new() :: lqueue:lqueue(prefix_msg() |
                                                  {msg_in_id(), indexed_msg()}),
          % a counter of enqueues - used to trigger shadow copy points
@@ -163,7 +156,7 @@
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
-                                                          ra:index(), #rabbit_fifo{}}),
+                                                          ra:index(), #?STATE{}}),
          % consumers need to reflect consumer state at time of snapshot
          % needs to be part of snapshot
          consumers = #{} :: #{consumer_id() => #consumer{}},
@@ -186,10 +179,7 @@
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_id(), consumer()}],
          msg_bytes_in_memory = 0 :: non_neg_integer(),
-         msgs_ready_in_memory = 0 :: non_neg_integer(),
-         last_active :: undefined | non_neg_integer(),
-         unused_1,
-         unused_2
+         msgs_ready_in_memory = 0 :: non_neg_integer()
         }).
 
 -type config() :: #{name := atom(),
@@ -201,9 +191,5 @@
                     max_bytes => non_neg_integer(),
                     max_in_memory_length => non_neg_integer(),
                     max_in_memory_bytes => non_neg_integer(),
-                    overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
-                    delivery_limit => non_neg_integer(),
-                    expires => non_neg_integer(),
-                    created => non_neg_integer()
-                   }.
+                    delivery_limit => non_neg_integer()}.

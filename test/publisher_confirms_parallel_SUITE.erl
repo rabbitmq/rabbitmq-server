@@ -82,7 +82,7 @@ init_per_group(mirrored_queue, Config) ->
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
-            ClusterSize = 2,
+            ClusterSize = 3,
             Config1 = rabbit_ct_helpers:set_config(Config, [
                 {rmq_nodename_suffix, Group},
                 {rmq_nodes_count, ClusterSize}
@@ -302,21 +302,23 @@ confirm_nack1(Config) ->
 %% The closest to a nack behaviour that we can get on quorum queues is not answering while
 %% the cluster is in minority. Once the cluster recovers, a 'basic.ack' will be issued.
 confirm_minority(Config) ->
-    [_A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [_A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
     ok = rabbit_ct_broker_helpers:stop_node(Config, B),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, C),
     amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QName, [<<"msg1">>]),
     receive
-        #'basic.nack'{} -> throw(unexpected_nack);
+        #'basic.nack'{} -> ok;
         #'basic.ack'{} -> throw(unexpected_ack)
-    after 30000 ->
+    after 120000 ->
             ok
     end,
     ok = rabbit_ct_broker_helpers:start_node(Config, B),
+    publish(Ch, QName, [<<"msg2">>]),
     receive
         #'basic.nack'{} -> throw(unexpected_nack);
         #'basic.ack'{} -> ok

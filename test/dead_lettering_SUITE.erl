@@ -106,7 +106,7 @@ init_per_group(mirrored_queue, Config) ->
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
-            ClusterSize = 2,
+            ClusterSize = 3,
             Config1 = rabbit_ct_helpers:set_config(Config, [
                 {rmq_nodename_suffix, Group},
                 {rmq_nodes_count, ClusterSize}

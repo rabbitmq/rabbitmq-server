@@ -125,7 +125,7 @@ init_per_group(mirrored_queue, Config) ->
 init_per_group(Group, Config0) ->
     case lists:member({group, Group}, all()) of
         true ->
-            ClusterSize = 2,
+            ClusterSize = 3,
             Config = rabbit_ct_helpers:merge_app_env(
                        Config0, {rabbit, [{channel_tick_interval, 1000},
                                           {quorum_tick_interval, 1000}]}),

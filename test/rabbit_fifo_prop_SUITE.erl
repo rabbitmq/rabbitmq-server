@@ -479,15 +479,17 @@ test_run_log(_Config) ->
 snapshots(_Config) ->
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength,
-                       InMemoryBytes},
-                      frequency([{10, {0, 0, false, 0, 0, 0}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer,
+                       DeliveryLimit, InMemoryLength, InMemoryBytes,
+                       Overflow},
+                      frequency([{10, {0, 0, false, 0, 0, 0, drop_head}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
                                       oneof([range(1, 3), undefined]),
                                       oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined])
+                                      oneof([range(1, 1000), undefined]),
+                                      oneof([drop_head, reject_publish])
                                      }}]),
                       begin
                           Config = config(?FUNCTION_NAME,
@@ -496,7 +498,8 @@ snapshots(_Config) ->
                                           SingleActiveConsumer,
                                           DeliveryLimit,
                                           InMemoryLength,
-                                          InMemoryBytes),
+                                          InMemoryBytes,
+                                          Overflow),
                           ?FORALL(O, ?LET(Ops, log_gen(256), expand(Ops, Config)),
                                   collect({log_size, length(O)},
                                           snapshots_prop(Config, O)))
@@ -681,6 +684,11 @@ max_length(_Config) ->
 
 config(Name, Length, Bytes, SingleActive, DeliveryLimit,
        InMemoryLength, InMemoryBytes) ->
+config(Name, Length, Bytes, SingleActive, DeliveryLimit,
+       InMemoryLength, InMemoryBytes, drop_head).
+
+config(Name, Length, Bytes, SingleActive, DeliveryLimit,
+       InMemoryLength, InMemoryBytes, Overflow) ->
     #{name => Name,
       max_length => map_max(Length),
       max_bytes => map_max(Bytes),
@@ -688,7 +696,8 @@ config(Name, Length, Bytes, SingleActive, DeliveryLimit,
       single_active_consumer_on => SingleActive,
       delivery_limit => map_max(DeliveryLimit),
       max_in_memory_length => map_max(InMemoryLength),
-      max_in_memory_bytes => map_max(InMemoryBytes)}.
+      max_in_memory_bytes => map_max(InMemoryBytes),
+      overflow_strategy => Overflow}.
 
 map_max(0) -> undefined;
 map_max(N) -> N.
@@ -1072,7 +1081,7 @@ do_apply(Cmd, #t{effects = Effs,
             %% down
             T;
         _ ->
-            {St, Effects} = case rabbit_fifo:apply(#{index => Index}, Cmd, S0) of
+            {St, Effects} = case rabbit_fifo:apply(meta(Index), Cmd, S0) of
                                 {S, _, E} when is_list(E) ->
                                     {S, E};
                                 {S, _, E} ->
@@ -1187,7 +1196,7 @@ test_init(Conf) ->
     rabbit_fifo:init(maps:merge(Default, Conf)).
 
 meta(Idx) ->
-    #{index => Idx, term => 1}.
+    #{index => Idx, term => 1, system_time => 0}.
 
 make_checkout(Cid, Spec) ->
     rabbit_fifo:make_checkout(Cid, Spec, #{}).

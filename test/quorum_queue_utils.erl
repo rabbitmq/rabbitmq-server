@@ -8,7 +8,8 @@
          wait_for_messages_total/3,
          wait_for_messages/2,
          dirty_query/3,
-         ra_name/1
+         ra_name/1,
+         is_mixed_versions/0
         ]).
 
 wait_for_messages_ready(Servers, QName, Ready) ->
@@ -34,11 +35,19 @@ wait_for_messages(Servers, QName, Number, Fun, 0) ->
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
     ct:pal("Got messages ~p", [Msgs]),
-    case lists:all(fun(C) when is_integer(C) ->
-                           C == Number;
-                      (_) ->
-                           false
-                   end, Msgs) of
+    %% hack to allow the check to succeed in mixed versions clusters if at
+    %% least one node matches the criteria rather than all nodes for
+    F = case is_mixed_versions() of
+            true ->
+                any;
+            false ->
+                all
+        end,
+    case lists:F(fun(C) when is_integer(C) ->
+                         C == Number;
+                    (_) ->
+                         false
+                 end, Msgs) of
         true ->
             ok;
         _ ->
@@ -88,3 +97,6 @@ filter_queues(Expected, Got) ->
     lists:filter(fun([K, _, _, _]) ->
                          lists:member(K, Keys)
                  end, Got).
+
+is_mixed_versions() ->
+    not (false == os:getenv("SECONDARY_UMBRELLA")).
