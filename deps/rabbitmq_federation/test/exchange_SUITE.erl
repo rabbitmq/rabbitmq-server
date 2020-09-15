@@ -703,7 +703,7 @@ message_cycle_detection_case2(Config) ->
         expect_empty(VH3Ch, Q)
     catch _:_ ->
         [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
-        [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]],
+        [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]]
     end,
     ok.
 
