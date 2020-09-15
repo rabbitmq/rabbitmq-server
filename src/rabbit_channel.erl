@@ -1892,8 +1892,9 @@ handle_publishing_queue_down(QPid, Reason,
                     record_rejects(RejectMXs, State1)
             end
     end;
-handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
-    error(quorum_queues_should_never_be_monitored).
+handle_publishing_queue_down(QPid, _Reason, State) when ?IS_QUORUM(QPid) ->
+    %% this should never happen after the queue type refactoring in 3.9
+    State.
 
 handle_consuming_queue_down_or_eol(QRef,
                                    State = #ch{queue_consumers = QCons,
