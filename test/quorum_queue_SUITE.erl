@@ -2427,6 +2427,8 @@ peek(Config) ->
     ?assertMatch({error, no_message_at_pos},
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                               peek, [3, QName])),
+
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     ok.
 
 in_memory(Config) ->
