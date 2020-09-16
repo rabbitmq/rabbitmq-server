@@ -466,13 +466,12 @@ no_loop(Config) ->
 suffix(Config, Node, Name, XName) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_federation_db, get_active_suffix,
-             [r(<<"fed.downstream">>),
+             [xr(<<"fed.downstream">>),
               #upstream{name          = Name,
                         exchange_name = list_to_binary(XName)}, none]).
 
 restart_upstream(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
+    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Downstream = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
     Upstream   = rabbit_ct_client_helpers:open_channel(Config, Hare),
 
@@ -683,8 +682,9 @@ message_cycle_detection_case2(Config) ->
     
     RK = <<"doesn't matter">>,
     Q  = bind_queue(VH3Ch, X, RK),
-    ok = await_binding(Config, 0, VH3, X, RK, 1),
-    timer:sleep(500),
+    ?assertEqual(ok, await_binding(Config, 0, VH2, X, RK, 1)),
+    ?assertEqual(ok, await_binding(Config, 0, VH3, X, RK, 1)),
+    timer:sleep(1000),
 
     rabbit_ct_helpers:await_condition(
     fun () ->
@@ -1192,10 +1192,10 @@ x(Name, Type) ->
                         type     = Type,
                         durable  = true}.
 
-r(Name) ->
+xr(Name) ->
     rabbit_misc:r(<<"/">>, exchange, Name).
 
-r(Vhost, Name) ->
+xr(Vhost, Name) ->
     rabbit_misc:r(Vhost, exchange, Name).
 
 declare_queue(Ch) ->
@@ -1235,16 +1235,24 @@ delete_queue(Ch, Q) ->
 await_binding(Config, Node, X, Key) ->
     await_binding(Config, Node, X, Key, 1).
 
-await_binding(Config, Node, X, Key, Count) when is_integer(Count) ->
-    await_binding(Config, Node, <<"/">>, X, Key, Count).
+await_binding(Config, Node, X, Key, ExpectedBindingCount) when is_integer(ExpectedBindingCount) ->
+    await_binding(Config, Node, <<"/">>, X, Key, ExpectedBindingCount).
 
-await_binding(Config, Node, Vhost, X, Key, Count) when is_integer(Count) ->
+await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount) when is_integer(ExpectedBindingCount) ->
+    Attempts = 100,
+    await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, Attempts).
+
+await_binding(_Config, _Node, _Vhost, _X, _Key, ExpectedBindingCount, 0) ->
+    {error, rabbit_misc:format("expected ~s bindings but they did not materialize in time", [ExpectedBindingCount])};
+await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) when is_integer(ExpectedBindingCount) ->
     case bound_keys_from(Config, Node, Vhost, X, Key) of
-        L when length(L) <   Count -> timer:sleep(100),
-                                      await_binding(Config, Node, Vhost, X, Key, Count);
-        L when length(L) =:= Count -> ok;
-        L                          -> exit({too_many_bindings,
-                                            X, Key, Count, L})
+        Bs when length(Bs) < ExpectedBindingCount ->
+            timer:sleep(100),
+            await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft - 1);
+        Bs when length(Bs) =:= ExpectedBindingCount ->
+            ok;
+        Bs ->
+            {error, rabbit_misc:format("expected ~s bindings, got ~p", [ExpectedBindingCount, length(Bs)])}
     end.
 
 await_bindings(Config, Node, X, Keys) ->
@@ -1259,7 +1267,7 @@ await_binding_absent(Config, Node, X, Key) ->
 
 bound_keys_from(Config, Node, Vhost, X, Key) ->
     List = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_binding,
-                                        list_for_source, [r(Vhost, X)]),
+                                        list_for_source, [xr(Vhost, X)]),
     [K || #binding{key = K} <- List, K =:= Key].
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
