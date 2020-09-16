@@ -34,6 +34,9 @@ all() ->
 
 groups() ->
     [
+      {without_automatic_setup, [], [
+          message_cycle_detection_case2
+      ]},
       {without_disambiguate, [], [
           {cluster_size_1, [], [
               simple,
@@ -53,8 +56,7 @@ groups() ->
               dynamic_plugin_cleanup_stop_start,
               dynamic_policy_cleanup,
               delete_federated_exchange_upstream,
-              delete_federated_queue_upstream,
-              message_cycle_detection_case2
+              delete_federated_queue_upstream
             ]}
         ]},
       {with_disambiguate, [], [
@@ -90,6 +92,16 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(without_automatic_setup, Config) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Suffix},
+        {rmq_nodes_clustered, false},
+        {rmq_nodes_count, 1}
+      ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_group(without_disambiguate, Config) ->
     rabbit_ct_helpers:set_config(Config,
       {disambiguate_step, []});
@@ -872,17 +884,17 @@ delete_federated_exchange_upstream(Config) ->
                                            <<"federation-upstream">>, <<"upstream">>,
                                            [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
 
-    ?assertMatch([_, _], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                                      status, [])),
+    ?assertEqual(2, length(federation_status(Config, 0))),
 
     rabbit_ct_broker_helpers:clear_parameter(Config, 0, <<"federation-downstream2">>,
                                              <<"federation-upstream">>, <<"upstream">>),
 
-    Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                          status, []),
+    Status = federation_status(Config, 0),
     %% one link is still around
     ?assertEqual(1, length(Status)),
-    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
+    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))),
+
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Val) || Val <- [<<"federation-downstream1">>, <<"federation-downstream2">>]].
 
 delete_federated_queue_upstream(Config) ->
     %% If two queues in different virtual hosts have the same name, only one should be deleted.
@@ -931,7 +943,9 @@ delete_federated_queue_upstream(Config) ->
     Status = federation_status(Config, 0),
     %% one link is still around
     ?assertEqual(1, length(Status)),
-    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
+    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))),
+
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Val) || Val <- [<<"federation-downstream1">>, <<"federation-downstream2">>]].
 
 federate_unfederate(Config) ->
     with_ch(Config,
