@@ -58,7 +58,8 @@
          make_credit/4,
          make_purge/0,
          make_purge_nodes/1,
-         make_update_config/1
+         make_update_config/1,
+         make_garbage_collection/0
         ]).
 
 %% command records representing all the protocol actions that are supported
@@ -82,6 +83,7 @@
 -record(purge, {}).
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
+-record(garbage_collection, {}).
 
 -opaque protocol() ::
     #enqueue{} |
@@ -93,7 +95,8 @@
     #credit{} |
     #purge{} |
     #purge_nodes{} |
-    #update_config{}.
+    #update_config{} |
+    #garbage_collection{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
 %% all the command types supported by ra fifo
@@ -365,6 +368,8 @@ apply(#{index := Index}, #purge{},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                             State1, Effects0),
     update_smallest_raft_index(Index, Reply, State, Effects);
+apply(_Meta, #garbage_collection{}, State) ->
+    {State, ok, [{aux, garbage_collection}]};
 apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
@@ -752,6 +757,12 @@ init_aux(Name) when is_atom(Name) ->
     #aux{name = Name,
          utilisation = {inactive, Now, 1, 1.0}}.
 
+handle_aux(leader, _, garbage_collection, State, Log, _MacState) ->
+    ra_log_wal:force_roll_over(ra_log_wal),
+    {no_reply, State, Log};
+handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
+    ra_log_wal:force_roll_over(ra_log_wal),
+    {no_reply, force_eval_gc(Log, MacState, State), Log};
 handle_aux(_RaState, cast, Cmd, #aux{name = Name,
                                      utilisation = Use0} = State0,
            Log, MacState) ->
@@ -781,6 +792,22 @@ eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
         _ ->
+            AuxState
+    end.
+
+force_eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}},
+              #aux{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
+    {Idx, _} = ra_log:last_index_term(Log),
+    {memory, Mem} = erlang:process_info(self(), memory),
+    case Idx > LastGcIdx of
+        true ->
+            garbage_collect(),
+            {memory, MemAfter} = erlang:process_info(self(), memory),
+            rabbit_log:debug("~s: full GC sweep complete. "
+                            "Process memory reduced from ~.2fMB to ~.2fMB.",
+                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
+            AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
+        false ->
             AuxState
     end.
 
@@ -1892,6 +1919,9 @@ make_credit(ConsumerId, Credit, DeliveryCount, Drain) ->
 
 -spec make_purge() -> protocol().
 make_purge() -> #purge{}.
+
+-spec make_garbage_collection() -> protocol().
+make_garbage_collection() -> #garbage_collection{}.
 
 -spec make_purge_nodes([node()]) -> protocol().
 make_purge_nodes(Nodes) ->
