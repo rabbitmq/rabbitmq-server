@@ -176,11 +176,11 @@ expect(Payloads, Timeout) ->
     receive
         {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
-                true  -> expect(Payloads -- [Payload]);
-                false -> throw({expected, Payloads, actual, Payload})
+                true  -> expect(Payloads -- [Payload], Timeout);
+                false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~p", [Payload]))
             end
     after Timeout ->
-      throw({timeout, {waiting_for, Payloads}})
+      ?assert(false, rabbit_misc:format("Did not receive expected payloads ~p in time", Payloads))
     end.
 
 expect_empty(Ch, Q) ->

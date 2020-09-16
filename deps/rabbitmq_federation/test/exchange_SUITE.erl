@@ -699,15 +699,11 @@ message_cycle_detection_case2(Config) ->
     publish(VH1Ch, X, RK, Payload2),
 
     Msgs = [Payload1, Payload2],
-    try
-        %% payloads published to a federated exchange in A reach a queue in C
-        expect(VH3Ch, Q, Msgs, 20000),
-        %% the messages have been consumed
-        expect_empty(VH3Ch, Q)
-    catch _:_ ->
-        [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
-        [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]]
-    end,
+    %% payloads published to a federated exchange in A reach a queue in C
+    expect(VH3Ch, Q, Msgs, 20000),
+
+    [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]],
     ok.
 
 %% Arrows indicate message flow. Numbers indicate max_hops.
