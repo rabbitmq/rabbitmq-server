@@ -199,11 +199,8 @@ post_process_payload_complex_claim(Payload) ->
     case AdditionalScopes of
         [] -> Payload;
         _  ->
-            TokenScopes = maps:get(<<"scope">>, Payload),
-            case TokenScopes of
-                [] -> maps:put(<<"scope">>, AdditionalScopes, Payload);
-                _  -> maps:put(<<"scope">>, AdditionalScopes ++ TokenScopes, Payload)
-            end
+            ExistingScopes = maps:get(<<"scope">>, Payload, []),
+            maps:put(<<"scope">>, AdditionalScopes ++ ExistingScopes, Payload)
         end.
 
 %% keycloak token format: https://github.com/rabbitmq/rabbitmq-auth-backend-oauth2/issues/36
