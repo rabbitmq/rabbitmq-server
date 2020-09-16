@@ -260,13 +260,20 @@ no_plugins(Cfg) ->
 
 %%----------------------------------------------------------------------------
 
-federation_status(Config, Node) ->
+all_federation_links(Config, Node) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_federation_status, status, []).
+
+federation_links_in_vhost(Config, Node, VirtualHost) ->
+    Links = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_federation_status, status, []),
+    lists:filter(
+        fun(Link) ->
+            VirtualHost =:= proplists:get_value(vhost, Link)
+        end, Links).
 
 status_fields(Prop, Statuses) ->
     lists:usort(
         lists:map(
-            fun(Upstream) -> proplists:get_value(Prop, Upstream) end,
+            fun(Link) -> proplists:get_value(Prop, Link) end,
             Statuses)).
 
 assert_status(Config, Node, XorQs, Names) ->
