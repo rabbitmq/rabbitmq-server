@@ -172,15 +172,19 @@ expect([]) ->
 expect(Payloads) ->
     expect(Payloads, 60000).
 
+expect([], _Timeout) ->
+    ok;
 expect(Payloads, Timeout) ->
     receive
         {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
-                true  -> expect(Payloads -- [Payload]);
-                false -> throw({expected, Payloads, actual, Payload})
+                true  ->
+                    ct:pal("Consumed a message: ~p", [Payload]),
+                    expect(Payloads -- [Payload], Timeout);
+                false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~p", [Payload]))
             end
     after Timeout ->
-      throw({timeout, {waiting_for, Payloads}})
+        ?assert(false, rabbit_misc:format("Did not receive expected payloads ~p in time", [Payloads]))
     end.
 
 expect_empty(Ch, Q) ->
@@ -192,6 +196,13 @@ set_upstream(Config, Node, Name, URI) ->
 
 set_upstream(Config, Node, Name, URI, Extra) ->
     rabbit_ct_broker_helpers:set_parameter(Config, Node,
+      <<"federation-upstream">>, Name, [{<<"uri">>, URI} | Extra]).
+
+set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI) ->
+    set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI, []).
+
+set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI, Extra) ->
+    rabbit_ct_broker_helpers:set_parameter(Config, Node, VirtualHost,
       <<"federation-upstream">>, Name, [{<<"uri">>, URI} | Extra]).
 
 clear_upstream(Config, Node, Name) ->
@@ -252,6 +263,22 @@ no_plugins(Cfg) ->
          end} || {K, V} <- Cfg].
 
 %%----------------------------------------------------------------------------
+
+all_federation_links(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_federation_status, status, []).
+
+federation_links_in_vhost(Config, Node, VirtualHost) ->
+    Links = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_federation_status, status, []),
+    lists:filter(
+        fun(Link) ->
+            VirtualHost =:= proplists:get_value(vhost, Link)
+        end, Links).
+
+status_fields(Prop, Statuses) ->
+    lists:usort(
+        lists:map(
+            fun(Link) -> proplists:get_value(Prop, Link) end,
+            Statuses)).
 
 assert_status(Config, Node, XorQs, Names) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
@@ -327,7 +354,7 @@ qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
 with_ch(Config, Fun, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     declare_all(Ch, Qs),
-    timer:sleep(1000), %% Time for statuses to get updated
+    timer:sleep(2000), %% Time for statuses to get updated
     assert_status(Config, 0,
       Qs, {queue, upstream_queue}),
     %% Clean up queues even after test failure.

@@ -49,7 +49,6 @@ adjust(Sup, XorQ, {clear_upstream, UpstreamName}) ->
            name(XorQ), rabbit_federation_upstream:for(XorQ)),
     [stop(Sup, Upstream, XorQ) || Upstream <- children(Sup, UpstreamName)];
 
-%% TODO handle changes of upstream sets minimally (bug 24853)
 adjust(Sup, X = #exchange{name = XName}, {upstream_set, _Set}) ->
     adjust(Sup, X, everything),
     case rabbit_federation_upstream:federate(X) of
