@@ -78,8 +78,8 @@ init(Q) when ?is_amqqueue(Q) ->
 go(SPid, sync)  -> gen_server2:call(SPid, go, infinity);
 go(SPid, async) -> gen_server2:cast(SPid, go).
 
-handle_go(Q) when ?is_amqqueue(Q) ->
-    QName = amqqueue:get_name(Q),
+handle_go(Q0) when ?is_amqqueue(Q0) ->
+    QName = amqqueue:get_name(Q0),
     %% We join the GM group before we add ourselves to the amqqueue
     %% record. As a result:
     %% 1. We can receive msgs from GM that correspond to messages we will
@@ -113,10 +113,10 @@ handle_go(Q) when ?is_amqqueue(Q) ->
             ok = rabbit_memory_monitor:register(
                    Self, {rabbit_amqqueue, set_ram_duration_target, [Self]}),
             {ok, BQ} = application:get_env(backing_queue_module),
-            QPid = amqqueue:get_pid(Q),
-            _ = BQ:delete_crashed(Q), %% For crash recovery
-            BQS = bq_init(BQ, Q, new),
-            State = #state { q                   = Q,
+            Q1 = amqqueue:set_pid(Q0, QPid),
+            _ = BQ:delete_crashed(Q1), %% For crash recovery
+            BQS = bq_init(BQ, Q1, new),
+            State = #state { q                   = Q1,
                              gm                  = GM,
                              backing_queue       = BQ,
                              backing_queue_state = BQS,
@@ -133,7 +133,7 @@ handle_go(Q) when ?is_amqqueue(Q) ->
                    },
             ok = gm:broadcast(GM, request_depth),
             ok = gm:validate_members(GM, [GM | [G || {G, _} <- GMPids]]),
-            rabbit_mirror_queue_misc:maybe_auto_sync(Q),
+            rabbit_mirror_queue_misc:maybe_auto_sync(Q1),
             {ok, State};
         {stale, StalePid} ->
             rabbit_mirror_queue_misc:log_warning(
