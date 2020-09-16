@@ -16,19 +16,28 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [wait_for_federation/2, expect/3, expect_empty/2,
-         set_upstream/4, set_upstream/5, clear_upstream/3, set_upstream_set/4,
+        [wait_for_federation/2, expect/3, expect/4, expect_empty/2,
+         set_upstream/4, set_upstream/5, set_upstream_in_vhost/5, set_upstream_in_vhost/6,
+         clear_upstream/3, set_upstream_set/4,
          set_policy/5, set_policy_pattern/5, clear_policy/3,
-         set_policy_upstream/5, set_policy_upstreams/4]).
+         set_policy_upstream/5, set_policy_upstreams/4,
+         all_federation_links/2, federation_links_in_vhost/3, status_fields/2]).
+
+-import(rabbit_ct_broker_helpers,
+        [set_policy_in_vhost/7]).
 
 all() ->
     [
+      {group, without_automatic_setup},
       {group, without_disambiguate},
       {group, with_disambiguate}
     ].
 
 groups() ->
     [
+      {without_automatic_setup, [], [
+          message_cycle_detection_case2
+      ]},
       {without_disambiguate, [], [
           {cluster_size_1, [], [
               simple,
@@ -54,7 +63,7 @@ groups() ->
       {with_disambiguate, [], [
           {cluster_size_2, [], [
               user_id,
-              cycle_detection,
+              message_cycle_detection_case1,
               restart_upstream
             ]},
           {cluster_size_3, [], [
@@ -84,6 +93,16 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(without_automatic_setup, Config) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Suffix},
+        {rmq_nodes_clustered, false},
+        {rmq_nodes_count, 1}
+      ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_group(without_disambiguate, Config) ->
     rabbit_ct_helpers:set_config(Config,
       {disambiguate_step, []});
@@ -135,7 +154,8 @@ end_per_group(without_plugins, Config) ->
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()).
+      rabbit_ct_broker_helpers:teardown_steps()
+    ).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -446,13 +466,12 @@ no_loop(Config) ->
 suffix(Config, Node, Name, XName) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_federation_db, get_active_suffix,
-             [r(<<"fed.downstream">>),
+             [xr(<<"fed.downstream">>),
               #upstream{name          = Name,
                         exchange_name = list_to_binary(XName)}, none]).
 
 restart_upstream(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
+    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Downstream = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
     Upstream   = rabbit_ct_client_helpers:open_channel(Config, Hare),
 
@@ -547,11 +566,10 @@ max_hops(Config) ->
     expect_empty(CottontailCh, Q3),
     ok.
 
-%% Two nodes, both federated with each other, and max_hops set to a
-%% high value. Things should not get out of hand.
-cycle_detection(Config) ->
-    [Cycle1, Cycle2] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
+%% Two nodes, federated two way with the same virtual hosts, and max_hops set to a
+%% high value.
+message_cycle_detection_case1(Config) ->
+    [Cycle1, Cycle2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     [set_policy_upstream(Config, Downstream,
        <<"^cycle$">>,
        rabbit_ct_broker_helpers:node_uri(Config, Upstream),
@@ -581,6 +599,111 @@ cycle_detection(Config) ->
     expect_empty(Cycle1Ch, Q1),
     expect_empty(Cycle2Ch, Q2),
 
+    ok.
+
+node_uri_with_virtual_host(Config, Vhost) ->
+    node_uri_with_virtual_host(Config, 0, Vhost).
+
+node_uri_with_virtual_host(Config, Node, Vhost) ->
+    NodeURI = rabbit_ct_broker_helpers:node_uri(Config, Node),
+    <<NodeURI/binary, "/", Vhost/binary>>.
+
+upstream_policy_defs(Upstream) ->
+    maps:to_list(#{<<"federation-upstream">> => Upstream}).
+
+%% Exchange federation between three local virtual hosts, A -> B -> C,
+%% propagates messages from A to C with a high enough max-hops value
+message_cycle_detection_case2(Config) ->
+    VH1 = <<"cycles.a">>,
+    VH2 = <<"cycles.b">>,
+    VH3 = <<"cycles.c">>,
+    [begin
+         rabbit_ct_broker_helpers:add_vhost(Config, V),
+         rabbit_ct_broker_helpers:set_full_permissions(Config, V)
+     end || V <- [VH1, VH2, VH3]],
+
+    %% make sure that cycle detection does not drop messages because of a limit on hops
+    UpstreamOpts = [{<<"max-hops">>, 5}],
+    %% VH1 is an upstream for VH2
+    %% VH2 is an upstream for VH3
+    UpstreamA = <<"upstream_a">>,
+    URI1 = node_uri_with_virtual_host(Config, VH1),
+    set_upstream_in_vhost(Config, 0, VH2, UpstreamA, URI1, UpstreamOpts),
+    UpstreamB = <<"upstream_b">>,
+    URI2 = node_uri_with_virtual_host(Config, VH2),
+    set_upstream_in_vhost(Config, 0, VH3, UpstreamB, URI2, UpstreamOpts),
+
+    %% policies
+    set_policy_in_vhost(Config, 0, VH2, <<"federate.x">>, <<"^federated">>, <<"exchanges">>, upstream_policy_defs(UpstreamA)),
+    set_policy_in_vhost(Config, 0, VH3, <<"federate.x">>, <<"^federated">>, <<"exchanges">>, upstream_policy_defs(UpstreamB)),
+
+    %% channels
+    VH1Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH1),
+    VH2Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH2),
+    VH3Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH3),
+
+    {ok, VH1Ch} = amqp_connection:open_channel(VH1Conn),
+    {ok, VH2Ch} = amqp_connection:open_channel(VH2Conn),
+    {ok, VH3Ch} = amqp_connection:open_channel(VH3Conn),
+
+    X = <<"federated.x">>,
+    declare_exchange(VH3Ch, x(X, <<"fanout">>)),
+    declare_exchange(VH2Ch, x(X, <<"fanout">>)),
+    declare_exchange(VH1Ch, x(X, <<"fanout">>)),
+    
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            LinksInB = federation_links_in_vhost(Config, 0, VH2),
+            LinksInC = federation_links_in_vhost(Config, 0, VH3),
+            length(LinksInB) =:= 1 andalso
+            length(LinksInC) =:= 1 andalso
+            [running] =:= status_fields(status, LinksInB ++ LinksInC)
+        end),
+    
+    Statuses = federation_links_in_vhost(Config, 0, VH2) ++ federation_links_in_vhost(Config, 0, VH3),
+    
+    ?assertEqual(lists:usort([URI1, URI2]),
+                 status_fields(uri, Statuses)),
+    ?assertEqual(lists:usort([<<"federated.x">>]),
+                 status_fields(upstream_exchange, Statuses)),
+    ?assertEqual(lists:usort([VH2, VH3]),
+                 status_fields(vhost, Statuses)),
+    ?assertEqual(lists:usort([exchange]),
+                 status_fields(type, Statuses)),
+    
+    %% give links some time to set up their topology
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
+            ExchangesInB = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH2]),
+            length(ExchangesInA) >= 1 andalso
+            length(ExchangesInB) >= 1
+        end),
+    
+    RK = <<"doesn't matter">>,
+    Q  = bind_queue(VH3Ch, X, RK),
+    ?assertEqual(ok, await_binding(Config, 0, VH2, X, RK, 1)),
+    ?assertEqual(ok, await_binding(Config, 0, VH3, X, RK, 1)),
+
+    rabbit_ct_helpers:await_condition(
+    fun () ->
+        ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
+        lists:any(fun(#exchange{name = XName}) ->
+                    XName =:= rabbit_misc:r(VH1, exchange, X)
+                  end, ExchangesInA)
+    end),
+    
+    Payload1 = <<"msg1">>,
+    Payload2 = <<"msg2">>,
+    publish(VH1Ch, X, RK, Payload1),
+    publish(VH1Ch, X, RK, Payload2),
+
+    Msgs = [Payload1, Payload2],
+    %% payloads published to a federated exchange in A reach a queue in C
+    expect(VH3Ch, Q, Msgs, 10000),
+
+    [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]],
     ok.
 
 %% Arrows indicate message flow. Numbers indicate max_hops.
@@ -711,13 +834,15 @@ dynamic_reconfiguration_integrity(Config) ->
 
 delete_federated_exchange_upstream(Config) ->
     %% If two exchanges in different virtual hosts have the same name, only one should be deleted.
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream1">>),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream1">>),
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream2">>),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream2">>),
+    VH1 = <<"federation-downstream1">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VH1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH1),
+    VH2 = <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VH2),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH2),
 
-    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream1">>),
-    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream2">>),
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH1),
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH2),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
@@ -730,45 +855,49 @@ delete_federated_exchange_upstream(Config) ->
 
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
-                                 [<<"federation-downstream1">>,
+                                 [VH1,
                                   <<"federation">>, <<"^federated\.">>,
                                   [{<<"federation-upstream-set">>, <<"all">>}],
                                   0, <<"exchanges">>, <<"acting-user">>]),
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
-                                 [<<"federation-downstream2">>,
+                                 [VH2,
                                   <<"federation">>, <<"^federated\.">>,
                                   [{<<"federation-upstream-set">>, <<"all">>}],
                                   0, <<"exchanges">>, <<"acting-user">>]),
 
-    rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream1">>,
+    rabbit_ct_broker_helpers:set_parameter(Config, 0, VH1,
                                            <<"federation-upstream">>, <<"upstream">>,
                                            [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
-    rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:set_parameter(Config, 0, VH2,
                                            <<"federation-upstream">>, <<"upstream">>,
                                            [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
 
-    ?assertMatch([_, _], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                                      status, [])),
+    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
+    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH2))),
 
-    rabbit_ct_broker_helpers:clear_parameter(Config, 0, <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:clear_parameter(Config, 0, VH2,
                                              <<"federation-upstream">>, <<"upstream">>),
 
-    Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                          status, []),
     %% one link is still around
-    ?assertEqual(1, length(Status)),
-    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
+    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
+    ?assertEqual(0, length(federation_links_in_vhost(Config, 0, VH2))),
+    LinksInVH1 = federation_links_in_vhost(Config, 0, VH1),
+    ?assertEqual(VH1, proplists:get_value(vhost, hd(LinksInVH1))),
+
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Val) || Val <- [VH1, VH2]].
 
 delete_federated_queue_upstream(Config) ->
     %% If two queues in different virtual hosts have the same name, only one should be deleted.
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream1">>),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream1">>),
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"federation-downstream2">>),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, <<"federation-downstream2">>),
+    VH1 = <<"federation-downstream1">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VH1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH1),
+    VH2 = <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VH2),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH2),
 
-    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream1">>),
-    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"federation-downstream2">>),
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH1),
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH2),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
@@ -781,35 +910,36 @@ delete_federated_queue_upstream(Config) ->
 
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
-                                 [<<"federation-downstream1">>,
+                                 [VH1,
                                   <<"federation">>, <<"^federated\.">>,
                                   [{<<"federation-upstream-set">>, <<"all">>}],
                                   0, <<"queues">>, <<"acting-user">>]),
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
-                                 [<<"federation-downstream2">>,
+                                 [VH2,
                                   <<"federation">>, <<"^federated\.">>,
                                   [{<<"federation-upstream-set">>, <<"all">>}],
                                   0, <<"queues">>, <<"acting-user">>]),
 
-    rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream1">>,
+    rabbit_ct_broker_helpers:set_parameter(Config, 0, VH1,
                                            <<"federation-upstream">>, <<"upstream">>,
                                            [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
-    rabbit_ct_broker_helpers:set_parameter(Config, 0, <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:set_parameter(Config, 0, VH2,
                                            <<"federation-upstream">>, <<"upstream">>,
                                            [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
 
-    ?assertMatch([_, _], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                                      status, [])),
+    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
+    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH2))),
 
-    rabbit_ct_broker_helpers:clear_parameter(Config, 0, <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:clear_parameter(Config, 0, VH2,
                                              <<"federation-upstream">>, <<"upstream">>),
 
-    Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status,
-                                          status, []),
-    %% one link is still around
-    ?assertEqual(1, length(Status)),
-    ?assertEqual(<<"federation-downstream1">>, proplists:get_value(vhost, hd(Status))).
+    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
+    ?assertEqual(0, length(federation_links_in_vhost(Config, 0, VH2))),
+    LinksInVH1 = federation_links_in_vhost(Config, 0, VH1),
+    ?assertEqual(VH1, proplists:get_value(vhost, hd(LinksInVH1))),
+
+    [rabbit_ct_broker_helpers:delete_vhost(Config, Val) || Val <- [VH1, VH2]].
 
 federate_unfederate(Config) ->
     with_ch(Config,
@@ -1061,7 +1191,11 @@ x(Name, Type) ->
                         type     = Type,
                         durable  = true}.
 
-r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
+xr(Name) ->
+    rabbit_misc:r(<<"/">>, exchange, Name).
+
+xr(Vhost, Name) ->
+    rabbit_misc:r(Vhost, exchange, Name).
 
 declare_queue(Ch) ->
     #'queue.declare_ok'{queue = Q} =
@@ -1100,28 +1234,39 @@ delete_queue(Ch, Q) ->
 await_binding(Config, Node, X, Key) ->
     await_binding(Config, Node, X, Key, 1).
 
-await_binding(Config, Node, X, Key, Count) ->
-    case bound_keys_from(Config, Node, X, Key) of
-        L when length(L) <   Count -> timer:sleep(100),
-                                      await_binding(Config, Node, X, Key, Count);
-        L when length(L) =:= Count -> ok;
-        L                          -> exit({too_many_bindings,
-                                            X, Key, Count, L})
+await_binding(Config, Node, X, Key, ExpectedBindingCount) when is_integer(ExpectedBindingCount) ->
+    await_binding(Config, Node, <<"/">>, X, Key, ExpectedBindingCount).
+
+await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount) when is_integer(ExpectedBindingCount) ->
+    Attempts = 100,
+    await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, Attempts).
+
+await_binding(_Config, _Node, _Vhost, _X, _Key, ExpectedBindingCount, 0) ->
+    {error, rabbit_misc:format("expected ~s bindings but they did not materialize in time", [ExpectedBindingCount])};
+await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) when is_integer(ExpectedBindingCount) ->
+    case bound_keys_from(Config, Node, Vhost, X, Key) of
+        Bs when length(Bs) < ExpectedBindingCount ->
+            timer:sleep(100),
+            await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft - 1);
+        Bs when length(Bs) =:= ExpectedBindingCount ->
+            ok;
+        Bs ->
+            {error, rabbit_misc:format("expected ~s bindings, got ~p", [ExpectedBindingCount, length(Bs)])}
     end.
 
 await_bindings(Config, Node, X, Keys) ->
     [await_binding(Config, Node, X, Key) || Key <- Keys].
 
 await_binding_absent(Config, Node, X, Key) ->
-    case bound_keys_from(Config, Node, X, Key) of
+    case bound_keys_from(Config, Node, <<"/">>, X, Key) of
         [] -> ok;
         _  -> timer:sleep(100),
               await_binding_absent(Config, Node, X, Key)
     end.
 
-bound_keys_from(Config, Node, X, Key) ->
-    List = rabbit_ct_broker_helpers:rpc(Config, Node,
-      rabbit_binding, list_for_source, [r(X)]),
+bound_keys_from(Config, Node, Vhost, X, Key) ->
+    List = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_binding,
+                                        list_for_source, [xr(Vhost, X)]),
     [K || #binding{key = K} <- List, K =:= Key].
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
