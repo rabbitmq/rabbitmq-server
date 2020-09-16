@@ -700,7 +700,7 @@ message_cycle_detection_case2(Config) ->
 
     Msgs = [Payload1, Payload2],
     %% payloads published to a federated exchange in A reach a queue in C
-    expect(VH3Ch, Q, Msgs, 20000),
+    expect(VH3Ch, Q, Msgs, 10000),
 
     [amqp_connection:close(Conn) || Conn <- [VH1Conn, VH2Conn, VH3Conn]],
     [rabbit_ct_broker_helpers:delete_vhost(Config, Vhost) || Vhost <- [VH1, VH2, VH3]],
