@@ -354,7 +354,7 @@ qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
 with_ch(Config, Fun, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     declare_all(Ch, Qs),
-    timer:sleep(1000), %% Time for statuses to get updated
+    timer:sleep(2000), %% Time for statuses to get updated
     assert_status(Config, 0,
       Qs, {queue, upstream_queue}),
     %% Clean up queues even after test failure.
