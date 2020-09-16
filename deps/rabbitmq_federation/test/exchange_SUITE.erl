@@ -684,6 +684,7 @@ message_cycle_detection_case2(Config) ->
     Q  = bind_queue(VH3Ch, X, RK),
     ?assertEqual(ok, await_binding(Config, 0, VH2, X, RK, 1)),
     ?assertEqual(ok, await_binding(Config, 0, VH3, X, RK, 1)),
+    timer:sleep(2000),
 
     rabbit_ct_helpers:await_condition(
     fun () ->
