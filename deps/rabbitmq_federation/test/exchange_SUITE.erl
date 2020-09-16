@@ -681,10 +681,11 @@ message_cycle_detection_case2(Config) ->
             length(ExchangesInB) >= 1
         end),
     
-    declare_exchange(VH1Ch, x(X, <<"fanout">>)),
     RK = <<"doesn't matter">>,
     Q  = bind_queue(VH3Ch, X, RK),
-    
+    ok = await_binding(Config, 0, VH3, X, RK, 1),
+    timer:sleep(500),
+
     rabbit_ct_helpers:await_condition(
     fun () ->
         ExchangesInA = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [VH1]),
@@ -1191,7 +1192,11 @@ x(Name, Type) ->
                         type     = Type,
                         durable  = true}.
 
-r(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
+r(Name) ->
+    rabbit_misc:r(<<"/">>, exchange, Name).
+
+r(Vhost, Name) ->
+    rabbit_misc:r(Vhost, exchange, Name).
 
 declare_queue(Ch) ->
     #'queue.declare_ok'{queue = Q} =
@@ -1230,10 +1235,13 @@ delete_queue(Ch, Q) ->
 await_binding(Config, Node, X, Key) ->
     await_binding(Config, Node, X, Key, 1).
 
-await_binding(Config, Node, X, Key, Count) ->
-    case bound_keys_from(Config, Node, X, Key) of
+await_binding(Config, Node, X, Key, Count) when is_integer(Count) ->
+    await_binding(Config, Node, <<"/">>, X, Key, Count).
+
+await_binding(Config, Node, Vhost, X, Key, Count) when is_integer(Count) ->
+    case bound_keys_from(Config, Node, Vhost, X, Key) of
         L when length(L) <   Count -> timer:sleep(100),
-                                      await_binding(Config, Node, X, Key, Count);
+                                      await_binding(Config, Node, Vhost, X, Key, Count);
         L when length(L) =:= Count -> ok;
         L                          -> exit({too_many_bindings,
                                             X, Key, Count, L})
@@ -1243,15 +1251,15 @@ await_bindings(Config, Node, X, Keys) ->
     [await_binding(Config, Node, X, Key) || Key <- Keys].
 
 await_binding_absent(Config, Node, X, Key) ->
-    case bound_keys_from(Config, Node, X, Key) of
+    case bound_keys_from(Config, Node, <<"/">>, X, Key) of
         [] -> ok;
         _  -> timer:sleep(100),
               await_binding_absent(Config, Node, X, Key)
     end.
 
-bound_keys_from(Config, Node, X, Key) ->
-    List = rabbit_ct_broker_helpers:rpc(Config, Node,
-      rabbit_binding, list_for_source, [r(X)]),
+bound_keys_from(Config, Node, Vhost, X, Key) ->
+    List = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_binding,
+                                        list_for_source, [r(Vhost, X)]),
     [K || #binding{key = K} <- List, K =:= Key].
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
