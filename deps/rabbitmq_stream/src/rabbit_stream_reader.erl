@@ -844,6 +844,9 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
             {error, stream_not_found} ->
                 <<Acc/binary, StreamLength:16, Stream:StreamLength/binary, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST:16,
                     -1:16, 0:32>>;
+            {error, stream_not_available} ->
+                <<Acc/binary, StreamLength:16, Stream:StreamLength/binary, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16,
+                    -1:16, 0:32>>;
             {ok, #{leader_node := LeaderNode, replica_nodes := Replicas}} ->
                 LeaderIndex = case NodesInfo of
                                   #{LeaderNode := NodeInfo} ->
