@@ -170,6 +170,13 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                       _ ->
                           {error, stream_not_found}
                   end;
+              {error, not_found} ->
+                  case rabbit_amqqueue:not_found_or_absent_dirty(Name) of
+                      not_found ->
+                          {error, stream_not_found};
+                      _ ->
+                          {error, stream_not_available}
+                  end;
               _ ->
                   {error, stream_not_found}
           end,
