@@ -7,7 +7,7 @@
 
 -module(rabbit_federation_queue_link_sup_sup).
 
--behaviour(supervisor2).
+-behaviour(mirrored_supervisor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
@@ -22,12 +22,14 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    supervisor2:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
+                                   fun rabbit_misc:execute_mnesia_transaction/1,
+                                   ?MODULE, []).
 
 %% Note that the next supervisor down, rabbit_federation_link_sup, is common
 %% between exchanges and queues.
 start_child(Q) ->
-    case supervisor2:start_child(
+    case mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {id(Q), {rabbit_federation_link_sup, start_link, [Q]},
             transient, ?SUPERVISOR_WAIT, supervisor,
@@ -45,16 +47,16 @@ start_child(Q) ->
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
     [rabbit_federation_link_sup:adjust(Pid, Q, {clear_upstream, UpstreamName}) ||
-        {Q, Pid, _, _} <- supervisor2:which_children(?SUPERVISOR),
+        {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
         ?amqqueue_vhost_equals(Q, VHost)],
     ok;
 adjust(Reason) ->
     [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
-        {Q, Pid, _, _} <- supervisor2:which_children(?SUPERVISOR)],
+        {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(Q) ->
-    case supervisor2:terminate_child(?SUPERVISOR, id(Q)) of
+    case mirrored_supervisor:terminate_child(?SUPERVISOR, id(Q)) of
       ok -> ok;
       {error, Err} ->
         QueueName = amqqueue:get_name(Q),
@@ -63,7 +65,7 @@ stop_child(Q) ->
           [rabbit_misc:rs(QueueName), Err]),
         ok
     end,
-    ok = supervisor2:delete_child(?SUPERVISOR, id(Q)).
+    ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)).
 
 %%----------------------------------------------------------------------------
 
