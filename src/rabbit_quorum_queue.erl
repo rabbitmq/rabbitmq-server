@@ -102,7 +102,6 @@ handle_event({ra_event, From, Evt}, QState) ->
     {new | existing, amqqueue:amqqueue()} | rabbit_types:channel_exit().
 
 declare(Q) when ?amqqueue_is_quorum(Q) ->
-    rabbit_log:info("quorum_queue declaring ~w", [Q]),
     QName = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),

@@ -430,7 +430,12 @@ start_queue_concurrent(Config) ->
     ok.
 
 quorum_cluster_size_3(Config) ->
-    quorum_cluster_size_x(Config, 3, 3).
+    case is_mixed_versions() of
+        true ->
+            {skip, "quorum_cluster_size_3 tests isn't mixed version reliable"};
+        false ->
+            quorum_cluster_size_x(Config, 3, 3)
+    end.
 
 quorum_cluster_size_7(Config) ->
     quorum_cluster_size_x(Config, 7, 5).
@@ -1221,7 +1226,16 @@ delete_declare(Config) ->
     %% the actual data deletions happen after the call has returned as a quorum
     %% queue leader waits for all nodes to confirm they replicated the poison
     %% pill before terminating itself.
-    timer:sleep(1000),
+    case is_mixed_versions() of
+        true ->
+            %% when in mixed versions the QQ may not be able to apply the posion
+            %% pill for all nodes so need to wait longer for forced delete to
+            %% happen
+            timer:sleep(10000);
+        false ->
+            timer:sleep(1000)
+    end,
+
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
