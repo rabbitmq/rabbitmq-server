@@ -1413,19 +1413,19 @@ auth_phase(Response,
                                        auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState},
                        sock = Sock}) ->
-    Ip = list_to_binary(inet:ntoa(Connection#connection.host)),
+    RemoteAddress = list_to_binary(inet:ntoa(Connection#connection.host)),
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Username, Msg, Args} ->
-            rabbit_core_metrics:auth_attempt_failed(Ip, Username),
+            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),
             auth_fail(Username, Msg, Args, Name, State);
         {protocol_error, Msg, Args} ->
-            rabbit_core_metrics:auth_attempt_failed(Ip, ""),
+            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, <<>>, amqp091),
             notify_auth_result(none, user_authentication_failure,
                                [{error, rabbit_misc:format(Msg, Args)}],
                                State),
             rabbit_misc:protocol_error(syntax_error, Msg, Args);
         {challenge, Challenge, AuthState1} ->
-            rabbit_core_metrics:auth_attempt_succeeded(Ip, ""),
+            rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, <<>>, amqp091),
             Secure = #'connection.secure'{challenge = Challenge},
             ok = send_on_channel0(Sock, Secure, Protocol),
             State#v1{connection = Connection#connection{
@@ -1433,11 +1433,11 @@ auth_phase(Response,
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok ->
-                    rabbit_core_metrics:auth_attempt_succeeded(Ip, Username),
+                    rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, Username, amqp091),
                     notify_auth_result(Username, user_authentication_success,
                                        [], State);
                 not_allowed ->
-                    rabbit_core_metrics:auth_attempt_failed(Ip, Username),
+                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),
                     auth_fail(Username, "user '~s' can only connect via "
                               "localhost", [Username], Name, State)
             end,

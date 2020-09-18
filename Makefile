@@ -119,7 +119,7 @@ define PROJECT_ENV
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
 	    {stream_messages_soft_limit, 256},
-        {return_per_user_auth_attempt_metrics, false}
+        {track_auth_attempt_source, false}
 	  ]
 endef
 
