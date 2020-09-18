@@ -13,8 +13,8 @@
 
 -compile(export_all).
 
--import(rabbit_ct_client_helpers, [open_unmanaged_connection/2,
-                                   open_unmanaged_connection/3]).
+-import(rabbit_ct_client_helpers, [open_unmanaged_connection/2
+                                   ]).
 
 all() ->
     [
@@ -42,10 +42,14 @@ suite() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, [
-      fun rabbit_ct_broker_helpers:configure_dist_proxy/1
-    ]).
+    case quorum_queue_utils:is_mixed_versions() of
+        true ->
+            {skip, "Not mixed versions compatible"};
+        false ->
+            rabbit_ct_helpers:log_environment(),
+            rabbit_ct_helpers:run_setup_steps(
+              Config, [fun rabbit_ct_broker_helpers:configure_dist_proxy/1])
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).

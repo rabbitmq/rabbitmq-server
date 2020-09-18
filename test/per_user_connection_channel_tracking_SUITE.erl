@@ -52,8 +52,13 @@ suite() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    case quorum_queue_utils:is_mixed_versions() of
+        true ->
+            {skip, "Not mixed versions compatible"};
+        false ->
+            rabbit_ct_helpers:log_environment(),
+            rabbit_ct_helpers:run_setup_steps(Config)
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
