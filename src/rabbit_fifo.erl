@@ -788,7 +788,7 @@ eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
             rabbit_log:debug("~s: full GC sweep complete. "
-                            "Process memory reduced from ~.2fMB to ~.2fMB.",
+                            "Process memory changed from ~.2fMB to ~.2fMB.",
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
         _ ->
@@ -804,7 +804,7 @@ force_eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}},
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
             rabbit_log:debug("~s: full GC sweep complete. "
-                            "Process memory reduced from ~.2fMB to ~.2fMB.",
+                            "Process memory changed from ~.2fMB to ~.2fMB.",
                              [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
         false ->
