@@ -10,8 +10,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   def scopes(), do: [:diagnostics, :queues]
 
-  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
-
+  use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
