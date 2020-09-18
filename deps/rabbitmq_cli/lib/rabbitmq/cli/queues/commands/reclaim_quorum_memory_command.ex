@@ -17,13 +17,30 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
   def run([name] = _args, %{node: node_name, vhost: vhost}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :reclaim_memory, [vhost, name]) do
       {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot reclaim memory of a classic queue"}
+        {:error, "This operation is not applicable to classic queues"}
 
       other ->
         other
     end
   end
 
+  def output({:error, :not_found}, %{vhost: vhost, formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Target queue was not found in virtual host '#{vhost}'"
+     }}
+  end
+  def output({:error, error}, %{formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Failed to perform the operation: #{error}"
+     }}
+  end
+  def output({:error, :not_found}, %{vhost: vhost}) do
+    {:error, "Target queue was not found in virtual host '#{vhost}'"}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
