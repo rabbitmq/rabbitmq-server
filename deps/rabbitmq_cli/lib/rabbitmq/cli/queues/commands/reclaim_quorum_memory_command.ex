@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
-    "reclaim_quorum_memory <quorum queue>"
+    "reclaim_quorum_memory  [--vhost <vhost>] <quorum queue>"
   end
 
   def usage_additional do
