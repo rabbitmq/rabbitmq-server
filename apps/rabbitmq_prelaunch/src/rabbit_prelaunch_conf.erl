@@ -90,6 +90,15 @@ set_default_config() ->
                 {wal_max_size_bytes, 536870912}, %% 5 * 2 ^ 20
                 {wal_max_batch_size, 4096}
                ]},
+              {aten,
+               [
+                %% a greater poll interval has shown to trigger fewer false
+                %% positive leader elections in quorum queues. The cost is slightly
+                %% longer detection time when a genuine network issue occurs.
+                %% Ra still uses erlang monitors of course so whenever a connection
+                %% goes down it is still immediately detected
+                {poll_interval, 5000}
+               ]},
               {sysmon_handler,
                [{process_limit, 100},
                 {port_limit, 100},
