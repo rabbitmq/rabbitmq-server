@@ -47,8 +47,8 @@
 
 -export([delete/2]).
 
--export([auth_attempt_failed/2,
-         auth_attempt_succeeded/2,
+-export([auth_attempt_failed/3,
+         auth_attempt_succeeded/3,
          reset_auth_attempt_metrics/0,
          get_auth_attempts/0]).
 
@@ -390,24 +390,24 @@ get_gen_server2_stats(Pid) ->
             not_found
     end.
 
-auth_attempt_succeeded(Ip, Username) ->
-    %% {Id, Total, Succeeded, Failed}
-    update_auth_attempt(Ip, Username, [{2, 1}, {3, 1}]).
+auth_attempt_succeeded(RemoteAddress, Username, Protocol) ->
+    %% ETS entry is {Key = {RemoteAddress, Username}, Total, Succeeded, Failed}
+    update_auth_attempt(RemoteAddress, Username, Protocol, [{2, 1}, {3, 1}]).
 
-auth_attempt_failed(Ip, Username) ->
-    %% {Id, Total, Succeeded, Failed}
-    update_auth_attempt(Ip, Username, [{2, 1}, {4, 1}]).
+auth_attempt_failed(RemoteAddress, Username, Protocol) ->
+    %% ETS entry is {Key = {RemoteAddress, Username}, Total, Succeeded, Failed}
+    update_auth_attempt(RemoteAddress, Username, Protocol, [{2, 1}, {4, 1}]).
 
-update_auth_attempt(Ip, Username, Incr) ->
+update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
     %% It should default to false as per ip/user metrics could keep growing indefinitely
     %% It's up to the operator to enable them, and reset it required
-    Id = case application:get_env(rabbit, return_per_user_auth_attempt_metrics) of
+    Key = case application:get_env(rabbit, track_auth_attempt_source) of
              {ok, true} ->
-                 {Ip, Username};
+                 {RemoteAddress, Username, Protocol};
              {ok, false} ->
-                 {<<"">>, <<"">>}
+                 {<<>>, <<>>, Protocol}
              end,
-    _ = ets:update_counter(auth_attempt_metrics, Id, Incr, {Id, 0, 0, 0}),
+    _ = ets:update_counter(auth_attempt_metrics, Key, Incr, {Key, 0, 0, 0}),
     ok.
 
 reset_auth_attempt_metrics() ->
@@ -417,6 +417,6 @@ reset_auth_attempt_metrics() ->
 get_auth_attempts() ->
     [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_metrics)].
 
-format_auth_attempt({{Ip, Username}, Total, Succeeded, Failed}) ->
-    [{ip, Ip}, {username, Username}, {auth_attempts, Total}, {auth_attempts_failed, Failed},
-     {auth_attempts_succeeded, Succeeded}].
+format_auth_attempt({{RemoteAddress, Username, Protocol}, Total, Succeeded, Failed}) ->
+    [{ip, RemoteAddress}, {username, Username}, {protocol, Protocol}, {auth_attempts, Total},
+     {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}].
