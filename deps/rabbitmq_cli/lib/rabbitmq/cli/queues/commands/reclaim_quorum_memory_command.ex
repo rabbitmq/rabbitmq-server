@@ -28,12 +28,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
-    "reclaim_quorum_memory [--vhost <vhost>] <queue>"
+    "reclaim_quorum_memory <quorum queue>"
   end
 
   def usage_additional do
     [
-      ["<queue>", "Name of the queue"]
+      ["<queue>", "Name of the quorum queue"]
     ]
   end
 
@@ -46,8 +46,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Makes all Erlang processes used by a quorum queue perform a full sweep garbage collection and flush of the WAL"
+  def description(), do: "Flushes quorum queue processes WAL, performs a full sweep GC on all of its local Erlang processes"
 
   def banner([name], %{}),
-    do: "Reclaim memory used by quorum queue #{name} ..."
+    do: "Will flush Raft WAL of quorum queue #{name} ..."
 end
