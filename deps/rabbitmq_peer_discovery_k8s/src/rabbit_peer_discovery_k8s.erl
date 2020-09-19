@@ -171,23 +171,23 @@ get_address(Address) ->
     maps:get(list_to_binary(get_config_key(k8s_address_type, M)), Address).
 
 
-generate_v1_event(Namespace, Type, Message, Reason) ->
+generate_v1_event(Namespace, Type, Reason, Message) ->
     {ok, HostName} = inet:gethostname(),
     Name =
         io_lib:format(HostName ++ ".~B",[os:system_time(millisecond)]),
     TimeInSeconds = calendar:system_time_to_rfc3339(erlang:system_time(second)),
-    generate_v1_event(Namespace, Name, Type, Message, Reason, TimeInSeconds, HostName).
+    generate_v1_event(Namespace, Name, Type, Reason, Message, TimeInSeconds, HostName).
 
 
-generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) ->
+generate_v1_event(Namespace, Name, Type, Reason, Message, Timestamp, HostName) ->
     #{
       metadata => #{
 		    namespace => rabbit_data_coercion:to_binary(Namespace),
 		    name => rabbit_data_coercion:to_binary(Name)
 		   },
       type => rabbit_data_coercion:to_binary(Type),
-      message => rabbit_data_coercion:to_binary(Message),
       reason => rabbit_data_coercion:to_binary(Reason),
+      message => rabbit_data_coercion:to_binary(Message),
       count => 1,
       lastTimestamp =>  rabbit_data_coercion:to_binary(Timestamp),
       involvedObject => #{
