@@ -111,7 +111,7 @@ event_v1_test(_Config) ->
 		    type => <<"Normal">>,
 		    lastTimestamp => <<"2019-12-06T15:10:23+00:00">>,
 		    reason => <<"Reason">>,
-            message => <<"MyMessage">>,
+		    message => <<"MyMessage">>,
 		    metadata =>#{
 				 name => <<"test">> ,
 				 namespace => <<"namespace">>
