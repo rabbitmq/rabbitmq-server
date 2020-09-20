@@ -110,8 +110,8 @@ event_v1_test(_Config) ->
 		    count => 1,
 		    type => <<"Normal">>,
 		    lastTimestamp => <<"2019-12-06T15:10:23+00:00">>,
-		    message => <<"MyMessage">>,
 		    reason => <<"Reason">>,
+		    message => <<"MyMessage">>,
 		    metadata =>#{
 				 name => <<"test">> ,
 				 namespace => <<"namespace">>
@@ -129,4 +129,4 @@ event_v1_test(_Config) ->
 		   },
     ?assertEqual(Expectation, 
 		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
-							     "Normal", "MyMessage", "Reason", "2019-12-06T15:10:23+00:00", "MyHostName")).
+							     "Normal", "Reason", "MyMessage", "2019-12-06T15:10:23+00:00", "MyHostName")).
