@@ -8,7 +8,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  def scopes(), do: [:diagnostics, :queues]
+  def scopes(), do: [:queues]
 
   def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
 
@@ -45,6 +45,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   end
 
   def help_section(), do: :observability_and_health_checks
+
+  def usage_doc_guides() do
+    [
+      DocGuide.quorum_queues()
+    ]
+  end
 
   def description(), do: "Peeks at the given position of a quorum queue"
 
