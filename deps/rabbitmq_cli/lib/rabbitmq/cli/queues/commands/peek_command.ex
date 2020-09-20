@@ -10,8 +10,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   def scopes(), do: [:queues]
 
-  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
-
+  use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
   use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
