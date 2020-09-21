@@ -42,14 +42,9 @@ suite() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    case quorum_queue_utils:is_mixed_versions() of
-        true ->
-            {skip, "Not mixed versions compatible"};
-        false ->
-            rabbit_ct_helpers:log_environment(),
-            rabbit_ct_helpers:run_setup_steps(
-              Config, [fun rabbit_ct_broker_helpers:configure_dist_proxy/1])
-    end.
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(
+      Config, [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -58,15 +53,24 @@ init_per_group(net_ticktime_1 = Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
     init_per_multinode_group(Group, Config1, 3).
 
-init_per_multinode_group(_Group, Config, NodeCount) ->
+init_per_multinode_group(Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
                                                     {rmq_nodename_suffix, Suffix}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1, rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
+                 Config2, user_limits),
+    case EnableFF of
+        ok ->
+            Config2;
+        Skip ->
+            end_per_group(Group, Config2),
+            Skip
+    end.
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,

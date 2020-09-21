@@ -65,13 +65,8 @@ suite() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    case quorum_queue_utils:is_mixed_versions() of
-        true ->
-            {skip, "Not mixed versions compatible"};
-        false ->
-            rabbit_ct_helpers:log_environment(),
-            rabbit_ct_helpers:run_setup_steps(Config)
-    end.
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -100,9 +95,18 @@ init_per_multinode_group(Group, Config, NodeCount) ->
             % The broker is managed by {init,end}_per_testcase().
             Config1;
         _ ->
-            rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps())
+            Config2 = rabbit_ct_helpers:run_steps(
+                        Config1, rabbit_ct_broker_helpers:setup_steps() ++
+                                 rabbit_ct_client_helpers:setup_steps()),
+            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
+                         Config2, user_limits),
+            case EnableFF of
+                ok ->
+                    Config2;
+                Skip ->
+                    end_per_group(Group, Config2),
+                    Skip
+            end
     end.
 
 end_per_group(cluster_rename, Config) ->
