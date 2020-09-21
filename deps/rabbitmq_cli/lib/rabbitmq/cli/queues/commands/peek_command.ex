@@ -55,6 +55,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
        "message" => "Target queue was not found in virtual host '#{vhost}'"
      }}
   end
+  def output({:error, :no_message_at_pos}, %{formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Target queue does not have a message at that position"
+     }}
+  end
   def output({:error, error}, %{formatter: "json"}) do
     {:error,
      %{
@@ -64,6 +71,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   end
   def output({:error, :not_found}, %{vhost: vhost}) do
     {:error, "Target queue was not found in virtual host '#{vhost}'"}
+  end
+  def output({:error, :no_message_at_pos}, _) do
+    {:error, "Target queue does not have a message at that position"}
   end
   def output({:ok, msg}, %{formatter: "json"}) do
     {:ok, %{"result" => "ok", "message" => Enum.into(msg, %{})}}
