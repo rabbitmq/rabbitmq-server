@@ -317,25 +317,38 @@ prepare-dist::
 # --------------------------------------------------------------------
 
 # If the top-level project is a RabbitMQ component, we override
-# $(DEPS_DIR) for this project to point to the top-level's one. We also
-# disable `make distclean` so $(DEPS_DIR) is not accidentally removed.
-
-ifneq ($(wildcard ../../rabbitmq-components.mk),)
-supposed_deps_dir = $(abspath ..)
-else ifneq ($(wildcard ../../../../rabbitmq-components.mk),)
-supposed_deps_dir = $(abspath ../../..)
-else ifneq ($(wildcard UMBRELLA.md),)
-DISABLE_DISTCLEAN = 1
-endif
-
-# We also verify that the guessed DEPS_DIR is actually named `deps`, to rule
-# out any situation where it is a coincidence that we found a
+# $(DEPS_DIR) for this project to point to the top-level's one.
+#
+# We also verify that the guessed DEPS_DIR is actually named `deps`,
+# to rule out any situation where it is a coincidence that we found a
 # `rabbitmq-components.mk` up upper directories.
 
-ifeq ($(notdir $(supposed_deps_dir)),deps)
+possible_deps_dir_1 = $(abspath ..)
+possible_deps_dir_2 = $(abspath ../../..)
+
+ifeq ($(notdir $(possible_deps_dir_1)),deps)
+ifneq ($(wildcard $(possible_deps_dir_1)/../rabbitmq-components.mk),)
+deps_dir_overriden = 1
+DEPS_DIR ?= $(possible_deps_dir_1)
 DISABLE_DISTCLEAN = 1
-DEPS_DIR ?= $(supposed_deps_dir)
 endif
+endif
+
+ifeq ($(deps_dir_overriden),)
+ifeq ($(notdir $(possible_deps_dir_2)),deps)
+ifneq ($(wildcard $(possible_deps_dir_2)/../rabbitmq-components.mk),)
+deps_dir_overriden = 1
+DEPS_DIR ?= $(possible_deps_dir_2)
+DISABLE_DISTCLEAN = 1
+endif
+endif
+endif
+
+ifneq ($(wildcard UMBRELLA.md),)
+DISABLE_DISTCLEAN = 1
+endif
+
+# We disable `make distclean` so $(DEPS_DIR) is not accidentally removed.
 
 ifeq ($(DISABLE_DISTCLEAN),1)
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
