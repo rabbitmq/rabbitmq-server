@@ -1207,7 +1207,16 @@ metrics_cleanup_on_leader_crash(Config) ->
       end),
     ok.
 
+
 delete_declare(Config) ->
+    case is_mixed_versions() of
+        true ->
+            {skip, "delete_declare isn't mixed version reliable"};
+        false ->
+            delete_declare0(Config)
+    end.
+
+delete_declare0(Config) ->
     %% Delete cluster in ra is asynchronous, we have to ensure that we handle that in rmq
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config,
                                                                    nodename),
