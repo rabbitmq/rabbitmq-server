@@ -433,10 +433,10 @@ most_basic_cluster_connection_and_channel_count(Config) ->
     ?assertEqual(15, count_channels_of_user(Config, Username)),
 
     close_channels(Chans1 ++ Chans2 ++ Chans3),
-    ?assertEqual(0, count_channels_of_user(Config, Username)),
+    ?awaitMatch(0, count_channels_of_user(Config, Username), 60000),
 
     close_connections([Conn1, Conn2, Conn3]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)).
+    ?awaitMatch(0, count_connections_of_user(Config, Username), 60000).
 
 cluster_single_user_connection_and_channel_count(Config) ->
     Username = proplists:get_value(rmq_username, Config),
@@ -1506,9 +1506,9 @@ count_connections_of_user(Config, Username) ->
 count_connections_in(Config, Username, NodeIndex) ->
     count_user_tracked_items(Config, NodeIndex, rabbit_connection_tracking, Username).
 
- count_channels_of_user(Config, Username) ->
-     count_channels_in(Config, Username, 0).
- count_channels_in(Config, Username, NodeIndex) ->
+count_channels_of_user(Config, Username) ->
+    count_channels_in(Config, Username, 0).
+count_channels_in(Config, Username, NodeIndex) ->
     count_user_tracked_items(Config, NodeIndex, rabbit_channel_tracking, Username).
 
 count_user_tracked_items(Config, NodeIndex, TrackingMod, Username) ->
