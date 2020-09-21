@@ -4,6 +4,7 @@
 %%
 %% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
+
 -module(app_utils).
 
 -export([load_applications/1,
