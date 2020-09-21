@@ -10,9 +10,30 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   def scopes(), do: [:queues]
 
-  use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
-  use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+
+  use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
+
+  def validate(args, _) when length(args) < 2 do
+    {:validation_failure, :not_enough_args}
+  end
+  def validate(args, _) when length(args) > 2 do
+    {:validation_failure, :too_many_args}
+  end
+  def validate([_, raw_pos], _) do
+    pos = case Integer.parse(raw_pos) do
+      {n, _} -> n
+      :error -> :error
+      _      -> :error
+    end
+
+    invalid_pos = {:validation_failure, "position value must be a positive integer"}
+    case pos do
+      :error            -> invalid_pos
+      num when num < 1  -> invalid_pos
+      num when num >= 1 -> :ok
+    end
+  end
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name, pos] = _args, %{node: node_name, vhost: vhost}) do
@@ -21,13 +42,36 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot peek into a classic queue"}
       {:ok, msg} ->
-        res = Enum.map(msg, fn {k,v} -> [{"keys", k}, {"values", v}] end)
-        {:ok, res}
+        {:ok, msg}
       err ->
         err
     end
   end
 
+  def output({:error, :not_found}, %{vhost: vhost, formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Target queue was not found in virtual host '#{vhost}'"
+     }}
+  end
+  def output({:error, error}, %{formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Failed to perform the operation: #{error}"
+     }}
+  end
+  def output({:error, :not_found}, %{vhost: vhost}) do
+    {:error, "Target queue was not found in virtual host '#{vhost}'"}
+  end
+  def output({:ok, msg}, %{formatter: "json"}) do
+    {:ok, %{"result" => "ok", "message" => Enum.into(msg, %{})}}
+  end
+  def output({:ok, msg}, _) do
+    res = Enum.map(msg, fn {k,v} -> [{"keys", k}, {"values", v}] end)
+    {:stream, res}
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
