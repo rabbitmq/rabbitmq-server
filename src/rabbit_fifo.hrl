@@ -94,7 +94,8 @@
          %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
          credit_mode = simple_prefetch :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
-         status = up :: up | suspected_down | cancelled
+         status = up :: up | suspected_down | cancelled,
+         priority = 0 :: non_neg_integer()
         }).
 
 -type consumer() :: #consumer{}.
@@ -169,7 +170,7 @@
          consumers = #{} :: #{consumer_id() => #consumer{}},
          % consumers that require further service are queued here
          % needs to be part of snapshot
-         service_queue = queue:new() :: queue:queue(consumer_id()),
+         service_queue = priority_queue:new() :: priority_queue:queue(consumer_id()),
          %% This is a special field that is only used for snapshots
          %% It represents the queued messages at the time the
          %% dehydrated snapshot state was cached.

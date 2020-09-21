@@ -132,7 +132,8 @@ all_tests() ->
      delete_if_empty,
      delete_if_unused,
      queue_ttl,
-     peek
+     peek,
+     consumer_priorities
     ].
 
 memory_tests() ->
@@ -2538,6 +2539,84 @@ queue_ttl(Config) ->
                                               auto_delete = false,
                                               arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                                            {<<"x-expires">>, long, 1000}]})),
+    ok.
+
+consumer_priorities(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch, 2, false),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% consumer with default priority
+    Tag1 = <<"ctag1">>,
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QQ,
+                                                no_ack = false,
+                                                consumer_tag = Tag1},
+                           self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = Tag1} ->
+             ok
+    end,
+    %% consumer with higher priority
+    Tag2 = <<"ctag2">>,
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QQ,
+                                                arguments = [{"x-priority", long, 10}],
+                                                no_ack = false,
+                                                consumer_tag = Tag2},
+                           self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = Tag2} ->
+             ok
+    end,
+
+    publish(Ch, QQ),
+    %% Tag2 should receive the message
+    DT1 = receive
+              {#'basic.deliver'{delivery_tag = D1,
+                                consumer_tag = Tag2}, _} ->
+                  D1
+          after 5000 ->
+                    flush(100),
+                    ct:fail("basic.deliver timeout")
+          end,
+    publish(Ch, QQ),
+    %% Tag2 should receive the message
+    receive
+        {#'basic.deliver'{delivery_tag = _,
+                          consumer_tag = Tag2}, _} ->
+            ok
+    after 5000 ->
+              flush(100),
+              ct:fail("basic.deliver timeout")
+    end,
+
+    publish(Ch, QQ),
+    %% Tag1 should receive the message as Tag2 has maxed qos
+    receive
+        {#'basic.deliver'{delivery_tag = _,
+                          consumer_tag = Tag1}, _} ->
+            ok
+    after 5000 ->
+              flush(100),
+              ct:fail("basic.deliver timeout")
+    end,
+
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT1,
+                                        multiple = false}),
+    publish(Ch, QQ),
+    %% Tag2 should receive the message
+    receive
+        {#'basic.deliver'{delivery_tag = _,
+                          consumer_tag = Tag2}, _} ->
+            ok
+    after 5000 ->
+              flush(100),
+              ct:fail("basic.deliver timeout")
+    end,
+
     ok.
 
 %%----------------------------------------------------------------------------
