@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ListLocalAuthAttemptsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptsCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -29,7 +29,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListLocalAuthAttemptsCommand do
     )
   end
 
-  def usage, do: "list_local_auth_attempts"
+  def usage, do: "list_node_auth_attempts"
 
   def usage_doc_guides() do
     [
@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListLocalAuthAttemptsCommand do
   end
 
   def help_section(), do: :observability_and_health_checks
-  def description(), do: "Lists authorization attempts on the target node"
+  def description(), do: "Lists authentication attempts on the target node"
 
-  def banner([], %{node: node_name}), do: "Listing authorization attempts for node \"#{node_name}\" ..."
+  def banner([], %{node: node_name}), do: "Listing authentication attempts for node \"#{node_name}\" ..."
 end

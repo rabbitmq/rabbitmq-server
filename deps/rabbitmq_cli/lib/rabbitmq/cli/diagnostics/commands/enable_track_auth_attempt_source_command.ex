@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.EnablePerUserAuthAttemptMetricsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.EnableTrackAuthAttemptSourceCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -14,10 +14,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.EnablePerUserAuthAttemptMetricsComma
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :application, :set_env,
-      [:rabbit, :return_per_user_auth_attempt_metrics, :true])
+      [:rabbit, :track_auth_attempt_source, :true])
   end
 
-  def usage, do: "enable_per_user_auth_attempt_metrics"
+  def usage, do: "enable_track_auth_attempt_source"
 
   def usage_doc_guides() do
     [
@@ -28,9 +28,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.EnablePerUserAuthAttemptMetricsComma
 
   def help_section(), do: :configuration
 
-  def description(), do: "Enables per user auth attempt metrics"
+  def description(), do: "Disables the tracking of remote address and username of authentication attempts"
 
-  def banner([], _), do: "Enabling per user auth attempt metrics ..."
+  def banner([], _), do: "Disabling the tracking of the source of authentication attempts ..."
 
   use RabbitMQ.CLI.DefaultOutput
 end

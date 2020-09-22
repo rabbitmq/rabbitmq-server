@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ResetAuthAttemptMetricsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.DisableTrackAuthAttemptSourceCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -13,10 +13,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResetAuthAttemptMetricsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_core_metrics, :reset_auth_attempt_metrics, [])
+    :rabbit_misc.rpc_call(node_name, :application, :set_env,
+      [:rabbit, :track_auth_attempt_source, :false])
   end
 
-  def usage, do: "reset_auth_attempt_metrics"
+  def usage, do: "disable_track_auth_attempt_source"
 
   def usage_doc_guides() do
     [
@@ -27,9 +28,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ResetAuthAttemptMetricsCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Resets auth attempt metrics"
+  def description(), do: "Enables the tracking of remote address and username of authentication attempts"
 
-  def banner([], _), do: "Reset auth attempt metrics ..."
+  def banner([], _), do: "Enabling the tracking of the source of authentication attempts ..."
 
   use RabbitMQ.CLI.DefaultOutput
 end

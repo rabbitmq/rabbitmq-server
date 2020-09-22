@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.DisablePerUserAuthAttemptMetricsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.ResetNodeAuthAttemptMetricsCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -13,11 +13,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DisablePerUserAuthAttemptMetricsComm
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :application, :set_env,
-      [:rabbit, :return_per_user_auth_attempt_metrics, :false])
+    :rabbit_misc.rpc_call(node_name, :rabbit_core_metrics, :reset_auth_attempt_metrics, [])
   end
 
-  def usage, do: "disable_per_user_auth_attempt_metrics"
+  def usage, do: "reset_node_auth_attempt_metrics"
 
   def usage_doc_guides() do
     [
@@ -28,9 +27,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DisablePerUserAuthAttemptMetricsComm
 
   def help_section(), do: :configuration
 
-  def description(), do: "Disables per user auth attempt metrics"
+  def description(), do: "Resets auth attempt metrics on the target node"
 
-  def banner([], _), do: "Disabling per user auth attempt metrics ..."
+  def banner([], %{node: node_name}) do
+    "Reset auth attempt metrics on node #{node_name} ..."
+  end
 
   use RabbitMQ.CLI.DefaultOutput
 end
