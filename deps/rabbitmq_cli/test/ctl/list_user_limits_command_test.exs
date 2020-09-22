@@ -54,7 +54,7 @@ defmodule ListUserLimitsCommandTest do
     assert @command.run([], context[:opts]) == []
   end
 
-  test "run: a well-formed user specific command returns an empty json object if there are no limits", context do
+  test "run: a well-formed user specific command returns an empty json object if there are no limits" do
     assert @command.run([], %{node: get_rabbit_hostname(),
                               user: @user}) == "{}"
   end
