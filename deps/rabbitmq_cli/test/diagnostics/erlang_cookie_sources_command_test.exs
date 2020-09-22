@@ -9,7 +9,7 @@ defmodule ErlangCookieSourcesCommandTest do
 
   @command RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand
 
-  setup context do
+  setup _context do
     {:ok, opts: %{}}
   end
 
