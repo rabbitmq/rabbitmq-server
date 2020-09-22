@@ -40,6 +40,7 @@
          query_stat/1,
          query_single_active_consumer/1,
          query_in_memory_usage/1,
+         query_peek/2,
          usage/1,
 
          zero/1,
@@ -320,7 +321,7 @@ apply(#{index := Index,
                                  end,
             {Reply, Effects2} =
             case Msg of
-                {RaftIdx, {Header, 'empty'}} ->
+                {RaftIdx, {Header, empty}} ->
                     %% TODO add here new log effect with reply
                     {'$ra_no_reply',
                      [reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From) |
@@ -763,20 +764,33 @@ handle_aux(leader, _, garbage_collection, State, Log, _MacState) ->
 handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
     ra_log_wal:force_roll_over(ra_log_wal),
     {no_reply, force_eval_gc(Log, MacState, State), Log};
-handle_aux(_RaState, cast, Cmd, #aux{name = Name,
-                                     utilisation = Use0} = State0,
+handle_aux(_RaState, cast, eval, Aux0, Log, _MacState) ->
+    {no_reply, Aux0, Log};
+handle_aux(_RaState, cast, Cmd, #aux{utilisation = Use0} = Aux0,
+           Log, _MacState)
+  when Cmd == active orelse Cmd == inactive ->
+    {no_reply, Aux0#aux{utilisation = update_use(Use0, Cmd)}, Log};
+handle_aux(_RaState, cast, tick, #aux{name = Name,
+                                      utilisation = Use0} = State0,
            Log, MacState) ->
-    State = case Cmd of
-              _ when Cmd == active orelse Cmd == inactive ->
-                  State0#aux{utilisation = update_use(Use0, Cmd)};
-              tick ->
-                  true = ets:insert(rabbit_fifo_usage,
-                                    {Name, utilisation(Use0)}),
-                  eval_gc(Log, MacState, State0);
-              eval ->
-                  State0
-          end,
-    {no_reply, State, Log}.
+    true = ets:insert(rabbit_fifo_usage,
+                      {Name, utilisation(Use0)}),
+    Aux = eval_gc(Log, MacState, State0),
+    {no_reply, Aux, Log};
+handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
+           Log0, MacState) ->
+    case rabbit_fifo:query_peek(Pos, MacState) of
+        {ok, {Idx, {Header, empty}}} ->
+            %% need to re-hydrate from the log
+           {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),
+           #enqueue{msg = Msg} = Cmd,
+           {reply, {ok, {Header, Msg}}, Aux0, Log};
+        {ok, {_Idx, {Header, Msg}}} ->
+           {reply, {ok, {Header, Msg}}, Aux0, Log0};
+        Err ->
+            {reply, Err, Aux0, Log0}
+    end.
+
 
 eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
         #aux{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
@@ -896,6 +910,7 @@ query_consumers(#?MODULE{consumers = Consumers,
                     end, #{}, WaitingConsumers),
     maps:merge(FromConsumers, FromWaitingConsumers).
 
+
 query_single_active_consumer(#?MODULE{cfg = #cfg{consumer_strategy = single_active},
                                       consumers = Consumers}) ->
     case maps:size(Consumers) of
@@ -916,6 +931,18 @@ query_stat(#?MODULE{consumers = Consumers} = State) ->
 query_in_memory_usage(#?MODULE{msg_bytes_in_memory = Bytes,
                                msgs_ready_in_memory = Length}) ->
     {Length, Bytes}.
+
+query_peek(Pos, State0) when Pos > 0 ->
+    case take_next_msg(State0) of
+        empty ->
+            {error, no_message_at_pos};
+        {{_Seq, IdxMsg}, _State}
+          when Pos == 1 ->
+            {ok, IdxMsg};
+        {_Msg, State} ->
+            query_peek(Pos-1, State)
+    end.
+
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->

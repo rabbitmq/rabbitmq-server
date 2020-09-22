@@ -144,7 +144,7 @@
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = lqueue:new() :: lqueue:queue(),
+         messages = lqueue:new() :: lqueue:lqueue({msg_in_id(), indexed_msg()}),
          % defines the next message id
          next_msg_num = 1 :: msg_in_id(),
          % queue of returned msg_in_ids - when checking out it picks from
