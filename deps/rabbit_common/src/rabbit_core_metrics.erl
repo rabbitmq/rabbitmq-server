@@ -401,22 +401,34 @@ auth_attempt_failed(RemoteAddress, Username, Protocol) ->
 update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
     %% It should default to false as per ip/user metrics could keep growing indefinitely
     %% It's up to the operator to enable them, and reset it required
-    Key = case application:get_env(rabbit, track_auth_attempt_source) of
-             {ok, true} ->
-                 {RemoteAddress, Username, Protocol};
-             {ok, false} ->
-                 {<<>>, <<>>, Protocol}
-             end,
-    _ = ets:update_counter(auth_attempt_metrics, Key, Incr, {Key, 0, 0, 0}),
+    case application:get_env(rabbit, track_auth_attempt_source) of
+        {ok, true} ->
+            case {RemoteAddress, Username} of
+                {<<>>, <<>>} ->
+                    ok;
+                _ ->
+                    Key = {RemoteAddress, Username, Protocol},
+                    _ = ets:update_counter(auth_attempt_detailed_metrics, Key, Incr, {Key, 0, 0, 0})
+            end;
+        {ok, false} ->
+            ok
+    end,
+    _ = ets:update_counter(auth_attempt_metrics, Protocol, Incr, {Protocol, 0, 0, 0}),
     ok.
 
 reset_auth_attempt_metrics() ->
     ets:delete_all_objects(auth_attempt_metrics),
+    ets:delete_all_objects(auth_attempt_detailed_metrics),
     ok.
 
 get_auth_attempts() ->
-    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_metrics)].
+    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_metrics)] ++
+        [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_detailed_metrics)].
 
 format_auth_attempt({{RemoteAddress, Username, Protocol}, Total, Succeeded, Failed}) ->
-    [{ip, RemoteAddress}, {username, Username}, {protocol, Protocol}, {auth_attempts, Total},
+    [{remote_address, RemoteAddress}, {username, Username},
+     {protocol, atom_to_binary(Protocol, utf8)}, {auth_attempts, Total},
+     {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}];
+format_auth_attempt({Protocol, Total, Succeeded, Failed}) ->
+    [{protocol, atom_to_binary(Protocol, utf8)}, {auth_attempts, Total},
      {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}].
