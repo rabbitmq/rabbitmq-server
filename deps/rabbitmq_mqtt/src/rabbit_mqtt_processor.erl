@@ -119,15 +119,15 @@ process_request(?CONNECT,
             _ ->
                 case creds(Username, Password, SSLLoginName) of
                     nocreds ->
-                        rabbit_core_metrics:auth_attempt_failed(Ip, <<"">>),
+                        rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
                         rabbit_log_connection:error("MQTT login failed: no credentials provided~n"),
                         {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
-                        rabbit_core_metrics:auth_attempt_failed(Ip, <<"">>),
+                        rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
                         rabbit_log_connection:error("MQTT login failed: no username is provided"),
                         {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {User, undefined}} when is_list(User) ->
-                        rabbit_core_metrics:auth_attempt_failed(Ip, User),
+                        rabbit_core_metrics:auth_attempt_failed(Ip, User, mqtt),
                         rabbit_log_connection:error("MQTT login failed for user '~p': no password provided", [User]),
                         {?CONNACK_CREDENTIALS, PState1};
                     {UserBin, PassBin} ->
@@ -539,7 +539,7 @@ process_login(_UserBin, _PassBin, _ProtoVersion,
                                                    vhost = VHost}}) when is_pid(Channel) ->
     UsernameStr = rabbit_data_coercion:to_list(Username),
     VHostStr = rabbit_data_coercion:to_list(VHost),
-    rabbit_core_metrics:auth_attempt_failed(list_to_binary(inet:ntoa(Addr)), Username),
+    rabbit_core_metrics:auth_attempt_failed(list_to_binary(inet:ntoa(Addr)), Username, mqtt),
     rabbit_log_connection:warning("MQTT detected duplicate connect/login attempt for user ~p, vhost ~p",
                                   [UsernameStr, VHostStr]),
     connack_dup_auth;
@@ -554,7 +554,7 @@ process_login(UserBin, PassBin, ProtoVersion,
     rabbit_log_connection:info(
         "MQTT vhost picked using ~s~n",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
-    Ip = list_to_binary(inet:ntoa(Addr)),
+    RemoteAddress = list_to_binary(inet:ntoa(Addr)),
     case rabbit_vhost:exists(VHost) of
         true  ->
             case amqp_connection:start(#amqp_params_direct{
@@ -565,7 +565,8 @@ process_login(UserBin, PassBin, ProtoVersion,
                 {ok, Connection} ->
                     case rabbit_access_control:check_user_loopback(UsernameBin, Addr) of
                         ok          ->
-                            rabbit_core_metrics:auth_attempt_succeeded(Ip, UsernameBin),
+                            rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, UsernameBin,
+                                                                       mqtt),
                             [{internal_user, InternalUser}] = amqp_connection:info(
                                 Connection, [internal_user]),
                             {?CONNACK_ACCEPT, Connection, VHost,
@@ -573,7 +574,8 @@ process_login(UserBin, PassBin, ProtoVersion,
                                     username = UsernameBin,
                                     vhost = VHost}};
                         not_allowed ->
-                            rabbit_core_metrics:auth_attempt_failed(Ip, UsernameBin),
+                            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin,
+                                                                    mqtt),
                             amqp_connection:close(Connection),
                             rabbit_log_connection:warning(
                                 "MQTT login failed for ~p access_refused "
@@ -582,18 +584,18 @@ process_login(UserBin, PassBin, ProtoVersion,
                             ?CONNACK_AUTH
                     end;
                 {error, {auth_failure, Explanation}} ->
-                    rabbit_core_metrics:auth_attempt_failed(Ip, UsernameBin),
+                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
                     rabbit_log_connection:error("MQTT login failed for user '~p' auth_failure: ~s~n",
                         [binary_to_list(UserBin), Explanation]),
                     ?CONNACK_CREDENTIALS;
                 {error, access_refused} ->
-                    rabbit_core_metrics:auth_attempt_failed(Ip, UsernameBin),
+                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
                     rabbit_log_connection:warning("MQTT login failed for user '~p': access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH;
                 {error, not_allowed} ->
-                    rabbit_core_metrics:auth_attempt_failed(Ip, UsernameBin),
+                    rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
                     %% when vhost allowed for TLS connection
                     rabbit_log_connection:warning("MQTT login failed for ~p access_refused "
                     "(vhost access not allowed)~n",
@@ -601,7 +603,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                     ?CONNACK_AUTH
             end;
         false ->
-            rabbit_core_metrics:auth_attempt_failed(Ip, UsernameBin),
+            rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
             rabbit_log_connection:error("MQTT login failed for user '~p' auth_failure: vhost ~s does not exist~n",
                 [binary_to_list(UserBin), VHost]),
             ?CONNACK_CREDENTIALS

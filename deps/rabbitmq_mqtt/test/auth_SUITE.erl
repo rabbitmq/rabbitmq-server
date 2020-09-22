@@ -460,8 +460,9 @@ expect_successful_connection(ConnectFun, Config) ->
     end,
     [Attempt] =
         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
-    ?assertEqual(proplists:get_value(ip, Attempt), <<>>),
-    ?assertEqual(proplists:get_value(username, Attempt), <<>>),
+    ?assertEqual(false, proplists:is_defined(remote_address, Attempt)),
+    ?assertEqual(false, proplists:is_defined(username, Attempt)),
+    ?assertEqual(proplists:get_value(protocol, Attempt), <<"mqtt">>),
     ?assertEqual(proplists:get_value(auth_attempts, Attempt), 1),
     ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 0),
     ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 1).
@@ -479,8 +480,9 @@ expect_authentication_failure(ConnectFun, Config) ->
     end,
     [Attempt] =
         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
-    ?assertEqual(proplists:get_value(ip, Attempt), <<>>),
-    ?assertEqual(proplists:get_value(username, Attempt), <<>>),
+    ?assertEqual(false, proplists:is_defined(remote_address, Attempt), <<>>),
+    ?assertEqual(false, proplists:is_defined(username, Attempt)),
+    ?assertEqual(proplists:get_value(protocol, Attempt), <<"mqtt">>),
     ?assertEqual(proplists:get_value(auth_attempts, Attempt), 1),
     ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 1),
     ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 0),
