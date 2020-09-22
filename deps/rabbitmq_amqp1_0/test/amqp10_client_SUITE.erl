@@ -162,19 +162,24 @@ auth_attempt_metrics(Config) ->
     open_and_close_connection(OpnConf),
     [Attempt] =
         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
-    ?assertEqual(proplists:get_value(ip, Attempt), <<>>),
-    ?assertEqual(proplists:get_value(username, Attempt), <<>>),
+    ?assertEqual(false, proplists:is_defined(remote_address, Attempt)),
+    ?assertEqual(false, proplists:is_defined(username, Attempt)),
+    ?assertEqual(proplists:get_value(protocol, Attempt), <<"amqp10">>),
     ?assertEqual(proplists:get_value(auth_attempts, Attempt), 1),
     ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 0),
     ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 1),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbit, return_per_user_auth_attempt_metrics, true]),
+                                 [rabbit, track_auth_attempt_source, true]),
     open_and_close_connection(OpnConf),
-    [Attempt1] =
-        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
-    ?assertEqual(proplists:get_value(ip, Attempt1), <<>>),
+    Attempts =
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts_by_source, []),
+    [Attempt1] = lists:filter(fun(Props) ->
+                                      proplists:is_defined(remote_address, Props)
+                              end, Attempts),
+    ?assertEqual(proplists:get_value(remote_address, Attempt1), <<>>),
     ?assertEqual(proplists:get_value(username, Attempt1), <<"guest">>),
+    ?assertEqual(proplists:get_value(protocol, Attempt), <<"amqp10">>),
     ?assertEqual(proplists:get_value(auth_attempts, Attempt1), 1),
     ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt1), 0),
     ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt1), 1),
