@@ -3,7 +3,7 @@
 %%
 %% 1) the module name is supervisor2
 %%
-%% 2) a internal_find_child/2 utility function has been added
+%% 2) a find_child/2 utility function has been added
 %%
 %% 3) Added an 'intrinsic' restart type. Like the transient type, this
 %%    type means the child should only be restarted if the child exits
@@ -69,8 +69,8 @@
 	 start_child/2, restart_child/2,
 	 delete_child/2, terminate_child/2,
 	 which_children/1, count_children/1,
-     find_child/2,
-	 check_childspecs/1, get_childspec/2]).
+	 check_childspecs/1, get_childspec/2,
+     find_child/2]).
 
 %% Internal exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -177,11 +177,12 @@
 	        args}).
 -type state() :: #state{}.
 
--define(is_simple(State), State#state.strategy =:= simple_one_for_one).
+-define(is_simple(State), State#state.strategy=:=simple_one_for_one).
 -define(is_temporary(_Child_), _Child_#child.restart_type=:=temporary).
--define(is_transient(_Child_), _Child_#child.restart_type=:=transient).
--define(is_permanent(_Child_), _Child_#child.restart_type=:=permanent).
--define(is_intrinsic(_Child_), _Child_#child.restart_type=:=intrinsic).
+-define(is_permanent(_Child_), ((_Child_#child.restart_type=:=permanent) orelse
+                                (is_tuple(_Child_#child.restart_type) andalso
+                                 tuple_size(_Child_#child.restart_type) =:= 2 andalso
+                                 element(1, _Child_#child.restart_type) =:= permanent))).
 
 -define(is_explicit_restart(R),
         R == {shutdown, restart}).
@@ -208,14 +209,14 @@
       Args :: term().
 start_link(Mod, Args) ->
     gen_server:start_link(?MODULE, {self, Mod, Args}, []).
- 
+
 -spec start_link(SupName, Module, Args) -> startlink_ret() when
       SupName :: sup_name(),
       Module :: module(),
       Args :: term().
 start_link(SupName, Mod, Args) ->
     gen_server:start_link(SupName, ?MODULE, {SupName, Mod, Args}, []).
- 
+
 %%% ---------------------------------------------------
 %%% Interface functions.
 %%% ---------------------------------------------------
@@ -330,9 +331,9 @@ get_callback_module(Pid) ->
     end.
 
 %%% ---------------------------------------------------
-%%% 
+%%%
 %%% Initialize the supervisor.
-%%% 
+%%%
 %%% ---------------------------------------------------
 
 -type init_sup_name() :: sup_name() | 'self'.
@@ -446,9 +447,9 @@ do_start_child_i(M, F, A) ->
     end.
 
 %%% ---------------------------------------------------
-%%% 
+%%%
 %%% Callback functions.
-%%% 
+%%%
 %%% ---------------------------------------------------
 -type call() :: 'which_children' | 'count_children' | {_, _}.	% XXX: refine
 -spec handle_call(call(), term(), state()) -> {'reply', term(), state()}.
@@ -637,8 +638,9 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 handle_info({delayed_restart, {Reason, Child}}, State) when ?is_simple(State) ->
     try_restart(Reason, Child, State#state{restarts = []});  %% [1]
 handle_info({delayed_restart, {Reason, Child}}, State) ->
-    case internal_find_child(Child#child.id, State) of
-        {value, Child1} ->
+    ChildId = Child#child.id,
+    case internal_find_child(ChildId, State) of
+        {ok, Child1} ->
             try_restart(Reason, Child1, State#state{restarts = []}); %% [1]
         _What ->
             {noreply, State}
@@ -732,7 +734,7 @@ update_chsp(#child{id=Id}=OldChild, NewDb) ->
             false
     end.
 
-    
+
 %%% ---------------------------------------------------
 %%% Start a new child.
 %%% ---------------------------------------------------
@@ -775,10 +777,10 @@ try_restart(Reason, Child, State) ->
         {shutdown, State2} -> {stop, shutdown, State2}
     end.
 
-do_restart(Reason, Child, State) when ?is_permanent(Child) ->
+do_restart(Reason, Child=#child{restart_type=permanent}, State) -> % is_permanent
     ?report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
-do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is_permanent_delay
+do_restart(Reason, Child=#child{restart_type={permanent,_Delay}}, State) -> % is_permanent_delay
     ?report_error(child_terminated, Reason, Child, State#state.name),
     do_restart_delay(Reason, Child, State);
 do_restart(normal, Child, State) ->
@@ -790,7 +792,7 @@ do_restart(shutdown, Child, State) ->
 do_restart({shutdown, _Term}, Child, State) ->
     NState = del_child(Child, State),
     {ok, NState};
-do_restart(Reason, Child, State) when ?is_transient(Child) ->
+do_restart(Reason, Child=#child{restart_type=transient}, State) -> % is_transient
     ?report_error(child_terminated, Reason, Child, State#state.name),
     restart(Child, State);
 do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is_transient_delay
@@ -798,12 +800,12 @@ do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is
     restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
                                     fun delete_child_and_continue/2,
                                     Reason, Child, State);
-do_restart(Reason, Child, State) when ?is_intrinsic(Child) ->
+do_restart(Reason, Child=#child{restart_type=intrinsic}, State) -> % is_intrinsic
     ?report_error(child_terminated, Reason, Child, State#state.name),
     restart_if_explicit_or_abnormal(fun restart/2,
                                     fun delete_child_and_stop/2,
                                     Reason, Child, State);
-do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is_intrinsic_delay
+do_restart(Reason, Child=#child{restart_type={intrinsic,_Delay}}, State) -> % is_intrinsic_delay
     ?report_error(child_terminated, Reason, Child, State#state.name),
     restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
                                     fun delete_child_and_stop/2,
@@ -834,26 +836,29 @@ is_abnormal_termination(shutdown)      -> false;
 is_abnormal_termination({shutdown, _}) -> false;
 is_abnormal_termination(_Other)        -> true.
 
-do_restart_delay(Reason, Child0=#child{restart_type={_RestartType,Delay}}, State0) ->
+do_restart_delay(Reason,
+                 Child = #child{id = ChildId,
+                                pid = ChildPid0,
+                                restart_type = {_RestartType, Delay}},
+                 State0) ->
     case add_restart(State0) of
         {ok, State1} ->
             Strategy = State1#state.strategy,
-            maybe_restart(Strategy, Child0, State1);
-        {terminate, _State1} ->
+            maybe_restart(Strategy, Child, State1);
+        {terminate, State1} ->
             %% we've reached the max restart intensity, but the
             %% add_restart will have added to the restarts
             %% field. Given we don't want to die here, we need to go
             %% back to the old restarts field otherwise we'll never
             %% attempt to restart later, which is why we ignore
             %% NState for this clause.
-            Msg = {delayed_restart, {Reason, Child0}},
+            Msg = {delayed_restart, {Reason, Child}},
             _TRef = erlang:send_after(trunc(Delay*1000), self(), Msg),
-            Pid0 = Child0#child.pid,
-            Pid1 = restarting(Pid0),
-            Child1 = Child0#child{pid=Pid1},
+            ChildPid1 = restarting(ChildPid0),
             % Note: State0 is intentionally used here
-            State1 = replace_child(Child1, State0),
-            {ok, State1}
+            % TODO LRB
+            State2 = set_pid(ChildPid1, ChildId, State1),
+            {ok, State2}
     end.
 
 maybe_restart(Strategy, Child, State) ->
@@ -884,7 +889,7 @@ restart(Child, State) ->
 		    %% for the supervisor can be handled - e.g. a
 		    %% shutdown request for the supervisor or the
 		    %% child.
-                    try_again_restart(TryAgainId),
+            try_again_restart(TryAgainId),
 		    {ok,NState2};
 		Other ->
 		    Other
@@ -999,13 +1004,13 @@ do_terminate(_Child, _SupName) ->
     ok.
 
 %%-----------------------------------------------------------------
-%% Shutdowns a child. We must check the EXIT value 
+%% Shutdowns a child. We must check the EXIT value
 %% of the child, because it might have died with another reason than
-%% the wanted. In that case we want to report the error. We put a 
-%% monitor on the child an check for the 'DOWN' message instead of 
-%% checking for the 'EXIT' message, because if we check the 'EXIT' 
-%% message a "naughty" child, who does unlink(Sup), could hang the 
-%% supervisor. 
+%% the wanted. In that case we want to report the error. We put a
+%% monitor on the child an check for the 'DOWN' message instead of
+%% checking for the 'EXIT' message, because if we check the 'EXIT'
+%% message a "naughty" child, who does unlink(Sup), could hang the
+%% supervisor.
 %% Returns: ok | {error, OtherReason}  (this should be reported)
 %%-----------------------------------------------------------------
 shutdown(Pid, brutal_kill) ->
@@ -1018,14 +1023,14 @@ shutdown(Pid, brutal_kill) ->
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
 		    {error, OtherReason}
 	    end;
-	{error, Reason} ->      
+	{error, Reason} ->
 	    {error, Reason}
     end;
 shutdown(Pid, Time) ->
     case monitor_child(Pid) of
 	ok ->
 	    exit(Pid, shutdown), %% Try to shutdown gracefully
-	    receive 
+	    receive
 		{'DOWN', _MRef, process, Pid, shutdown} ->
 		    ok;
 		{'DOWN', _MRef, process, Pid, OtherReason} ->
@@ -1037,14 +1042,14 @@ shutdown(Pid, Time) ->
 			    {error, OtherReason}
 		    end
 	    end;
-	{error, Reason} ->      
+	{error, Reason} ->
 	    {error, Reason}
     end.
 
 %% Help function to shutdown/2 switches from link to monitor approach
 monitor_child(Pid) ->
-    
-    %% Do the monitor operation first so that if the child dies 
+
+    %% Do the monitor operation first so that if the child dies
     %% before the monitoring is done causing a 'DOWN'-message with
     %% reason noproc, we will get the real reason in the 'EXIT'-message
     %% unless a naughty child has already done unlink...
@@ -1054,19 +1059,19 @@ monitor_child(Pid) ->
     receive
 	%% If the child dies before the unlik we must empty
 	%% the mail-box of the 'EXIT'-message and the 'DOWN'-message.
-	{'EXIT', Pid, Reason} -> 
-	    receive 
+	{'EXIT', Pid, Reason} ->
+	    receive
 		{'DOWN', _, process, Pid, _} ->
 		    {error, Reason}
 	    end
-    after 0 -> 
+    after 0 ->
 	    %% If a naughty child did unlink and the child dies before
-	    %% monitor the result will be that shutdown/2 receives a 
+	    %% monitor the result will be that shutdown/2 receives a
 	    %% 'DOWN'-message with reason noproc.
 	    %% If the child should die after the unlink there
 	    %% will be a 'DOWN'-message with a correct reason
-	    %% that will be handled in shutdown/2. 
-	    ok   
+	    %% that will be handled in shutdown/2.
+	    ok
     end.
 
 %%-----------------------------------------------------------------
@@ -1290,16 +1295,6 @@ set_pid(Pid, Id, {Ids, Db}) ->
     NewDb = maps:update_with(Id, fun(Child) -> Child#child{pid=Pid} end, Db),
     {Ids,NewDb}.
 
--spec replace_child(child(), state()) -> state().
-replace_child(Child, State) ->
-    Chs = do_replace_child(Child, State#state.children),
-    State#state{children = Chs}.
-
-do_replace_child(Child, [Ch|Chs]) when Ch#child.id =:= Child#child.id ->
-    [Child | Chs];
-do_replace_child(Child, [Ch|Chs]) ->
-    [Ch|do_replace_child(Child, Chs)].
-
 %% Remove the Id and the child record from the process state
 -spec remove_child(child_id(), state()) -> state().
 remove_child(Id, #state{children={Ids,Db}} = State) ->
@@ -1488,16 +1483,24 @@ validChildType(What) -> throw({invalid_child_type, What}).
 
 validId(_Id) -> true.
 
-validFunc({M, F, A}) when is_atom(M), 
-                          is_atom(F), 
+validFunc({M, F, A}) when is_atom(M),
+                          is_atom(F),
                           is_list(A) -> true;
 validFunc(Func)                      -> throw({invalid_mfa, Func}).
 
-validRestartType(permanent)   -> true;
-validRestartType(temporary)   -> true;
-validRestartType(transient)   -> true;
-validRestartType(intrinsic)   -> true;
+validRestartType(permanent)           -> true;
+validRestartType({permanent, Delay})  -> validDelay(Delay);
+validRestartType(temporary)           -> true;
+validRestartType(transient)           -> true;
+validRestartType({transient, Delay})  -> validDelay(Delay);
+validRestartType(intrinsic)           -> true;
+validRestartType({intrinsic, Delay})  -> validDelay(Delay);
 validRestartType(RestartType) -> throw({invalid_restart_type, RestartType}).
+
+validDelay(Delay) when is_number(Delay), Delay >= 0 ->
+    true;
+validDelay(What) ->
+    throw({invalid_delay, What}).
 
 validShutdown(Shutdown)
   when is_integer(Shutdown), Shutdown > 0 -> true;
@@ -1538,7 +1541,7 @@ child_to_spec(#child{id = Id,
 %%% Returns: {ok, State'} | {terminate, State'}
 %%% ------------------------------------------------------
 
-add_restart(State) ->  
+add_restart(State) ->
     I = State#state.intensity,
     P = State#state.period,
     R = State#state.restarts,
