@@ -50,7 +50,8 @@
 -export([auth_attempt_failed/3,
          auth_attempt_succeeded/3,
          reset_auth_attempt_metrics/0,
-         get_auth_attempts/0]).
+         get_auth_attempts/0,
+         get_auth_attempts_by_source/0]).
 
 %%----------------------------------------------------------------------------
 %% Types
@@ -422,8 +423,10 @@ reset_auth_attempt_metrics() ->
     ok.
 
 get_auth_attempts() ->
-    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_metrics)] ++
-        [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_detailed_metrics)].
+    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_metrics)].
+
+get_auth_attempts_by_source() ->
+    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_detailed_metrics)].
 
 format_auth_attempt({{RemoteAddress, Username, Protocol}, Total, Succeeded, Failed}) ->
     [{remote_address, RemoteAddress}, {username, Username},
