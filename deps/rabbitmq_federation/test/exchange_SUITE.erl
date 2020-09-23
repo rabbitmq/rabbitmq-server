@@ -1252,7 +1252,7 @@ await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) w
         Bs when length(Bs) =:= ExpectedBindingCount ->
             ok;
         Bs ->
-            {error, rabbit_misc:format("expected ~s bindings, got ~p", [ExpectedBindingCount, length(Bs)])}
+            {error, rabbit_misc:format("expected ~b bindings, got ~b", [ExpectedBindingCount, length(Bs)])}
     end.
 
 await_bindings(Config, Node, X, Keys) ->
