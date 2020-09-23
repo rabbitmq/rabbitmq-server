@@ -15,7 +15,8 @@
 
 all() ->
     [
-      {group, cluster_size_3}
+      {group, cluster_size_3},
+      {group, quorum_queues}
     ].
 
 groups() ->
@@ -24,9 +25,11 @@ groups() ->
           maintenance_mode_status,
           listener_suspension_status,
           client_connection_closure,
-          classic_mirrored_queue_leadership_transfer,
+          classic_mirrored_queue_leadership_transfer
+        ]},
+      {quorum_queues, [], [
           quorum_queue_leadership_transfer
-        ]}
+      ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -40,7 +43,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_3, Config) ->
+init_per_group(_Group, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         {rmq_nodes_count, 3}
       ]).
@@ -48,6 +51,36 @@ init_per_group(cluster_size_3, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(quorum_queue_leadership_transfer = Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_clustered, true},
+        {rmq_nodename_suffix, Testcase},
+        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+      ]),
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    MaintenanceModeFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
+                                Config2, maintenance_mode_status),
+    QuorumQueueFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
+                                Config2, quorum_queue),
+    case MaintenanceModeFFEnabled of
+        ok ->
+            case QuorumQueueFFEnabled of
+                ok ->
+                    Config2;
+                Skip ->
+                    end_per_testcase(Testcase, Config2),
+                    Skip
+            end;
+        Skip ->
+            end_per_testcase(Testcase, Config2),
+            Skip
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
@@ -62,10 +95,10 @@ init_per_testcase(Testcase, Config) ->
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps() ++
                 [fun rabbit_ct_broker_helpers:set_ha_policy_all/1]),
-    FFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
-                  Config2,
-                  maintenance_mode_status),
-    case FFEnabled of
+    MaintenanceModeFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
+                                Config2,
+                                maintenance_mode_status),
+    case MaintenanceModeFFEnabled of
         ok ->
             Config2;
         Skip ->
