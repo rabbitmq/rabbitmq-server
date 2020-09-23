@@ -810,7 +810,13 @@ decode(<<"">>) ->
     {ok, #{}};
 decode(Body) ->
     try
-        {ok, rabbit_json:decode(Body)}
+        %% handle double encoded JSON, see rabbitmq/rabbitmq-management#839
+        case rabbit_json:decode(Body) of
+            Val when is_map(Val)    -> {ok, Val};
+            Val when is_list(Val)   -> {ok, maps:from_list(Val)};
+            Bin when is_binary(Bin) -> {error, not_json};
+            _                       -> {error, not_json}
+        end
     catch error:_ -> {error, not_json}
     end.
 
