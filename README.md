@@ -1,3 +1,6 @@
+[![OTP v22.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/Test%20-%20Erlang%2022.3/master?label=Erlang%2022.3)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22Test+-+Erlang+22.3%22+branch%3A%22master%22)
+[![OTP v23](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/Test%20-%20Erlang%2023.0/master?label=Erlang%2023.0)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22Test+-+Erlang+23.0%22+branch%3Amaster)
+
 # RabbitMQ Server
 
 [![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-server.svg?branch=v3.8.x)](https://travis-ci.org/rabbitmq/rabbitmq-server)
