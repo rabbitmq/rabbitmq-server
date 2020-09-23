@@ -77,7 +77,9 @@ all_tests() -> [
     sorting_test,
     columns_test,
     if_empty_unused_test,
-    queues_enable_totals_test].
+    queues_enable_totals_test,
+    double_encoded_json_test
+    ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -911,6 +913,12 @@ queue_actions_test(Config) ->
     http_post(Config, "/queues/%2F/q/actions", [{action, cancel_sync}], {group, '2xx'}),
     http_post(Config, "/queues/%2F/q/actions", [{action, change_colour}], ?BAD_REQUEST),
     http_delete(Config, "/queues/%2F/q", {group, '2xx'}),
+    passed.
+
+double_encoded_json_test(Config) ->
+    Payload = rabbit_json:encode(rabbit_json:encode(#{<<"durable">> => true, <<"auto_delete">> => false})),
+    %% double-encoded JSON response is a 4xx, e.g. a Bad Request, and not a 500
+    http_put_raw(Config, "/queues/%2F/q", Payload, {group, '4xx'}),
     passed.
 
 exclusive_queue_test(Config) ->
