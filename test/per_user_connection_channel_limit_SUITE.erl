@@ -364,8 +364,12 @@ single_node_list_in_user(Config) ->
     set_up_user(Config, Username1),
     set_up_user(Config, Username2),
 
-    ?assertEqual(0, length(connections_in(Config, Username1))),
-    ?assertEqual(0, length(connections_in(Config, Username2))),
+    rabbit_ct_helpers:await_condition(
+    fun () ->
+        length(connections_in(Config, Username1)) =:= 0 andalso
+        length(connections_in(Config, Username2)) =:= 0
+    end),
+
     ?assertEqual(0, length(channels_in(Config, Username1))),
     ?assertEqual(0, length(channels_in(Config, Username2))),
 
@@ -374,9 +378,15 @@ single_node_list_in_user(Config) ->
     [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
     [#tracked_channel{username = Username1}] = channels_in(Config, Username1),
     close_channels([Chan1]),
-    ?assertEqual(0, length(channels_in(Config, Username1))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(channels_in(Config, Username1)) =:= 0
+        end),
     close_connections([Conn1]),
-    ?assertEqual(0, length(connections_in(Config, Username1))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(connections_in(Config, Username1)) =:= 0
+        end),
 
     [Conn2] = open_connections(Config, [{0, Username2}]),
     [Chan2] = open_channels(Conn2, 1),
@@ -405,10 +415,16 @@ single_node_list_in_user(Config) ->
                       all_channels(Config))),
 
     close_channels([Chan2, Chan3, Chan5, Chan6]),
-    ?assertEqual(0, length(all_channels(Config))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(all_channels(Config)) =:= 0
+        end),
 
     close_connections([Conn2, Conn3, Conn5, Conn6]),
-    ?assertEqual(0, length(all_connections(Config))),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(all_connections(Config)) =:= 0
+        end),
 
     rabbit_ct_broker_helpers:delete_user(Config, Username1),
     rabbit_ct_broker_helpers:delete_user(Config, Username2).
