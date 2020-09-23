@@ -309,16 +309,14 @@
                 <td>
                 <% if (queue_type == "classic") { %>
                   <span class="argument-link" field="arguments" key="x-message-ttl" type="number">Message TTL</span> <span class="help" id="queue-message-ttl"></span> |
-                  <span class="argument-link" field="arguments" key="x-expires" type="number">Auto expire</span> <span class="help" id="queue-expires"></span> |
                 <% } %>
+                  <span class="argument-link" field="arguments" key="x-expires" type="number">Auto expire</span> <span class="help" id="queue-expires"></span> |
                   <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
                   <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span> |
                 <% if (queue_type == "quorum") { %>
                   <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span><br/>
                 <% } %>
-                <% if (queue_type == "classic") { %>
                   <span class="argument-link" field="arguments" key="x-overflow" type="string">Overflow behaviour</span> <span class="help" id="queue-overflow"></span><br/>
-                <% } %>
                   <span class="argument-link" field="arguments" key="x-dead-letter-exchange" type="string">Dead letter exchange</span> <span class="help" id="queue-dead-letter-exchange"></span> |
                   <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span> |
                   <span class="argument-link" field="arguments" key="x-single-active-consumer" type="boolean">Single active consumer</span> <span class="help" id="queue-single-active-consumer"></span>
