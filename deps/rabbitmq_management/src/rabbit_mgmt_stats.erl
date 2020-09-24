@@ -58,7 +58,7 @@ format_no_range(Table, Now, Interval, InstantRateFun) ->
     end.
 
 -spec calculate_instant_rate(maybe_slide_fun(), atom(), integer()) ->
-    'not_found' | {integer(), number()}.
+    'not_found' | {integer(), number()} | {tuple(), tuple()}.
 calculate_instant_rate(Fun, Table, RangePoint) ->
     case Fun() of
         [] ->
