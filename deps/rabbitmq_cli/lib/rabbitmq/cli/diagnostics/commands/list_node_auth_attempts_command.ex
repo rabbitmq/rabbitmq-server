@@ -14,22 +14,35 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
-  use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_core_metrics,
-      :get_auth_attempts,
-      [],
-      timeout
-    )
+  def switches(), do: [by_source: :boolean]
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{by_source: false}, opts)}
   end
 
-  def usage, do: "list_node_auth_attempts"
+  def validate([], _), do: :ok
+  def validate(_, _), do: {:validation_failure, :too_many_args}
+
+  def run([], %{node: node_name, timeout: timeout, by_source: by_source}) do
+    case by_source do
+      :true ->
+        :rabbit_misc.rpc_call(
+          node_name, :rabbit_core_metrics, :get_auth_attempts_by_source, [], timeout)
+      :false ->
+        :rabbit_misc.rpc_call(
+          node_name, :rabbit_core_metrics, :get_auth_attempts, [], timeout)
+    end
+  end
+
+  def usage, do: "list_node_auth_attempts [--by-source]"
+
+  def usage_additional do
+    [
+      ["--by-source", "list authentication attempts by remote address and username"]
+    ]
+  end
 
   def usage_doc_guides() do
     [
@@ -41,5 +54,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptsCommand do
   def help_section(), do: :observability_and_health_checks
   def description(), do: "Lists authentication attempts on the target node"
 
-  def banner([], %{node: node_name}), do: "Listing authentication attempts for node \"#{node_name}\" ..."
+  def banner([], %{node: node_name}), do: "Listing authentication
+ attempts for node \"#{node_name}\" ..."
 end
