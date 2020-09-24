@@ -78,6 +78,7 @@
     allow_traffic_between/2,
 
     get_connection_pids/1,
+    close_all_connections/3,
 
     set_policy/6,
     set_policy/7,
@@ -1650,6 +1651,10 @@ get_connection_pids(Connections) ->
           lists:member(ConnInfo, ConnInfos) orelse
           lists:member(AltConnInfo, ConnInfos)
       end, rabbit_networking:connections()).
+
+close_all_connections(Config, Node, Reason) ->
+    rpc(Config, Node, rabbit_networking, close_all_connections, [Reason]),
+    ok.
 
 %% -------------------------------------------------------------------
 %% Policy helpers.
