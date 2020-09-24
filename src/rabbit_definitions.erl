@@ -212,15 +212,15 @@ atomise_map_keys(Decoded) ->
         Acc#{rabbit_data_coercion:to_atom(K, utf8) => V}
               end, Decoded, Decoded).
 
--spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok'.
+-spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser) ->
     apply_defs(Map, ActingUser, fun () -> ok end).
 
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
-                SuccessFun :: fun(() -> 'ok')) -> 'ok';
+                SuccessFun :: fun(() -> 'ok')) -> 'ok'  | {error, term()};
                 (Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
-                VHost :: vhost:name()) -> 'ok'.
+                VHost :: vhost:name()) -> 'ok'  | {error, term()}.
 
 apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
     apply_defs(Map, ActingUser, fun () -> ok end, VHost);
@@ -253,7 +253,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
 -spec apply_defs(Map :: #{atom() => any()},
                 ActingUser :: rabbit_types:username(),
                 SuccessFun :: fun(() -> 'ok'),
-                VHost :: vhost:name()) -> 'ok'.
+                VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
     rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
@@ -276,7 +276,7 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
                 ActingUser :: rabbit_types:username(),
                 SuccessFun :: fun(() -> 'ok'),
                 ErrorFun :: fun((any()) -> 'ok'),
-                VHost :: vhost:name()) -> 'ok'.
+                VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
     rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
