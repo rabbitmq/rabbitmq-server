@@ -256,8 +256,6 @@
 -spec get_env(atom(), atom(), term())  -> term().
 -spec get_channel_operation_timeout() -> non_neg_integer().
 -spec random(non_neg_integer()) -> non_neg_integer().
--spec rpc_call(node(), atom(), atom(), [any()]) -> any().
--spec rpc_call(node(), atom(), atom(), [any()], infinity | non_neg_integer()) -> any().
 -spec report_default_thread_pool_size() -> no_return().
 -spec get_gc_info(pid()) -> [any()].
 -spec group_proplists_by(fun((proplists:proplist()) -> any()),
@@ -1381,16 +1379,16 @@ escape_html_tags("&" ++ Rest, Acc) ->
 escape_html_tags([C | Rest], Acc) ->
     escape_html_tags(Rest, [C | Acc]).
 
-
-%% Moved from rabbit/src/rabbit_cli.erl
 %% If the server we are talking to has non-standard net_ticktime, and
 %% our connection lasts a while, we could get disconnected because of
 %% a timeout unless we set our ticktime to be the same. So let's do
 %% that.
 %% TODO: do not use an infinite timeout!
+-spec rpc_call(node(), atom(), atom(), [any()]) -> any() | {badrpc, term()}.
 rpc_call(Node, Mod, Fun, Args) ->
     rpc_call(Node, Mod, Fun, Args, ?RPC_INFINITE_TIMEOUT).
 
+-spec rpc_call(node(), atom(), atom(), [any()], infinity | non_neg_integer()) -> any() | {badrpc, term()}.
 rpc_call(Node, Mod, Fun, Args, Timeout) ->
     case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
         {badrpc, _} = E -> E;
