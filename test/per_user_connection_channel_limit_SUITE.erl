@@ -821,7 +821,7 @@ single_node_single_user_limit_with(Config, ConnLimit, ChLimit) ->
         end),
 
     close_connections([Conn1, Conn2, Conn3, Conn4, Conn5]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)),
+    ?awaitMatch(0, count_connections_of_user(Config, Username), 60000),
 
     set_user_connection_and_channel_limit(Config, Username,  -1, -1).
 
@@ -868,7 +868,7 @@ single_node_single_user_zero_limit(Config) ->
         end),
 
     close_connections([Conn1, Conn2]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)).
+    ?awaitMatch(0, count_connections_of_user(Config, Username), 60000).
 
 single_node_single_user_clear_limits(Config) ->
     Username = proplists:get_value(rmq_username, Config),
@@ -1178,10 +1178,10 @@ cluster_single_user_limit(Config) ->
     [Chans3, Chans4] = [open_channels(Conn, 5) || Conn <- Conns2],
 
     close_channels(Chans2 ++ Chans3 ++ Chans4),
-    ?assertEqual(0, count_channels_of_user(Config, Username)),
+    ?awaitMatch(0, count_channels_of_user(Config, Username), 60000),
 
     close_connections([Conn2, Conn3, Conn4]),
-    ?assertEqual(0, count_connections_of_user(Config, Username)),
+    ?awaitMatch(0, count_connections_of_user(Config, Username), 60000),
 
     set_user_connection_and_channel_limit(Config, Username,  -1, -1).
 
@@ -1458,11 +1458,11 @@ cluster_multiple_users_zero_limit(Config) ->
     ?assertEqual(false, is_process_alive(ConnA)),
     ?assertEqual(true, is_process_alive(ConnB)),
     close_connections([ConnB]),
-        rabbit_ct_helpers:await_condition(
-        fun () ->
-            count_connections_of_user(Config, Username2) =:= 0 andalso
-            count_channels_of_user(Config, Username2) =:= 0
-        end),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              count_connections_of_user(Config, Username2) =:= 0 andalso
+              count_channels_of_user(Config, Username2) =:= 0
+      end),
     ?assertEqual(false, is_process_alive(ConnB)),
 
     set_user_connection_and_channel_limit(Config, Username1, -1, -1),
@@ -1477,12 +1477,12 @@ cluster_multiple_users_zero_limit(Config) ->
     [Chans1, Chans2, Chans3, Chans4] = [open_channels(Conn, 5) || Conn <- Conns1],
 
     close_channels(Chans1 ++ Chans2 ++ Chans3 ++ Chans4),
-    ?assertEqual(0, count_channels_of_user(Config, Username1)),
-    ?assertEqual(0, count_channels_of_user(Config, Username2)),
+    ?awaitMatch(0, count_channels_of_user(Config, Username1), 60000),
+    ?awaitMatch(0, count_channels_of_user(Config, Username2), 60000),
 
     close_connections([Conn1, Conn2, Conn3, Conn4]),
-    ?assertEqual(0, count_connections_of_user(Config, Username1)),
-    ?assertEqual(0, count_connections_of_user(Config, Username2)),
+    ?awaitMatch(0, count_connections_of_user(Config, Username1), 60000),
+    ?awaitMatch(0, count_connections_of_user(Config, Username2), 60000),
 
     set_user_connection_and_channel_limit(Config, Username1, -1, -1),
     set_user_connection_and_channel_limit(Config, Username2, -1, -1).
