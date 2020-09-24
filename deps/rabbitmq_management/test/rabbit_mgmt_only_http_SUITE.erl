@@ -175,9 +175,11 @@ init_per_testcase(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 
 init_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_only_http_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_only_http_SUITE:end_per_testcase">>),
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
@@ -194,7 +196,8 @@ end_per_testcase0(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase0(_, Config) -> Config.
+end_per_testcase0(_, Config) ->
+    Config.
 
 %% -------------------------------------------------------------------
 %% Testcases.
@@ -731,7 +734,10 @@ permissions_connection_channel_consumer_test(Config) ->
     timer:sleep(1500),
     AssertLength = fun (Path, User, Len) ->
                            Res = http_get(Config, Path, User, User, ?OK),
-                           ?assertEqual(Len, length(Res))
+                           rabbit_ct_helpers:await_condition(
+                               fun () ->
+                                   Len =:= length(Res)
+                               end)
                    end,
     AssertDisabled = fun(Path) ->
                          http_get(Config, Path, "user", "user", ?BAD_REQUEST),
@@ -787,6 +793,7 @@ consumers_qq_test(Config) ->
     consumers_test(Config, [{'x-queue-type', <<"quorum">>}]).
 
 consumers_test(Config, Args) ->
+    http_delete(Config, "/queues/%2F/test", [?NO_CONTENT, ?NOT_FOUND]),
     QArgs = [{auto_delete, false}, {durable, true},
              {arguments, Args}],
     http_put(Config, "/queues/%2F/test", QArgs, {group, '2xx'}),
@@ -923,9 +930,9 @@ double_encoded_json_test(Config) ->
 
 exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
-    #'queue.declare_ok'{ queue = QName } =
-    amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    timer:sleep(2000),
     Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName),
     Queue = http_get(Config, Path),
     assert_item(#{name        => QName,
@@ -948,18 +955,19 @@ connections_channels_pagination_test(Config) ->
     Conn2     = open_unmanaged_connection(Config),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
-    %% for stats to update
-    timer:sleep(1500),
-    PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
-    ?assertEqual(3, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(3, maps:get(filtered_count, PageOfTwo)),
-    ?assertEqual(2, maps:get(item_count, PageOfTwo)),
-    ?assertEqual(1, maps:get(page, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    ?assert(lists:all(fun(C) ->
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
+            3 == maps:get(total_count, PageOfTwo) andalso
+            3 == maps:get(filtered_count, PageOfTwo) andalso
+            2 == maps:get(item_count, PageOfTwo) andalso
+            1 == maps:get(page, PageOfTwo) andalso
+            2 == maps:get(page_size, PageOfTwo) andalso
+            2 == maps:get(page_count, PageOfTwo) andalso
+            lists:all(fun(C) ->
                               not maps:is_key(recv_oct_details, C)
-                      end, maps:get(items, PageOfTwo))),
+                      end, maps:get(items, PageOfTwo))
+        end),
 
     http_get(Config, "/channels?page=2&page_size=2", ?BAD_REQUEST),
 
@@ -1270,6 +1278,11 @@ queue_pagination_columns_test(Config) ->
     passed.
 
 queues_pagination_permissions_test(Config) ->
+    http_delete(Config, "/vhosts/vh1", [?NO_CONTENT, ?NOT_FOUND]),
+    http_delete(Config, "/queues/%2F/test0", [?NO_CONTENT, ?NOT_FOUND]),
+    http_delete(Config, "/users/admin", [?NO_CONTENT, ?NOT_FOUND]),
+    http_delete(Config, "/users/non-admin", [?NO_CONTENT, ?NOT_FOUND]),
+
     http_put(Config, "/users/non-admin", [{password, <<"non-admin">>},
                                           {tags, <<"management">>}], {group, '2xx'}),
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
@@ -1310,39 +1323,33 @@ queues_pagination_permissions_test(Config) ->
     passed.
 
 samples_range_test(Config) ->
-
     {Conn, Ch} = open_connection_and_channel(Config),
 
-    %% Channels.
-    timer:sleep(1500),
-    http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?BAD_REQUEST),
-    http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?BAD_REQUEST),
-
-    %% Connections.
+    %% Connections
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            1 == length(http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK))
+        end),
     [Connection] = http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(maps:is_key(name, Connection)),
-    ?assert(not maps:is_key(recv_oct_details, Connection)),
 
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
 
-    %% Exchanges.
-
+    %% Exchanges
     [Exchange1 | _] = http_get(Config, "/exchanges?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(not maps:is_key(message_stats, Exchange1)),
     Exchange2 = http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(not maps:is_key(message_stats, Exchange2)),
 
-    %% Nodes.
-
+    %% Nodes
     [Node] = http_get(Config, "/nodes?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(not maps:is_key(channel_closed_details, Node)),
     ?assert(not maps:is_key(channel_closed, Node)),
     ?assert(not maps:is_key(disk_free, Node)),
     ?assert(not maps:is_key(io_read_count, Node)),
 
-    %% Overview.
-
+    %% Overview
     Overview = http_get(Config, "/overview?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(maps:is_key(node, Overview)),
     ?assert(maps:is_key(object_totals, Overview)),
@@ -1350,10 +1357,13 @@ samples_range_test(Config) ->
     ?assert(not maps:is_key(churn_rates, Overview)),
     ?assert(not maps:is_key(message_stats, Overview)),
 
-    %% Queues.
-
+    %% Queues
     http_put(Config, "/queues/%2F/test0", #{}, {group, '2xx'}),
-    timer:sleep(1500),
+
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            1 == length(http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK))
+        end),
 
     [Queue1] = http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(not maps:is_key(message_stats, Queue1)),
@@ -1367,10 +1377,14 @@ samples_range_test(Config) ->
 
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
 
-    %% Vhosts.
+    %% Vhosts
 
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    timer:sleep(1500),
+
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            length(http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK)) > 1
+        end),
 
     [VHost | _] = http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
     ?assert(not maps:is_key(message_stats, VHost)),

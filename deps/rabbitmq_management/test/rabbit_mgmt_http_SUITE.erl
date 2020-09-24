@@ -107,7 +107,6 @@ all_tests() -> [
     long_definitions_test,
     long_definitions_multipart_test,
     aliveness_test,
-    healthchecks_test,
     arguments_test,
     arguments_table_test,
     queue_purge_test,
@@ -120,7 +119,6 @@ all_tests() -> [
     queue_pagination_test,
     queue_pagination_columns_test,
     queues_pagination_permissions_test,
-    samples_range_test,
     sorting_test,
     format_output_test,
     columns_test,
@@ -241,9 +239,11 @@ init_per_testcase(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 
 init_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:end_per_testcase">>),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbitmq_management, disable_basic_auth, false]),
     Config1 = end_per_testcase0(Testcase, Config),
@@ -1875,11 +1875,6 @@ aliveness_test(Config) ->
     http_delete(Config, "/queues/%2F/aliveness-test", {group, '2xx'}),
     passed.
 
-healthchecks_test(Config) ->
-    #{status := <<"ok">>} = http_get(Config, "/healthchecks/node", ?OK),
-    http_get(Config, "/healthchecks/node/foo", ?NOT_FOUND),
-    passed.
-
 arguments_test(Config) ->
     XArgs = [{type, <<"headers">>},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
@@ -2334,87 +2329,6 @@ queues_pagination_permissions_test(Config) ->
     http_delete(Config, "/queues/vh1/test1","admin","admin", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
     http_delete(Config, "/users/non-admin", {group, '2xx'}),
-    passed.
-
-samples_range_test(Config) ->
-
-    {Conn, Ch} = open_connection_and_channel(Config),
-
-    %% Channels.
-    timer:sleep(1500),
-    [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    ConnDetails = maps:get(connection_details, ConnInfo),
-    ConnName0 = maps:get(name, ConnDetails),
-    ConnName = uri_string:recompose(#{path => binary_to_list(ConnName0)}),
-    ChanName = ConnName ++ uri_string:recompose(#{path => " (1)"}),
-
-    http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts/%2F/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    %% Connections.
-
-    http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_get(Config, "/vhosts/%2F/connections?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts/%2F/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    amqp_channel:close(Ch),
-    amqp_connection:close(Conn),
-
-    %% Exchanges.
-
-    http_get(Config, "/exchanges?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/exchanges?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    %% Nodes.
-
-    http_get(Config, "/nodes?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/nodes?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    %% Overview.
-
-    http_get(Config, "/overview?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/overview?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    %% Queues.
-
-    http_put(Config, "/queues/%2F/test0", #{}, {group, '2xx'}),
-    timer:sleep(1500),
-
-    http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/queues/%2F?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-    http_get(Config, "/queues/%2F/test0?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/queues/%2F/test0?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
-
-    %% Vhosts.
-
-    http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    timer:sleep(1500),
-
-    http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-    http_get(Config, "/vhosts/vh1?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts/vh1?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-
-    http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
-
     passed.
 
 sorting_test(Config) ->
