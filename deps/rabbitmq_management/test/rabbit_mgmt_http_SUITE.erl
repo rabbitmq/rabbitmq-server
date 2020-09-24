@@ -3394,28 +3394,52 @@ auth_attempts_test(Config) ->
     [NodeData] = http_get(Config, "/nodes"),
     Node = binary_to_atom(maps:get(name, NodeData), utf8),
     Map = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node), ?OK),
-    [Attempt] = maps:get(auth_attempts, Map),
-    ?assertEqual(<<>>, maps:get(ip, Attempt)),
-    ?assertEqual(<<>>, maps:get(username, Attempt)),
-    ?assertEqual(1, maps:get(auth_attempts, Attempt)),
-    ?assertEqual(1, maps:get(auth_attempts_succeeded, Attempt)),
-    ?assertEqual(0, maps:get(auth_attempts_failed, Attempt)),
-
-    http_delete(Config, "/auth-attempts/" ++ atom_to_list(Node), {group, '2xx'}),
-    Map2 = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node), ?OK),
-    ?assertEqual([], maps:get(auth_attempts, Map2)),
+    Http = get_auth_attempts(<<"http">>, Map),
+    Amqp091 = get_auth_attempts(<<"amqp091">>, Map),
+    ?assertEqual(false, maps:is_key(remote_address, Amqp091)),
+    ?assertEqual(false, maps:is_key(username, Amqp091)),
+    ?assertEqual(1, maps:get(auth_attempts, Amqp091)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Amqp091)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091)),
+    ?assertEqual(false, maps:is_key(remote_address, Http)),
+    ?assertEqual(false, maps:is_key(username, Http)),
+    ?assertEqual(2, maps:get(auth_attempts, Http)),
+    ?assertEqual(2, maps:get(auth_attempts_succeeded, Http)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Http)),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbit, return_per_user_auth_attempt_metrics, true]),
+                                 [rabbit, track_auth_attempt_source, true]),
     {Conn2, _Ch2} = open_connection_and_channel(Config),
     close_connection(Conn2),
+    Map2 = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node) ++ "/source", ?OK),
     Map3 = http_get(Config, "/auth-attempts/" ++ atom_to_list(Node), ?OK),
-    [Attempt3] = maps:get(auth_attempts, Map3),
-    ?assertEqual(true, <<>> =/= maps:get(ip, Attempt3)),
-    ?assertEqual(<<"guest">>, maps:get(username, Attempt3)),
-    ?assertEqual(1, maps:get(auth_attempts, Attempt3)),
-    ?assertEqual(1, maps:get(auth_attempts_succeeded, Attempt3)),
-    ?assertEqual(0, maps:get(auth_attempts_failed, Attempt3)),
+    Http2 = get_auth_attempts(<<"http">>, Map2),
+    Http3 = get_auth_attempts(<<"http">>, Map3),
+    Amqp091_2 = get_auth_attempts(<<"amqp091">>, Map2),
+    Amqp091_3 = get_auth_attempts(<<"amqp091">>, Map3),
+    ?assertEqual(<<"127.0.0.1">>, maps:get(remote_address, Http2)),
+    ?assertEqual(<<"guest">>, maps:get(username, Http2)),
+    ?assertEqual(1, maps:get(auth_attempts, Http2)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Http2)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Http2)),
+
+    ?assertEqual(false, maps:is_key(remote_address, Http3)),
+    ?assertEqual(false, maps:is_key(username, Http3)),
+    ?assertEqual(4, maps:get(auth_attempts, Http3)),
+    ?assertEqual(4, maps:get(auth_attempts_succeeded, Http3)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Http3)),
+
+    ?assertEqual(true, <<>> =/= maps:get(remote_address, Amqp091_2)),
+    ?assertEqual(<<"guest">>, maps:get(username, Amqp091_2)),
+    ?assertEqual(1, maps:get(auth_attempts, Amqp091_2)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Amqp091_2)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_2)),
+
+    ?assertEqual(false, maps:is_key(remote_address, Amqp091_3)),
+    ?assertEqual(false, maps:is_key(username, Amqp091_3)),
+    ?assertEqual(2, maps:get(auth_attempts, Amqp091_3)),
+    ?assertEqual(2, maps:get(auth_attempts_succeeded, Amqp091_3)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_3)),
 
     passed.
 
@@ -3510,3 +3534,9 @@ format_multipart_filedata(Boundary, Files) ->
     EndingParts = [lists:concat(["--", Boundary, "--"]), ""],
     Parts = lists:append([FileParts2, EndingParts]),
     string:join(Parts, "\r\n").
+
+get_auth_attempts(Protocol, Map) ->
+    [A] = lists:filter(fun(#{protocol := P}) ->
+                               P == Protocol
+                       end, Map),
+    A.

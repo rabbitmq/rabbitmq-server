@@ -8,7 +8,7 @@
 -module(rabbit_mgmt_wm_auth_attempts).
 
 -export([init/2, to_json/2, content_types_provided/2, allowed_methods/2, is_authorized/2,
-         delete_resource/2]).
+         delete_resource/2, resource_exists/2]).
 -export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -17,8 +17,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-init(Req, _State) ->
-    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
+init(Req, [Mode]) ->
+    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE),
+     {Mode, #context{}}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -32,13 +33,14 @@ allowed_methods(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(augment(ReqData), ReqData, Context).
+to_json(ReqData, {Mode, Context}) ->
+    rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, Context).
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+is_authorized(ReqData, {Mode, Context}) ->
+    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
+    {Res, Req2, {Mode, Context2}}.
 
-delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
+delete_resource(ReqData, Context) ->
     Node = get_node(ReqData),
     case node_exists(ReqData, Node) of
         false ->
@@ -60,14 +62,18 @@ node_exists(ReqData, Node) ->
         [_] -> true
     end.
 
-augment(ReqData) ->
+augment(Mode, ReqData) ->
     Node = get_node(ReqData),
     case node_exists(ReqData, Node) of
         false ->
             not_found;
         true ->
-            case rpc:call(Node, rabbit_core_metrics, get_auth_attempts, [], infinity) of
-                {badrpc, _} -> [{auth_attempts, not_available}];
-                Result      -> [{auth_attempts, Result}]
+            Fun = case Mode of
+                      all -> get_auth_attempts;
+                      by_source -> get_auth_attempts_by_source
+                  end,
+            case rpc:call(Node, rabbit_core_metrics, Fun, [], infinity) of
+                {badrpc, _} -> not_available;
+                Result      -> Result
             end
     end.
