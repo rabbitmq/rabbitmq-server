@@ -1,6 +1,6 @@
 # vim:sw=2:et:
 # https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow
-name: "Test - Erlang 22.3"
+name: "Test - Erlang 23.0"
 on:
   push:
   repository_dispatch:
@@ -18,7 +18,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: CHECK RABBITMQ COMPONENTS
@@ -55,13 +55,13 @@ jobs:
         run: |
           make test-build base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
       - name: CACHE SECONDARY UMBRELLAS
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/cache@v1
         with:
           path: umbrellas
-          key: secondary-umbrellas-v3.7.28-v3.8.8-erlang-22.3-rev4
+          key: secondary-umbrellas-v3.7.28-v3.8.8-erlang-23.0-rev4
       - name: PREPARE SECONDARY UMBRELLA COPIES
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           for version in v3.7.28 v3.8.8; do
@@ -98,12 +98,12 @@ jobs:
           done
           rm -fr umbrellas/master
       - name: CREATE SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar cf - umbrellas | xz > secondary-umbrellas.tar.xz
       - name: UPLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/upload-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
@@ -115,28 +115,28 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - name: CHECKOUT REPOSITORY
-        if: success() && 'oldest' == 'latest'
+        if: success() && 'latest' == 'latest'
         uses: actions/checkout@v2
       # https://github.com/marketplace/actions/setup-elixir
       - name: CONFIGURE OTP & ELIXIR
-        if: success() && 'oldest' == 'latest'
+        if: success() && 'latest' == 'latest'
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
-        if: success() && 'oldest' == 'latest'
+        if: success() && 'latest' == 'latest'
         uses: actions/download-artifact@v2
         with:
           name: deps.tar.xz
       - name: UNPACK DEPS ARCHIVE
-        if: success() && 'oldest' == 'latest'
+        if: success() && 'latest' == 'latest'
         run: |
           tar Jxf deps.tar.xz
           rm deps.tar.xz
       - name: RUN DIALYZER
-        if: success() && 'oldest' == 'latest'
+        if: success() && 'latest' == 'latest'
         run: |
           branch_or_tag_name=${GITHUB_REF#refs/*/}
           make dialyze \
@@ -156,7 +156,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -190,7 +190,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -211,18 +211,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -263,7 +263,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -284,18 +284,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -336,7 +336,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -357,18 +357,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -409,7 +409,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -430,18 +430,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -482,7 +482,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -503,18 +503,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -555,7 +555,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -576,18 +576,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -628,7 +628,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -649,18 +649,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -701,7 +701,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -722,18 +722,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -774,7 +774,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -795,18 +795,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -847,7 +847,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -868,18 +868,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -920,7 +920,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -941,18 +941,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -993,7 +993,7 @@ jobs:
       - name: CONFIGURE OTP & ELIXIR
         uses: actions/setup-elixir@v1
         with:
-          otp-version: 22.3
+          otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
           elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
@@ -1014,18 +1014,18 @@ jobs:
             FAIL_FAST=1 \
             SKIP_AS_ERROR=1
       - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         uses: actions/download-artifact@v2
         with:
           name: secondary-umbrellas.tar.xz
       - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           tar Jxf secondary-umbrellas.tar.xz
           rm secondary-umbrellas.tar.xz
       - name: RUN TESTS [mixed-versions]
-        if: success() && 'oldest' == 'oldest'
+        if: success() && 'latest' == 'oldest'
         run: |
           set -ex
           branch_or_tag_name=${GITHUB_REF#refs/*/}
@@ -1093,4 +1093,4 @@ jobs:
          AWS_REGION: ${{ secrets.AWS_REGION }}
          FILE: rabbitmq_management-rabbitmq-deps.mk
          S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-         S3_KEY: rabbitmq-management/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-22.3/rabbitmq_management-rabbitmq-deps.mk
+         S3_KEY: rabbitmq-management/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-23.0/rabbitmq_management-rabbitmq-deps.mk
