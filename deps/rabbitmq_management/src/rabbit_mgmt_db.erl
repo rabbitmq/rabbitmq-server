@@ -177,9 +177,9 @@ get_connection(Name, Ranges) ->
     submit(fun(Interval) ->
                    case created_stats_delegated(Name, connection_created_stats) of
                         not_found -> not_found;
-                        C -> case connection_stats(Ranges, [C], Interval) of
-                               [Result] -> Result
-                             end
+                        C ->
+                            [Result] = connection_stats(Ranges, [C], Interval),
+                            Result
                    end
            end).
 
