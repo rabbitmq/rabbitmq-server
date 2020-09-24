@@ -119,6 +119,7 @@ all_tests() -> [
     queue_pagination_test,
     queue_pagination_columns_test,
     queues_pagination_permissions_test,
+    samples_range_test,
     sorting_test,
     format_output_test,
     columns_test,
@@ -2331,15 +2332,92 @@ queues_pagination_permissions_test(Config) ->
     http_delete(Config, "/users/non-admin", {group, '2xx'}),
     passed.
 
+samples_range_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+
+    %% Channels
+    timer:sleep(2000),
+    [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    ConnDetails = maps:get(connection_details, ConnInfo),
+    ConnName0 = maps:get(name, ConnDetails),
+    ConnName = uri_string:recompose(#{path => binary_to_list(ConnName0)}),
+    ChanName = ConnName ++ uri_string:recompose(#{path => " (1)"}),
+
+    http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/vhosts/%2F/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Connections.
+
+    http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get(Config, "/vhosts/%2F/connections?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/vhosts/%2F/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+
+    %% Exchanges
+
+    http_get(Config, "/exchanges?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/exchanges?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Nodes
+    http_get(Config, "/nodes?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/nodes?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Overview
+    http_get(Config, "/overview?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/overview?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Queues
+    http_put(Config, "/queues/%2F/test-001", #{}, {group, '2xx'}),
+    timer:sleep(2000),
+
+    http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/queues/%2F?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    http_get(Config, "/queues/%2F/test-001?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/queues/%2F/test-001?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_delete(Config, "/queues/%2F/test-001", {group, '2xx'}),
+
+    %% Vhosts
+    http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
+    timer:sleep(2000),
+
+    http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    http_get(Config, "/vhosts/vh1?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/vhosts/vh1?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+
+    passed.
+
 sorting_test(Config) ->
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    http_put(Config, "/permissions/vh1/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/vhosts/vh19", none, {group, '2xx'}),
+    http_put(Config, "/permissions/vh19/guest", PermArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/test1", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/vh19/test1", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test2", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/test3", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/vh19/test3", QArgs, {group, '2xx'}),
+    timer:sleep(2000),
     assert_list([#{name => <<"test0">>},
                  #{name => <<"test2">>},
                  #{name => <<"test1">>},
@@ -2367,31 +2445,32 @@ sorting_test(Config) ->
     %% Rather poor but at least test it doesn't blow up with dots
     http_get(Config, "/queues?sort=owner_pid_details.name", ?OK),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
-    http_delete(Config, "/queues/vh1/test1", {group, '2xx'}),
+    http_delete(Config, "/queues/vh19/test1", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/test2", {group, '2xx'}),
-    http_delete(Config, "/queues/vh1/test3", {group, '2xx'}),
-    http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+    http_delete(Config, "/queues/vh19/test3", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vh19", {group, '2xx'}),
     passed.
 
 format_output_test(Config) ->
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    http_put(Config, "/permissions/vh1/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/vhosts/vh129", none, {group, '2xx'}),
+    http_put(Config, "/permissions/vh129/guest", PermArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
+    timer:sleep(2000),
     assert_list([#{name => <<"test0">>,
                    consumer_utilisation => null,
                    exclusive_consumer_tag => null,
                    recoverable_slaves => null}], http_get(Config, "/queues", ?OK)),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
-    http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vh129", {group, '2xx'}),
     passed.
 
 columns_test(Config) ->
     http_put(Config, "/queues/%2F/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
              {group, '2xx'}),
     Item = #{arguments => #{foo => <<"bar">>}, name => <<"test">>},
-    timer:sleep(1500),
+    timer:sleep(2000),
     [Item] = http_get(Config, "/queues?columns=arguments.foo,name", ?OK),
     Item = http_get(Config, "/queues/%2F/test?columns=arguments.foo,name", ?OK),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
