@@ -101,14 +101,17 @@ init_per_testcase(multi_node_case1_test = Testcase, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, clear_all_table_data, []),
     rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE, clear_all_table_data, []),
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"clustering_SUITE:init_per_testcase">>),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     Config1 = rabbit_ct_helpers:set_config(Config, {conn, Conn}),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(multi_node_case1_test = Testcase, Config) ->
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"clustering_SUITE:end_per_testcase">>),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_client_helpers:close_connection(?config(conn, Config)),
+    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"clustering_SUITE:end_per_testcase">>),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
