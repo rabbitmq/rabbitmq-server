@@ -178,8 +178,7 @@ get_connection(Name, Ranges) ->
                    case created_stats_delegated(Name, connection_created_stats) of
                         not_found -> not_found;
                         C -> case connection_stats(Ranges, [C], Interval) of
-                               [Result] -> Result;
-                               []       -> not_found
+                               [Result] -> Result
                              end
                    end
            end).
