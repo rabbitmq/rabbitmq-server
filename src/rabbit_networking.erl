@@ -27,7 +27,7 @@
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, close_connections/2,
+         close_connection/2, close_connections/2, close_all_connections/1,
          force_connection_event_refresh/1, handshake/2, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
          listener_of_protocol/1, stop_ranch_listener_of_protocol/1]).
@@ -446,6 +446,13 @@ close_connection(Pid, Explanation) ->
 
 -spec close_connections([pid()], string()) -> 'ok'.
 close_connections(Pids, Explanation) ->
+    [close_connection(Pid, Explanation) || Pid <- Pids],
+    ok.
+
+%% Meant to be used by tests only
+-spec close_all_connections(string()) -> 'ok'.
+close_all_connections(Explanation) ->
+    Pids = connections(),
     [close_connection(Pid, Explanation) || Pid <- Pids],
     ok.
 
