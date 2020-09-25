@@ -20,6 +20,7 @@ steps:
     run: |
       gcloud auth configure-docker
       docker pull (@= ci_image() @)
+      mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \
         --env SKIP_DIALYZE=(@= str(should_skip_dialyze(dep)) @) \
@@ -27,7 +28,7 @@ steps:
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-        --volume /tmp/ct-logs:/ct-logs \
+        --volume ${PWD}/ct-logs:/workspace/ct-logs \
         --oom-kill-disable \
         (@= ci_image() @) \
         ci/scripts/tests.sh
@@ -37,5 +38,5 @@ steps:
     if: failure()
     with:
       name: (@= dep.name @)-ct-logs
-      path: "/tmp/ct-logs/*-ct-logs-*.tar.xz"
+      path: "ct-logs/*-ct-logs-*.tar.xz"
 #@ end

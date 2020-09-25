@@ -8,7 +8,7 @@ trap 'catch $?' EXIT
 
 catch() {
     if [ "$1" != "0" ]; then
-        make ct-logs-archive && mv *-ct-logs-*.tar.xz /ct-logs/
+        make ct-logs-archive && mv *-ct-logs-*.tar.xz /workspace/ct-logs/
     fi
 
     buildevents step ${GITHUB_RUN_ID} ${project} ${STEP_START} ${project}
@@ -18,11 +18,6 @@ if [ $SKIP_DIALYZE != True ]; then
     buildevents cmd ${GITHUB_RUN_ID} ${project} dialyze -- \
             make dialyze \
                  FULL=
-fi
-
-if [ $SKIP_XREF != True ]; then
-    buildevents cmd ${GITHUB_RUN_ID} ${project} xref -- \
-            make xref
 fi
 
 buildevents cmd ${GITHUB_RUN_ID} ${project} test-build -- \
