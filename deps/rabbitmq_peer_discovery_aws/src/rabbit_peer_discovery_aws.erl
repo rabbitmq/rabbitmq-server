@@ -181,7 +181,7 @@ get_autoscaling_group_node_list(Instance, Tag) ->
                         error ->
                             rabbit_log:error("Cannot discover any nodes: DescribeInstances "
                                              "API call failed.", []),
-                            {ok, {[], disc}};
+                            error;
                         Names ->
                             rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~p", [Names]),
                             {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}}
@@ -196,7 +196,7 @@ get_autoscaling_group_node_list(Instance, Tag) ->
         _ ->
             rabbit_log:warning("Cannot discover any nodes because AWS "
                                "autoscaling group description API call failed.", []),
-            {ok, {[], disc}}
+            error
     end.
 
 get_autoscaling_instances([], _, Accum) -> Accum;
