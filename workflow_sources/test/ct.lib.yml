@@ -52,12 +52,13 @@ steps:
   #@ for suite in group["suites"]:
   - name: #@ "RUN ct-" + suite
     run: |
+      mkdir ct-(@= suite @)-logs && chmod 777 ct-(@= suite @)-logs
       docker run \
         --env project=(@= dep.name @) \
         --env CT_SUITE=(@= suite @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-        --volume /tmp/ct-(@= suite @)-logs:/ct-logs \
+        --volume ${PWD}/ct-(@= suite @)-logs:/workspace/ct-logs \
         (@= ci_dep_image(dep.name) @) \
         /workspace/rabbitmq/ci/scripts/ct-suite.sh
   - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -68,7 +69,7 @@ steps:
     if: always()
     with:
       name: (@= dep.name @)-ct-(@= suite @)-logs
-      path: "/tmp/ct-(@= suite @)-logs/*-ct-logs-*.tar.xz"
+      path: "ct-(@= suite @)-logs/*-ct-logs-*.tar.xz"
   #@ end
 #@ end
 

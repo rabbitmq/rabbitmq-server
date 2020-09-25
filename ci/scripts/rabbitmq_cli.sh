@@ -10,12 +10,11 @@ catch() {
     buildevents cmd ${GITHUB_RUN_ID} ${project} stop-node -- \
         make stop-node -C ../.. \
             DEPS_DIR=/workspace/rabbitmq/deps \
-            PLUGINS='rabbitmq_federation rabbitmq_stomp' \
-            PROJECT_VERSION=3.9.0
+            PLUGINS='rabbitmq_federation rabbitmq_stomp'
 
     if [ "$1" != "0" ]; then
         tar -c -f - /tmp/rabbitmq-test-instances/*/log | \
-        xz > /broker-logs/broker-logs.tar.xz
+        xz > /workspace/broker-logs/broker-logs.tar.xz
     fi
 
     buildevents step ${GITHUB_RUN_ID} ${project} ${STEP_START} ${project}
@@ -28,8 +27,7 @@ buildevents cmd ${GITHUB_RUN_ID} ${project} start-background-broker -- \
             make start-background-broker \
                 -C ../.. \
                 DEPS_DIR=/workspace/rabbitmq/deps \
-                PLUGINS='rabbitmq_federation rabbitmq_stomp' \
-                PROJECT_VERSION=3.9.0
+                PLUGINS='rabbitmq_federation rabbitmq_stomp'
 
 buildevents cmd ${GITHUB_RUN_ID} ${project} rebar -- \
         mix local.rebar --force
@@ -42,6 +40,8 @@ buildevents cmd ${GITHUB_RUN_ID} ${project} compile-tests -- \
                 MIX_TEST_OPTS="--exclude test" \
                 DEPS_DIR=/workspace/rabbitmq/deps
 
+# rabbitmq-diagnostics erlang-cookie-sources reads USER from then env
+export USER=$(whoami)
 buildevents cmd ${GITHUB_RUN_ID} ${project} tests -- \
         make tests \
                 DEPS_DIR=/workspace/rabbitmq/deps

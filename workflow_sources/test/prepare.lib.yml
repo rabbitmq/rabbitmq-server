@@ -34,6 +34,7 @@ prepare:
         #@ build_args["GITHUB_SHA"] = '${{ github.sha }}'
         #@ build_args["base_rmq_ref"] = data.values.base_rmq_ref
         #@ build_args["current_rmq_ref"] = '${{ steps.buildevents.outputs.branch_or_tag_name }}'
+        #@ build_args["RABBITMQ_VERSION"] = data.values.base_rmq_ref.replace('master', '3.9.x').replace('.x', '.0')
         build_args: #@ to_build_args(build_args)
         tags: (@= ci_image_tag() @)
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
