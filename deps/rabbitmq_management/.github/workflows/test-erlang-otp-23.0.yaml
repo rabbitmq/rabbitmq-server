@@ -1021,7 +1021,6 @@ jobs:
   # vim:sw=2:et:
   capture-tested-deps-versions:
     needs:
-      - dialyzer
       - eunit
       - ct-cache
       - ct-clustering
