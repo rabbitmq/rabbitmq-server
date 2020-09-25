@@ -53,14 +53,12 @@ format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
 format_no_range(Table, Now, Interval, InstantRateFun) ->
     RangePoint = ((Now div Interval) * Interval) - Interval,
     case calculate_instant_rate(InstantRateFun, Table, RangePoint) of
-        {Total, Rate} ->
-            format_rate(Table, Total, Rate);
-        not_found ->
-            []
+        {Total, Rate} -> format_rate(Table, Total, Rate);
+        not_found     -> []
     end.
 
 -spec calculate_instant_rate(maybe_slide_fun(), atom(), integer()) ->
-    not_found | {integer(), number()}.
+    'not_found' | {integer(), number()} | {tuple(), tuple()}.
 calculate_instant_rate(Fun, Table, RangePoint) ->
     case Fun() of
         [] ->

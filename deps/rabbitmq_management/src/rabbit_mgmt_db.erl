@@ -177,15 +177,15 @@ get_connection(Name, Ranges) ->
     submit(fun(Interval) ->
                    case created_stats_delegated(Name, connection_created_stats) of
                         not_found -> not_found;
-                        C -> [Result] = connection_stats(Ranges, [C], Interval),
-                             Result
+                        C ->
+                            [Result] = connection_stats(Ranges, [C], Interval),
+                            Result
                    end
            end).
 
 get_all_channels(?NO_RANGES = Ranges) ->
     submit_cached(channels,
                   fun(Interval) ->
-
                            Chans = created_stats_delegated(channel_created_stats),
                            list_channel_stats(Ranges, Chans, Interval)
                   end);
@@ -262,6 +262,9 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 %%----------------------------------------------------------------------------
 
 pget(Key, List) -> pget(Key, List, unknown).
+
+-type id_name() :: 'name' | 'route' | 'pid'.
+-spec id_name(atom()) -> id_name().
 
 %% id_name() and id() are for use when handling events, id_lookup()
 %% for when augmenting. The difference is that when handling events a
