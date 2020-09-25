@@ -101,7 +101,6 @@ push-base-images: $(PUSHES)
 LOCAL_CI_GOALS = $(foreach dep,$(filter-out rabbitmq_cli,$(VENDORED_COMPONENTS)),ci-$(dep))
 ERLANG_VERSION ?= 23.0
 SKIP_DIALYZE ?= False
-SKIP_XREF ?= False
 
 TAG = erlang-$(ERLANG_VERSION)-rabbitmq-$(shell git rev-parse HEAD)$(shell git diff-index --quiet HEAD -- || echo -dirty)
 LOCAL_IMAGE = $(DOCKER_REPO)/ci:$(TAG)
@@ -116,14 +115,14 @@ local-ci-image:
 		--build-arg BUILDEVENT_APIKEY=$(BUILDEVENT_APIKEY) \
 		--build-arg GITHUB_SHA=$$(git rev-parse HEAD) \
 		--build-arg base_rmq_ref=master \
-		--build-arg current_rmq_ref=$$(git rev-parse --abbrev-ref HEAD)
+		--build-arg current_rmq_ref=$$(git rev-parse --abbrev-ref HEAD) \
+		--build-arg RABBITMQ_VERSION=3.9.0
 
 .PHONY: $(LOCAL_CI_GOALS)
 $(LOCAL_CI_GOALS): local-ci-image
 	docker run --rm \
 		--env project=$(subst ci-,,$@) \
 		--env SKIP_DIALYZE=$(SKIP_DIALYZE) \
-		--env SKIP_XREF=$(SKIP_XREF) \
 		--env GITHUB_RUN_ID=none \
 		--env BUILDEVENT_APIKEY=$(BUILDEVENT_APIKEY) \
 		--env STEP_START=$$(date +%s) \
@@ -136,7 +135,6 @@ ci-rabbitmq_cli: local-ci-image
 	docker run --rm \
 		--env project=$(subst ci-,,$@) \
 		--env SKIP_DIALYZE=$(SKIP_DIALYZE) \
-		--env SKIP_XREF=$(SKIP_XREF) \
 		--env GITHUB_RUN_ID=none \
 		--env BUILDEVENT_APIKEY=$(BUILDEVENT_APIKEY) \
 		--env STEP_START=$$(date +%s) \

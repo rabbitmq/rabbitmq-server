@@ -20,12 +20,13 @@ steps:
     run: |
       gcloud auth configure-docker
       docker pull (@= ci_image() @)
+      mkdir broker-logs && chmod 777 broker-logs
       docker run \
         --env project=(@= dep.name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-        --volume /tmp/broker-logs:/broker-logs \
+        --volume ${PWD}/broker-logs:/workspace/broker-logs \
         (@= ci_image() @) \
         ci/scripts/rabbitmq_cli.sh
   - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -34,5 +35,5 @@ steps:
     if: failure()
     with:
       name: (@= dep.name @)-broker-logs
-      path: "/tmp/broker-logs/broker-logs.tar.xz"
+      path: "broker-logs/broker-logs.tar.xz"
 #@ end

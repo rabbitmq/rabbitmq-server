@@ -20,11 +20,12 @@ package-generic-unix:
       run: |
         gcloud auth configure-docker
         docker pull (@= ci_image() @)
+        mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/PACKAGES:/workspace/rabbitmq/PACKAGES \
+          --volume ${PWD}/PACKAGES:/workspace/rabbitmq/PACKAGES \
           (@= ci_image() @) \
           ci/scripts/package_generic_unix.sh
     - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
@@ -32,7 +33,17 @@ package-generic-unix:
       uses: actions/upload-artifact@v2-preview
       with:
         name: rabbitmq-server-generic-unix.tar.xz
-        path: "/tmp/PACKAGES/rabbitmq-server-generic-unix-*.tar.xz"
+        path: "PACKAGES/rabbitmq-server-generic-unix-*.tar.xz"
+    - name: RECORD STEP FINISH
+      if: always()
+      run: |
+        docker run \
+          --env project=packaging \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          (@= ci_image() @) \
+          ci/scripts/collect.sh
 finish:
   name: finish
   needs: #@ ["prepare"] + [dep.name for dep in data.values.deps if not hasattr(dep, "skip_tests") or not dep.skip_tests]

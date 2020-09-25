@@ -24,7 +24,7 @@ jobs:
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci
         dockerfile: ci/dockerfiles/ci
-        build_args: ERLANG_VERSION=23.0,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }}
+        build_args: ERLANG_VERSION=23.0,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
         tags: erlang-23.0-rabbitmq-${{ github.sha }}
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -575,6 +575,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbit_common \
           --env SKIP_DIALYZE=False \
@@ -582,7 +583,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -591,7 +592,7 @@ jobs:
       if: failure()
       with:
         name: rabbit_common-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbit-checks:
     name: rabbit-checks
     needs:
@@ -633,12 +634,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_connection_tracking
       run: |
+        mkdir ct-unit_connection_tracking-logs && chmod 777 ct-unit_connection_tracking-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_connection_tracking \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_connection_tracking-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_connection_tracking-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -646,15 +648,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_connection_tracking-logs
-        path: /tmp/ct-unit_connection_tracking-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_connection_tracking-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_plugin_directories
       run: |
+        mkdir ct-unit_plugin_directories-logs && chmod 777 ct-unit_plugin_directories-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_plugin_directories \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_plugin_directories-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_plugin_directories-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -662,15 +665,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_plugin_directories-logs
-        path: /tmp/ct-unit_plugin_directories-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_plugin_directories-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_cluster_formation_locking_mocks
       run: |
+        mkdir ct-unit_cluster_formation_locking_mocks-logs && chmod 777 ct-unit_cluster_formation_locking_mocks-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_cluster_formation_locking_mocks \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_cluster_formation_locking_mocks-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_cluster_formation_locking_mocks-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -678,15 +682,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_cluster_formation_locking_mocks-logs
-        path: /tmp/ct-unit_cluster_formation_locking_mocks-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_cluster_formation_locking_mocks-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_collections
       run: |
+        mkdir ct-unit_collections-logs && chmod 777 ct-unit_collections-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_collections \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_collections-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_collections-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -694,15 +699,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_collections-logs
-        path: /tmp/ct-unit_collections-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_collections-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-amqqueue_backward_compatibility
       run: |
+        mkdir ct-amqqueue_backward_compatibility-logs && chmod 777 ct-amqqueue_backward_compatibility-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=amqqueue_backward_compatibility \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-amqqueue_backward_compatibility-logs:/ct-logs \
+          --volume ${PWD}/ct-amqqueue_backward_compatibility-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -710,15 +716,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-amqqueue_backward_compatibility-logs
-        path: /tmp/ct-amqqueue_backward_compatibility-logs/*-ct-logs-*.tar.xz
+        path: ct-amqqueue_backward_compatibility-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_gm
       run: |
+        mkdir ct-unit_gm-logs && chmod 777 ct-unit_gm-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_gm \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_gm-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_gm-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -726,15 +733,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_gm-logs
-        path: /tmp/ct-unit_gm-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_gm-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-msg_store
       run: |
+        mkdir ct-msg_store-logs && chmod 777 ct-msg_store-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=msg_store \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-msg_store-logs:/ct-logs \
+          --volume ${PWD}/ct-msg_store-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -742,15 +750,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-msg_store-logs
-        path: /tmp/ct-msg_store-logs/*-ct-logs-*.tar.xz
+        path: ct-msg_store-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_operator_policy
       run: |
+        mkdir ct-unit_operator_policy-logs && chmod 777 ct-unit_operator_policy-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_operator_policy \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_operator_policy-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_operator_policy-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -758,15 +767,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_operator_policy-logs
-        path: /tmp/ct-unit_operator_policy-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_operator_policy-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-per_vhost_msg_store
       run: |
+        mkdir ct-per_vhost_msg_store-logs && chmod 777 ct-per_vhost_msg_store-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=per_vhost_msg_store \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-per_vhost_msg_store-logs:/ct-logs \
+          --volume ${PWD}/ct-per_vhost_msg_store-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -774,15 +784,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-per_vhost_msg_store-logs
-        path: /tmp/ct-per_vhost_msg_store-logs/*-ct-logs-*.tar.xz
+        path: ct-per_vhost_msg_store-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-term_to_binary_compat_prop
       run: |
+        mkdir ct-term_to_binary_compat_prop-logs && chmod 777 ct-term_to_binary_compat_prop-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=term_to_binary_compat_prop \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-term_to_binary_compat_prop-logs:/ct-logs \
+          --volume ${PWD}/ct-term_to_binary_compat_prop-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -790,15 +801,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-term_to_binary_compat_prop-logs
-        path: /tmp/ct-term_to_binary_compat_prop-logs/*-ct-logs-*.tar.xz
+        path: ct-term_to_binary_compat_prop-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbitmqctl_shutdown
       run: |
+        mkdir ct-rabbitmqctl_shutdown-logs && chmod 777 ct-rabbitmqctl_shutdown-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbitmqctl_shutdown \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbitmqctl_shutdown-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbitmqctl_shutdown-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -806,15 +818,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbitmqctl_shutdown-logs
-        path: /tmp/ct-rabbitmqctl_shutdown-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbitmqctl_shutdown-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_amqp091_content_framing
       run: |
+        mkdir ct-unit_amqp091_content_framing-logs && chmod 777 ct-unit_amqp091_content_framing-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_amqp091_content_framing \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_amqp091_content_framing-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_amqp091_content_framing-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -822,15 +835,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_amqp091_content_framing-logs
-        path: /tmp/ct-unit_amqp091_content_framing-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_amqp091_content_framing-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_pg_local
       run: |
+        mkdir ct-unit_pg_local-logs && chmod 777 ct-unit_pg_local-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_pg_local \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_pg_local-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_pg_local-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -838,15 +852,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_pg_local-logs
-        path: /tmp/ct-unit_pg_local-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_pg_local-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_policy_validators
       run: |
+        mkdir ct-unit_policy_validators-logs && chmod 777 ct-unit_policy_validators-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_policy_validators \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_policy_validators-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_policy_validators-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -854,15 +869,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_policy_validators-logs
-        path: /tmp/ct-unit_policy_validators-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_policy_validators-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_plugin_versioning
       run: |
+        mkdir ct-unit_plugin_versioning-logs && chmod 777 ct-unit_plugin_versioning-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_plugin_versioning \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_plugin_versioning-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_plugin_versioning-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -870,7 +886,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_plugin_versioning-logs
-        path: /tmp/ct-unit_plugin_versioning-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_plugin_versioning-logs/*-ct-logs-*.tar.xz
   rabbit-ct-unit_priority_queue-plus-11-more:
     name: rabbit-ct-unit_priority_queue-plus-11-more
     needs:
@@ -888,12 +904,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_priority_queue
       run: |
+        mkdir ct-unit_priority_queue-logs && chmod 777 ct-unit_priority_queue-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_priority_queue \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_priority_queue-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_priority_queue-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -901,15 +918,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_priority_queue-logs
-        path: /tmp/ct-unit_priority_queue-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_priority_queue-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_supervisor2
       run: |
+        mkdir ct-unit_supervisor2-logs && chmod 777 ct-unit_supervisor2-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_supervisor2 \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_supervisor2-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_supervisor2-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -917,15 +935,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_supervisor2-logs
-        path: /tmp/ct-unit_supervisor2-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_supervisor2-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-sup_delayed_restart
       run: |
+        mkdir ct-sup_delayed_restart-logs && chmod 777 ct-sup_delayed_restart-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=sup_delayed_restart \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-sup_delayed_restart-logs:/ct-logs \
+          --volume ${PWD}/ct-sup_delayed_restart-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -933,15 +952,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-sup_delayed_restart-logs
-        path: /tmp/ct-sup_delayed_restart-logs/*-ct-logs-*.tar.xz
+        path: ct-sup_delayed_restart-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_queue_consumers
       run: |
+        mkdir ct-unit_queue_consumers-logs && chmod 777 ct-unit_queue_consumers-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_queue_consumers \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_queue_consumers-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_queue_consumers-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -949,15 +969,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_queue_consumers-logs
-        path: /tmp/ct-unit_queue_consumers-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_queue_consumers-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_access_control_credential_validation
       run: |
+        mkdir ct-unit_access_control_credential_validation-logs && chmod 777 ct-unit_access_control_credential_validation-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_access_control_credential_validation \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_access_control_credential_validation-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_access_control_credential_validation-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -965,15 +986,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_access_control_credential_validation-logs
-        path: /tmp/ct-unit_access_control_credential_validation-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_access_control_credential_validation-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_log_config
       run: |
+        mkdir ct-unit_log_config-logs && chmod 777 ct-unit_log_config-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_log_config \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_log_config-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_log_config-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -981,15 +1003,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_log_config-logs
-        path: /tmp/ct-unit_log_config-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_log_config-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_disk_monitor_mocks
       run: |
+        mkdir ct-unit_disk_monitor_mocks-logs && chmod 777 ct-unit_disk_monitor_mocks-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_disk_monitor_mocks \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_disk_monitor_mocks-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_disk_monitor_mocks-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -997,15 +1020,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_disk_monitor_mocks-logs
-        path: /tmp/ct-unit_disk_monitor_mocks-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_disk_monitor_mocks-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-peer_discovery_dns
       run: |
+        mkdir ct-peer_discovery_dns-logs && chmod 777 ct-peer_discovery_dns-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=peer_discovery_dns \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-peer_discovery_dns-logs:/ct-logs \
+          --volume ${PWD}/ct-peer_discovery_dns-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1013,15 +1037,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-peer_discovery_dns-logs
-        path: /tmp/ct-peer_discovery_dns-logs/*-ct-logs-*.tar.xz
+        path: ct-peer_discovery_dns-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-topic_permission
       run: |
+        mkdir ct-topic_permission-logs && chmod 777 ct-topic_permission-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=topic_permission \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-topic_permission-logs:/ct-logs \
+          --volume ${PWD}/ct-topic_permission-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1029,15 +1054,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-topic_permission-logs
-        path: /tmp/ct-topic_permission-logs/*-ct-logs-*.tar.xz
+        path: ct-topic_permission-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-single_active_consumer
       run: |
+        mkdir ct-single_active_consumer-logs && chmod 777 ct-single_active_consumer-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=single_active_consumer \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-single_active_consumer-logs:/ct-logs \
+          --volume ${PWD}/ct-single_active_consumer-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1045,15 +1071,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-single_active_consumer-logs
-        path: /tmp/ct-single_active_consumer-logs/*-ct-logs-*.tar.xz
+        path: ct-single_active_consumer-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-message_size_limit
       run: |
+        mkdir ct-message_size_limit-logs && chmod 777 ct-message_size_limit-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=message_size_limit \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-message_size_limit-logs:/ct-logs \
+          --volume ${PWD}/ct-message_size_limit-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1061,15 +1088,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-message_size_limit-logs
-        path: /tmp/ct-message_size_limit-logs/*-ct-logs-*.tar.xz
+        path: ct-message_size_limit-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-proxy_protocol
       run: |
+        mkdir ct-proxy_protocol-logs && chmod 777 ct-proxy_protocol-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=proxy_protocol \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-proxy_protocol-logs:/ct-logs \
+          --volume ${PWD}/ct-proxy_protocol-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1077,7 +1105,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-proxy_protocol-logs
-        path: /tmp/ct-proxy_protocol-logs/*-ct-logs-*.tar.xz
+        path: ct-proxy_protocol-logs/*-ct-logs-*.tar.xz
   rabbit-ct-rabbit_fifo-plus-10-more:
     name: rabbit-ct-rabbit_fifo-plus-10-more
     needs:
@@ -1095,12 +1123,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo
       run: |
+        mkdir ct-rabbit_fifo-logs && chmod 777 ct-rabbit_fifo-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbit_fifo \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbit_fifo-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbit_fifo-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1108,15 +1137,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbit_fifo-logs
-        path: /tmp/ct-rabbit_fifo-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbit_fifo-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_app_management
       run: |
+        mkdir ct-unit_app_management-logs && chmod 777 ct-unit_app_management-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_app_management \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_app_management-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_app_management-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1124,15 +1154,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_app_management-logs
-        path: /tmp/ct-unit_app_management-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_app_management-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_disk_monitor
       run: |
+        mkdir ct-unit_disk_monitor-logs && chmod 777 ct-unit_disk_monitor-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_disk_monitor \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_disk_monitor-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_disk_monitor-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1140,15 +1171,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_disk_monitor-logs
-        path: /tmp/ct-unit_disk_monitor-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_disk_monitor-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_gen_server2
       run: |
+        mkdir ct-unit_gen_server2-logs && chmod 777 ct-unit_gen_server2-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_gen_server2 \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_gen_server2-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_gen_server2-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1156,15 +1188,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_gen_server2-logs
-        path: /tmp/ct-unit_gen_server2-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_gen_server2-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_credit_flow
       run: |
+        mkdir ct-unit_credit_flow-logs && chmod 777 ct-unit_credit_flow-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_credit_flow \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_credit_flow-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_credit_flow-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1172,15 +1205,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_credit_flow-logs
-        path: /tmp/ct-unit_credit_flow-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_credit_flow-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-config_schema
       run: |
+        mkdir ct-config_schema-logs && chmod 777 ct-config_schema-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=config_schema \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-config_schema-logs:/ct-logs \
+          --volume ${PWD}/ct-config_schema-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1188,15 +1222,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-config_schema-logs
-        path: /tmp/ct-config_schema-logs/*-ct-logs-*.tar.xz
+        path: ct-config_schema-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_vm_memory_monitor
       run: |
+        mkdir ct-unit_vm_memory_monitor-logs && chmod 777 ct-unit_vm_memory_monitor-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_vm_memory_monitor \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_vm_memory_monitor-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_vm_memory_monitor-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1204,15 +1239,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_vm_memory_monitor-logs
-        path: /tmp/ct-unit_vm_memory_monitor-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_vm_memory_monitor-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-mirrored_supervisor
       run: |
+        mkdir ct-mirrored_supervisor-logs && chmod 777 ct-mirrored_supervisor-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=mirrored_supervisor \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-mirrored_supervisor-logs:/ct-logs \
+          --volume ${PWD}/ct-mirrored_supervisor-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1220,15 +1256,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-mirrored_supervisor-logs
-        path: /tmp/ct-mirrored_supervisor-logs/*-ct-logs-*.tar.xz
+        path: ct-mirrored_supervisor-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-definition_import
       run: |
+        mkdir ct-definition_import-logs && chmod 777 ct-definition_import-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=definition_import \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-definition_import-logs:/ct-logs \
+          --volume ${PWD}/ct-definition_import-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1236,15 +1273,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-definition_import-logs
-        path: /tmp/ct-definition_import-logs/*-ct-logs-*.tar.xz
+        path: ct-definition_import-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-queue_length_limits
       run: |
+        mkdir ct-queue_length_limits-logs && chmod 777 ct-queue_length_limits-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=queue_length_limits \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-queue_length_limits-logs:/ct-logs \
+          --volume ${PWD}/ct-queue_length_limits-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1252,15 +1290,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-queue_length_limits-logs
-        path: /tmp/ct-queue_length_limits-logs/*-ct-logs-*.tar.xz
+        path: ct-queue_length_limits-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-cluster
       run: |
+        mkdir ct-cluster-logs && chmod 777 ct-cluster-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=cluster \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-cluster-logs:/ct-logs \
+          --volume ${PWD}/ct-cluster-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1268,7 +1307,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-cluster-logs
-        path: /tmp/ct-cluster-logs/*-ct-logs-*.tar.xz
+        path: ct-cluster-logs/*-ct-logs-*.tar.xz
   rabbit-ct-rabbitmq_queues_cli_integration-plus-9-more:
     name: rabbit-ct-rabbitmq_queues_cli_integration-plus-9-more
     needs:
@@ -1286,12 +1325,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmq_queues_cli_integration
       run: |
+        mkdir ct-rabbitmq_queues_cli_integration-logs && chmod 777 ct-rabbitmq_queues_cli_integration-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbitmq_queues_cli_integration \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbitmq_queues_cli_integration-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbitmq_queues_cli_integration-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1299,15 +1339,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbitmq_queues_cli_integration-logs
-        path: /tmp/ct-rabbitmq_queues_cli_integration-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbitmq_queues_cli_integration-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-list_queues_online_and_offline
       run: |
+        mkdir ct-list_queues_online_and_offline-logs && chmod 777 ct-list_queues_online_and_offline-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=list_queues_online_and_offline \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-list_queues_online_and_offline-logs:/ct-logs \
+          --volume ${PWD}/ct-list_queues_online_and_offline-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1315,15 +1356,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-list_queues_online_and_offline-logs
-        path: /tmp/ct-list_queues_online_and_offline-logs/*-ct-logs-*.tar.xz
+        path: ct-list_queues_online_and_offline-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-list_consumers_sanity_check
       run: |
+        mkdir ct-list_consumers_sanity_check-logs && chmod 777 ct-list_consumers_sanity_check-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=list_consumers_sanity_check \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-list_consumers_sanity_check-logs:/ct-logs \
+          --volume ${PWD}/ct-list_consumers_sanity_check-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1331,15 +1373,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-list_consumers_sanity_check-logs
-        path: /tmp/ct-list_consumers_sanity_check-logs/*-ct-logs-*.tar.xz
+        path: ct-list_consumers_sanity_check-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbit_fifo_int
       run: |
+        mkdir ct-rabbit_fifo_int-logs && chmod 777 ct-rabbit_fifo_int-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbit_fifo_int \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbit_fifo_int-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbit_fifo_int-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1347,15 +1390,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbit_fifo_int-logs
-        path: /tmp/ct-rabbit_fifo_int-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbit_fifo_int-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-policy
       run: |
+        mkdir ct-policy-logs && chmod 777 ct-policy-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=policy \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-policy-logs:/ct-logs \
+          --volume ${PWD}/ct-policy-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1363,15 +1407,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-policy-logs
-        path: /tmp/ct-policy-logs/*-ct-logs-*.tar.xz
+        path: ct-policy-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
       run: |
+        mkdir ct-unit_access_control_authn_authz_context_propagation-logs && chmod 777 ct-unit_access_control_authn_authz_context_propagation-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_access_control_authn_authz_context_propagation \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_access_control_authn_authz_context_propagation-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_access_control_authn_authz_context_propagation-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1379,15 +1424,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_access_control_authn_authz_context_propagation-logs
-        path: /tmp/ct-unit_access_control_authn_authz_context_propagation-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_access_control_authn_authz_context_propagation-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_stats_and_metrics
       run: |
+        mkdir ct-unit_stats_and_metrics-logs && chmod 777 ct-unit_stats_and_metrics-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_stats_and_metrics \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_stats_and_metrics-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_stats_and_metrics-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1395,15 +1441,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_stats_and_metrics-logs
-        path: /tmp/ct-unit_stats_and_metrics-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_stats_and_metrics-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-disconnect_detected_during_alarm
       run: |
+        mkdir ct-disconnect_detected_during_alarm-logs && chmod 777 ct-disconnect_detected_during_alarm-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=disconnect_detected_during_alarm \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-disconnect_detected_during_alarm-logs:/ct-logs \
+          --volume ${PWD}/ct-disconnect_detected_during_alarm-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1411,15 +1458,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-disconnect_detected_during_alarm-logs
-        path: /tmp/ct-disconnect_detected_during_alarm-logs/*-ct-logs-*.tar.xz
+        path: ct-disconnect_detected_during_alarm-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-priority_queue_recovery
       run: |
+        mkdir ct-priority_queue_recovery-logs && chmod 777 ct-priority_queue_recovery-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=priority_queue_recovery \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-priority_queue_recovery-logs:/ct-logs \
+          --volume ${PWD}/ct-priority_queue_recovery-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1427,15 +1475,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-priority_queue_recovery-logs
-        path: /tmp/ct-priority_queue_recovery-logs/*-ct-logs-*.tar.xz
+        path: ct-priority_queue_recovery-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_access_control
       run: |
+        mkdir ct-unit_access_control-logs && chmod 777 ct-unit_access_control-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_access_control \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_access_control-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_access_control-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1443,7 +1492,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_access_control-logs
-        path: /tmp/ct-unit_access_control-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_access_control-logs/*-ct-logs-*.tar.xz
   rabbit-ct-product_info-plus-8-more:
     name: rabbit-ct-product_info-plus-8-more
     needs:
@@ -1461,12 +1510,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-product_info
       run: |
+        mkdir ct-product_info-logs && chmod 777 ct-product_info-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=product_info \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-product_info-logs:/ct-logs \
+          --volume ${PWD}/ct-product_info-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1474,15 +1524,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-product_info-logs
-        path: /tmp/ct-product_info-logs/*-ct-logs-*.tar.xz
+        path: ct-product_info-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_file_handle_cache
       run: |
+        mkdir ct-unit_file_handle_cache-logs && chmod 777 ct-unit_file_handle_cache-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_file_handle_cache \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_file_handle_cache-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_file_handle_cache-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1490,15 +1541,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_file_handle_cache-logs
-        path: /tmp/ct-unit_file_handle_cache-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_file_handle_cache-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_amqp091_server_properties
       run: |
+        mkdir ct-unit_amqp091_server_properties-logs && chmod 777 ct-unit_amqp091_server_properties-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_amqp091_server_properties \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_amqp091_server_properties-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_amqp091_server_properties-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1506,15 +1558,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_amqp091_server_properties-logs
-        path: /tmp/ct-unit_amqp091_server_properties-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_amqp091_server_properties-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_config_value_encryption
       run: |
+        mkdir ct-unit_config_value_encryption-logs && chmod 777 ct-unit_config_value_encryption-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_config_value_encryption \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_config_value_encryption-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_config_value_encryption-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1522,15 +1575,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_config_value_encryption-logs
-        path: /tmp/ct-unit_config_value_encryption-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_config_value_encryption-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbitmqctl_integration
       run: |
+        mkdir ct-rabbitmqctl_integration-logs && chmod 777 ct-rabbitmqctl_integration-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbitmqctl_integration \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbitmqctl_integration-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbitmqctl_integration-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1538,15 +1592,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbitmqctl_integration-logs
-        path: /tmp/ct-rabbitmqctl_integration-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbitmqctl_integration-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-feature_flags
       run: |
+        mkdir ct-feature_flags-logs && chmod 777 ct-feature_flags-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=feature_flags \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-feature_flags-logs:/ct-logs \
+          --volume ${PWD}/ct-feature_flags-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1554,15 +1609,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-feature_flags-logs
-        path: /tmp/ct-feature_flags-logs/*-ct-logs-*.tar.xz
+        path: ct-feature_flags-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-channel_interceptor
       run: |
+        mkdir ct-channel_interceptor-logs && chmod 777 ct-channel_interceptor-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=channel_interceptor \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-channel_interceptor-logs:/ct-logs \
+          --volume ${PWD}/ct-channel_interceptor-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1570,15 +1626,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-channel_interceptor-logs
-        path: /tmp/ct-channel_interceptor-logs/*-ct-logs-*.tar.xz
+        path: ct-channel_interceptor-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-channel_operation_timeout
       run: |
+        mkdir ct-channel_operation_timeout-logs && chmod 777 ct-channel_operation_timeout-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=channel_operation_timeout \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-channel_operation_timeout-logs:/ct-logs \
+          --volume ${PWD}/ct-channel_operation_timeout-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1586,15 +1643,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-channel_operation_timeout-logs
-        path: /tmp/ct-channel_operation_timeout-logs/*-ct-logs-*.tar.xz
+        path: ct-channel_operation_timeout-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_log_management
       run: |
+        mkdir ct-unit_log_management-logs && chmod 777 ct-unit_log_management-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=unit_log_management \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-unit_log_management-logs:/ct-logs \
+          --volume ${PWD}/ct-unit_log_management-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1602,7 +1660,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-unit_log_management-logs
-        path: /tmp/ct-unit_log_management-logs/*-ct-logs-*.tar.xz
+        path: ct-unit_log_management-logs/*-ct-logs-*.tar.xz
   rabbit-ct-many_node_ha-plus-6-more:
     name: rabbit-ct-many_node_ha-plus-6-more
     needs:
@@ -1620,12 +1678,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-many_node_ha
       run: |
+        mkdir ct-many_node_ha-logs && chmod 777 ct-many_node_ha-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=many_node_ha \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-many_node_ha-logs:/ct-logs \
+          --volume ${PWD}/ct-many_node_ha-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1633,15 +1692,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-many_node_ha-logs
-        path: /tmp/ct-many_node_ha-logs/*-ct-logs-*.tar.xz
+        path: ct-many_node_ha-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-upgrade_preparation
       run: |
+        mkdir ct-upgrade_preparation-logs && chmod 777 ct-upgrade_preparation-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=upgrade_preparation \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-upgrade_preparation-logs:/ct-logs \
+          --volume ${PWD}/ct-upgrade_preparation-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1649,15 +1709,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-upgrade_preparation-logs
-        path: /tmp/ct-upgrade_preparation-logs/*-ct-logs-*.tar.xz
+        path: ct-upgrade_preparation-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-per_vhost_connection_limit_partitions
       run: |
+        mkdir ct-per_vhost_connection_limit_partitions-logs && chmod 777 ct-per_vhost_connection_limit_partitions-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=per_vhost_connection_limit_partitions \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-per_vhost_connection_limit_partitions-logs:/ct-logs \
+          --volume ${PWD}/ct-per_vhost_connection_limit_partitions-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1665,15 +1726,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-per_vhost_connection_limit_partitions-logs
-        path: /tmp/ct-per_vhost_connection_limit_partitions-logs/*-ct-logs-*.tar.xz
+        path: ct-per_vhost_connection_limit_partitions-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-consumer_timeout
       run: |
+        mkdir ct-consumer_timeout-logs && chmod 777 ct-consumer_timeout-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=consumer_timeout \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-consumer_timeout-logs:/ct-logs \
+          --volume ${PWD}/ct-consumer_timeout-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1681,15 +1743,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-consumer_timeout-logs
-        path: /tmp/ct-consumer_timeout-logs/*-ct-logs-*.tar.xz
+        path: ct-consumer_timeout-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-crashing_queues
       run: |
+        mkdir ct-crashing_queues-logs && chmod 777 ct-crashing_queues-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=crashing_queues \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-crashing_queues-logs:/ct-logs \
+          --volume ${PWD}/ct-crashing_queues-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1697,15 +1760,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-crashing_queues-logs
-        path: /tmp/ct-crashing_queues-logs/*-ct-logs-*.tar.xz
+        path: ct-crashing_queues-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-lazy_queue
       run: |
+        mkdir ct-lazy_queue-logs && chmod 777 ct-lazy_queue-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=lazy_queue \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-lazy_queue-logs:/ct-logs \
+          --volume ${PWD}/ct-lazy_queue-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1713,15 +1777,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-lazy_queue-logs
-        path: /tmp/ct-lazy_queue-logs/*-ct-logs-*.tar.xz
+        path: ct-lazy_queue-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-sync_detection
       run: |
+        mkdir ct-sync_detection-logs && chmod 777 ct-sync_detection-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=sync_detection \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-sync_detection-logs:/ct-logs \
+          --volume ${PWD}/ct-sync_detection-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1729,7 +1794,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-sync_detection-logs
-        path: /tmp/ct-sync_detection-logs/*-ct-logs-*.tar.xz
+        path: ct-sync_detection-logs/*-ct-logs-*.tar.xz
   rabbit-ct-publisher_confirms_parallel-plus-5-more:
     name: rabbit-ct-publisher_confirms_parallel-plus-5-more
     needs:
@@ -1747,12 +1812,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-publisher_confirms_parallel
       run: |
+        mkdir ct-publisher_confirms_parallel-logs && chmod 777 ct-publisher_confirms_parallel-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=publisher_confirms_parallel \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-publisher_confirms_parallel-logs:/ct-logs \
+          --volume ${PWD}/ct-publisher_confirms_parallel-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1760,15 +1826,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-publisher_confirms_parallel-logs
-        path: /tmp/ct-publisher_confirms_parallel-logs/*-ct-logs-*.tar.xz
+        path: ct-publisher_confirms_parallel-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-per_user_connection_tracking
       run: |
+        mkdir ct-per_user_connection_tracking-logs && chmod 777 ct-per_user_connection_tracking-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=per_user_connection_tracking \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-per_user_connection_tracking-logs:/ct-logs \
+          --volume ${PWD}/ct-per_user_connection_tracking-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1776,15 +1843,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-per_user_connection_tracking-logs
-        path: /tmp/ct-per_user_connection_tracking-logs/*-ct-logs-*.tar.xz
+        path: ct-per_user_connection_tracking-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-peer_discovery_classic_config
       run: |
+        mkdir ct-peer_discovery_classic_config-logs && chmod 777 ct-peer_discovery_classic_config-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=peer_discovery_classic_config \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-peer_discovery_classic_config-logs:/ct-logs \
+          --volume ${PWD}/ct-peer_discovery_classic_config-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1792,15 +1860,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-peer_discovery_classic_config-logs
-        path: /tmp/ct-peer_discovery_classic_config-logs/*-ct-logs-*.tar.xz
+        path: ct-peer_discovery_classic_config-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-per_vhost_queue_limit
       run: |
+        mkdir ct-per_vhost_queue_limit-logs && chmod 777 ct-per_vhost_queue_limit-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=per_vhost_queue_limit \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-per_vhost_queue_limit-logs:/ct-logs \
+          --volume ${PWD}/ct-per_vhost_queue_limit-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1808,15 +1877,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-per_vhost_queue_limit-logs
-        path: /tmp/ct-per_vhost_queue_limit-logs/*-ct-logs-*.tar.xz
+        path: ct-per_vhost_queue_limit-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-confirms_rejects
       run: |
+        mkdir ct-confirms_rejects-logs && chmod 777 ct-confirms_rejects-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=confirms_rejects \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-confirms_rejects-logs:/ct-logs \
+          --volume ${PWD}/ct-confirms_rejects-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1824,15 +1894,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-confirms_rejects-logs
-        path: /tmp/ct-confirms_rejects-logs/*-ct-logs-*.tar.xz
+        path: ct-confirms_rejects-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-metrics
       run: |
+        mkdir ct-metrics-logs && chmod 777 ct-metrics-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=metrics \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-metrics-logs:/ct-logs \
+          --volume ${PWD}/ct-metrics-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1840,7 +1911,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-metrics-logs
-        path: /tmp/ct-metrics-logs/*-ct-logs-*.tar.xz
+        path: ct-metrics-logs/*-ct-logs-*.tar.xz
   rabbit-ct-signal_handling-plus-3-more:
     name: rabbit-ct-signal_handling-plus-3-more
     needs:
@@ -1858,12 +1929,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-signal_handling
       run: |
+        mkdir ct-signal_handling-logs && chmod 777 ct-signal_handling-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=signal_handling \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-signal_handling-logs:/ct-logs \
+          --volume ${PWD}/ct-signal_handling-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1871,15 +1943,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-signal_handling-logs
-        path: /tmp/ct-signal_handling-logs/*-ct-logs-*.tar.xz
+        path: ct-signal_handling-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbit_fifo_prop
       run: |
+        mkdir ct-rabbit_fifo_prop-logs && chmod 777 ct-rabbit_fifo_prop-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbit_fifo_prop \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbit_fifo_prop-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbit_fifo_prop-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1887,15 +1960,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbit_fifo_prop-logs
-        path: /tmp/ct-rabbit_fifo_prop-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbit_fifo_prop-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-dead_lettering
       run: |
+        mkdir ct-dead_lettering-logs && chmod 777 ct-dead_lettering-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=dead_lettering \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-dead_lettering-logs:/ct-logs \
+          --volume ${PWD}/ct-dead_lettering-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1903,15 +1977,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-dead_lettering-logs
-        path: /tmp/ct-dead_lettering-logs/*-ct-logs-*.tar.xz
+        path: ct-dead_lettering-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-maintenance_mode
       run: |
+        mkdir ct-maintenance_mode-logs && chmod 777 ct-maintenance_mode-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=maintenance_mode \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-maintenance_mode-logs:/ct-logs \
+          --volume ${PWD}/ct-maintenance_mode-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1919,7 +1994,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-maintenance_mode-logs
-        path: /tmp/ct-maintenance_mode-logs/*-ct-logs-*.tar.xz
+        path: ct-maintenance_mode-logs/*-ct-logs-*.tar.xz
   rabbit-ct-vhost-plus-2-more:
     name: rabbit-ct-vhost-plus-2-more
     needs:
@@ -1937,12 +2012,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-vhost
       run: |
+        mkdir ct-vhost-logs && chmod 777 ct-vhost-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=vhost \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-vhost-logs:/ct-logs \
+          --volume ${PWD}/ct-vhost-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1950,15 +2026,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-vhost-logs
-        path: /tmp/ct-vhost-logs/*-ct-logs-*.tar.xz
+        path: ct-vhost-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbit_core_metrics_gc
       run: |
+        mkdir ct-rabbit_core_metrics_gc-logs && chmod 777 ct-rabbit_core_metrics_gc-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=rabbit_core_metrics_gc \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-rabbit_core_metrics_gc-logs:/ct-logs \
+          --volume ${PWD}/ct-rabbit_core_metrics_gc-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1966,15 +2043,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-rabbit_core_metrics_gc-logs
-        path: /tmp/ct-rabbit_core_metrics_gc-logs/*-ct-logs-*.tar.xz
+        path: ct-rabbit_core_metrics_gc-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-dynamic_qq
       run: |
+        mkdir ct-dynamic_qq-logs && chmod 777 ct-dynamic_qq-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=dynamic_qq \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-dynamic_qq-logs:/ct-logs \
+          --volume ${PWD}/ct-dynamic_qq-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -1982,7 +2060,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-dynamic_qq-logs
-        path: /tmp/ct-dynamic_qq-logs/*-ct-logs-*.tar.xz
+        path: ct-dynamic_qq-logs/*-ct-logs-*.tar.xz
   rabbit-ct-priority_queue-plus-2-more:
     name: rabbit-ct-priority_queue-plus-2-more
     needs:
@@ -2000,12 +2078,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue
       run: |
+        mkdir ct-priority_queue-logs && chmod 777 ct-priority_queue-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=priority_queue \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-priority_queue-logs:/ct-logs \
+          --volume ${PWD}/ct-priority_queue-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2013,15 +2092,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-priority_queue-logs
-        path: /tmp/ct-priority_queue-logs/*-ct-logs-*.tar.xz
+        path: ct-priority_queue-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-per_vhost_connection_limit
       run: |
+        mkdir ct-per_vhost_connection_limit-logs && chmod 777 ct-per_vhost_connection_limit-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=per_vhost_connection_limit \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-per_vhost_connection_limit-logs:/ct-logs \
+          --volume ${PWD}/ct-per_vhost_connection_limit-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2029,15 +2109,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-per_vhost_connection_limit-logs
-        path: /tmp/ct-per_vhost_connection_limit-logs/*-ct-logs-*.tar.xz
+        path: ct-per_vhost_connection_limit-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-queue_parallel
       run: |
+        mkdir ct-queue_parallel-logs && chmod 777 ct-queue_parallel-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=queue_parallel \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-queue_parallel-logs:/ct-logs \
+          --volume ${PWD}/ct-queue_parallel-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2045,7 +2126,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-queue_parallel-logs
-        path: /tmp/ct-queue_parallel-logs/*-ct-logs-*.tar.xz
+        path: ct-queue_parallel-logs/*-ct-logs-*.tar.xz
   rabbit-ct-cluster_rename-plus-1-more:
     name: rabbit-ct-cluster_rename-plus-1-more
     needs:
@@ -2063,12 +2144,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster_rename
       run: |
+        mkdir ct-cluster_rename-logs && chmod 777 ct-cluster_rename-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=cluster_rename \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-cluster_rename-logs:/ct-logs \
+          --volume ${PWD}/ct-cluster_rename-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2076,15 +2158,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-cluster_rename-logs
-        path: /tmp/ct-cluster_rename-logs/*-ct-logs-*.tar.xz
+        path: ct-cluster_rename-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-backing_queue
       run: |
+        mkdir ct-backing_queue-logs && chmod 777 ct-backing_queue-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=backing_queue \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-backing_queue-logs:/ct-logs \
+          --volume ${PWD}/ct-backing_queue-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2092,7 +2175,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-backing_queue-logs
-        path: /tmp/ct-backing_queue-logs/*-ct-logs-*.tar.xz
+        path: ct-backing_queue-logs/*-ct-logs-*.tar.xz
   rabbit-ct-queue_master_location-plus-1-more:
     name: rabbit-ct-queue_master_location-plus-1-more
     needs:
@@ -2110,12 +2193,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_master_location
       run: |
+        mkdir ct-queue_master_location-logs && chmod 777 ct-queue_master_location-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=queue_master_location \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-queue_master_location-logs:/ct-logs \
+          --volume ${PWD}/ct-queue_master_location-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2123,15 +2207,16 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-queue_master_location-logs
-        path: /tmp/ct-queue_master_location-logs/*-ct-logs-*.tar.xz
+        path: ct-queue_master_location-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-simple_ha
       run: |
+        mkdir ct-simple_ha-logs && chmod 777 ct-simple_ha-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=simple_ha \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-simple_ha-logs:/ct-logs \
+          --volume ${PWD}/ct-simple_ha-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2139,7 +2224,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-simple_ha-logs
-        path: /tmp/ct-simple_ha-logs/*-ct-logs-*.tar.xz
+        path: ct-simple_ha-logs/*-ct-logs-*.tar.xz
   rabbit-ct-eager_sync:
     name: rabbit-ct-eager_sync
     needs:
@@ -2157,12 +2242,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-eager_sync
       run: |
+        mkdir ct-eager_sync-logs && chmod 777 ct-eager_sync-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=eager_sync \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-eager_sync-logs:/ct-logs \
+          --volume ${PWD}/ct-eager_sync-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2170,7 +2256,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-eager_sync-logs
-        path: /tmp/ct-eager_sync-logs/*-ct-logs-*.tar.xz
+        path: ct-eager_sync-logs/*-ct-logs-*.tar.xz
   rabbit-ct-quorum_queue:
     name: rabbit-ct-quorum_queue
     needs:
@@ -2188,12 +2274,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-quorum_queue
       run: |
+        mkdir ct-quorum_queue-logs && chmod 777 ct-quorum_queue-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=quorum_queue \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-quorum_queue-logs:/ct-logs \
+          --volume ${PWD}/ct-quorum_queue-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2201,7 +2288,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-quorum_queue-logs
-        path: /tmp/ct-quorum_queue-logs/*-ct-logs-*.tar.xz
+        path: ct-quorum_queue-logs/*-ct-logs-*.tar.xz
   rabbit-ct-clustering_management:
     name: rabbit-ct-clustering_management
     needs:
@@ -2219,12 +2306,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-clustering_management
       run: |
+        mkdir ct-clustering_management-logs && chmod 777 ct-clustering_management-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=clustering_management \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-clustering_management-logs:/ct-logs \
+          --volume ${PWD}/ct-clustering_management-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2232,7 +2320,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-clustering_management-logs
-        path: /tmp/ct-clustering_management-logs/*-ct-logs-*.tar.xz
+        path: ct-clustering_management-logs/*-ct-logs-*.tar.xz
   rabbit-ct-dynamic_ha:
     name: rabbit-ct-dynamic_ha
     needs:
@@ -2250,12 +2338,13 @@ jobs:
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_ha
       run: |
+        mkdir ct-dynamic_ha-logs && chmod 777 ct-dynamic_ha-logs
         docker run \
           --env project=rabbit \
           --env CT_SUITE=dynamic_ha \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume /tmp/ct-dynamic_ha-logs:/ct-logs \
+          --volume ${PWD}/ct-dynamic_ha-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.0-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2263,7 +2352,7 @@ jobs:
       if: always()
       with:
         name: rabbit-ct-dynamic_ha-logs
-        path: /tmp/ct-dynamic_ha-logs/*-ct-logs-*.tar.xz
+        path: ct-dynamic_ha-logs/*-ct-logs-*.tar.xz
   rabbit:
     name: rabbit
     needs:
@@ -2320,6 +2409,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp_client \
           --env SKIP_DIALYZE=True \
@@ -2327,7 +2417,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2336,7 +2426,7 @@ jobs:
       if: failure()
       with:
         name: amqp_client-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   amqp10_common:
     name: amqp10_common
     needs:
@@ -2355,6 +2445,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_common \
           --env SKIP_DIALYZE=False \
@@ -2362,7 +2453,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2371,7 +2462,7 @@ jobs:
       if: failure()
       with:
         name: amqp10_common-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_backend_cache:
     name: rabbitmq_auth_backend_cache
     needs:
@@ -2390,6 +2481,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_cache \
           --env SKIP_DIALYZE=True \
@@ -2397,7 +2489,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2406,7 +2498,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_auth_backend_cache-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_backend_http:
     name: rabbitmq_auth_backend_http
     needs:
@@ -2425,6 +2517,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_http \
           --env SKIP_DIALYZE=True \
@@ -2432,7 +2525,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2441,7 +2534,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_auth_backend_http-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_backend_oauth2:
     name: rabbitmq_auth_backend_oauth2
     needs:
@@ -2460,6 +2553,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_oauth2 \
           --env SKIP_DIALYZE=True \
@@ -2467,7 +2561,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2476,7 +2570,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_auth_backend_oauth2-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_mechanism_ssl:
     name: rabbitmq_auth_mechanism_ssl
     needs:
@@ -2495,6 +2589,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_mechanism_ssl \
           --env SKIP_DIALYZE=False \
@@ -2502,7 +2597,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2511,7 +2606,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_auth_mechanism_ssl-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_aws:
     name: rabbitmq_aws
     needs:
@@ -2530,6 +2625,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_aws \
           --env SKIP_DIALYZE=True \
@@ -2537,7 +2633,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2546,7 +2642,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_aws-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_cli:
     name: rabbitmq_cli
     needs:
@@ -2565,12 +2661,13 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir broker-logs && chmod 777 broker-logs
         docker run \
           --env project=rabbitmq_cli \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/broker-logs:/broker-logs \
+          --volume ${PWD}/broker-logs:/workspace/broker-logs \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/rabbitmq_cli.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
@@ -2578,7 +2675,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_cli-broker-logs
-        path: /tmp/broker-logs/broker-logs.tar.xz
+        path: broker-logs/broker-logs.tar.xz
   rabbitmq_consistent_hash_exchange:
     name: rabbitmq_consistent_hash_exchange
     needs:
@@ -2597,6 +2694,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_consistent_hash_exchange \
           --env SKIP_DIALYZE=True \
@@ -2604,7 +2702,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2613,7 +2711,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_consistent_hash_exchange-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_event_exchange:
     name: rabbitmq_event_exchange
     needs:
@@ -2632,6 +2730,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_event_exchange \
           --env SKIP_DIALYZE=False \
@@ -2639,7 +2738,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2648,7 +2747,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_event_exchange-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_federation:
     name: rabbitmq_federation
     needs:
@@ -2667,6 +2766,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation \
           --env SKIP_DIALYZE=True \
@@ -2674,7 +2774,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2683,7 +2783,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_federation-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_federation_management:
     name: rabbitmq_federation_management
     needs:
@@ -2702,6 +2802,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation_management \
           --env SKIP_DIALYZE=False \
@@ -2709,7 +2810,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2718,7 +2819,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_federation_management-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_jms_topic_exchange:
     name: rabbitmq_jms_topic_exchange
     needs:
@@ -2737,6 +2838,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_jms_topic_exchange \
           --env SKIP_DIALYZE=True \
@@ -2744,7 +2846,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2753,7 +2855,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_jms_topic_exchange-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_management:
     name: rabbitmq_management
     needs:
@@ -2772,6 +2874,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management \
           --env SKIP_DIALYZE=True \
@@ -2779,7 +2882,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2788,7 +2891,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_management-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_management_agent:
     name: rabbitmq_management_agent
     needs:
@@ -2807,6 +2910,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management_agent \
           --env SKIP_DIALYZE=True \
@@ -2814,7 +2918,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2823,7 +2927,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_management_agent-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_common:
     name: rabbitmq_peer_discovery_common
     needs:
@@ -2842,6 +2946,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_common \
           --env SKIP_DIALYZE=False \
@@ -2849,7 +2954,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2858,7 +2963,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_peer_discovery_common-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_k8s:
     name: rabbitmq_peer_discovery_k8s
     needs:
@@ -2877,6 +2982,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_k8s \
           --env SKIP_DIALYZE=True \
@@ -2884,7 +2990,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2893,7 +2999,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_peer_discovery_k8s-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_consul:
     name: rabbitmq_peer_discovery_consul
     needs:
@@ -2912,6 +3018,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_consul \
           --env SKIP_DIALYZE=True \
@@ -2919,7 +3026,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2928,7 +3035,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_peer_discovery_consul-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_prometheus:
     name: rabbitmq_prometheus
     needs:
@@ -2947,6 +3054,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_prometheus \
           --env SKIP_DIALYZE=True \
@@ -2954,7 +3062,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2963,7 +3071,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_prometheus-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_random_exchange:
     name: rabbitmq_random_exchange
     needs:
@@ -2982,6 +3090,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_random_exchange \
           --env SKIP_DIALYZE=False \
@@ -2989,7 +3098,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -2998,7 +3107,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_random_exchange-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_recent_history_exchange:
     name: rabbitmq_recent_history_exchange
     needs:
@@ -3017,6 +3126,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_recent_history_exchange \
           --env SKIP_DIALYZE=True \
@@ -3024,7 +3134,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3033,7 +3143,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_recent_history_exchange-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_sharding:
     name: rabbitmq_sharding
     needs:
@@ -3052,6 +3162,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_sharding \
           --env SKIP_DIALYZE=True \
@@ -3059,7 +3170,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3068,7 +3179,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_sharding-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_shovel:
     name: rabbitmq_shovel
     needs:
@@ -3087,6 +3198,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel \
           --env SKIP_DIALYZE=True \
@@ -3094,7 +3206,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3103,7 +3215,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_shovel-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_shovel_management:
     name: rabbitmq_shovel_management
     needs:
@@ -3122,6 +3234,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel_management \
           --env SKIP_DIALYZE=False \
@@ -3129,7 +3242,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3138,7 +3251,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_shovel_management-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_stomp:
     name: rabbitmq_stomp
     needs:
@@ -3157,6 +3270,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stomp \
           --env SKIP_DIALYZE=True \
@@ -3164,7 +3278,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3173,7 +3287,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_stomp-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_top:
     name: rabbitmq_top
     needs:
@@ -3192,6 +3306,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_top \
           --env SKIP_DIALYZE=False \
@@ -3199,7 +3314,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3208,7 +3323,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_top-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_tracing:
     name: rabbitmq_tracing
     needs:
@@ -3227,6 +3342,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_tracing \
           --env SKIP_DIALYZE=False \
@@ -3234,7 +3350,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3243,7 +3359,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_tracing-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_trust_store:
     name: rabbitmq_trust_store
     needs:
@@ -3262,6 +3378,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_trust_store \
           --env SKIP_DIALYZE=True \
@@ -3269,7 +3386,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3278,7 +3395,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_trust_store-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_web_dispatch:
     name: rabbitmq_web_dispatch
     needs:
@@ -3297,6 +3414,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_dispatch \
           --env SKIP_DIALYZE=True \
@@ -3304,7 +3422,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3313,7 +3431,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_web_dispatch-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_web_mqtt:
     name: rabbitmq_web_mqtt
     needs:
@@ -3332,6 +3450,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt \
           --env SKIP_DIALYZE=True \
@@ -3339,7 +3458,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3348,7 +3467,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_web_mqtt-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_web_mqtt_examples:
     name: rabbitmq_web_mqtt_examples
     needs:
@@ -3367,6 +3486,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt_examples \
           --env SKIP_DIALYZE=False \
@@ -3374,7 +3494,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3383,7 +3503,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_web_mqtt_examples-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_web_stomp:
     name: rabbitmq_web_stomp
     needs:
@@ -3402,6 +3522,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp \
           --env SKIP_DIALYZE=True \
@@ -3409,7 +3530,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3418,7 +3539,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_web_stomp-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_web_stomp_examples:
     name: rabbitmq_web_stomp_examples
     needs:
@@ -3437,6 +3558,7 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp_examples \
           --env SKIP_DIALYZE=False \
@@ -3444,7 +3566,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/ct-logs:/ct-logs \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
@@ -3453,7 +3575,7 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_web_stomp_examples-ct-logs
-        path: /tmp/ct-logs/*-ct-logs-*.tar.xz
+        path: ct-logs/*-ct-logs-*.tar.xz
   package-generic-unix:
     name: package-generic-unix
     needs:
@@ -3472,18 +3594,29 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }}
+        mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume /tmp/PACKAGES:/workspace/rabbitmq/PACKAGES \
+          --volume ${PWD}/PACKAGES:/workspace/rabbitmq/PACKAGES \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
           ci/scripts/package_generic_unix.sh
     - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
       uses: actions/upload-artifact@v2-preview
       with:
         name: rabbitmq-server-generic-unix.tar.xz
-        path: /tmp/PACKAGES/rabbitmq-server-generic-unix-*.tar.xz
+        path: PACKAGES/rabbitmq-server-generic-unix-*.tar.xz
+    - name: RECORD STEP FINISH
+      if: always()
+      run: |
+        docker run \
+          --env project=packaging \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.0-rabbitmq-${{ github.sha }} \
+          ci/scripts/collect.sh
   finish:
     name: finish
     needs:

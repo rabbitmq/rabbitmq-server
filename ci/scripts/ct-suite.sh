@@ -10,7 +10,7 @@ trap 'catch $?' EXIT
 
 catch() {
     if [ "$1" != "0" ]; then
-        make ct-logs-archive && mv *-ct-logs-*.tar.xz /ct-logs/
+        make ct-logs-archive && mv *-ct-logs-*.tar.xz /workspace/ct-logs/
     fi
 }
 
