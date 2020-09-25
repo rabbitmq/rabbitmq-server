@@ -239,7 +239,8 @@ classic_mirrored_queue_leadership_transfer(Config) ->
     rabbit_ct_broker_helpers:clear_policy(Config, A, PolicyPattern).
 
 quorum_queue_leadership_transfer(Config) ->
-    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A | _] = Nodenames = rabbit_ct_broker_helpers:get_node_configs(
+                            Config, nodename),
     ct:pal("Picked node ~s for maintenance tests...", [A]),
 
     rabbit_ct_helpers:await_condition(
@@ -260,11 +261,24 @@ quorum_queue_leadership_transfer(Config) ->
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
 
     %% quorum queue leader election is asynchronous
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            LocalLeaders = rabbit_ct_broker_helpers:rpc(Config, A,
-                            rabbit_amqqueue, list_local_leaders, []),
-            length(LocalLeaders) =:= 0
-        end, 20000),
+    AllTheSame = quorum_queue_utils:fifo_machines_use_same_version(
+                   Config, Nodenames),
+    case AllTheSame of
+        true ->
+            rabbit_ct_helpers:await_condition(
+              fun () ->
+                      LocalLeaders = rabbit_ct_broker_helpers:rpc(
+                                       Config, A,
+                                       rabbit_amqqueue,
+                                       list_local_leaders,
+                                       []),
+                      length(LocalLeaders) =:= 0
+              end, 20000);
+        false ->
+            ct:pal(
+              ?LOW_IMPORTANCE,
+              "Skip leader election check because rabbit_fifo machines "
+              "have different versions", [])
+    end,
 
     rabbit_ct_broker_helpers:revive_node(Config, A).

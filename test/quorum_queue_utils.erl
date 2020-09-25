@@ -9,6 +9,8 @@
          wait_for_messages/2,
          dirty_query/3,
          ra_name/1,
+         fifo_machines_use_same_version/1,
+         fifo_machines_use_same_version/2,
          is_mixed_versions/0
         ]).
 
@@ -97,6 +99,19 @@ filter_queues(Expected, Got) ->
     lists:filter(fun([K, _, _, _]) ->
                          lists:member(K, Keys)
                  end, Got).
+
+fifo_machines_use_same_version(Config) ->
+    Nodenames = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    fifo_machines_use_same_version(Config, Nodenames).
+
+fifo_machines_use_same_version(Config, Nodenames)
+  when length(Nodenames) >= 1 ->
+    [MachineAVersion | OtherMachinesVersions] =
+    [(catch rabbit_ct_broker_helpers:rpc(
+              Config, Nodename,
+              rabbit_fifo, version, []))
+     || Nodename <- Nodenames],
+    lists:all(fun(V) -> V =:= MachineAVersion end, OtherMachinesVersions).
 
 is_mixed_versions() ->
     not (false == os:getenv("SECONDARY_UMBRELLA")).
