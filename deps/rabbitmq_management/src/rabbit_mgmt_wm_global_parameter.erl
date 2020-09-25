@@ -49,19 +49,11 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
     rabbit_mgmt_util:with_decode(
       [value], ReqData0, Context,
       fun([Value], _, ReqData) ->
-              case rabbit_runtime_parameters:set_global(
-                     name(ReqData),
-                     if
-                         is_map(Value) -> maps:to_list(Value);
-                         true -> Value
-                     end,
-                     Username) of
-                  ok ->
-                      {true, ReqData, Context};
-                  {error_string, Reason} ->
-                      rabbit_mgmt_util:bad_request(
-                        list_to_binary(Reason), ReqData, Context)
-              end
+          Val = if is_map(Value) -> maps:to_list(Value);
+                    true         -> Value
+                end,
+          rabbit_runtime_parameters:set_global(name(ReqData), Val, Username),
+          {true, ReqData, Context}
       end).
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->

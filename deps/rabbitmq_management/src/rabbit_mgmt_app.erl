@@ -52,8 +52,9 @@ reset_dispatcher(IgnoreApps) ->
 
 -spec start_configured_listener([atom()], boolean()) -> ok.
 start_configured_listener(IgnoreApps, NeedLogStartup) ->
-    [ start_listener(Listener, IgnoreApps, NeedLogStartup)
-      || Listener <- get_listeners_config() ].
+    [start_listener(Listener, IgnoreApps, NeedLogStartup)
+      || Listener <- get_listeners_config()],
+    ok.
 
 get_listeners_config() ->
     Listeners = case {has_configured_legacy_listener(),

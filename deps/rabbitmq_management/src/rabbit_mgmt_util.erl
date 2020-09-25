@@ -806,17 +806,29 @@ decode(Keys, Body) ->
         Else -> Else
     end.
 
+-type parsed_json() :: map() | atom() | binary().
+-spec decode(binary()) -> {ok, parsed_json()} | {error, term()}.
+
 decode(<<"">>) ->
+    {ok, #{}};
+%% some HTTP API clients include "null" for payload in certain scenarios
+decode(<<"null">>) ->
+    {ok, #{}};
+decode(<<"undefined">>) ->
     {ok, #{}};
 decode(Body) ->
     try
-        %% handle double encoded JSON, see rabbitmq/rabbitmq-management#839
         case rabbit_json:decode(Body) of
-            Val when is_map(Val)    -> {ok, Val};
-            Val when is_list(Val)   -> {ok, maps:from_list(Val)};
-            Bin when is_binary(Bin) -> {error, "invalid payload: the request body JSON-decoded to a string. "
-                                               "Is the input doubly-JSON-encoded?"};
-            _                       -> {error, not_json}
+            Val when is_map(Val) ->
+                {ok, Val};
+            Val when is_atom(Val) ->
+                {ok, #{}};
+            %% handle double encoded JSON, see rabbitmq/rabbitmq-management#839
+            Bin when is_binary(Bin) ->
+                {error, "invalid payload: the request body JSON-decoded to a string. "
+                        "Is the input doubly-JSON-encoded?"};
+            _                       ->
+                {error, not_json}
         end
     catch error:_ -> {error, not_json}
     end.
@@ -870,11 +882,6 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
               end
       end, ReqData, Context).
 
-props_as_map(Val) when is_map(Val)  -> Val;
-props_as_map(null)                  -> #{};
-props_as_map(undefined)             -> #{};
-props_as_map(Val) when is_list(Val) -> maps:from_list(Val).
-
 with_vhost_and_props(Fun, ReqData, Context) ->
     case vhost(ReqData) of
         not_found ->
@@ -885,7 +892,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             case decode(Body) of
                 {ok, Props} ->
                     try
-                        Fun(VHost, props_as_map(Props), ReqData1)
+                        Fun(VHost, Props, ReqData1)
                     catch {error, Error} ->
                             bad_request(Error, ReqData1, Context)
                     end;

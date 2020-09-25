@@ -31,7 +31,7 @@
 
 -record(state, {data :: any() | none,
                 args :: [any()],
-                timer_ref :: undefined | timer:tref(),
+                timer_ref :: undefined | reference(),
                 multiplier :: integer()}).
 
 -type error_desc() :: key_not_found | timeout | {throw, atom()}.
