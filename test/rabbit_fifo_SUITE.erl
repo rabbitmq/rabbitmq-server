@@ -1061,7 +1061,7 @@ query_consumers_test(_) ->
                           Consumer#consumer{status = suspected_down}, Consumers0),
     State2 = State1#rabbit_fifo{consumers = Consumers1},
 
-    ?assertEqual(4, rabbit_fifo:query_consumer_count(State2)),
+    ?assertEqual(3, rabbit_fifo:query_consumer_count(State2)),
     Consumers2 = rabbit_fifo:query_consumers(State2),
     ?assertEqual(4, maps:size(Consumers2)),
     maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
