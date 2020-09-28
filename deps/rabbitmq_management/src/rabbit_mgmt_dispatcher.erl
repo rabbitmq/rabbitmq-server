@@ -163,8 +163,12 @@ dispatcher() ->
      {"/topic-permissions/:vhost/:user",                       rabbit_mgmt_wm_topic_permission, []},
      {"/topic-permissions/:vhost/:user/:exchange",             rabbit_mgmt_wm_topic_permission, []},
      {"/aliveness-test/:vhost",                                rabbit_mgmt_wm_aliveness_test, []},
+     %% now deprecated
      {"/healthchecks/node",                                    rabbit_mgmt_wm_healthchecks, []},
      {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []},
+     %% modern generation of fine-grained health checks
+     {"/health/checks/alarms",                                 rabbit_mgmt_wm_health_check_alarms, []},
+     
      {"/reset",                                                rabbit_mgmt_wm_reset, []},
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
      {"/rebalance/queues",                                     rabbit_mgmt_wm_rebalance_queues, [{queues, all}]},
