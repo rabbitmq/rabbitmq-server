@@ -21,7 +21,7 @@
 -behaviour(gen_event).
 
 -export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
-         clear_alarm/1, get_alarms/0, on_node_up/1, on_node_down/1]).
+         clear_alarm/1, get_alarms/0, get_alarms/1, on_node_up/1, on_node_down/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -92,8 +92,10 @@ set_alarm(Alarm)   -> gen_event:notify(?SERVER, {set_alarm,   Alarm}).
 clear_alarm(Alarm) -> gen_event:notify(?SERVER, {clear_alarm, Alarm}).
 
 -spec get_alarms() -> [{alarm(), []}].
-
 get_alarms() -> gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
+
+-spec get_alarms(timeout()) -> [{alarm(), []}].
+get_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_alarms, Timeout).
 
 -spec on_node_up(node()) -> 'ok'.
 
@@ -123,7 +125,7 @@ handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
      internal_register(Pid, AlertMFA, State)};
 
 handle_call(get_alarms, State) ->
-    {ok, get_alarms(State), State};
+    {ok, compute_alarms(State), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
@@ -302,7 +304,7 @@ is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->
             false
     end.
 
-get_alarms(#alarms{alarms = Alarms,
+compute_alarms(#alarms{alarms = Alarms,
                    alarmed_nodes = AN}) ->
     Alarms ++ [ {{resource_limit, Source, Node}, []}
                 || {Node, Sources} <- dict:to_list(AN), Source <- Sources ].
