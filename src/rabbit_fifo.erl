@@ -706,7 +706,10 @@ query_ra_indexes(#?MODULE{ra_indexes = RaIndexes}) ->
 
 query_consumer_count(#?MODULE{consumers = Consumers,
                               waiting_consumers = WaitingConsumers}) ->
-    maps:size(Consumers) + length(WaitingConsumers).
+    Up = maps:filter(fun(_ConsumerId, #consumer{status = Status}) ->
+                             Status =/= suspected_down
+                     end, Consumers),
+    maps:size(Up) + length(WaitingConsumers).
 
 query_consumers(#?MODULE{consumers = Consumers,
                          waiting_consumers = WaitingConsumers,
