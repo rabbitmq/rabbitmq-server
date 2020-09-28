@@ -43,7 +43,7 @@ to_json(ReqData, Context) ->
 
 failure(Message, ReqData, Context) ->
     {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
-                                                             {reason, Message}],
+                                                             {reason, rabbit_data_coercion:to_binary(Message)}],
                                                            ReqData, Context),
     {stop, cowboy_req:reply(500, #{}, Response, ReqData1), Context1}.
 
