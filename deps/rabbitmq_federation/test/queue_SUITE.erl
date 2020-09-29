@@ -254,12 +254,8 @@ dynamic_plugin_stop_start(Config) ->
                         ],
                         length(L) =:= 2
                 end),
-              %% We wait a bit more because the condition above is not
-              %% enough. Unfortunately, I don't know what to look for...
-              %% -- JSP
-              timer:sleep(30000),
-              expect_federation(Ch, U, Q1),
-              expect_federation(Ch, U, Q2),
+              expect_federation(Ch, U, Q1, 120000),
+              expect_federation(Ch, U, Q2, 120000),
 
               clear_policy(Config, 0, <<"dyn">>),
               expect_no_federation(Ch, U, Q1),
