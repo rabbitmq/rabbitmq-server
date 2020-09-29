@@ -1000,6 +1000,11 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     case ra:force_delete_server(ServerId) of
                         ok ->
                             ok;
+                        {error, {badrpc, nodedown}} ->
+                            ok;
+                        {error, {badrpc, {'EXIT', {badarg, _}}}} ->
+                            %% DETS/ETS tables can't be found, application isn't running
+                            ok;
                         {error, _} = Err ->
                             Err;
                         Err ->
