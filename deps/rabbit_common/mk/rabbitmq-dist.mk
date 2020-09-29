@@ -17,7 +17,7 @@ dist_verbose = $(dist_verbose_$(V))
 
 MIX_ARCHIVES ?= $(HOME)/.mix/archives
 
-MIX_TASK_ARCHIVE_DEPS_VERSION = 0.4.0
+MIX_TASK_ARCHIVE_DEPS_VERSION = 0.5.0
 mix_task_archive_deps = $(MIX_ARCHIVES)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION)
 
 # We take the version of an Erlang application from the .app file. This
