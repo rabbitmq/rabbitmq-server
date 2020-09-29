@@ -661,6 +661,7 @@ queue_definition(Q) ->
     Type = case amqqueue:get_type(Q) of
                rabbit_classic_queue -> classic;
                rabbit_quorum_queue -> quorum;
+               rabbit_stream_queue -> stream;
                T -> T
            end,
     #{

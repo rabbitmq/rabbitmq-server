@@ -11,7 +11,7 @@
 
 -export([start_link/0]).
 -export([filename/0]).
--export([gen/0, gen_secure/0, string/2, binary/2]).
+-export([gen/0, gen_secure/0, string/2, binary/2, to_string/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -150,6 +150,12 @@ string(G, Prefix) when is_binary(Prefix) ->
 
 binary(G, Prefix) ->
     list_to_binary(string(G, Prefix)).
+
+%% copied from https://stackoverflow.com/questions/1657204/erlang-uuid-generator
+to_string(<<TL:32, TM:16, THV:16, CSR:8, CSL:8, N:48>>) ->
+    lists:flatten(
+      io_lib:format("~8.16.0b-~4.16.0b-~4.16.0b-~2.16.0b~2.16.0b-~12.16.0b",
+                    [TL, TM, THV, CSR, CSL, N])).
 
 %%----------------------------------------------------------------------------
 

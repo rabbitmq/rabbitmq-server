@@ -472,9 +472,14 @@ matches_type(_,        _)               -> false.
 sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 
 is_applicable(#resource{kind = queue} = Resource, Policy) ->
-    rabbit_amqqueue:is_policy_applicable(Resource, Policy);
+    rabbit_amqqueue:is_policy_applicable(Resource, to_list(Policy));
 is_applicable(_, _) ->
     true.
+
+to_list(L) when is_list(L) ->
+    L;
+to_list(M) when is_map(M) ->
+    maps:to_list(M).
 
 %%----------------------------------------------------------------------------
 

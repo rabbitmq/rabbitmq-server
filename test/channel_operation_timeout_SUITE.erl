@@ -71,11 +71,13 @@ notify_down_all(Config) ->
     RabbitCh = rabbit_ct_client_helpers:open_channel(Config, 0),
     HareCh = rabbit_ct_client_helpers:open_channel(Config, 1),
 
+    ct:pal("one"),
     %% success
     set_channel_operation_timeout_config(Config, 1000),
     configure_bq(Config),
     QCfg0    = qconfig(RabbitCh, <<"q0">>, <<"ex0">>, true, false),
     declare(QCfg0),
+    ct:pal("two"),
     %% Testing rabbit_amqqueue:notify_down_all via rabbit_channel.
     %% Consumer count = 0 after correct channel termination and
     %% notification of queues via delegate:call/3
@@ -83,6 +85,7 @@ notify_down_all(Config) ->
     rabbit_ct_client_helpers:close_channel(RabbitCh),
     0 = length(get_consumers(Config, Rabbit, ?DEFAULT_VHOST)),
     false = is_process_alive(RabbitCh),
+    ct:pal("three"),
 
     %% fail
     set_channel_operation_timeout_config(Config, 10),

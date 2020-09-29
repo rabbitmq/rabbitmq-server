@@ -424,8 +424,7 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
       nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
-    ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A],
-        [all])),
+    ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A], [all])),
     %% --> Master: A
     %%     Slaves: [B, C] or [C, B]
     SSPids = ?awaitMatch(SSPids when is_list(SSPids),
@@ -450,7 +449,7 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     %% should instead use an existing synchronised mirror as the new master,
     %% even though that isn't in the policy.
     ?assertEqual(true, apply_policy_to_declared_queue(Config, Ch, [A],
-        [{nodes, [LastSlave, A]}])),
+                                                      [{nodes, [LastSlave, A]}])),
     %% --> Master: B or C (same as previous policy)
     %%     Slaves: [A]
 
@@ -931,6 +930,7 @@ apply_in_parallel(Config, Nodes, Policies) ->
     Self = self(),
     [spawn_link(fun() ->
                         [begin
+
                              apply_policy(Config, N, Policy)
                          end || Policy <- Policies],
                         Self ! parallel_task_done
@@ -969,7 +969,7 @@ wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries) ->
             %% Let's wait a bit longer.
             timer:sleep(1000),
             wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries - 1);
-        FinalInfo ->
+        {ok, FinalInfo} ->
             %% The last policy is the final state
             LastPolicy = lists:last(TestedPolicies),
             case verify_policy(LastPolicy, FinalInfo) of

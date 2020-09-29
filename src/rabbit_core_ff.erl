@@ -8,6 +8,7 @@
 -module(rabbit_core_ff).
 
 -export([quorum_queue_migration/3,
+         stream_queue_migration/3,
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
          maintenance_mode_status_migration/3,
@@ -19,6 +20,14 @@
       doc_url       => "https://www.rabbitmq.com/quorum-queues.html",
       stability     => stable,
       migration_fun => {?MODULE, quorum_queue_migration}
+     }}).
+
+-rabbit_feature_flag(
+   {stream_queue,
+    #{desc          => "Support queues of type `stream`",
+      doc_url       => "https://www.rabbitmq.com/stream-queues.html",
+      stability     => stable,
+      migration_fun => {?MODULE, stream_queue_migration}
      }}).
 
 -rabbit_feature_flag(
@@ -68,6 +77,9 @@ quorum_queue_migration(_FeatureName, _FeatureProps, is_enabled) ->
     Fields = amqqueue:fields(amqqueue_v2),
     mnesia:table_info(rabbit_queue, attributes) =:= Fields andalso
     mnesia:table_info(rabbit_durable_queue, attributes) =:= Fields.
+
+stream_queue_migration(_FeatureName, _FeatureProps, _Enable) ->
+    ok.
 
 migrate_to_amqqueue_with_type(FeatureName, [Table | Rest], Fields) ->
     rabbit_log_feature_flags:info(

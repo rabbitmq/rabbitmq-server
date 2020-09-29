@@ -28,15 +28,10 @@ wait_for_messages_total(Servers, QName, Total) ->
 
 wait_for_messages(Servers, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Servers, QName, Fun),
-    Totals = lists:map(fun(M) when is_map(M) ->
-                               maps:size(M);
-                          (_) ->
-                               -1
-                       end, Msgs),
-    ?assertEqual(Totals, [Number || _ <- lists:seq(1, length(Servers))]);
+    ?assertEqual(Msgs, [Number || _ <- lists:seq(1, length(Servers))]);
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
-    ct:pal("Got messages ~p", [Msgs]),
+    ct:pal("Got messages ~p ~p", [QName, Msgs]),
     %% hack to allow the check to succeed in mixed versions clusters if at
     %% least one node matches the criteria rather than all nodes for
     F = case is_mixed_versions() of
