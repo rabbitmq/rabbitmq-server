@@ -29,11 +29,11 @@ delayed_restart(_Config) ->
     DelayInSeconds = 1,
     Intensity = 1,
     Args0 = {simple_one_for_one, {permanent, DelayInSeconds}, Intensity},
-    F = fun (SupPid) ->
-                {ok, _ChildPid} =
-                supervisor2:start_child(SupPid, []),
-                test_supervisor_delayed_restart(SupPid)
-        end,
+    F = fun(SupPid) ->
+        {ok, _ChildPid} =
+            supervisor2:start_child(SupPid, []),
+        test_supervisor_delayed_restart(SupPid)
+    end,
     {passed, _} = with_sup(Args0, F),
 
     Args1 = {one_for_one, {permanent, DelayInSeconds}, Intensity},
@@ -77,19 +77,19 @@ with_sup({RestartStrategy, Restart, Intensity}, Fun) ->
 
 init([RestartStrategy, Restart, Intensity]) ->
     SupFlags = #{
-      strategy => RestartStrategy,
-      intensity => Intensity,
-      period => 1},
+        strategy => RestartStrategy,
+        intensity => Intensity,
+        period => 1
+    },
     ChildSpec = #{
-      id => test,
-      start => {?MODULE, start_child, []},
-      restart => Restart,
-      shutdown => 16#ffffffff,
-      type => worker,
-      modules => [?MODULE]
-     },
+        id => test,
+        start => {?MODULE, start_child, []},
+        restart => Restart,
+        shutdown => 16#ffffffff,
+        type => worker,
+        modules => [?MODULE]
+    },
     {ok, {SupFlags, [ChildSpec]}}.
-
 
 start_child() ->
     {ok, proc_lib:spawn_link(fun run_child/0)}.
@@ -97,17 +97,18 @@ start_child() ->
 ping_child(SupPid) ->
     Ref = make_ref(),
     F = fun(ChildPid) ->
-                ChildPid ! {ping, Ref, self()}
-        end,
+        ChildPid ! {ping, Ref, self()}
+    end,
     with_child_pid(SupPid, F),
-    receive {pong, Ref} -> ok
-    after 1000          -> timeout
+    receive
+        {pong, Ref} -> ok
+    after 1000 -> timeout
     end.
 
 exit_child(SupPid, ExitType) ->
     F = fun(ChildPid) ->
-                exit(ChildPid, ExitType)
-        end,
+        exit(ChildPid, ExitType)
+    end,
     with_child_pid(SupPid, F),
     ok.
 
@@ -115,8 +116,8 @@ with_child_pid(SupPid, Fun) ->
     case supervisor2:which_children(SupPid) of
         [{_Id, undefined, worker, [?MODULE]}] -> ok;
         [{_Id, restarting, worker, [?MODULE]}] -> ok;
-        [{_Id,  ChildPid, worker, [?MODULE]}] -> Fun(ChildPid);
-        []                                     -> ok
+        [{_Id, ChildPid, worker, [?MODULE]}] -> Fun(ChildPid);
+        [] -> ok
     end.
 
 run_child() ->
