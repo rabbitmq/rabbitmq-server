@@ -10,7 +10,7 @@ is currently the reference implementation.
 
 int8, int16, int32, int64 - Signed integers (big endian order)
 
-uint16, uint32, uint64 - Unsigned integers (big endian order)
+uint8, uint16, uint32, uint64 - Unsigned integers (big endian order)
 
 bytes - int32 for the length followed by the bytes of content, length of -1 indicates null.
 
@@ -160,9 +160,10 @@ Publish => Key Version Stream PublishedMessages
   Key => int16 // 0
   Version => int16
   Stream => string // the name of the stream
-  PublisherId => int8
+  PublisherId => uint8
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
+  PublishingId => int64
   Message => bytes
 ```
 
@@ -172,7 +173,7 @@ Publish => Key Version Stream PublishedMessages
 PublishConfirm => Key Version PublishingIds
   Key => int16 // 1
   Version => int16
-  PublisherId => int8
+  PublisherId => uint8
   PublishingIds => [int64] // to correlate with the messages sent
 ```
 
@@ -183,7 +184,7 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
   Key => int16 // 2
   Version => int16
   CorrelationId => int32 // correlation id to correlate the response
-  SubscriptionId => int8 // client-supplied id to identify the subscription
+  SubscriptionId => uint8 // client-supplied id to identify the subscription
   Stream => string // the name of the stream
   OffsetSpecification => OffsetType Offset
   OffsetType => int16 // 0 (first), 1 (last), 2 (next), 3 (offset), 4 (timestamp)
@@ -197,7 +198,7 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
 Deliver => Key Version SubscriptionId OsirisChunk
   Key => int16 // 3
   Version => int32
-  SubscriptionId => int8
+  SubscriptionId => uint8
   OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
   MagicVersion => int8
   NumEntries => uint16
@@ -406,7 +407,7 @@ CommitOffset => Key Version Reference Stream Offset
   Key => int16 // 16
   Version => int16
   Reference => string // max 256 characters
-  Stream => string
+  SubscriptionId => uint8
   Offset => int64
 ```
 

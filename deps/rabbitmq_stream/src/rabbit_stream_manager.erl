@@ -146,15 +146,21 @@ handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
                                       Acc
                               end
                                                     end, undefined, [LeaderPid] ++ ReplicaPids),
-                          %% FIXME: if no local member, maybe return not_available response code
                           case LocalMember of
                               undefined ->
-                                  {error, not_found};
+                                  {error, not_available};
                               Pid ->
                                   {ok, Pid}
                           end;
                       _ ->
                           {error, not_found}
+                  end;
+              {error, not_found} ->
+                  case rabbit_amqqueue:not_found_or_absent_dirty(Name) of
+                      not_found ->
+                          {error, not_found};
+                      _ ->
+                          {error, not_available}
                   end;
               _ ->
                   {error, not_found}

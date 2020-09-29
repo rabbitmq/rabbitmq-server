@@ -96,7 +96,7 @@ public class FailureTest {
             assertThat(metadataLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
             //   wait until there's a new leader
-            TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
+            TestUtils.waitAtMost(Duration.ofSeconds(10), () -> {
                 Client.StreamMetadata m = publisher.metadata(stream).get(stream);
                 return m.getLeader() != null && m.getLeader().getPort() != TestUtils.streamPortNode1();
             });
@@ -112,10 +112,12 @@ public class FailureTest {
             Host.rabbitmqctl("start_app");
         }
 
-        // wait until all the replicas are there
-        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
-            Client.StreamMetadata m = publisher.metadata(stream).get(stream);
-            return m.getReplicas().size() == 2;
+    // wait until all the replicas are there
+    TestUtils.waitAtMost(
+        Duration.ofSeconds(5),
+        () -> {
+          Client.StreamMetadata m = publisher.metadata(stream).get(stream);
+          return m.getReplicas().size() == 2;
         });
 
         confirmLatch.set(new CountDownLatch(1));
@@ -135,8 +137,10 @@ public class FailureTest {
                     consumeLatch.countDown();
                 }));
 
-        Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-        assertThat(response.isOk()).isTrue();
+        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
+            Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
+            return response.isOk();
+        });
         assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(bodies).hasSize(3).contains("all nodes available", "2 nodes available", "all nodes are back");
     }
