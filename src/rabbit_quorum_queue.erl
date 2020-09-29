@@ -1012,8 +1012,6 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     end;
                 {timeout, _} ->
                     {error, timeout};
-                {badrpc, nodedown} ->
-                    ok;
                 E ->
                     E
             end
