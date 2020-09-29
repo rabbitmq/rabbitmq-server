@@ -1,6 +1,6 @@
 #@ load("@ytt:data", "data")
-#@ load("util.lib.yml", "group_by_time", "to_build_args")
-#@ load("helpers.lib.yml", "should_skip_dialyze", "ci_image_tag", "ci_dep_image")
+#@ load("util.star", "group_by_time", "to_build_args")
+#@ load("helpers.star", "should_skip_dialyze", "ci_image_tag", "ci_dep_image")
 
 #@ def checks_job(dep):
 name: #@ dep.name + "-checks"
