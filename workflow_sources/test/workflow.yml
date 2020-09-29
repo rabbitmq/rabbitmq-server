@@ -1,8 +1,8 @@
 #@ load("@ytt:data", "data")
 #@ load("@ytt:template", "template")
-#@ load("util.lib.yml", "merge")
+#@ load("util.star", "merge")
 #@ load("prepare.lib.yml", "prepare_jobs")
-#@ load("dep.lib.yml", "dep_jobs")
+#@ load("dep.star", "dep_jobs")
 #@ load("finish.lib.yml", "finish_jobs")
 ---
 name: #@ "Test - Erlang " + data.values.versions.erlang
