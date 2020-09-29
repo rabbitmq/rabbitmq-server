@@ -779,6 +779,24 @@ do_restart(Reason, Child=#child{restart_type=permanent}, State) -> % is_permanen
 do_restart(Reason, Child=#child{restart_type={permanent,_Delay}}, State) -> % is_permanent_delay
     ?report_error(child_terminated, Reason, Child, State#state.name),
     do_restart_delay(Reason, Child, State);
+do_restart(Reason, Child=#child{restart_type=transient}, State) -> % is_transient
+    maybe_report_error(Reason, Child, State),
+    restart(Child, State);
+do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is_transient_delay
+    maybe_report_error(Reason, Child, State),
+    restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
+                                    fun delete_child_and_continue/2,
+                                    Reason, Child, State);
+do_restart(Reason, Child=#child{restart_type=intrinsic}, State) -> % is_intrinsic
+    maybe_report_error(Reason, Child, State),
+    restart_if_explicit_or_abnormal(fun restart/2,
+                                    fun delete_child_and_stop/2,
+                                    Reason, Child, State);
+do_restart(Reason, Child=#child{restart_type={intrinsic,_Delay}}, State) -> % is_intrinsic_delay
+    maybe_report_error(Reason, Child, State),
+    restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
+                                    fun delete_child_and_stop/2,
+                                    Reason, Child, State);
 do_restart(normal, Child, State) ->
     NState = del_child(Child, State),
     {ok, NState};
@@ -788,28 +806,18 @@ do_restart(shutdown, Child, State) ->
 do_restart({shutdown, _Term}, Child, State) ->
     NState = del_child(Child, State),
     {ok, NState};
-do_restart(Reason, Child=#child{restart_type=transient}, State) -> % is_transient
-    ?report_error(child_terminated, Reason, Child, State#state.name),
-    restart(Child, State);
-do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is_transient_delay
-    ?report_error(child_terminated, Reason, Child, State#state.name),
-    restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
-                                    fun delete_child_and_continue/2,
-                                    Reason, Child, State);
-do_restart(Reason, Child=#child{restart_type=intrinsic}, State) -> % is_intrinsic
-    ?report_error(child_terminated, Reason, Child, State#state.name),
-    restart_if_explicit_or_abnormal(fun restart/2,
-                                    fun delete_child_and_stop/2,
-                                    Reason, Child, State);
-do_restart(Reason, Child=#child{restart_type={intrinsic,_Delay}}, State) -> % is_intrinsic_delay
-    ?report_error(child_terminated, Reason, Child, State#state.name),
-    restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
-                                    fun delete_child_and_stop/2,
-                                    Reason, Child, State);
 do_restart(Reason, Child, State) when ?is_temporary(Child) ->
     ?report_error(child_terminated, Reason, Child, State#state.name),
     NState = del_child(Child, State),
     {ok, NState}.
+
+maybe_report_error(Reason, Child, State) ->
+    case is_abnormal_termination(Reason) of
+        true  ->
+            ?report_error(child_terminated, Reason, Child, State#state.name);
+        false ->
+            ok
+    end.
 
 restart_if_explicit_or_abnormal(RestartHow, Otherwise, Reason, Child, State) ->
     case ?is_explicit_restart(Reason) orelse is_abnormal_termination(Reason) of
