@@ -781,7 +781,9 @@ do_restart(Reason, Child=#child{restart_type={permanent,_Delay}}, State) -> % is
     do_restart_delay(Reason, Child, State);
 do_restart(Reason, Child=#child{restart_type=transient}, State) -> % is_transient
     maybe_report_error(Reason, Child, State),
-    restart(Child, State);
+    restart_if_explicit_or_abnormal(fun restart/2,
+                                    fun delete_child_and_continue/2,
+                                    Reason, Child, State);
 do_restart(Reason, Child=#child{restart_type={transient,_Delay}}, State) -> % is_transient_delay
     maybe_report_error(Reason, Child, State),
     restart_if_explicit_or_abnormal(defer_to_restart_delay(Reason),
