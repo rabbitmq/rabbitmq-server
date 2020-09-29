@@ -51,6 +51,10 @@ init_per_group(cluster = Group, Config) ->
             {rmq_nodename_suffix, Group},
             {tcp_ports_base}]),
     rabbit_ct_helpers:run_setup_steps(Config2,
+        [fun(StepConfig) ->
+            rabbit_ct_helpers:merge_app_env(StepConfig,
+                {aten, [{poll_interval, 1000}]})
+            end] ++
         rabbit_ct_broker_helpers:setup_steps());
 init_per_group(_, Config) ->
     rabbit_ct_helpers:run_setup_steps(Config).

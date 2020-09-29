@@ -590,6 +590,9 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
     case check_read_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
         ok ->
             case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
+                {error, not_available} ->
+                    response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE),
+                    {Connection, State, Rest};
                 {error, not_found} ->
                     response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
                     {Connection, State, Rest};
