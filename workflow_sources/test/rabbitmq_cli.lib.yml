@@ -1,5 +1,5 @@
 #@ load("@ytt:data", "data")
-#@ load("helpers.lib.yml", "ci_image")
+#@ load("helpers.star", "ci_image")
 
 #@ def rabbitmq_cli_job(dep):
 name: #@ dep.name

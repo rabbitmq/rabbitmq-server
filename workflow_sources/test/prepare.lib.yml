@@ -1,6 +1,6 @@
 #@ load("@ytt:data", "data")
-#@ load("util.lib.yml", "to_build_args")
-#@ load("helpers.lib.yml", "ci_image", "ci_image_tag", "should_skip_xref")
+#@ load("util.star", "to_build_args")
+#@ load("helpers.star", "ci_image", "ci_image_tag", "should_skip_xref")
 
 #@ def prepare_jobs():
 prepare:
