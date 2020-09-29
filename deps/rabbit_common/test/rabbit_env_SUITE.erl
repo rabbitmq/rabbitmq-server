@@ -48,6 +48,7 @@
          check_RABBITMQ_PRODUCT_NAME/1,
          check_RABBITMQ_PRODUCT_VERSION/1,
          check_RABBITMQ_QUORUM_DIR/1,
+         check_RABBITMQ_STREAM_DIR/1,
          check_RABBITMQ_UPGRADE_LOG/1,
          check_RABBITMQ_USE_LOGNAME/1,
          check_value_is_yes/1,
@@ -190,6 +191,7 @@ check_default_values(_) ->
       product_version => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
+      stream_queue_dir => default,
       upgrade_log_file => default
      },
 
@@ -232,6 +234,8 @@ check_default_values(_) ->
          quorum_queue_dir =>
            "/var/lib/rabbitmq/mnesia/" ++ NodeS ++ "/quorum",
          rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
+         stream_queue_dir =>
+           "/var/lib/rabbitmq/mnesia/" ++ NodeS ++ "/stream",
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
          upgrade_log_file =>
@@ -280,6 +284,8 @@ check_default_values(_) ->
            "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-mnesia/quorum",
          rabbitmq_base => "%APPDATA%/RabbitMQ",
          rabbitmq_home => maps:get(rabbitmq_home, Win32Context),
+         stream_queue_dir =>
+           "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-mnesia/stream",
          split_nodename => rabbit_nodes_common:parts(Node),
          upgrade_log_file =>
            "%APPDATA%/RabbitMQ/log/" ++ NodeS ++ "_upgrade.log",
@@ -397,6 +403,7 @@ check_values_from_reachable_remote_node(Config) ->
           product_version => default,
           quorum_queue_dir => default,
           rabbitmq_home => default,
+          stream_queue_dir => default,
           upgrade_log_file => default
          },
 
@@ -437,6 +444,7 @@ check_values_from_reachable_remote_node(Config) ->
              product_version => undefined,
              quorum_queue_dir => MnesiaDir ++ "/quorum",
              rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
+             stream_queue_dir => MnesiaDir ++ "/stream",
              split_nodename => rabbit_nodes_common:parts(Node),
              sys_prefix => "",
              upgrade_log_file =>
@@ -512,6 +520,7 @@ check_values_from_offline_remote_node(_) ->
       product_version => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
+      stream_queue_dir => default,
       upgrade_log_file => default
      },
 
@@ -552,6 +561,7 @@ check_values_from_offline_remote_node(_) ->
          product_version => undefined,
          quorum_queue_dir => undefined,
          rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
+         stream_queue_dir => undefined,
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
          upgrade_log_file =>
@@ -570,6 +580,7 @@ check_context_to_app_env_vars(_) ->
 
     Vars = [{mnesia, dir, maps:get(mnesia_dir, UnixContext)},
             {ra, data_dir, maps:get(quorum_queue_dir, UnixContext)},
+            {osiris, data_dir, maps:get(stream_queue_dir, UnixContext)},
             {rabbit, feature_flags_file,
              maps:get(feature_flags_file, UnixContext)},
             {rabbit, plugins_dir, maps:get(plugins_path, UnixContext)},
@@ -965,6 +976,14 @@ check_RABBITMQ_QUORUM_DIR(_) ->
                             Value1, Value1,
                             Value2, Value2).
 
+check_RABBITMQ_STREAM_DIR(_) ->
+    Value1 = random_string(),
+    Value2 = random_string(),
+    check_prefixed_variable("RABBITMQ_STREAM_DIR",
+                            stream_queue_dir,
+                            '_',
+                            Value1, Value1,
+                            Value2, Value2).
 check_RABBITMQ_USE_LOGNAME(_) ->
     check_prefixed_variable("RABBITMQ_USE_LONGNAME",
                             nodename_type,
