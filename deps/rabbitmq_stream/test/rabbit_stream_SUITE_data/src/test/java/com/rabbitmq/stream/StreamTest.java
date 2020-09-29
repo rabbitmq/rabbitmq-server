@@ -16,13 +16,9 @@
 
 package com.rabbitmq.stream;
 
-import com.rabbitmq.stream.impl.Client;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.rabbitmq.stream.impl.Client;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,106 +28,146 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 @ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
 public class StreamTest {
 
-    String stream;
-    TestUtils.ClientFactory cf;
+  String stream;
+  TestUtils.ClientFactory cf;
 
-    static Stream<Arguments> shouldBePossibleToPublishFromAnyNodeAndConsumeFromAnyMember() {
-        return Stream.of(
-                brokers("leader", metadata -> metadata.getLeader(), "leader", metadata -> metadata.getLeader()),
-                brokers("leader", metadata -> metadata.getLeader(), "replica", metadata -> metadata.getReplicas().iterator().next()),
-                brokers("replica", metadata -> metadata.getReplicas().iterator().next(), "leader", metadata -> metadata.getLeader()),
-                brokers("replica", metadata -> new ArrayList<>(metadata.getReplicas()).get(0), "replica", metadata -> new ArrayList<>(metadata.getReplicas()).get(1))
-        );
-    }
+  static Stream<Arguments> shouldBePossibleToPublishFromAnyNodeAndConsumeFromAnyMember() {
+    return Stream.of(
+        brokers(
+            "leader", metadata -> metadata.getLeader(), "leader", metadata -> metadata.getLeader()),
+        brokers(
+            "leader",
+            metadata -> metadata.getLeader(),
+            "replica",
+            metadata -> metadata.getReplicas().iterator().next()),
+        brokers(
+            "replica",
+            metadata -> metadata.getReplicas().iterator().next(),
+            "leader",
+            metadata -> metadata.getLeader()),
+        brokers(
+            "replica",
+            metadata -> new ArrayList<>(metadata.getReplicas()).get(0),
+            "replica",
+            metadata -> new ArrayList<>(metadata.getReplicas()).get(1)));
+  }
 
-    static Arguments brokers(String dp, Function<Client.StreamMetadata, Client.Broker> publisherBroker,
-                             String dc, Function<Client.StreamMetadata, Client.Broker> consumerBroker) {
-        return Arguments.of(new FunctionWithToString<>(dp, publisherBroker), new FunctionWithToString<>(dc, consumerBroker));
-    }
+  static Arguments brokers(
+      String dp,
+      Function<Client.StreamMetadata, Client.Broker> publisherBroker,
+      String dc,
+      Function<Client.StreamMetadata, Client.Broker> consumerBroker) {
+    return Arguments.of(
+        new FunctionWithToString<>(dp, publisherBroker),
+        new FunctionWithToString<>(dc, consumerBroker));
+  }
 
-    @ParameterizedTest
-    @MethodSource
-    void shouldBePossibleToPublishFromAnyNodeAndConsumeFromAnyMember(Function<Client.StreamMetadata, Client.Broker> publisherBroker,
-                                                                     Function<Client.StreamMetadata, Client.Broker> consumerBroker) throws Exception {
+  @ParameterizedTest
+  @MethodSource
+  void shouldBePossibleToPublishFromAnyNodeAndConsumeFromAnyMember(
+      Function<Client.StreamMetadata, Client.Broker> publisherBroker,
+      Function<Client.StreamMetadata, Client.Broker> consumerBroker)
+      throws Exception {
 
-        int messageCount = 10_000;
-        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
-        Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
-        assertThat(metadata).hasSize(1).containsKey(stream);
-        Client.StreamMetadata streamMetadata = metadata.get(stream);
+    int messageCount = 10_000;
+    Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
+    assertThat(metadata).hasSize(1).containsKey(stream);
+    Client.StreamMetadata streamMetadata = metadata.get(stream);
 
-        CountDownLatch publishingLatch = new CountDownLatch(messageCount);
-        Client publisher = cf.get(new Client.ClientParameters()
+    CountDownLatch publishingLatch = new CountDownLatch(messageCount);
+    Client publisher =
+        cf.get(
+            new Client.ClientParameters()
                 .port(publisherBroker.apply(streamMetadata).getPort())
-                .publishConfirmListener((publisherId, publishingId) -> publishingLatch.countDown()));
+                .publishConfirmListener(
+                    (publisherId, publishingId) -> publishingLatch.countDown()));
 
-        IntStream.range(0, messageCount).forEach(i -> publisher.publish(stream, (byte) 1, Collections.singletonList(
-                publisher.messageBuilder().addData(("hello " + i).getBytes(StandardCharsets.UTF_8)).build())));
+    IntStream.range(0, messageCount)
+        .forEach(
+            i ->
+                publisher.publish(
+                    stream,
+                    (byte) 1,
+                    Collections.singletonList(
+                        publisher
+                            .messageBuilder()
+                            .addData(("hello " + i).getBytes(StandardCharsets.UTF_8))
+                            .build())));
 
-        assertThat(publishingLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(publishingLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-        CountDownLatch consumingLatch = new CountDownLatch(messageCount);
-        Set<String> bodies = ConcurrentHashMap.newKeySet(messageCount);
-        Client consumer = cf.get(new Client.ClientParameters()
+    CountDownLatch consumingLatch = new CountDownLatch(messageCount);
+    Set<String> bodies = ConcurrentHashMap.newKeySet(messageCount);
+    Client consumer =
+        cf.get(
+            new Client.ClientParameters()
                 .port(consumerBroker.apply(streamMetadata).getPort())
-                .chunkListener((client1, subscriptionId, offset, messageCount1, dataSize) -> client1.credit(subscriptionId, 10))
-                .messageListener((subscriptionId, offset, message) -> {
-                    bodies.add(new String(message.getBodyAsBinary(), StandardCharsets.UTF_8));
-                    consumingLatch.countDown();
-                })
-        );
+                .chunkListener(
+                    (client1, subscriptionId, offset, messageCount1, dataSize) ->
+                        client1.credit(subscriptionId, 10))
+                .messageListener(
+                    (subscriptionId, offset, message) -> {
+                      bodies.add(new String(message.getBodyAsBinary(), StandardCharsets.UTF_8));
+                      consumingLatch.countDown();
+                    }));
 
-        consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
+    consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
 
-        assertThat(consumingLatch.await(10, TimeUnit.SECONDS)).isTrue();
-        assertThat(bodies).hasSize(messageCount);
-        IntStream.range(0, messageCount).forEach(i -> assertThat(bodies.contains("hello " + i)));
-    }
+    assertThat(consumingLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(bodies).hasSize(messageCount);
+    IntStream.range(0, messageCount).forEach(i -> assertThat(bodies.contains("hello " + i)));
+  }
 
-    @Test
-    void metadataOnClusterShouldReturnLeaderAndReplicas() {
-        Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
-        Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
-        assertThat(metadata).hasSize(1).containsKey(stream);
-        Client.StreamMetadata streamMetadata = metadata.get(stream);
-        assertThat(streamMetadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
-        assertThat(streamMetadata.getReplicas()).hasSize(2);
+  @Test
+  void metadataOnClusterShouldReturnLeaderAndReplicas() {
+    Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
+    assertThat(metadata).hasSize(1).containsKey(stream);
+    Client.StreamMetadata streamMetadata = metadata.get(stream);
+    assertThat(streamMetadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
+    assertThat(streamMetadata.getReplicas()).hasSize(2);
 
-        BiConsumer<Client.Broker, Client.Broker> assertNodesAreDifferent = (node, anotherNode) -> {
-            assertThat(node.getHost()).isEqualTo(anotherNode.getHost());
-            assertThat(node.getPort()).isNotEqualTo(anotherNode.getPort());
+    BiConsumer<Client.Broker, Client.Broker> assertNodesAreDifferent =
+        (node, anotherNode) -> {
+          assertThat(node.getHost()).isEqualTo(anotherNode.getHost());
+          assertThat(node.getPort()).isNotEqualTo(anotherNode.getPort());
         };
 
-        streamMetadata.getReplicas().forEach(replica -> assertNodesAreDifferent.accept(replica, streamMetadata.getLeader()));
-        List<Client.Broker> replicas = new ArrayList<>(streamMetadata.getReplicas());
-        assertNodesAreDifferent.accept(replicas.get(0), replicas.get(1));
+    streamMetadata
+        .getReplicas()
+        .forEach(replica -> assertNodesAreDifferent.accept(replica, streamMetadata.getLeader()));
+    List<Client.Broker> replicas = new ArrayList<>(streamMetadata.getReplicas());
+    assertNodesAreDifferent.accept(replicas.get(0), replicas.get(1));
+  }
+
+  static class FunctionWithToString<T, R> implements Function<T, R> {
+
+    final String toString;
+    final Function<T, R> delegate;
+
+    FunctionWithToString(String toString, Function<T, R> delegate) {
+      this.toString = toString;
+      this.delegate = delegate;
     }
 
-    static class FunctionWithToString<T, R> implements Function<T, R> {
-
-        final String toString;
-        final Function<T, R> delegate;
-
-        FunctionWithToString(String toString, Function<T, R> delegate) {
-            this.toString = toString;
-            this.delegate = delegate;
-        }
-
-        @Override
-        public R apply(T t) {
-            return delegate.apply(t);
-        }
-
-        @Override
-        public String toString() {
-            return toString;
-        }
+    @Override
+    public R apply(T t) {
+      return delegate.apply(t);
     }
 
+    @Override
+    public String toString() {
+      return toString;
+    }
+  }
 }

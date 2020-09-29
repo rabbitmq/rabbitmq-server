@@ -27,13 +27,14 @@
 
     <properties>
         <stream-client.version>0.1.0-SNAPSHOT</stream-client.version>
-        <proton-j.version>0.33.5</proton-j.version>
-        <junit.jupiter.version>5.6.2</junit.jupiter.version>
-        <assertj.version>3.16.1</assertj.version>
-        <mockito.version>3.3.3</mockito.version>
+        <proton-j.version>0.33.6</proton-j.version>
+        <junit.jupiter.version>5.7.0</junit.jupiter.version>
+        <assertj.version>3.17.2</assertj.version>
+        <mockito.version>3.5.11</mockito.version>
         <logback.version>1.2.3</logback.version>
         <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
+        <spotless.version>2.2.0</spotless.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -108,6 +109,20 @@
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <version>1.9</version>
+                            <style>GOOGLE</style>
+                        </googleJavaFormat>
+                    </java>
+                </configuration>
             </plugin>
 
         </plugins>

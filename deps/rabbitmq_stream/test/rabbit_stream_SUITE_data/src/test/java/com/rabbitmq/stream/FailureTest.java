@@ -16,12 +16,11 @@
 
 package com.rabbitmq.stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
 import com.rabbitmq.stream.codec.WrapperMessageBuilder;
 import com.rabbitmq.stream.impl.Client;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
@@ -29,88 +28,100 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 @ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
 public class FailureTest {
 
-    TestUtils.ClientFactory cf;
-    String stream;
-    ExecutorService executorService;
+  TestUtils.ClientFactory cf;
+  String stream;
+  ExecutorService executorService;
 
-    static void wait(Duration duration) {
-        try {
-            Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+  static void wait(Duration duration) {
+    try {
+      Thread.sleep(duration.toMillis());
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
     }
+  }
 
-    @AfterEach
-    void tearDown() {
-        if (executorService != null) {
-            executorService.shutdownNow();
-        }
+  @AfterEach
+  void tearDown() {
+    if (executorService != null) {
+      executorService.shutdownNow();
     }
+  }
 
-    @Test
-    void leaderFailureWhenPublisherConnectedToReplica() throws Exception {
-        Set<String> messages = new HashSet<>();
-        Client client = cf.get(new Client.ClientParameters()
-                .port(TestUtils.streamPortNode1())
-        );
-        Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
-        Client.StreamMetadata streamMetadata = metadata.get(stream);
-        assertThat(streamMetadata).isNotNull();
+  @Test
+  void leaderFailureWhenPublisherConnectedToReplica() throws Exception {
+    Set<String> messages = new HashSet<>();
+    Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
+    Client.StreamMetadata streamMetadata = metadata.get(stream);
+    assertThat(streamMetadata).isNotNull();
 
-        assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
-        assertThat(streamMetadata.getReplicas()).isNotEmpty();
-        Client.Broker replica = streamMetadata.getReplicas().get(0);
-        assertThat(replica.getPort()).isNotEqualTo(TestUtils.streamPortNode1());
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+    assertThat(streamMetadata.getReplicas()).isNotEmpty();
+    Client.Broker replica = streamMetadata.getReplicas().get(0);
+    assertThat(replica.getPort()).isNotEqualTo(TestUtils.streamPortNode1());
 
-        AtomicReference<CountDownLatch> confirmLatch = new AtomicReference<>(new CountDownLatch(1));
+    AtomicReference<CountDownLatch> confirmLatch = new AtomicReference<>(new CountDownLatch(1));
 
-        CountDownLatch metadataLatch = new CountDownLatch(1);
-        Client publisher = cf.get(new Client.ClientParameters()
+    CountDownLatch metadataLatch = new CountDownLatch(1);
+    Client publisher =
+        cf.get(
+            new Client.ClientParameters()
                 .port(replica.getPort())
                 .metadataListener((stream, code) -> metadataLatch.countDown())
-                .publishConfirmListener((publisherId, publishingId) -> confirmLatch.get().countDown()));
-        String message = "all nodes available";
-        messages.add(message);
-        publisher.publish(stream, (byte) 1,
-                Collections.singletonList(publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
-        assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
-        confirmLatch.set(null);
+                .publishConfirmListener(
+                    (publisherId, publishingId) -> confirmLatch.get().countDown()));
+    String message = "all nodes available";
+    messages.add(message);
+    publisher.publish(
+        stream,
+        (byte) 1,
+        Collections.singletonList(
+            publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
+    assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
+    confirmLatch.set(null);
 
-        try {
-            Host.rabbitmqctl("stop_app");
-            try {
-                cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
-                fail("Node app stopped, connecting should not be possible");
-            } catch (Exception e) {
-                // OK
-            }
+    try {
+      Host.rabbitmqctl("stop_app");
+      try {
+        cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+        fail("Node app stopped, connecting should not be possible");
+      } catch (Exception e) {
+        // OK
+      }
 
-            assertThat(metadataLatch.await(10, TimeUnit.SECONDS)).isTrue();
+      assertThat(metadataLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-            //   wait until there's a new leader
-            TestUtils.waitAtMost(Duration.ofSeconds(10), () -> {
-                Client.StreamMetadata m = publisher.metadata(stream).get(stream);
-                return m.getLeader() != null && m.getLeader().getPort() != TestUtils.streamPortNode1();
-            });
+      //   wait until there's a new leader
+      TestUtils.waitAtMost(
+          Duration.ofSeconds(10),
+          () -> {
+            Client.StreamMetadata m = publisher.metadata(stream).get(stream);
+            return m.getLeader() != null && m.getLeader().getPort() != TestUtils.streamPortNode1();
+          });
 
-            confirmLatch.set(new CountDownLatch(1));
-            message = "2 nodes available";
-            messages.add(message);
-            publisher.publish(stream, (byte) 1, Collections.singletonList(publisher.messageBuilder()
-                    .addData(message.getBytes(StandardCharsets.UTF_8)).build()));
-            assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
-            confirmLatch.set(null);
-        } finally {
-            Host.rabbitmqctl("start_app");
-        }
+      confirmLatch.set(new CountDownLatch(1));
+      message = "2 nodes available";
+      messages.add(message);
+      publisher.publish(
+          stream,
+          (byte) 1,
+          Collections.singletonList(
+              publisher
+                  .messageBuilder()
+                  .addData(message.getBytes(StandardCharsets.UTF_8))
+                  .build()));
+      assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
+      confirmLatch.set(null);
+    } finally {
+      Host.rabbitmqctl("start_app");
+    }
 
     // wait until all the replicas are there
     TestUtils.waitAtMost(
@@ -120,350 +131,411 @@ public class FailureTest {
           return m.getReplicas().size() == 2;
         });
 
-        confirmLatch.set(new CountDownLatch(1));
-        message = "all nodes are back";
-        messages.add(message);
-        publisher.publish(stream, (byte) 1, Collections.singletonList(publisher.messageBuilder()
-                .addData(message.getBytes(StandardCharsets.UTF_8)).build()));
-        assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
-        confirmLatch.set(null);
+    confirmLatch.set(new CountDownLatch(1));
+    message = "all nodes are back";
+    messages.add(message);
+    publisher.publish(
+        stream,
+        (byte) 1,
+        Collections.singletonList(
+            publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
+    assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
+    confirmLatch.set(null);
 
-        CountDownLatch consumeLatch = new CountDownLatch(2);
-        Set<String> bodies = ConcurrentHashMap.newKeySet();
-        Client consumer = cf.get(new Client.ClientParameters()
+    CountDownLatch consumeLatch = new CountDownLatch(2);
+    Set<String> bodies = ConcurrentHashMap.newKeySet();
+    Client consumer =
+        cf.get(
+            new Client.ClientParameters()
                 .port(TestUtils.streamPortNode1())
-                .messageListener((subscriptionId, offset, msg) -> {
-                    bodies.add(new String(msg.getBodyAsBinary(), StandardCharsets.UTF_8));
-                    consumeLatch.countDown();
-                }));
+                .messageListener(
+                    (subscriptionId, offset, msg) -> {
+                      bodies.add(new String(msg.getBodyAsBinary(), StandardCharsets.UTF_8));
+                      consumeLatch.countDown();
+                    }));
 
-        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
-            Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-            return response.isOk();
+    TestUtils.waitAtMost(
+        Duration.ofSeconds(5),
+        () -> {
+          Client.Response response =
+              consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
+          return response.isOk();
         });
-        assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
-        assertThat(bodies).hasSize(3).contains("all nodes available", "2 nodes available", "all nodes are back");
-    }
+    assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(bodies)
+        .hasSize(3)
+        .contains("all nodes available", "2 nodes available", "all nodes are back");
+  }
 
-    @Test
-    void noLostConfirmedMessagesWhenLeaderGoesAway() throws Exception {
-        executorService = Executors.newCachedThreadPool();
-        Client client = cf.get(new Client.ClientParameters()
-                .port(TestUtils.streamPortNode1())
-        );
-        Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
-        Client.StreamMetadata streamMetadata = metadata.get(stream);
-        assertThat(streamMetadata).isNotNull();
+  @Test
+  void noLostConfirmedMessagesWhenLeaderGoesAway() throws Exception {
+    executorService = Executors.newCachedThreadPool();
+    Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
+    Client.StreamMetadata streamMetadata = metadata.get(stream);
+    assertThat(streamMetadata).isNotNull();
 
-        assertThat(streamMetadata.getLeader()).isNotNull();
-        assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+    assertThat(streamMetadata.getLeader()).isNotNull();
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
 
-        Map<Long, Message> published = new ConcurrentHashMap<>();
-        Set<Message> confirmed = ConcurrentHashMap.newKeySet();
+    Map<Long, Message> published = new ConcurrentHashMap<>();
+    Set<Message> confirmed = ConcurrentHashMap.newKeySet();
 
-        Client.PublishConfirmListener publishConfirmListener = (publisherId, publishingId) -> {
-            Message confirmedMessage;
-            int attempts = 0;
-            while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
-                wait(Duration.ofMillis(5));
-                attempts++;
-            }
-            confirmed.add(confirmedMessage);
+    Client.PublishConfirmListener publishConfirmListener =
+        (publisherId, publishingId) -> {
+          Message confirmedMessage;
+          int attempts = 0;
+          while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
+            wait(Duration.ofMillis(5));
+            attempts++;
+          }
+          confirmed.add(confirmedMessage);
         };
 
-        AtomicLong generation = new AtomicLong(0);
-        AtomicLong sequence = new AtomicLong(0);
-        AtomicBoolean connected = new AtomicBoolean(true);
-        AtomicReference<Client> publisher = new AtomicReference<>();
-        CountDownLatch reconnectionLatch = new CountDownLatch(1);
-        AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
-        Client.ShutdownListener shutdownListener = shutdownContext -> {
-            if (shutdownContext.getShutdownReason() == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
-                // avoid long-running task in the IO thread
-                executorService.submit(() -> {
-                    connected.set(false);
+    AtomicLong generation = new AtomicLong(0);
+    AtomicLong sequence = new AtomicLong(0);
+    AtomicBoolean connected = new AtomicBoolean(true);
+    AtomicReference<Client> publisher = new AtomicReference<>();
+    CountDownLatch reconnectionLatch = new CountDownLatch(1);
+    AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
+    Client.ShutdownListener shutdownListener =
+        shutdownContext -> {
+          if (shutdownContext.getShutdownReason()
+              == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
+            // avoid long-running task in the IO thread
+            executorService.submit(
+                () -> {
+                  connected.set(false);
 
-                    Client locator = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
-                    // wait until there's a new leader
-                    try {
-                        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
-                            Client.StreamMetadata m = locator.metadata(stream).get(stream);
-                            return m.getLeader() != null && m.getLeader().getPort() != TestUtils.streamPortNode1();
+                  Client locator =
+                      cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
+                  // wait until there's a new leader
+                  try {
+                    TestUtils.waitAtMost(
+                        Duration.ofSeconds(5),
+                        () -> {
+                          Client.StreamMetadata m = locator.metadata(stream).get(stream);
+                          return m.getLeader() != null
+                              && m.getLeader().getPort() != TestUtils.streamPortNode1();
                         });
-                    } catch (Throwable e) {
-                        reconnectionLatch.countDown();
-                        return;
-                    }
-
-                    int newLeaderPort = locator.metadata(stream).get(stream).getLeader().getPort();
-                    Client newPublisher = cf.get(new Client.ClientParameters()
-                            .port(newLeaderPort)
-                            .shutdownListener(shutdownListenerReference.get())
-                            .publishConfirmListener(publishConfirmListener)
-                    );
-
-                    generation.incrementAndGet();
-                    published.clear();
-                    publisher.set(newPublisher);
-                    connected.set(true);
-
+                  } catch (Throwable e) {
                     reconnectionLatch.countDown();
-                });
-            }
-        };
-        shutdownListenerReference.set(shutdownListener);
+                    return;
+                  }
 
-        client = cf.get(new Client.ClientParameters()
+                  int newLeaderPort = locator.metadata(stream).get(stream).getLeader().getPort();
+                  Client newPublisher =
+                      cf.get(
+                          new Client.ClientParameters()
+                              .port(newLeaderPort)
+                              .shutdownListener(shutdownListenerReference.get())
+                              .publishConfirmListener(publishConfirmListener));
+
+                  generation.incrementAndGet();
+                  published.clear();
+                  publisher.set(newPublisher);
+                  connected.set(true);
+
+                  reconnectionLatch.countDown();
+                });
+          }
+        };
+    shutdownListenerReference.set(shutdownListener);
+
+    client =
+        cf.get(
+            new Client.ClientParameters()
                 .port(streamMetadata.getLeader().getPort())
                 .shutdownListener(shutdownListener)
                 .publishConfirmListener(publishConfirmListener));
 
-        publisher.set(client);
+    publisher.set(client);
 
-        AtomicBoolean keepPublishing = new AtomicBoolean(true);
+    AtomicBoolean keepPublishing = new AtomicBoolean(true);
 
-        executorService.submit(() -> {
-            while (keepPublishing.get()) {
-                if (connected.get()) {
-                    Message message = publisher.get().messageBuilder()
-                            .properties().messageId(sequence.getAndIncrement())
-                            .messageBuilder().applicationProperties().entry("generation", generation.get())
-                            .messageBuilder().build();
-                    try {
-                        long publishingId = publisher.get().publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
-                        published.put(publishingId, message);
-                    } catch (Exception e) {
-                        // keep going
-                    }
-                    wait(Duration.ofMillis(10));
-                } else {
-                    wait(Duration.ofSeconds(1));
-                }
+    executorService.submit(
+        () -> {
+          while (keepPublishing.get()) {
+            if (connected.get()) {
+              Message message =
+                  publisher
+                      .get()
+                      .messageBuilder()
+                      .properties()
+                      .messageId(sequence.getAndIncrement())
+                      .messageBuilder()
+                      .applicationProperties()
+                      .entry("generation", generation.get())
+                      .messageBuilder()
+                      .build();
+              try {
+                long publishingId =
+                    publisher
+                        .get()
+                        .publish(stream, (byte) 1, Collections.singletonList(message))
+                        .get(0);
+                published.put(publishingId, message);
+              } catch (Exception e) {
+                // keep going
+              }
+              wait(Duration.ofMillis(10));
+            } else {
+              wait(Duration.ofSeconds(1));
             }
+          }
         });
 
-        // let's publish for a bit of time
-        Thread.sleep(2000);
+    // let's publish for a bit of time
+    Thread.sleep(2000);
 
-        assertThat(confirmed).isNotEmpty();
-        int confirmedCount = confirmed.size();
+    assertThat(confirmed).isNotEmpty();
+    int confirmedCount = confirmed.size();
 
-        try {
-            Host.rabbitmqctl("stop_app");
+    try {
+      Host.rabbitmqctl("stop_app");
 
-            assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
+      assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-            // let's publish for a bit of time
-            Thread.sleep(2000);
+      // let's publish for a bit of time
+      Thread.sleep(2000);
 
-        } finally {
-            Host.rabbitmqctl("start_app");
-        }
-        assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
-        confirmedCount = confirmed.size();
-
-        Client metadataClient = cf.get(new Client.ClientParameters()
-                .port(TestUtils.streamPortNode2())
-        );
-        // wait until all the replicas are there
-        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
-            Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
-            return m.getReplicas().size() == 2;
-        });
-
-        // let's publish for a bit of time
-        Thread.sleep(2000);
-
-        assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
-
-        keepPublishing.set(false);
-
-        Queue<Message> consumed = new ConcurrentLinkedQueue<>();
-        Set<Long> generations = ConcurrentHashMap.newKeySet();
-        CountDownLatch consumedLatch = new CountDownLatch(1);
-        Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
-        Client consumer = cf.get(new Client.ClientParameters()
-                .port(m.getReplicas().get(0).getPort())
-                .chunkListener((client1, subscriptionId, offset, messageCount, dataSize) -> client1.credit(subscriptionId, 1))
-                .messageListener((subscriptionId, offset, message) -> {
-                    consumed.add(message);
-                    generations.add((Long) message.getApplicationProperties().get("generation"));
-                    if (consumed.size() == confirmed.size()) {
-                        consumedLatch.countDown();
-                    }
-                })
-        );
-
-        Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-        assertThat(response.isOk()).isTrue();
-
-        assertThat(consumedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-        assertThat(generations).hasSize(2).contains(0L, 1L);
-        assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
-        long lastMessageId = -1;
-        for (Message message : consumed) {
-            long messageId = message.getProperties().getMessageIdAsLong();
-            assertThat(messageId).isGreaterThanOrEqualTo(lastMessageId);
-            lastMessageId = messageId;
-        }
-        assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
+    } finally {
+      Host.rabbitmqctl("start_app");
     }
+    assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
+    confirmedCount = confirmed.size();
 
-    @Test
-    void consumerReattachesToOtherReplicaWhenReplicaGoesAway() throws Exception {
-        executorService = Executors.newCachedThreadPool();
-        Client metadataClient = cf.get(new Client.ClientParameters()
-                .port(TestUtils.streamPortNode1())
-        );
-        Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
-        Client.StreamMetadata streamMetadata = metadata.get(stream);
-        assertThat(streamMetadata).isNotNull();
-
-        assertThat(streamMetadata.getLeader()).isNotNull();
-        assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
-
-        Map<Long, Message> published = new ConcurrentHashMap<>();
-        Set<Message> confirmed = ConcurrentHashMap.newKeySet();
-        Set<Long> confirmedIds = ConcurrentHashMap.newKeySet();
-        Client.PublishConfirmListener publishConfirmListener = (publisherId, publishingId) -> {
-            Message confirmedMessage;
-            int attempts = 0;
-            while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
-                wait(Duration.ofMillis(5));
-                attempts++;
-            }
-            confirmed.add(confirmedMessage);
-            confirmedIds.add(confirmedMessage.getProperties().getMessageIdAsLong());
-        };
-
-        Client publisher = cf.get(new Client.ClientParameters()
-                .port(streamMetadata.getLeader().getPort())
-                .publishConfirmListener(publishConfirmListener)
-        );
-
-        AtomicLong generation = new AtomicLong(0);
-        AtomicLong sequence = new AtomicLong(0);
-        AtomicBoolean keepPublishing = new AtomicBoolean(true);
-        CountDownLatch publishingLatch = new CountDownLatch(1);
-
-        executorService.submit(() -> {
-            while (keepPublishing.get()) {
-                Message message = new WrapperMessageBuilder()
-                        .properties().messageId(sequence.getAndIncrement())
-                        .messageBuilder().applicationProperties().entry("generation", generation.get())
-                        .messageBuilder().build();
-                try {
-                    long publishingId = publisher.publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
-                    published.put(publishingId, message);
-                } catch (Exception e) {
-                    // keep going
-                }
-                wait(Duration.ofMillis(10));
-            }
-            publishingLatch.countDown();
+    Client metadataClient = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
+    // wait until all the replicas are there
+    TestUtils.waitAtMost(
+        Duration.ofSeconds(5),
+        () -> {
+          Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+          return m.getReplicas().size() == 2;
         });
 
-        Queue<Message> consumed = new ConcurrentLinkedQueue<>();
+    // let's publish for a bit of time
+    Thread.sleep(2000);
 
-        Client.Broker replica = streamMetadata.getReplicas().stream()
-                .filter(broker -> broker.getPort() == TestUtils.streamPortNode2())
-                .findFirst()
-                .orElseThrow(() -> new NoSuchElementException());
+    assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
 
-        AtomicLong lastProcessedOffset = new AtomicLong(-1);
-        Set<Long> generations = ConcurrentHashMap.newKeySet();
-        Set<Long> consumedIds = ConcurrentHashMap.newKeySet();
-        Client.MessageListener messageListener = (subscriptionId, offset, message) -> {
-            consumed.add(message);
-            generations.add((Long) message.getApplicationProperties().get("generation"));
-            consumedIds.add(message.getProperties().getMessageIdAsLong());
-            lastProcessedOffset.set(offset);
+    keepPublishing.set(false);
+
+    Queue<Message> consumed = new ConcurrentLinkedQueue<>();
+    Set<Long> generations = ConcurrentHashMap.newKeySet();
+    CountDownLatch consumedLatch = new CountDownLatch(1);
+    Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+    Client consumer =
+        cf.get(
+            new Client.ClientParameters()
+                .port(m.getReplicas().get(0).getPort())
+                .chunkListener(
+                    (client1, subscriptionId, offset, messageCount, dataSize) ->
+                        client1.credit(subscriptionId, 1))
+                .messageListener(
+                    (subscriptionId, offset, message) -> {
+                      consumed.add(message);
+                      generations.add((Long) message.getApplicationProperties().get("generation"));
+                      if (consumed.size() == confirmed.size()) {
+                        consumedLatch.countDown();
+                      }
+                    }));
+
+    Client.Response response =
+        consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
+    assertThat(response.isOk()).isTrue();
+
+    assertThat(consumedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(generations).hasSize(2).contains(0L, 1L);
+    assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
+    long lastMessageId = -1;
+    for (Message message : consumed) {
+      long messageId = message.getProperties().getMessageIdAsLong();
+      assertThat(messageId).isGreaterThanOrEqualTo(lastMessageId);
+      lastMessageId = messageId;
+    }
+    assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
+  }
+
+  @Test
+  void consumerReattachesToOtherReplicaWhenReplicaGoesAway() throws Exception {
+    executorService = Executors.newCachedThreadPool();
+    Client metadataClient = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
+    Client.StreamMetadata streamMetadata = metadata.get(stream);
+    assertThat(streamMetadata).isNotNull();
+
+    assertThat(streamMetadata.getLeader()).isNotNull();
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+
+    Map<Long, Message> published = new ConcurrentHashMap<>();
+    Set<Message> confirmed = ConcurrentHashMap.newKeySet();
+    Set<Long> confirmedIds = ConcurrentHashMap.newKeySet();
+    Client.PublishConfirmListener publishConfirmListener =
+        (publisherId, publishingId) -> {
+          Message confirmedMessage;
+          int attempts = 0;
+          while ((confirmedMessage = published.remove(publishingId)) == null && attempts < 10) {
+            wait(Duration.ofMillis(5));
+            attempts++;
+          }
+          confirmed.add(confirmedMessage);
+          confirmedIds.add(confirmedMessage.getProperties().getMessageIdAsLong());
         };
 
-        CountDownLatch reconnectionLatch = new CountDownLatch(1);
-        AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
-        Client.ShutdownListener shutdownListener = shutdownContext -> {
-            if (shutdownContext.getShutdownReason() == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
-                // avoid long-running task in the IO thread
-                executorService.submit(() -> {
-                    Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
-                    int newReplicaPort = m.getReplicas().get(0).getPort();
+    Client publisher =
+        cf.get(
+            new Client.ClientParameters()
+                .port(streamMetadata.getLeader().getPort())
+                .publishConfirmListener(publishConfirmListener));
 
-                    Client newConsumer = cf.get(new Client.ClientParameters()
-                            .port(newReplicaPort)
-                            .shutdownListener(shutdownListenerReference.get())
-                            .chunkListener((client1, subscriptionId, offset, messageCount, dataSize) -> client1.credit(subscriptionId, 1))
-                            .messageListener(messageListener)
-                    );
+    AtomicLong generation = new AtomicLong(0);
+    AtomicLong sequence = new AtomicLong(0);
+    AtomicBoolean keepPublishing = new AtomicBoolean(true);
+    CountDownLatch publishingLatch = new CountDownLatch(1);
 
-                    newConsumer.subscribe((byte) 1, stream, OffsetSpecification.offset(lastProcessedOffset.get() + 1), 10);
-
-                    generation.incrementAndGet();
-                    reconnectionLatch.countDown();
-                });
+    executorService.submit(
+        () -> {
+          while (keepPublishing.get()) {
+            Message message =
+                new WrapperMessageBuilder()
+                    .properties()
+                    .messageId(sequence.getAndIncrement())
+                    .messageBuilder()
+                    .applicationProperties()
+                    .entry("generation", generation.get())
+                    .messageBuilder()
+                    .build();
+            try {
+              long publishingId =
+                  publisher.publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
+              published.put(publishingId, message);
+            } catch (Exception e) {
+              // keep going
             }
-        };
-        shutdownListenerReference.set(shutdownListener);
+            wait(Duration.ofMillis(10));
+          }
+          publishingLatch.countDown();
+        });
 
-        Client consumer = cf.get(new Client.ClientParameters()
+    Queue<Message> consumed = new ConcurrentLinkedQueue<>();
+
+    Client.Broker replica =
+        streamMetadata.getReplicas().stream()
+            .filter(broker -> broker.getPort() == TestUtils.streamPortNode2())
+            .findFirst()
+            .orElseThrow(() -> new NoSuchElementException());
+
+    AtomicLong lastProcessedOffset = new AtomicLong(-1);
+    Set<Long> generations = ConcurrentHashMap.newKeySet();
+    Set<Long> consumedIds = ConcurrentHashMap.newKeySet();
+    Client.MessageListener messageListener =
+        (subscriptionId, offset, message) -> {
+          consumed.add(message);
+          generations.add((Long) message.getApplicationProperties().get("generation"));
+          consumedIds.add(message.getProperties().getMessageIdAsLong());
+          lastProcessedOffset.set(offset);
+        };
+
+    CountDownLatch reconnectionLatch = new CountDownLatch(1);
+    AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
+    Client.ShutdownListener shutdownListener =
+        shutdownContext -> {
+          if (shutdownContext.getShutdownReason()
+              == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
+            // avoid long-running task in the IO thread
+            executorService.submit(
+                () -> {
+                  Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+                  int newReplicaPort = m.getReplicas().get(0).getPort();
+
+                  Client newConsumer =
+                      cf.get(
+                          new Client.ClientParameters()
+                              .port(newReplicaPort)
+                              .shutdownListener(shutdownListenerReference.get())
+                              .chunkListener(
+                                  (client1, subscriptionId, offset, messageCount, dataSize) ->
+                                      client1.credit(subscriptionId, 1))
+                              .messageListener(messageListener));
+
+                  newConsumer.subscribe(
+                      (byte) 1,
+                      stream,
+                      OffsetSpecification.offset(lastProcessedOffset.get() + 1),
+                      10);
+
+                  generation.incrementAndGet();
+                  reconnectionLatch.countDown();
+                });
+          }
+        };
+    shutdownListenerReference.set(shutdownListener);
+
+    Client consumer =
+        cf.get(
+            new Client.ClientParameters()
                 .port(replica.getPort())
                 .shutdownListener(shutdownListener)
-                .chunkListener((client1, subscriptionId, offset, messageCount, dataSize) -> client1.credit(subscriptionId, 1))
-                .messageListener(messageListener)
-        );
+                .chunkListener(
+                    (client1, subscriptionId, offset, messageCount, dataSize) ->
+                        client1.credit(subscriptionId, 1))
+                .messageListener(messageListener));
 
-        Client.Response response = consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-        assertThat(response.isOk()).isTrue();
+    Client.Response response =
+        consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
+    assertThat(response.isOk()).isTrue();
 
-        // let's publish for a bit of time
-        Thread.sleep(2000);
+    // let's publish for a bit of time
+    Thread.sleep(2000);
 
-        assertThat(confirmed).isNotEmpty();
-        assertThat(consumed).isNotEmpty();
-        int confirmedCount = confirmed.size();
+    assertThat(confirmed).isNotEmpty();
+    assertThat(consumed).isNotEmpty();
+    int confirmedCount = confirmed.size();
 
-        try {
-            Host.rabbitmqctl("stop_app", Host.node2name());
+    try {
+      Host.rabbitmqctl("stop_app", Host.node2name());
 
-            assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
+      assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-            // let's publish for a bit of time
-            Thread.sleep(2000);
+      // let's publish for a bit of time
+      Thread.sleep(2000);
 
-        } finally {
-            Host.rabbitmqctl("start_app", Host.node2name());
-        }
-        assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
-        confirmedCount = confirmed.size();
+    } finally {
+      Host.rabbitmqctl("start_app", Host.node2name());
+    }
+    assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
+    confirmedCount = confirmed.size();
 
-        // wait until all the replicas are there
-        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> {
-            Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
-            return m.getReplicas().size() == 2;
+    // wait until all the replicas are there
+    TestUtils.waitAtMost(
+        Duration.ofSeconds(5),
+        () -> {
+          Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+          return m.getReplicas().size() == 2;
         });
 
-        // let's publish for a bit of time
-        Thread.sleep(2000);
+    // let's publish for a bit of time
+    Thread.sleep(2000);
 
-        assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
+    assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
 
-        keepPublishing.set(false);
+    keepPublishing.set(false);
 
-        assertThat(publishingLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(publishingLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-        TestUtils.waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
+    TestUtils.waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
 
-        assertThat(generations).hasSize(2).contains(0L, 1L);
-        assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
-        long lastMessageId = -1;
-        for (Message message : consumed) {
-            long messageId = message.getProperties().getMessageIdAsLong();
-            assertThat(messageId).isGreaterThanOrEqualTo(lastMessageId);
-            lastMessageId = messageId;
-        }
-        assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
-
-        confirmedIds.forEach(confirmedId -> assertThat(consumedIds).contains(confirmedId));
+    assertThat(generations).hasSize(2).contains(0L, 1L);
+    assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
+    long lastMessageId = -1;
+    for (Message message : consumed) {
+      long messageId = message.getProperties().getMessageIdAsLong();
+      assertThat(messageId).isGreaterThanOrEqualTo(lastMessageId);
+      lastMessageId = messageId;
     }
+    assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
 
+    confirmedIds.forEach(confirmedId -> assertThat(consumedIds).contains(confirmedId));
+  }
 }
