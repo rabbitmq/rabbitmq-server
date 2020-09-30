@@ -610,7 +610,7 @@ range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize},
 	     TotalElements) ->
     Offset = (PageNum - 1) * PageSize + 1,
     try
-        range_response(lists:sublist(List, Offset, PageSize), RP, List,
+        range_response(sublist(List, Offset, PageSize), RP, List,
 		       TotalElements)
     catch
         error:function_clause ->
@@ -1203,3 +1203,8 @@ catch_no_such_user_or_vhost(Fun, Replacement) ->
     catch throw:{error, {E, _}} when E =:= no_such_user; E =:= no_such_vhost ->
         Replacement()
     end.
+
+%% this retains the old, buggy, pre 23.1 behavour of lists:sublist/3 where an
+%% error is thrown when the request is out of range
+sublist(List, S, L) when is_integer(L), L >= 0 ->
+    lists:sublist(lists:nthtail(S-1, List), L).
