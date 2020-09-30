@@ -407,7 +407,8 @@ generate_handler(Backend, HandlerConfig) ->
                            lists:ukeysort(1, default_handler_config(Backend)))}].
 
 configure_handler_backend(syslog_lager_backend) ->
-    app_utils:load_applications([syslog]);
+    {ok, _} = application:ensure_all_started(syslog),
+    ok;
 configure_handler_backend(_Backend) ->
     ok.
 
