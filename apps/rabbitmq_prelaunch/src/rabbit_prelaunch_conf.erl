@@ -360,7 +360,9 @@ override_with_hard_coded_critical_config() ->
               {ra,
                %% Make Ra use a custom logger that dispatches to lager
                %% instead of the default OTP logger
-               [{logger_module, rabbit_log_ra_shim}]}
+               [{logger_module, rabbit_log_ra_shim}]},
+              {osiris,
+               [{logger_module, rabbit_log_osiris_shim}]}
              ],
     apply_erlang_term_based_config(Config).
 

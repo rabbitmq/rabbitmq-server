@@ -39,6 +39,8 @@ register() ->
                           {policy_validator, <<"queue-mode">>},
                           {policy_validator, <<"overflow">>},
                           {policy_validator, <<"delivery-limit">>},
+                          {policy_validator, <<"max-age">>},
+                          {policy_validator, <<"max-segment-size">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -135,7 +137,21 @@ validate_policy0(<<"delivery-limit">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
 validate_policy0(<<"delivery-limit">>, Value) ->
-    {error, "~p is not a valid delivery limit", [Value]}.
+    {error, "~p is not a valid delivery limit", [Value]};
+
+validate_policy0(<<"max-age">>, Value) ->
+    case rabbit_amqqueue:check_max_age(Value) of
+        {error, _} ->
+            {error, "~p is not a valid max age", [Value]};
+        _ ->
+            ok
+    end;
+
+validate_policy0(<<"max-segment-size">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"max-segment-size">>, Value) ->
+    {error, "~p is not a valid segment size", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);

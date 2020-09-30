@@ -286,7 +286,7 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
     end;
 apply(_, #checkout{spec = {dequeue, _}},
       #?MODULE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
-    {State0, {error, unsupported}};
+    {State0, {error, {unsupported, single_active_consumer}}};
 apply(#{index := Index,
         system_time := Ts,
         from := From} = Meta, #checkout{spec = {dequeue, Settlement},
@@ -968,7 +968,6 @@ usage(Name) when is_atom(Name) ->
 messages_ready(#?MODULE{messages = M,
                         prefix_msgs = {RCnt, _R, PCnt, _P},
                         returns = R}) ->
-
     %% prefix messages will rarely have anything in them during normal
     %% operations so length/1 is fine here
     lqueue:len(M) + lqueue:len(R) + RCnt + PCnt.

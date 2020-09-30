@@ -388,9 +388,12 @@ kill_the_queue(QueueName) ->
     [begin
         {ok, Q} = rabbit_amqqueue:lookup({resource, <<"/">>, queue, QueueName}),
         Pid = amqqueue:get_pid(Q),
+        ct:pal("~w killed", [Pid]),
+        timer:sleep(1),
         exit(Pid, kill)
      end
-     || _ <- lists:seq(1, 11)],
+     || _ <- lists:seq(1, 50)],
+    timer:sleep(1),
     {ok, Q} = rabbit_amqqueue:lookup({resource, <<"/">>, queue, QueueName}),
     Pid = amqqueue:get_pid(Q),
     case is_process_alive(Pid) of
@@ -399,7 +402,11 @@ kill_the_queue(QueueName) ->
         false -> ok
     end.
 
-
-
-
-
+flush() ->
+    receive
+        Any ->
+            ct:pal("flush ~p", [Any]),
+            flush()
+    after 0 ->
+              ok
+    end.

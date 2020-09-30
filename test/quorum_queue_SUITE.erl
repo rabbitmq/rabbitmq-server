@@ -383,13 +383,19 @@ start_queue(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Expected = Children + 1,
+    ?assertMatch(Expected,
+                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -405,7 +411,8 @@ start_queue(Config) ->
     %% Check that the application and process are still up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])).
+    ?assertMatch(Expected,
+                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))).
 
 start_queue_concurrent(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -463,6 +470,10 @@ quorum_cluster_size_x(Config, Max, Expected) ->
 stop_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -471,19 +482,25 @@ stop_queue(Config) ->
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Expected = Children + 1,
+    ?assertMatch(Expected,
+                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
     %% Check that the application and process are down
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])
+                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))).
 
 restart_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
@@ -496,7 +513,9 @@ restart_queue(Config) ->
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])).
+    Expected = Children + 1,
+    ?assertMatch(Expected,
+                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))).
 
 idempotent_recover(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -554,6 +573,10 @@ restart_all_types(Config) ->
     %% ensure there are no regressions
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]),
+
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"restart_all_types-qq1">>,
     ?assertEqual({'queue.declare_ok', QQ1, 0, 0},
@@ -575,7 +598,9 @@ restart_all_types(Config) ->
     %% Check that the application and two ra nodes are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Expected = length(Children) + 2,
+    Got = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    ?assertMatch(Expected, Got),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -591,6 +616,10 @@ stop_start_rabbit_app(Config) ->
     %% Test start/stop of rabbit app with both types of queues (quorum and
     %%  classic) to ensure there are no regressions
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"stop_start_rabbit_app-qq">>,
@@ -617,7 +646,9 @@ stop_start_rabbit_app(Config) ->
     %% Check that the application and two ra nodes are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Expected = Children + 2,
+    ?assertMatch(Expected,
+                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -935,6 +966,10 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     %% to verify that the cleanup is propagated through channels
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -955,17 +990,21 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children,
-                                      [ra_server_sup_sup])
+                       Children == length(rpc:call(Server, supervisor, which_children,
+                                                   [ra_server_sup_sup]))
                end),
     %% Check that all queue states have been cleaned
-    wait_for_cleanup(Server, NCh1, 0),
-    wait_for_cleanup(Server, NCh2, 0).
+    wait_for_cleanup(Server, NCh2, 0),
+    wait_for_cleanup(Server, NCh1, 0).
 
 cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% Declare/delete the queue and publish in one channel, while consuming on a
     %% different one to verify that the cleanup is propagated through channels
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -993,7 +1032,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     wait_for_cleanup(Server, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])
+                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh1, 0),
@@ -1596,8 +1635,8 @@ cleanup_data_dir(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
 
-    [{_, UId1}] = rpc:call(Server1, ra_directory, list_registered, []),
-    [{_, UId2}] = rpc:call(Server2, ra_directory, list_registered, []),
+    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [])),
+    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [])),
     DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [UId1]),
     DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [UId2]),
     ?assert(filelib:is_dir(DataDir1)),
@@ -1748,6 +1787,11 @@ reconnect_consumer_and_wait_channel_down(Config) ->
 delete_immediately_by_resource(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
+    %% are not affected by any other ra cluster that could be added in the future
+    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1756,7 +1800,7 @@ delete_immediately_by_resource(Config) ->
 
     %% Check that the application and process are down
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])
+                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))).
@@ -1784,6 +1828,8 @@ subscribe_redelivery_count(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
+    after 5000 ->
+              exit(basic_deliver_timeout)
     end,
 
     receive
@@ -1794,6 +1840,8 @@ subscribe_redelivery_count(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,
                                                 requeue      = true})
+    after 5000 ->
+              exit(basic_deliver_timeout_2)
     end,
 
     receive
@@ -1803,8 +1851,13 @@ subscribe_redelivery_count(Config) ->
             ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag2,
                                                multiple     = false}),
+            ct:pal("wait_for_messages_ready", []),
             wait_for_messages_ready(Servers, RaName, 0),
+            ct:pal("wait_for_messages_pending_ack", []),
             wait_for_messages_pending_ack(Servers, RaName, 0)
+    after 5000 ->
+              flush(500),
+              exit(basic_deliver_timeout_3)
     end.
 
 subscribe_redelivery_limit(Config) ->

@@ -114,6 +114,20 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({rabbit_osiris_metrics,
+                   [{description, "osiris metrics scraper"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_osiris_metrics]}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
+%% -rabbit_boot_step({rabbit_stream_coordinator,
+%%                    [{description, "stream queues coordinator"},
+%%                     {mfa,         {rabbit_stream_coordinator, start,
+%%                                    []}},
+%%                     {requires,    pre_boot},
+%%                     {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -255,7 +269,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit, osiris]).
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
