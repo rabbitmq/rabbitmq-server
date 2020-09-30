@@ -198,6 +198,12 @@ var HELP = {
     'queue-max-in-memory-bytes':
       'Total body size for ready messages a quorum queue can contain in memory before it starts storing them on disk only.<br/>(Sets the x-max-in-memory-bytes argument.)',
 
+    'queue-max-age':
+      'How long a message published to a stream queue can live before it is discarded.',
+
+    'queue-max-segment-size':
+      'Total segment size for stream segments on disk.',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
@@ -212,6 +218,9 @@ var HELP = {
 
     'queue-max-priority':
       'Maximum number of priority levels for the queue to support; if not set, the queue will not support message priorities.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/priority.html">x-max-priority</a>" argument.)',
+
+    'queue-max-age':
+      'Retention policy for stream queues.<br/>(Sets the x-max-age argument.)',
 
     'queue-lazy':
       'Set the queue into lazy mode, keeping as many messages as possible on disk to reduce RAM usage; if not set, the queue will keep an in-memory cache to deliver messages as fast as possible.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/lazy-queues.html">x-queue-mode</a>" argument.)',

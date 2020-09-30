@@ -1069,7 +1069,9 @@ quorum_queues_test_loop(Config, N) ->
     Publish(),
     Publish(),
     wait_until(fun() ->
-                       2 == maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined)
+                       Num = maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined),
+                       ct:pal("wait_until got ~w", [N]),
+                       2 == Num
                end, 100),
 
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
