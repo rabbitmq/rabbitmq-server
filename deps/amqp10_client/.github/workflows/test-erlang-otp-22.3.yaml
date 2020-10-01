@@ -20,7 +20,7 @@ jobs:
         with:
           otp-version: 22.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: CHECK RABBITMQ COMPONENTS
         # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
         id: ref
@@ -115,7 +115,7 @@ jobs:
         with:
           otp-version: 22.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: CACHE DEPS
         if: success() && 'latest' == 'latest'
         uses: actions/cache@v1
@@ -151,7 +151,7 @@ jobs:
         with:
           otp-version: 22.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: CACHE DEPS
         uses: actions/cache@v1
         with:
@@ -182,7 +182,7 @@ jobs:
         with:
           otp-version: 22.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: CACHE DEPS
         uses: actions/cache@v1
         with:
@@ -283,7 +283,7 @@ jobs:
         with:
           otp-version: 22.3
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: CACHE DEPS
         uses: actions/cache@v1
         with:
