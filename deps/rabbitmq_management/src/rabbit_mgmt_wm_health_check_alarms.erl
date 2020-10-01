@@ -12,6 +12,7 @@
 -export([resource_exists/2]).
 -export([variances/2]).
 
+-include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 %%--------------------------------------------------------------------
@@ -38,14 +39,18 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
         Xs when length(Xs) > 0 ->
             Msg = "There are alarms in effect in the cluster",
-            failure(Msg, ReqData, Context)
+            failure(Msg, Xs, ReqData, Context)
     end.
 
-failure(Message, ReqData, Context) ->
-    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
-                                                             {reason, rabbit_data_coercion:to_binary(Message)}],
-                                                           ReqData, Context),
-    {stop, cowboy_req:reply(500, #{}, Response, ReqData1), Context1}.
+failure(Message, Alarms0, ReqData, Context) ->
+    Alarms = rabbit_alarm:format_as_maps(Alarms0),
+    Body = #{
+        status => failed,
+        reason => rabbit_data_coercion:to_binary(Message),
+        alarms => Alarms
+    },
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData, Context),
+    {stop, cowboy_req:reply(?HEALTH_CHECK_FAILURE_STATUS, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
