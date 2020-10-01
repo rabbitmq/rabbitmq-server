@@ -20,7 +20,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: CHECK RABBITMQ COMPONENTS
         # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
         id: ref
@@ -123,7 +123,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -157,7 +157,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -230,7 +230,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -303,7 +303,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -376,7 +376,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -449,7 +449,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -522,7 +522,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -595,7 +595,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -668,7 +668,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -741,7 +741,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -814,7 +814,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -887,7 +887,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
@@ -960,7 +960,7 @@ jobs:
         with:
           otp-version: 23.0
           # https://github.com/elixir-lang/elixir/releases
-          elixir-version: 1.8.0
+          elixir-version: 1.10.4
       - name: DOWNLOAD DEPS ARCHIVE
         uses: actions/download-artifact@v2
         with:
