@@ -20,6 +20,7 @@
 
 -export([log/4]).
 
+-spec log(lager:log_level(), string(), [any()], _) -> ok.
 log(Level, Format, Args, _Meta) ->
     rabbit_log:log(osiris, Level, Format, Args),
     ok.

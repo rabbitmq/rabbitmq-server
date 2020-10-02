@@ -32,7 +32,8 @@
                     queue |
                     ra |
                     shovel |
-                    upgrade.
+                    upgrade |
+                    osiris.
 
 -spec debug(string()) -> 'ok'.
 -spec debug(string(), [any()]) -> 'ok'.

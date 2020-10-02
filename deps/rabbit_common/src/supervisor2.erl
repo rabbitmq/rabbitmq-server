@@ -869,7 +869,7 @@ do_restart_delay(Reason,
 
 maybe_restart(Strategy, Child, State) ->
     case restart(Strategy, Child, State) of
-        {try_again, Reason, NState2} ->
+        {{try_again, Reason}, NState2} ->
             %% Leaving control back to gen_server before
             %% trying again. This way other incoming requests
             %% for the supervisor can be handled - e.g. a
