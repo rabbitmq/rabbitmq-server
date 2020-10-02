@@ -2076,24 +2076,22 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                         msg_seq_no = MsgSeqNo},
                    DelQNames}, State0 = #ch{queue_states = QueueStates0}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
+    AllQueueNames = lists:foldl(fun (Q, Acc) ->
+                                        QRef = amqqueue:get_name(Q),
+                                        [QRef | Acc]
+                                end, [], Qs),
     {ok, QueueStates, Actions} =
         rabbit_queue_type:deliver(Qs, Delivery, QueueStates0),
-    State1 = handle_queue_actions(Actions,
-                                  State0#ch{queue_states = QueueStates}),
     %% NB: the order here is important since basic.returns must be
     %% sent before confirms.
-    %% TODO: fix - HACK TO WORK OUT ALL QREFS
-    AllDeliveredQRefs = lists:foldl(fun (Q, Acc) ->
-                                            QRef = amqqueue:get_name(Q),
-                                            [QRef | Acc]
-                                    end, [], Qs),
-    ok = process_routing_mandatory(Mandatory, AllDeliveredQRefs,
-                                   Message, State1),
-    State = process_routing_confirm(Confirm,
-                                    AllDeliveredQRefs,
-                                    MsgSeqNo,
-                                    XName, State1),
-    case rabbit_event:stats_level(State1, #ch.stats_timer) of
+    ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+    State1 = process_routing_confirm(Confirm, AllQueueNames,
+                                     MsgSeqNo, XName, State0),
+    %% Actions must be processed after registering confirms as actions may
+    %% contain rejections of publishes
+    State = handle_queue_actions(Actions,
+                                 State1#ch{queue_states = QueueStates}),
+    case rabbit_event:stats_level(State, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
             [?INCR_STATS(queue_exchange_stats,
@@ -2132,7 +2130,6 @@ confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
     {ConfirmMXs, UC1} = rabbit_confirms:confirm(MsgSeqNos, QRef, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
     record_confirms(ConfirmMXs, State#ch{unconfirmed = UC1}).
-    % record_rejects(RejectMXs, State1).
 
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;
@@ -2700,7 +2697,7 @@ handle_queue_actions(Actions, #ch{} = State0) ->
                                 {ok, MX, U2} ->
                                     {U2, [MX | Acc]};
                                 {error, not_found} ->
-                                    Acc
+                                    {U1, Acc}
                             end
                     end, {S0#ch.unconfirmed, []}, MsgSeqNos),
               S = S0#ch{unconfirmed = U},

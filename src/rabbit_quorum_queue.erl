@@ -203,7 +203,7 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       max_in_memory_bytes => MaxMemoryBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
       delivery_limit => DeliveryLimit,
-      overflow_strategy => overflow(Overflow, drop_head),
+      overflow_strategy => overflow(Overflow, drop_head, QName),
       created => erlang:system_time(millisecond),
       expires => Expires
      }.
@@ -735,7 +735,6 @@ stateless_deliver(ServerId, Delivery) ->
               rabbit_fifo_client:state()) ->
     {ok | slow, rabbit_fifo_client:state()} |
     {reject_publish, rabbit_fifo_client:state()}.
-
 deliver(false, Delivery, QState0) ->
     case rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0) of
         {ok, _} = Res -> Res;
@@ -744,18 +743,8 @@ deliver(false, Delivery, QState0) ->
             {ok, State}
     end;
 deliver(true, Delivery, QState0) ->
-    Seq = Delivery#delivery.msg_seq_no,
-    case rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
-                                    Delivery#delivery.message, QState0) of
-        {ok, _} = Res -> Res;
-        {slow, _} = Res -> Res;
-        {reject_publish, State} ->
-            %% TODO: this works fine but once the queue types interface is in
-            %% place it could be replaced with an action or similar to avoid
-            %% self publishing messages.
-            gen_server2:cast(self(), {reject_publish, Seq, undefined}),
-            {ok, State}
-    end.
+    rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
+                               Delivery#delivery.message, QState0).
 
 deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
     lists:foldl(
@@ -765,8 +754,14 @@ deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
                      [QRef], Delivery#delivery.message),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
-              {_, S} = deliver(Confirm, Delivery, S0),
-              {[{Q, S} | Qs], Actions}
+              case deliver(Confirm, Delivery, S0) of
+                  {reject_publish, S} ->
+                      Seq = Delivery#delivery.msg_seq_no,
+                      QName = rabbit_fifo_client:cluster_name(S),
+                      {[{Q, S} | Qs], [{rejected, QName, [Seq]} | Actions]};
+                  {_, S} ->
+                      {[{Q, S} | Qs], Actions}
+              end
       end, {[], []}, QSs).
 
 
@@ -1423,7 +1418,8 @@ maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 check_invalid_arguments(QueueName, Args) ->
     Keys = [<<"x-message-ttl">>,
-            <<"x-max-priority">>, <<"x-queue-mode">>],
+            <<"x-max-priority">>,
+            <<"x-queue-mode">>],
     rabbit_queue_type_util:check_invalid_arguments(QueueName, Args, Keys).
 
 queue_name(RaFifoState) ->
@@ -1487,6 +1483,10 @@ update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
     Ts = amqqueue:get_type_state(Q),
     amqqueue:set_type_state(Q, Fun(Ts)).
 
-overflow(undefined, Def) -> Def;
-overflow(<<"reject-publish">>, _Def) -> reject_publish;
-overflow(<<"drop-head">>, _Def) -> drop_head.
+overflow(undefined, Def, _QName) -> Def;
+overflow(<<"reject-publish">>, _Def, _QName) -> reject_publish;
+overflow(<<"drop-head">>, _Def, _QName) -> drop_head;
+overflow(<<"reject-publish-dlx">> = V, _Def, QName) ->
+    rabbit_misc:protocol_error(precondition_failed,
+                               "invalid overflow value '~s' for ~s",
+                               [V, rabbit_misc:rs(QName)]).

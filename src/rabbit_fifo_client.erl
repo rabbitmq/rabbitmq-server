@@ -602,7 +602,7 @@ handle_ra_event(From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
 handle_ra_event(_, {machine, {queue_status, Status}},
                 #state{} = State) ->
     %% just set the queue status
-    {internal, [], [], State#state{queue_status = Status}};
+    {ok, State#state{queue_status = Status}, []};
 handle_ra_event(Leader, {machine, leader_change},
                 #state{leader = Leader} = State) ->
     %% leader already known
