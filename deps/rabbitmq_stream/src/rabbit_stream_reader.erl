@@ -712,7 +712,8 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S} = Connection,
     end;
 handle_frame_post_auth(_Transport, #stream_connection{virtual_host = VirtualHost, user = User} = Connection,
     State,
-    <<?COMMAND_COMMIT_OFFSET:16, ?VERSION_0:16, ReferenceSize:16, Reference:ReferenceSize/binary,
+    <<?COMMAND_COMMIT_OFFSET:16, ?VERSION_0:16, _CorrelationId:32,
+      ReferenceSize:16, Reference:ReferenceSize/binary,
       StreamSize:16, Stream:StreamSize/binary, Offset:64>>, Rest) ->
 
     case check_write_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
