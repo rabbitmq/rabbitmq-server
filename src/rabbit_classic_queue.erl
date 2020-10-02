@@ -56,7 +56,7 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
                 _ ->
                     case rabbit_queue_master_location_misc:get_location(Q)  of
                         {ok, Node0}  -> Node0;
-                        {error, _}   -> Node
+                        _   -> Node
                     end
             end,
     Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
