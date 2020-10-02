@@ -57,8 +57,7 @@ groups() ->
                                                  trigger_message_store_compaction]},
        {quorum_queue, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
-       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
-       {stream_queue, [parallel], AllTests}
+       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]}
       ]}
     ].
 
