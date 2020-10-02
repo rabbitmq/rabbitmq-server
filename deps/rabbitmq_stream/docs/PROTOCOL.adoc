@@ -406,6 +406,7 @@ SaslAuthenticateResponse => Key Version CorrelationId ResponseCode PeerPropertie
 CommitOffset => Key Version Reference Stream Offset
   Key => int16 // 16
   Version => int16
+  CorrelationId => int32 // not used yet
   Reference => string // max 256 characters
   SubscriptionId => uint8
   Offset => int64
