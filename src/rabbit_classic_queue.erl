@@ -241,6 +241,12 @@ handle_event({reject_publish, SeqNo, _QPid},
 handle_event({down, Pid, Info}, #?STATE{qref = QRef,
                                         pid = MasterPid,
                                         unconfirmed = U0} = State0) ->
+    Actions0 = case Pid =:= MasterPid of
+                   true ->
+                       [{queue_down, QRef}];
+                   false ->
+                       []
+              end,
     case rabbit_misc:is_abnormal_exit(Info) of
         false when Info =:= normal andalso Pid == MasterPid ->
             %% queue was deleted and masterpid is down
@@ -254,7 +260,7 @@ handle_event({down, Pid, Info}, #?STATE{qref = QRef,
             {Unconfirmed, ConfirmedSeqNos, Rejected} =
                 settle_seq_nos(MsgSeqNos, Pid, U0, down),
             Actions = [{settled, QRef, ConfirmedSeqNos},
-                       {rejected, QRef, Rejected}],
+                       {rejected, QRef, Rejected} | Actions0],
             {ok, State0#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
@@ -270,7 +276,8 @@ handle_event({down, Pid, Info}, #?STATE{qref = QRef,
                                   end
                           end, [], U0),
             U = maps:without(MsgIds, U0),
-            {ok, State0#?STATE{unconfirmed = U}, [{rejected, QRef, MsgIds}]}
+            {ok, State0#?STATE{unconfirmed = U},
+             [{rejected, QRef, MsgIds} | Actions0]}
     end.
 
 -spec deliver([{amqqueue:amqqueue(), state()}],

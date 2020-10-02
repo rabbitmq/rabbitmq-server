@@ -73,7 +73,6 @@
               %% The queue type module will then emit a {confirm | reject, [msg_tag()}
               %% action to the channel or channel like process when a msg_tag
               %% has reached its conclusion
-              % unsettled = #{} :: #{msg_tag() => [queue_ref()]},
               state :: queue_state()}).
 
 
@@ -375,7 +374,7 @@ handle_down(Pid, Info, #?STATE{monitor_registry = Reg} = State0) ->
             %% TODO: remove Pid from monitor_registry
             case handle_event(QRef, {down, Pid, Info}, State0) of
                 {ok, State, Actions} ->
-                    {ok, State, [{queue_down, QRef} | Actions]};
+                    {ok, State, Actions};
                 eol ->
                     {eol, QRef};
                 Err ->
