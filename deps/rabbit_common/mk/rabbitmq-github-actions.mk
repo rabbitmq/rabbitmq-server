@@ -6,7 +6,7 @@ ifneq ($(filter github-actions,$(MAKECMDGOALS)),)
 ERLANG_VERSIONS ?= 22.3 \
 		   23.1
 
-ELIXIR_VERSION ?= 1.8.0
+ELIXIR_VERSION ?= 1.10.4
 
 WORKFLOWS_DIR ?= .github/workflows
 
