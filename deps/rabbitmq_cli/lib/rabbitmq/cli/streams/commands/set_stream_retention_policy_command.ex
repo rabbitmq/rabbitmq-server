@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2020 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
