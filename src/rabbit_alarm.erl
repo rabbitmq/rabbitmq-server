@@ -21,8 +21,8 @@
 -behaviour(gen_event).
 
 -export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
-         clear_alarm/1, get_alarms/0, get_alarms/1, on_node_up/1, on_node_down/1,
-         format_as_map/1, format_as_maps/1]).
+         clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
+         format_as_map/1, format_as_maps/1, is_local/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -100,6 +100,21 @@ get_alarms() -> gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
 -spec get_alarms(timeout()) -> [{alarm(), []}].
 get_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_alarms, Timeout).
 
+-spec get_local_alarms() -> [alarm()].
+get_local_alarms() -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, infinity).
+
+-spec get_local_alarms(timeout()) -> [alarm()].
+get_local_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, Timeout).
+
+-spec filter_local_alarms([alarm()]) -> [alarm()].
+filter_local_alarms(Alarms) ->
+    lists:filter(fun is_local/1, Alarms).
+
+-spec is_local(alarm()) -> boolean().
+is_local({file_descriptor_limit, _}) -> true;
+is_local({{resource_limit, _Resource, Node}, _}) when Node =:= node() -> true;
+is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
+
 -spec format_as_map(alarm()) -> #{binary() => term()}.
 format_as_map(file_descriptor_limit) ->
     #{
@@ -163,6 +178,9 @@ handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
 
 handle_call(get_alarms, State) ->
     {ok, compute_alarms(State), State};
+
+handle_call(get_local_alarms, State) ->
+    {ok, filter_local_alarms(compute_alarms(State)), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
