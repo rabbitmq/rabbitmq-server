@@ -333,7 +333,7 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
 
 record_distribution_listener() ->
     {Name, Host} = rabbit_nodes:parts(node()),
-    case erl_epmd:port_please(Name, Host, infinity) of
+    case erl_epmd:port_please(list_to_atom(Name), Host, infinity) of
         {port, Port, _Version} ->
             tcp_listener_started(clustering, [], {0,0,0,0,0,0,0,0}, Port);
         noport ->
