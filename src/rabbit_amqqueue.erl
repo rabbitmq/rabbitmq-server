@@ -1865,7 +1865,8 @@ immutable(Q) -> amqqueue:set_immutable(Q).
 -spec deliver([amqqueue:amqqueue()], rabbit_types:delivery()) -> 'ok'.
 
 deliver(Qs, Delivery) ->
-    rabbit_queue_type:deliver(Qs, Delivery, stateless).
+    _ = rabbit_queue_type:deliver(Qs, Delivery, stateless),
+    ok.
 
 get_quorum_nodes(Q) ->
     case amqqueue:get_type_state(Q) of
