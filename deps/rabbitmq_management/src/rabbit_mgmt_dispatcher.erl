@@ -168,6 +168,7 @@ dispatcher() ->
      {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []},
      %% modern generation of fine-grained health checks
      {"/health/checks/alarms",                                 rabbit_mgmt_wm_health_check_alarms, []},
+     {"/health/checks/local-alarms",                           rabbit_mgmt_wm_health_check_local_alarms, []},
      
      {"/reset",                                                rabbit_mgmt_wm_reset, []},
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
