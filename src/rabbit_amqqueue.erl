@@ -45,6 +45,9 @@
 -export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
 -export([delete_immediately_by_resource/1]).
+-export([delete_crashed/1,
+         delete_crashed/2,
+         delete_crashed_internal/2]).
 
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
@@ -1408,6 +1411,17 @@ delete_immediately_by_resource(Resources) ->
             rabbit_types:error('not_empty').
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
+
+%% delete_crashed* INCLUDED FOR BACKWARDS COMPATBILITY REASONS
+delete_crashed(Q) when ?amqqueue_is_classic(Q) ->
+    rabbit_classic_queue:delete_crashed(Q).
+
+delete_crashed(Q, ActingUser) when ?amqqueue_is_classic(Q) ->
+    rabbit_classic_queue:delete_crashed(Q, ActingUser).
+
+-spec delete_crashed_internal(amqqueue:amqqueue(), rabbit_types:username()) -> 'ok'.
+delete_crashed_internal(Q, ActingUser) when ?amqqueue_is_classic(Q) ->
+    rabbit_classic_queue:delete_crashed_internal(Q, ActingUser).
 
 -spec purge(amqqueue:amqqueue()) -> qlen().
 purge(Q) when ?is_amqqueue(Q) ->

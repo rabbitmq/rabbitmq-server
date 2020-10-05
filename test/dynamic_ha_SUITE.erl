@@ -969,7 +969,12 @@ wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries) ->
             %% Let's wait a bit longer.
             timer:sleep(1000),
             wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries - 1);
-        {ok, FinalInfo} ->
+        Result  ->
+            FinalInfo = case Result of
+                            {ok, I} -> I;
+                            _ when is_list(Result) ->
+                                Result
+                        end,
             %% The last policy is the final state
             LastPolicy = lists:last(TestedPolicies),
             case verify_policy(LastPolicy, FinalInfo) of

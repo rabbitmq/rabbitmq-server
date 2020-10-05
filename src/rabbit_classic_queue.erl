@@ -336,7 +336,10 @@ info(Q, Items) ->
         {ok, Result} ->
             Result;
         {error, _Err} ->
-            []
+            [];
+        Result when is_list(Result) ->
+            %% this is a backwards compatibility clause
+            Result
     end.
 
 -spec purge(amqqueue:amqqueue()) ->

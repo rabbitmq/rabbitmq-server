@@ -2709,7 +2709,7 @@ handle_queue_actions(Actions, #ch{} = State0) ->
 
       end, State0, Actions).
 
-find_queue_name_from_pid(Pid, QStates) ->
+find_queue_name_from_pid(Pid, QStates) when is_pid(Pid) ->
     Fun = fun(K, _V, undefined) ->
                   {ok, Q} = rabbit_amqqueue:lookup(K),
                   Pids = get_queue_pids(Q),
@@ -2718,7 +2718,9 @@ find_queue_name_from_pid(Pid, QStates) ->
                           K;
                       false ->
                           undefined
-                  end
+                  end;
+             (_K, _V, Acc) ->
+                  Acc
           end,
     rabbit_queue_type:fold_state(Fun, undefined, QStates).
 
