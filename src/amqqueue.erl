@@ -255,7 +255,8 @@ new(#resource{kind = queue} = Name,
               Owner,
               Args,
               VHost,
-              Options)
+              Options,
+              Type)
     end.
 
 -spec new_with_version
