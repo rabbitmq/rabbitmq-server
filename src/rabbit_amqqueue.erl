@@ -233,7 +233,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
             rabbit_misc:protocol_error(
               internal_error,
               "Cannot declare a queue '~s' of type '~s' on node '~s': "
-              "the 'quorum_queue' feature flag is disabled",
+              "the corresponding feature flag is disabled",
               [rabbit_misc:rs(QueueName), Type, Node])
     end.
 
