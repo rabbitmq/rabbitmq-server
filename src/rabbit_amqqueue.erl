@@ -16,7 +16,7 @@
          with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1,
+         stat/1, deliver/2,
          requeue/3, ack/3, reject/4]).
 -export([not_found/1, absent/2]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
@@ -1861,6 +1861,11 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
 -spec immutable(amqqueue:amqqueue()) -> amqqueue:amqqueue().
 
 immutable(Q) -> amqqueue:set_immutable(Q).
+
+-spec deliver([amqqueue:amqqueue()], rabbit_types:delivery()) -> 'ok'.
+
+deliver(Qs, Delivery) ->
+    rabbit_queue_type:deliver(Qs, Delivery, stateless).
 
 get_quorum_nodes(Q) ->
     case amqqueue:get_type_state(Q) of
