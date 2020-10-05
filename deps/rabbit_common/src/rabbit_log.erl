@@ -28,12 +28,12 @@
                     feature_flags |
                     ldap |
                     mirroring |
+                    osiris |
                     prelaunch |
                     queue |
                     ra |
                     shovel |
-                    upgrade |
-                    osiris.
+                    upgrade.
 
 -spec debug(string()) -> 'ok'.
 -spec debug(string(), [any()]) -> 'ok'.
