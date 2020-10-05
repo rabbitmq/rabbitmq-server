@@ -27,6 +27,7 @@
     #{desc          => "Support queues of type `stream`",
       doc_url       => "https://www.rabbitmq.com/stream-queues.html",
       stability     => stable,
+      depends_on    => [quorum_queue],
       migration_fun => {?MODULE, stream_queue_migration}
      }}).
 
