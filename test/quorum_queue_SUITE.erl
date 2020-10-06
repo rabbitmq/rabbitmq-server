@@ -2105,15 +2105,19 @@ memory_alarm_rolls_wal(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     WalDataDir = rpc:call(Server, ra_env, wal_data_dir, []),
     [Wal0] = filelib:wildcard(WalDataDir ++ "/*.wal"),
-    ok = rpc:call(Server, rabbit_alarm, set_alarm,
-                  [{{resource_limit, memory, Server}, []}]),
+    rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
+    rabbit_ct_helpers:await_condition(
+        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
+    ),
     timer:sleep(1000),
     [Wal1] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     ?assert(Wal0 =/= Wal1),
     %% roll over shouldn't happen if we trigger a new alarm in less than
     %% min_wal_roll_over_interval
-    ok = rpc:call(Server, rabbit_alarm, set_alarm,
-                  [{{resource_limit, memory, Server}, []}]),
+    rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
+    rabbit_ct_helpers:await_condition(
+        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
+    ),
     timer:sleep(1000),
     [Wal2] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     ?assert(Wal1 == Wal2),
