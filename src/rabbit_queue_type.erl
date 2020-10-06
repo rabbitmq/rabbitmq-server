@@ -367,20 +367,19 @@ recover(VHost, Qs) ->
 
 -spec handle_down(pid(), term(), state()) ->
     {ok, state(), actions()} | {eol, queue_ref()} | {error, term()}.
-handle_down(Pid, Info, #?STATE{monitor_registry = Reg} = State0) ->
+handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
     %% lookup queue ref in monitor registry
-    case Reg of
-        #{Pid := QRef} ->
-            %% TODO: remove Pid from monitor_registry
+    case maps:take(Pid, Reg0) of
+        {QRef, Reg} ->
             case handle_event(QRef, {down, Pid, Info}, State0) of
                 {ok, State, Actions} ->
-                    {ok, State, Actions};
+                    {ok, State#?STATE{monitor_registry = Reg}, Actions};
                 eol ->
                     {eol, QRef};
                 Err ->
                     Err
             end;
-        _ ->
+        error ->
             {ok, State0, []}
     end.
 

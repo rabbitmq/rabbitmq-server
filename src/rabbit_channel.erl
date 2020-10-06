@@ -783,6 +783,7 @@ handle_info(emit_stats, State) ->
 handle_info({'DOWN', _MRef, process, QPid, Reason},
             #ch{queue_states = QStates0,
                 queue_monitors = _QMons} = State0) ->
+    credit_flow:peer_down(QPid),
     case rabbit_queue_type:handle_down(QPid, Reason, QStates0) of
         {ok, QState1, Actions} ->
             State1 = State0#ch{queue_states = QState1},
@@ -1792,7 +1793,8 @@ handle_consuming_queue_down_or_eol(QName,
                       case catch basic_consume(
                                    QName, NoAck, ConsumerPrefetch, CTag,
                                    Exclusive, Args, true, StateN) of
-                          {ok, StateN1} -> StateN1;
+                          {ok, StateN1} ->
+                              StateN1;
                           _Err ->
                               cancel_consumer(CTag, QName, StateN)
                       end

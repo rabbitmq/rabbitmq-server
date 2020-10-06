@@ -201,7 +201,8 @@ cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
              [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
 settle(complete, _CTag, MsgIds, State) ->
-    delegate:invoke_no_result(State#?STATE.pid,
+    Pid = State#?STATE.pid,
+    delegate:invoke_no_result(Pid,
                               {gen_server2, cast, [{ack, MsgIds, self()}]}),
     {State, []};
 settle(Op, _CTag, MsgIds, State) ->
@@ -257,10 +258,11 @@ handle_event({down, Pid, Info}, #?STATE{qref = QRef,
                           maps:filter(fun (_, #msg_status{pending = Pids}) ->
                                               lists:member(Pid, Pids)
                                       end, U0)),
-            {Unconfirmed, ConfirmedSeqNos, Rejected} =
+            {Unconfirmed, Settled, Rejected} =
                 settle_seq_nos(MsgSeqNos, Pid, U0, down),
-            Actions = [{settled, QRef, ConfirmedSeqNos},
-                       {rejected, QRef, Rejected} | Actions0],
+            Actions = settlement_action(
+                        settled, QRef, Settled,
+                        settlement_action(rejected, QRef, Rejected, Actions0)),
             {ok, State0#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
@@ -279,6 +281,11 @@ handle_event({down, Pid, Info}, #?STATE{qref = QRef,
             {ok, State0#?STATE{unconfirmed = U},
              [{rejected, QRef, MsgIds} | Actions0]}
     end.
+
+settlement_action(_Type, _QRef, [], Acc) ->
+    Acc;
+settlement_action(Type, QRef, MsgSeqs, Acc) ->
+    [{Type, QRef, MsgSeqs} | Acc].
 
 -spec deliver([{amqqueue:amqqueue(), state()}],
               Delivery :: term()) ->
@@ -356,19 +363,23 @@ qpids(Qs, MsgNo) ->
               QRef = amqqueue:get_name(Q),
               Actions = [{monitor, QPid, QRef}
                          | [{monitor, P, QRef} || P <- SPids]] ++ Actions0,
-              %% confirm record
+              %% confirm record only if MsgNo isn't undefined
               S = case S0 of
                       #?STATE{unconfirmed = U0} ->
                           Rec = [QPid | SPids],
-                          U = U0#{MsgNo => #msg_status{pending = Rec}},
-                          S0#?STATE{unconfirmed = U};
+                          U = case MsgNo of
+                                  undefined ->
+                                      U0;
+                                  _ ->
+                                      U0#{MsgNo => #msg_status{pending = Rec}}
+                              end,
+                          S0#?STATE{pid = QPid,
+                                    unconfirmed = U};
                       stateless ->
                           S0
                   end,
-              {[QPid | MPidAcc],
-               SPidAcc ++ SPids,
-               [{Q, S} | Qs0],
-               Actions}
+              {[QPid | MPidAcc], SPidAcc ++ SPids,
+               [{Q, S} | Qs0], Actions}
       end, {[], [], [], []}, Qs).
 
 %% internal-ish

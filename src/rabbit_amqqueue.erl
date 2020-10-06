@@ -1511,6 +1511,7 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
 basic_consume(Q, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser, Contexts) ->
+
     QName = amqqueue:get_name(Q),
     %% first phase argument validation
     %% each queue type may do further validations

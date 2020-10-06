@@ -63,6 +63,7 @@ confirm(SeqNos, QName, #?MODULE{smallest = Smallest0,
                                confirm_one(SeqNo, QName, Acc)
                        end, {[], U0}, SeqNos),
     %% check if smallest is in Confirmed
+    %% TODO: this can be optimised by checking in the preceeding foldr
     Smallest =
     case lists:any(fun ({S, _}) -> S == Smallest0 end, Confirmed) of
         true ->
