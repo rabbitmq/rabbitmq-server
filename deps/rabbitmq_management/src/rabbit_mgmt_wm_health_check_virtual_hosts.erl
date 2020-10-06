@@ -5,14 +5,13 @@
 %% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
-%% An HTTP API counterpart of 'rabbitmq-diagnostics check_alarms'
--module(rabbit_mgmt_wm_health_check_alarms).
+%% An HTTP API counterpart of 'rabbitmq-diagnostics check_virtual_hosts'
+-module(rabbit_mgmt_wm_health_check_virtual_hosts).
 
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
 
--include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 %%--------------------------------------------------------------------
@@ -30,27 +29,20 @@ resource_exists(ReqData, Context) ->
     {true, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                  undefined -> 70000;
-                  Val       -> list_to_integer(binary_to_list(Val))
-              end,
-    case rabbit_alarm:get_alarms(Timeout) of
+    case rabbit_vhost_sup_sup:check() of
         [] ->
             rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
-        Xs when length(Xs) > 0 ->
-            Msg = "There are alarms in effect in the cluster",
-            failure(Msg, Xs, ReqData, Context)
+        Vs when length(Vs) > 0 ->
+            Msg = <<"Some virtual hosts are down">>,
+            failure(Msg, Vs, ReqData, Context)
     end.
 
-failure(Message, Alarms0, ReqData, Context) ->
-    Alarms = rabbit_alarm:format_as_maps(Alarms0),
-    Body = #{
-        status => failed,
-        reason => rabbit_data_coercion:to_binary(Message),
-        alarms => Alarms
-    },
-    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData, Context),
-    {stop, cowboy_req:reply(?HEALTH_CHECK_FAILURE_STATUS, #{}, Response, ReqData1), Context1}.
+failure(Message, Vs, ReqData, Context) ->
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
+                                                             {reason, Message},
+                                                             {virtual_hosts, Vs}],
+                                                            ReqData, Context),
+    {stop, cowboy_req:reply(503, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
