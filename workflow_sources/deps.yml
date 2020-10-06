@@ -5,429 +5,366 @@ deps:
 - name: rabbit_common
   suites:
   - name: unit_priority_queue
-    time: 0
   - name: unit
-    time: 0
   - name: worker_pool
-    time: 0
   - name: rabbit_env
-    time: 0
 - name: rabbit
   suites:
-  - name: unit_operator_policy
-    time: 66
-  - name: dynamic_qq
-    time: 238
-  - name: unit_log_config
-    time: 75
-  - name: unit_pg_local
-    time: 68
-  - name: per_vhost_msg_store
-    time: 66
-  - name: unit_config_value_encryption
-    time: 99
-  - name: vhost
-    time: 211
-  - name: queue_parallel
-    time: 260
-  - name: eager_sync
-    time: 452
-  - name: cluster_rename
-    time: 284
-  - name: peer_discovery_classic_config
-    time: 136
-  - name: unit_cluster_formation_locking_mocks
-    time: 56
-  - name: many_node_ha
-    time: 112
-  - name: metrics
-    time: 160
-  - name: sup_delayed_restart
-    time: 73
-  - name: upgrade_preparation
-    time: 117
-  - name: mirrored_supervisor
-    time: 82
-  - name: rabbitmqctl_shutdown
-    time: 67
-  - name: definition_import
-    time: 84
-  - name: unit_policy_validators
-    time: 68
-  - name: lazy_queue
-    time: 125
-  - name: unit_disk_monitor
-    time: 80
-  - name: confirms_rejects
-    time: 138
-  - name: list_consumers_sanity_check
-    time: 86
-  - name: sync_detection
-    time: 125
-  - name: unit_gm
-    time: 65
-  - name: rabbit_fifo_prop
-    time: 169
-  - name: signal_handling
-    time: 164
-  - name: clustering_management
-    time: 708
-  - name: backing_queue
-    time: 320
-  - name: product_info
-    time: 93
-  - name: unit_access_control_authn_authz_context_propagation
-    time: 87
   - name: amqqueue_backward_compatibility
     time: 63
-  - name: channel_operation_timeout
-    time: 104
-  - name: rabbit_fifo
-    time: 79
-  - name: per_vhost_connection_limit_partitions
-    time: 123
-  - name: dead_lettering
-    time: 173
-  - name: unit_connection_tracking
-    time: 0
-  - name: dynamic_ha
-    time: 900
-  - name: unit_file_handle_cache
-    time: 93
-  - name: unit_gen_server2
-    time: 80
-  - name: priority_queue
-    time: 243
-  - name: unit_access_control_credential_validation
-    time: 74
-  - name: unit_plugin_versioning
-    time: 69
-  - name: unit_credit_flow
-    time: 81
-  - name: single_active_consumer
-    time: 78
-  - name: unit_log_management
-    time: 104
-  - name: unit_stats_and_metrics
-    time: 88
-  - name: message_size_limit
-    time: 78
-  - name: cluster
-    time: 85
-  - name: config_schema
-    time: 81
-  - name: per_vhost_connection_limit
-    time: 252
-  - name: topic_permission
-    time: 77
-  - name: unit_amqp091_content_framing
-    time: 67
-  - name: unit_disk_monitor_mocks
-    time: 76
-  - name: unit_queue_consumers
-    time: 73
-  - name: rabbitmqctl_integration
-    time: 100
-  - name: rabbit_fifo_int
-    time: 86
-  - name: unit_vm_memory_monitor
-    time: 81
-  - name: crashing_queues
-    time: 124
-  - name: rabbitmq_queues_cli_integration
-    time: 85
-  - name: publisher_confirms_parallel
-    time: 126
-  - name: quorum_queue
-    time: 687
-  - name: queue_length_limits
-    time: 84
-  - name: maintenance_mode
-    time: 185
-  - name: peer_discovery_dns
-    time: 76
-  - name: rabbit_core_metrics_gc
-    time: 221
-  - name: queue_master_location
-    time: 401
-  - name: unit_collections
-    time: 61
+  - name: backing_queue
+    time: 320
   - name: channel_interceptor
     time: 103
-  - name: per_user_connection_tracking
-    time: 132
+  - name: channel_operation_timeout
+    time: 104
+  - name: cluster
+    time: 85
+  - name: cluster_rename
+    time: 284
+  - name: clustering_management
+    time: 708
+  - name: config_schema
+    time: 81
+  - name: confirms_rejects
+    time: 138
+  - name: consumer_timeout
+    time: 123
+  - name: crashing_queues
+    time: 124
+  - name: dead_lettering
+    time: 173
+  - name: definition_import
+    time: 84
+  - name: disconnect_detected_during_alarm
+    time: 88
+  - name: dynamic_ha
+    time: 900
+  - name: dynamic_qq
+    time: 238
+  - name: eager_sync
+    time: 452
+  - name: feature_flags
+    time: 102
+  - name: lazy_queue
+    time: 125
+  - name: list_consumers_sanity_check
+    time: 86
+  - name: list_queues_online_and_offline
+    time: 85
+  - name: maintenance_mode
+    time: 185
+  - name: many_node_ha
+    time: 112
+  - name: message_size_limit
+    time: 78
+  - name: metrics
+    time: 160
+  - name: mirrored_supervisor
+    time: 82
   - name: msg_store
     time: 65
+  - name: peer_discovery_classic_config
+    time: 136
+  - name: peer_discovery_dns
+    time: 76
+  - name: per_user_connection_channel_limit
+    time: 0
+  - name: per_user_connection_channel_limit_partitions
+    time: 0
+  - name: per_user_connection_channel_tracking
+    time: 0
+  - name: per_user_connection_tracking
+    time: 132
+  - name: per_vhost_connection_limit
+    time: 252
+  - name: per_vhost_connection_limit_partitions
+    time: 123
+  - name: per_vhost_msg_store
+    time: 66
   - name: per_vhost_queue_limit
     time: 137
   - name: policy
     time: 86
-  - name: proxy_protocol
-    time: 78
-  - name: unit_plugin_directories
-    time: 52
-  - name: consumer_timeout
-    time: 123
-  - name: term_to_binary_compat_prop
-    time: 66
+  - name: priority_queue
+    time: 243
   - name: priority_queue_recovery
     time: 90
-  - name: feature_flags
-    time: 102
-  - name: unit_amqp091_server_properties
-    time: 95
-  - name: disconnect_detected_during_alarm
-    time: 88
+  - name: product_info
+    time: 93
+  - name: proxy_protocol
+    time: 78
+  - name: publisher_confirms_parallel
+    time: 126
+  - name: queue_length_limits
+    time: 84
+  - name: queue_master_location
+    time: 401
+  - name: queue_parallel
+    time: 260
+  - name: queue_type
+    time: 0
+  - name: quorum_queue
+    time: 687
+  - name: rabbit_confirms
+    time: 0
+  - name: rabbit_core_metrics_gc
+    time: 221
+  - name: rabbit_fifo
+    time: 79
+  - name: rabbit_fifo_int
+    time: 86
+  - name: rabbit_fifo_prop
+    time: 169
+  - name: rabbit_fifo_v0
+    time: 0
+  - name: rabbit_msg_record
+    time: 0
+  - name: rabbit_stream_queue
+    time: 0
+  - name: rabbitmq_queues_cli_integration
+    time: 85
+  - name: rabbitmqctl_integration
+    time: 100
+  - name: rabbitmqctl_shutdown
+    time: 67
+  - name: signal_handling
+    time: 164
   - name: simple_ha
     time: 426
-  - name: list_queues_online_and_offline
-    time: 85
-  - name: unit_priority_queue
-    time: 70
-  - name: unit_app_management
-    time: 79
+  - name: single_active_consumer
+    time: 78
+  - name: sync_detection
+    time: 125
+  - name: term_to_binary_compat_prop
+    time: 66
+  - name: topic_permission
+    time: 77
   - name: unit_access_control
     time: 90
+  - name: unit_access_control_authn_authz_context_propagation
+    time: 87
+  - name: unit_access_control_credential_validation
+    time: 74
+  - name: unit_amqp091_content_framing
+    time: 67
+  - name: unit_amqp091_server_properties
+    time: 95
+  - name: unit_app_management
+    time: 79
+  - name: unit_cluster_formation_locking_mocks
+    time: 56
+  - name: unit_collections
+    time: 61
+  - name: unit_config_value_encryption
+    time: 99
+  - name: unit_connection_tracking
+    time: 0
+  - name: unit_credit_flow
+    time: 81
+  - name: unit_disk_monitor
+    time: 80
+  - name: unit_disk_monitor_mocks
+    time: 76
+  - name: unit_file_handle_cache
+    time: 93
+  - name: unit_gen_server2
+    time: 80
+  - name: unit_gm
+    time: 65
+  - name: unit_log_config
+    time: 75
+  - name: unit_log_management
+    time: 104
+  - name: unit_operator_policy
+    time: 66
+  - name: unit_pg_local
+    time: 68
+  - name: unit_plugin_directories
+    time: 52
+  - name: unit_plugin_versioning
+    time: 69
+  - name: unit_policy_validators
+    time: 68
+  - name: unit_priority_queue
+    time: 70
+  - name: unit_queue_consumers
+    time: 73
+  - name: unit_stats_and_metrics
+    time: 88
   - name: unit_supervisor2
     time: 71
+  - name: unit_vm_memory_monitor
+    time: 81
+  - name: upgrade_preparation
+    time: 117
+  - name: vhost
+    time: 211
 - name: amqp_client
   skip_dialyzer: true
   suites:
   - name: unit
-    time: 0
   - name: system
-    time: 0
 - name: amqp10_client
   skip_tests: true
   suites:
   - name: system
-    time: 0
   - name: msg
-    time: 0
 - name: amqp10_common
   suites:
   - name: binary_generator
-    time: 0
 - name: rabbitmq_amqp1_0
+  skip_dialyzer: true
   skip_tests: true
   suites:
   - name: amqp10_client
-    time: 0
   - name: proxy_protocol
-    time: 0
   - name: command
-    time: 0
   - name: unit
-    time: 0
   - name: system
-    time: 0
 - name: rabbitmq_auth_backend_cache
   skip_dialyzer: true
   suites:
   - name: rabbit_auth_backend_cache
-    time: 0
   - name: rabbit_auth_cache
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_auth_backend_http
   skip_dialyzer: true
   suites:
   - name: unit
-    time: 0
   - name: auth
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_auth_backend_ldap
+  skip_dialyzer: true
   skip_tests: true
   suites:
   - name: unit
-    time: 0
   - name: system
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_auth_backend_oauth2
   skip_dialyzer: true
   suites:
   - name: wildcard_match
-    time: 0
   - name: unit
-    time: 0
   - name: scope
-    time: 0
   - name: system
-    time: 0
   - name: add_uaa_key_command
-    time: 0
 - name: rabbitmq_auth_mechanism_ssl
   suites: []
 - name: rabbitmq_aws
   skip_dialyzer: true
   suites: []
 - name: rabbitmq_cli
+  skip_dialyzer: true
   suites: []
 - name: rabbitmq_codegen
   skip_xref: true
+  skip_dialyzer: true
   skip_tests: true
   suites: []
 - name: rabbitmq_consistent_hash_exchange
   skip_dialyzer: true
   suites:
   - name: rabbit_exchange_type_consistent_hash
-    time: 0
 - name: rabbitmq_event_exchange
   suites:
   - name: unit
-    time: 0
   - name: system
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_federation
   skip_dialyzer: true
   suites:
   - name: unit_inbroker
-    time: 0
   - name: restart_federation_link_command
-    time: 0
   - name: rabbit_federation_status
-    time: 0
   - name: federation_status_command
-    time: 0
   - name: unit
-    time: 0
   - name: queue
-    time: 0
   - name: exchange
-    time: 0
 - name: rabbitmq_federation_management
   suites:
   - name: federation_mgmt
-    time: 0
 - name: rabbitmq_jms_topic_exchange
   skip_dialyzer: true
   suites:
   - name: sjx_evaluation
-    time: 0
   - name: rjms_topic_selector
-    time: 0
   - name: rjms_topic_selector_unit
-    time: 0
 - name: rabbitmq_management
   skip_dialyzer: true
   suites:
   - name: cache
-    time: 0
   - name: stats
-    time: 0
   - name: rabbit_mgmt_rabbitmqadmin
-    time: 0
   - name: listener_config
-    time: 0
   - name: rabbit_mgmt_test_db
-    time: 0
   - name: rabbit_mgmt_only_http
-    time: 0
   - name: rabbit_mgmt_stats
-    time: 0
   - name: rabbit_mgmt_test_unit
-    time: 0
   - name: rabbit_mgmt_http
-    time: 0
   - name: clustering_prop
-    time: 0
   - name: clustering
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_management_agent
   skip_dialyzer: true
   suites:
   - name: metrics
-    time: 0
   - name: exometer_slide
-    time: 0
   - name: rabbit_mgmt_gc
-    time: 0
   - name: rabbit_mgmt_slide
-    time: 0
 - name: rabbitmq_mqtt
+  skip_dialyzer: true
   skip_tests: true
   suites:
   - name: util
-    time: 0
   - name: retainer
-    time: 0
   - name: proxy_protocol
-    time: 0
   - name: command
-    time: 0
   - name: reader
-    time: 0
   - name: mqtt_machine
-    time: 0
   - name: processor
-    time: 0
   - name: java
-    time: 0
   - name: auth
-    time: 0
   - name: cluster
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_peer_discovery_common
   suites:
   - name: config_schema
-    time: 0
 - name: rabbitmq_peer_discovery_aws
+  skip_dialyzer: true
   skip_tests: true
   suites:
   - name: rabbitmq_peer_discovery_aws
-    time: 0
   - name: integration
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_peer_discovery_k8s
   skip_dialyzer: true
   suites:
   - name: rabbitmq_peer_discovery_k8s
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_peer_discovery_consul
   skip_dialyzer: true
   suites:
   - name: rabbitmq_peer_discovery_consul
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_peer_discovery_etcd
+  skip_dialyzer: true
   skip_tests: true
   suites:
   - name: unit
-    time: 0
   - name: system
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_prometheus
   skip_dialyzer: true
   suites:
   - name: rabbit_prometheus_http
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_random_exchange
   suites: []
 - name: rabbitmq_recent_history_exchange
   skip_dialyzer: true
   suites:
   - name: system
-    time: 0
 - name: rabbitmq_sharding
   skip_dialyzer: true
   suites: []
@@ -435,91 +372,59 @@ deps:
   skip_dialyzer: true
   suites:
   - name: amqp10_shovel
-    time: 0
   - name: configuration
-    time: 0
   - name: dynamic
-    time: 0
   - name: parameters
-    time: 0
   - name: config
-    time: 0
   - name: shovel_status_command
-    time: 0
   - name: delete_shovel_command
-    time: 0
   - name: amqp10_dynamic
-    time: 0
   - name: amqp10
-    time: 0
 - name: rabbitmq_shovel_management
   suites:
   - name: http
-    time: 0
 - name: rabbitmq_stomp
   skip_dialyzer: true
   suites:
   - name: util
-    time: 0
   - name: proxy_protocol
-    time: 0
   - name: amqqueue
-    time: 0
   - name: command
-    time: 0
   - name: topic
-    time: 0
   - name: frame
-    time: 0
   - name: python
-    time: 0
   - name: connections
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_top
   suites: []
 - name: rabbitmq_tracing
   suites:
   - name: rabbit_tracing
-    time: 0
 - name: rabbitmq_trust_store
   skip_dialyzer: true
   suites:
   - name: system
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_web_dispatch
   skip_dialyzer: true
   suites:
   - name: rabbit_web_dispatch
-    time: 0
   - name: rabbit_web_dispatch_unit
-    time: 0
 - name: rabbitmq_web_mqtt
   skip_dialyzer: true
   suites:
   - name: proxy_protocol
-    time: 0
   - name: config_schema
-    time: 0
 - name: rabbitmq_web_mqtt_examples
   suites: []
 - name: rabbitmq_web_stomp
   skip_dialyzer: true
   suites:
   - name: proxy_protocol
-    time: 0
   - name: raw_websocket
-    time: 0
   - name: cowboy_websocket
-    time: 0
   - name: unit
-    time: 0
   - name: config_schema
-    time: 0
   - name: amqp_stomp
-    time: 0
 - name: rabbitmq_web_stomp_examples
   suites: []
