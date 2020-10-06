@@ -116,6 +116,10 @@
     force_vhost_failure/2,
     force_vhost_failure/3,
 
+    set_alarm/3,
+    get_alarms/2,
+    get_local_alarms/2,
+
     add_user/2,
     add_user/3,
     add_user/4,
@@ -1227,6 +1231,19 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
             end;
         false -> ok
     end.
+
+set_alarm(Config, Node, file_descriptor_limit = Resource) ->
+    rpc(Config, Node, rabbit_alarm, set_alarm, [{Resource, []}]);
+set_alarm(Config, Node, memory = Resource) ->
+    rpc(Config, Node, rabbit_alarm, set_alarm, [{{resource, Resource, Node}, []}]);
+set_alarm(Config, Node, disk = Resource) ->
+    rpc(Config, Node, rabbit_alarm, set_alarm, [{{resource, Resource, Node}, []}]).
+
+get_alarms(Config, Node) ->
+    rpc(Config, Node, rabbit_alarm, get_alarms, []).
+
+get_local_alarms(Config, Node) ->
+    rpc(Config, Node, rabbit_alarm, get_local_alarms, []).
 
 get_message_store_pid(Config, Node, VHost) ->
     {ok, VHostSup} = rpc(Config, Node,
