@@ -110,7 +110,7 @@ get_local_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, 
 filter_local_alarms(Alarms) ->
     lists:filter(fun is_local/1, Alarms).
 
--spec is_local(alarm()) -> boolean().
+-spec is_local({alarm(), any()}) -> boolean().
 is_local({file_descriptor_limit, _}) -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =:= node() -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
