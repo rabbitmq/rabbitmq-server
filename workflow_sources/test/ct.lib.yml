@@ -1,6 +1,7 @@
 #@ load("@ytt:data", "data")
-#@ load("util.star", "group_by_time", "to_build_args")
-#@ load("helpers.star", "should_skip_dialyze", "ci_image_tag", "ci_dep_image")
+#@ load("@ytt:assert", "assert")
+#@ load("util.star", "is_unique", "group_by_time", "to_build_args")
+#@ load("helpers.star", "ci_image_tag", "ci_dep_image")
 
 #@ def checks_job(dep):
 name: #@ dep.name + "-checks"
@@ -16,6 +17,13 @@ steps:
       echo "::set-output name=step_start::$(date +%s)"
   - name: CHECKOUT REPOSITORY
     uses: actions/checkout@v2
+  - name: VALIDATE KNOWN CT SUITES
+    env:
+      project: #@ dep.name
+    #@ suite_names = [suite.name for suite in dep.suites]
+    #@ None if is_unique(suite_names) else assert.fail('{} suite names are not unique'.format(dep.name))
+    run: |
+      ci/scripts/validate-workflow.sh (@= " ".join(suite_names) @)
   - name: RUN CHECKS
     uses: docker/build-push-action@v1
     with:
@@ -28,7 +36,6 @@ steps:
       #@ build_args["IMAGE_TAG"] = ci_image_tag()
       #@ build_args["BUILDEVENT_APIKEY"] = '${{ secrets.HONEYCOMB_API_KEY }}'
       #@ build_args["project"] = dep.name
-      #@ build_args["SKIP_DIALYZE"] = should_skip_dialyze(dep)
       build_args: #@ to_build_args(build_args)
       tags: (@= ci_image_tag() @)
 #@ end

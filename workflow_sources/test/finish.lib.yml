@@ -1,7 +1,7 @@
 #@ load("@ytt:data", "data")
 #@ load("helpers.star", "ci_image")
 
-#@ def finish_jobs():
+#@ def finish_jobs(prepare_jobs_names):
 package-generic-unix:
   name: package-generic-unix
   needs: [prepare]
@@ -46,7 +46,7 @@ package-generic-unix:
           ci/scripts/collect.sh
 finish:
   name: finish
-  needs: #@ ["prepare"] + [dep.name for dep in data.values.deps if not hasattr(dep, "skip_tests") or not dep.skip_tests]
+  needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)] + ['package-generic-unix']
   runs-on: ubuntu-18.04
   if: always()
   #@yaml/text-templated-strings
