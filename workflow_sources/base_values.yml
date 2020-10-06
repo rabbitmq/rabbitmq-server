@@ -1,0 +1,7 @@
+#@data/values
+---
+base_rmq_ref: master
+#! these values are injected at template time from the cli,
+#! but must be declared first here
+erlang_versions: []
+erlang_version: null

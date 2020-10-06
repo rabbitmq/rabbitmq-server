@@ -1,6 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("util.star", "to_build_args")
-#@ load("helpers.star", "should_skip_dialyze", "ci_image")
+#@ load("helpers.star", "ci_image")
 
 #@ def tests_job(dep):
 name: #@ dep.name
@@ -23,8 +23,6 @@ steps:
       mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \
-        --env SKIP_DIALYZE=(@= str(should_skip_dialyze(dep)) @) \
-        --env SKIP_XREF=(@= str(hasattr(dep, "skip_xref") and dep.skip_xref) @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env STEP_START=${{ steps.buildevents.outputs.step_start }} \

@@ -46,7 +46,7 @@ VENDORED_COMPONENTS = rabbit_common \
 	rabbitmq_web_stomp \
 	rabbitmq_web_stomp_examples
 
-DEPS_YAML_FILE = workflow_sources/test/deps.yml
+DEPS_YAML_FILE = workflow_sources/deps.yml
 
 define dep_yaml_chunk
 $(eval SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(wildcard deps/$(1)/test/*_SUITE.erl)))))
@@ -58,27 +58,34 @@ $(DEPS_YAML_FILE):
 	@$(foreach dep,$(VENDORED_COMPONENTS),$(call dep_yaml_chunk,$(dep)))
 	@cat $@ | git stripspace > $@.fixed && mv $@.fixed $@
 
-.PHONY: monorepo-actions
-monorepo-actions: $(YTT) $(DEPS_YAML_FILE)
+ERLANG_VERSIONS = 22.3 23.1
+ERLANG_VERSIONS_YAML1 = [$(foreach v,$(ERLANG_VERSIONS),,"$(v)")]
+UNFIXED := [,"
+ERLANG_VERSIONS_YAML2 = $(subst $(UNFIXED),[",$(ERLANG_VERSIONS_YAML1))
+
+.github/workflows/base-images.yaml: $(YTT) $(wildcard workflow_sources/base_image/*)
 	ytt -f workflow_sources/base_image \
-	| sed s/a_magic_string_that_we_will_sed_to_on/on/ \
-	> .github/workflows/base-images.yaml
+	-f workflow_sources/base_values.yml \
+	--data-value-yaml erlang_versions='$(ERLANG_VERSIONS_YAML2)' \
+	--output-files /tmp
+	cat /tmp/workflow.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
+	> $@
 
+.github/workflows/test-erlang-otp-%.yaml: $(YTT) $(DEPS_YAML_FILE) $(wildcard workflow_sources/test/*)
 	ytt -f workflow_sources/test \
-	--data-value versions.erlang=23.0 \
-	--data-value versions.elixir=1.8.0 \
-	| sed s/a_magic_string_that_we_will_sed_to_on/on/ \
-	> .github/workflows/test-erlang-otp-23.0.yaml
+	-f workflow_sources/base_values.yml \
+	-f $(DEPS_YAML_FILE) \
+	--data-value-yaml erlang_versions='$(ERLANG_VERSIONS_YAML2)' \
+	--data-value erlang_version=$* \
+	--output-files /tmp
+	cat /tmp/workflow.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
+	> $@
 
-	ytt -f workflow_sources/test \
-	--data-value versions.erlang=22.3 \
-	--data-value versions.elixir=1.10.3 \
-	| sed s/a_magic_string_that_we_will_sed_to_on/on/ \
-	> .github/workflows/test-erlang-otp-22.3.yaml
+monorepo-actions: \
+  .github/workflows/base-images.yaml \
+  $(foreach v,$(ERLANG_VERSIONS), .github/workflows/test-erlang-otp-$(v).yaml)
 
 DOCKER_REPO ?= eu.gcr.io/cf-rabbitmq-core
-
-ERLANG_VERSIONS = 23.0 22.3
 
 CI_BASE_IMAGES = $(foreach v,$(ERLANG_VERSIONS),ci-base-image-$(v))
 .PHONY: $(CI_BASE_IMAGES)
@@ -99,7 +106,7 @@ $(PUSHES):
 push-base-images: $(PUSHES)
 
 LOCAL_CI_GOALS = $(foreach dep,$(filter-out rabbitmq_cli,$(VENDORED_COMPONENTS)),ci-$(dep))
-ERLANG_VERSION ?= 23.0
+ERLANG_VERSION ?= 23.1
 SKIP_DIALYZE ?= False
 
 TAG = erlang-$(ERLANG_VERSION)-rabbitmq-$(shell git rev-parse HEAD)$(shell git diff-index --quiet HEAD -- || echo -dirty)
@@ -148,3 +155,14 @@ docker: local-ci-image
 		--oom-score-adj -500 \
 		$(LOCAL_IMAGE) \
 		/bin/bash
+
+# A literal space.
+space :=
+space +=
+
+comma := ,
+
+# Joins elements of the list in arg 2 with the given separator.
+#   1. Element separator.
+#   2. The list.
+join-with = $(subst $(space),$1,$(strip $(comma)))

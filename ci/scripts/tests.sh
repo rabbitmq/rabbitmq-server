@@ -14,12 +14,6 @@ catch() {
     buildevents step ${GITHUB_RUN_ID} ${project} ${STEP_START} ${project}
 }
 
-if [ $SKIP_DIALYZE != True ]; then
-    buildevents cmd ${GITHUB_RUN_ID} ${project} dialyze -- \
-            make dialyze \
-                 FULL=
-fi
-
 buildevents cmd ${GITHUB_RUN_ID} ${project} test-build -- \
             make test-build
 

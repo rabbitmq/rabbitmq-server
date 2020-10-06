@@ -4,20 +4,8 @@ FROM eu.gcr.io/cf-rabbitmq-core/ci:${IMAGE_TAG}
 
 ARG BUILDEVENT_APIKEY
 ARG project
-ARG SKIP_DIALYZE
 
 WORKDIR /workspace/rabbitmq/deps/${project}
-
-RUN if [ "${SKIP_DIALYZE}" != "True" ]; then \
-    BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
-        buildevents cmd ${GITHUB_RUN_ID} ${project} dialyze -- \
-            make dialyze \
-                 FULL=; \
-    fi
-
-RUN BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
-    buildevents cmd ${GITHUB_RUN_ID} ${project} xref -- \
-            make xref
 
 RUN BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
     buildevents cmd ${GITHUB_RUN_ID} ${project} test-build -- \

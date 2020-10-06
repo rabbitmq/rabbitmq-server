@@ -1,3 +1,7 @@
+def is_unique(l):
+  return len(l) == len(set(l))
+end
+
 def merge(dicts):
   r = {}
   for d in dicts:
