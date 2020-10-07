@@ -117,11 +117,13 @@ health_checks_test(Config) ->
     passed.
 
 alarms_test(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    rabbit_ct_broker_helpers:clear_all_alarms(Config, Server),
+
     EndpointPath = "/health/checks/alarms",
     Check0 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
     rabbit_ct_helpers:await_condition(
         fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
@@ -131,19 +133,22 @@ alarms_test(Config) ->
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
     ?assert(is_list(maps:get(<<"alarms">>, Body))),
 
-    ok = rabbit_ct_broker_helpers:clear_alarm(Config, Server, memory),
+    rabbit_ct_broker_helpers:clear_all_alarms(Config, Server),
     rabbit_ct_helpers:await_condition(
         fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =:= [] end
     ),
+    ct:pal("Alarms: ~p", [rabbit_ct_broker_helpers:get_alarms(Config, Server)]),
 
     passed.
 
 local_alarms_test(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    rabbit_ct_broker_helpers:clear_all_alarms(Config, Server),
+
     EndpointPath = "/health/checks/local-alarms",
     Check0 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, file_descriptor_limit),
     rabbit_ct_helpers:await_condition(
         fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
@@ -153,9 +158,9 @@ local_alarms_test(Config) ->
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
     ?assert(is_list(maps:get(<<"alarms">>, Body))),
 
-    ok = rabbit_ct_broker_helpers:clear_alarm(Config, Server, file_descriptor_limit),
+    rabbit_ct_broker_helpers:clear_all_alarms(Config, Server),
     rabbit_ct_helpers:await_condition(
-        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =:= [] end
+        fun() -> rabbit_ct_broker_helpers:get_local_alarms(Config, Server) =:= [] end
     ),
 
     passed.
