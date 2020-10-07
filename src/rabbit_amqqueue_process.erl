@@ -599,7 +599,7 @@ confirm_messages(MsgIds, MTC, QName) ->
           end, {#{}, MTC}, MsgIds),
     maps:fold(
         fun(Pid, MsgSeqNos, _) ->
-            rabbit_misc:confirm_to_sender(Pid, QName, MsgSeqNos)
+            confirm_to_sender(Pid, QName, MsgSeqNos)
         end,
         ok,
         CMs),
@@ -622,7 +622,7 @@ send_or_record_confirm(#delivery{confirm    = true,
                                  sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo},
                        #q{q = Q} = State) ->
-    rabbit_misc:confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
+    confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
     {immediately, State}.
 
 %% This feature was used by `rabbit_amqqueue_process` and
@@ -806,7 +806,7 @@ send_reject_publish(#delivery{confirm = true,
                                   backing_queue = BQ,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}) ->
-    gen_server2:cast(SenderPid, {queue_event, Q, {reject_publish, MsgSeqNo, self()}}),
+    ok = send_rejection(SenderPid, amqqueue:get_name(Q), MsgSeqNo),
 
     MTC1 = maps:remove(MsgId, MTC),
     BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
@@ -1521,9 +1521,9 @@ handle_cast({run_backing_queue, Mod, Fun},
     noreply(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)});
 
 handle_cast({deliver,
-                Delivery = #delivery{sender = Sender,
-                                     flow   = Flow},
-                SlaveWhenPublished},
+             Delivery = #delivery{sender = Sender,
+                                  flow   = Flow},
+             SlaveWhenPublished},
             State = #q{senders = Senders}) ->
     Senders1 = case Flow of
     %% In both credit_flow:ack/1 we are acking messages to the channel
@@ -1840,3 +1840,23 @@ update_ha_mode(State) ->
     {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
     ok = rabbit_mirror_queue_misc:update_mirrors(Q),
     State.
+
+confirm_to_sender(Pid, QName, MsgSeqNos) ->
+    %% the stream queue included the queue type refactoring and thus requires
+    %% a different message format
+    case rabbit_ff_registry:is_enabled(steam_queue) of
+        true ->
+            rabbit_misc:confirm_to_sender(Pid, QName, MsgSeqNos);
+        false ->
+            rabbit_misc:confirm_to_sender_compat(Pid, QName, MsgSeqNos)
+    end.
+
+send_rejection(Pid, QName, MsgSeqNo) ->
+    case rabbit_ff_registry:is_enabled(steam_queue) of
+        true ->
+            gen_server2:cast(Pid, {queue_event, QName,
+                                   {reject_publish, MsgSeqNo, self()}});
+        false ->
+            gen_server2:cast(Pid, {reject_publish, MsgSeqNo, self()})
+    end.
+

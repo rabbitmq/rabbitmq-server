@@ -294,7 +294,7 @@ send_command(Pid, Msg) ->
         (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok'.
 
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
-    gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, [Msg]}).
+    gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
 
 -spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 
@@ -2568,10 +2568,13 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
 
-handle_deliver(CTag, Ack, Msgs, State) ->
+handle_deliver(CTag, Ack, Msgs, State) when is_list(Msgs) ->
     lists:foldl(fun(Msg, S) ->
                         handle_deliver0(CTag, Ack, Msg, S)
-                end, State, Msgs).
+                end, State, Msgs);
+handle_deliver(CTag, Ack, Msg, State) ->
+    %% backwards compatibility clause
+    handle_deliver0(CTag, Ack, Msg, State).
 
 handle_deliver0(ConsumerTag, AckRequired,
                 Msg = {QName, QPid, _MsgId, Redelivered,
