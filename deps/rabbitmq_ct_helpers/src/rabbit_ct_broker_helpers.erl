@@ -120,6 +120,7 @@
     get_alarms/2,
     get_local_alarms/2,
     clear_alarm/3,
+    clear_all_alarms/2,
 
     add_user/2,
     add_user/3,
@@ -1249,9 +1250,18 @@ get_local_alarms(Config, Node) ->
 clear_alarm(Config, Node, file_descriptor_limit = Resource) ->
     rpc(Config, Node, rabbit_alarm, clear_alarm, [Resource]);
 clear_alarm(Config, Node, memory = Resource) ->
-    rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource, Resource, Node}]);
+    rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]);
 clear_alarm(Config, Node, disk = Resource) ->
-    rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource, Resource, Node}]).
+    rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]).
+
+clear_all_alarms(Config, Node) ->
+    lists:foreach(fun ({file_descriptor_limit, _}) ->
+                        clear_alarm(Config, Node, file_descriptor_limit);
+                      ({{resource_limit, Resource, OnNode}, _}) when OnNode =:= Node ->
+                        clear_alarm(Config, Node, Resource);
+                      (_) -> ok
+                  end, get_alarms(Config, Node)),
+    ok.
 
 get_message_store_pid(Config, Node, VHost) ->
     {ok, VHostSup} = rpc(Config, Node,
