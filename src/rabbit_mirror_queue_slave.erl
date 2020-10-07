@@ -579,7 +579,8 @@ send_or_record_confirm(_Status, #delivery { sender     = ChPid,
                                             confirm    = true,
                                             msg_seq_no = MsgSeqNo },
                        MS, #state{q = Q} = _State) ->
-    ok = confirm_to_sender(ChPid, amqqueue:get_name(Q), [MsgSeqNo]),
+    ok = rabbit_classic_queue:confirm_to_sender(ChPid,
+                                                amqqueue:get_name(Q), [MsgSeqNo]),
     MS.
 
 confirm_messages(MsgIds, State = #state{q = Q, msg_id_status = MS}) ->
@@ -612,7 +613,7 @@ confirm_messages(MsgIds, State = #state{q = Q, msg_id_status = MS}) ->
                   end
           end, {gb_trees:empty(), MS}, MsgIds),
     Fun = fun (Pid, MsgSeqNos) ->
-                  confirm_to_sender(Pid, QName, MsgSeqNos)
+                  rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos)
           end,
     rabbit_misc:gb_trees_foreach(Fun, CMs),
     State #state { msg_id_status = MS1 }.
@@ -1089,14 +1090,4 @@ record_synchronised(Q0) when ?is_amqqueue(Q0) ->
     case rabbit_misc:execute_mnesia_transaction(F) of
         ok -> ok;
         {ok, Q2} -> rabbit_mirror_queue_misc:maybe_drop_master_after_sync(Q2)
-    end.
-
-confirm_to_sender(Pid, QName, MsgSeqNos) ->
-    %% the stream queue included the queue type refactoring and thus requires
-    %% a different message format
-    case rabbit_ff_registry:is_enabled(steam_queue) of
-        true ->
-            rabbit_misc:confirm_to_sender(Pid, QName, MsgSeqNos);
-        false ->
-            rabbit_misc:confirm_to_sender_compat(Pid, QName, MsgSeqNos)
     end.

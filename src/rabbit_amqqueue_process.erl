@@ -806,7 +806,8 @@ send_reject_publish(#delivery{confirm = true,
                                   backing_queue = BQ,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}) ->
-    ok = send_rejection(SenderPid, amqqueue:get_name(Q), MsgSeqNo),
+    ok = rabbit_classic_queue:send_rejection(SenderPid,
+                                             amqqueue:get_name(Q), MsgSeqNo),
 
     MTC1 = maps:remove(MsgId, MTC),
     BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
@@ -1842,21 +1843,6 @@ update_ha_mode(State) ->
     State.
 
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
-    %% the stream queue included the queue type refactoring and thus requires
-    %% a different message format
-    case rabbit_ff_registry:is_enabled(steam_queue) of
-        true ->
-            rabbit_misc:confirm_to_sender(Pid, QName, MsgSeqNos);
-        false ->
-            rabbit_misc:confirm_to_sender_compat(Pid, QName, MsgSeqNos)
-    end.
+    rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).
 
-send_rejection(Pid, QName, MsgSeqNo) ->
-    case rabbit_ff_registry:is_enabled(steam_queue) of
-        true ->
-            gen_server2:cast(Pid, {queue_event, QName,
-                                   {reject_publish, MsgSeqNo, self()}});
-        false ->
-            gen_server2:cast(Pid, {reject_publish, MsgSeqNo, self()})
-    end.
 

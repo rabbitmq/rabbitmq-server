@@ -45,6 +45,9 @@
          delete_crashed/2,
          delete_crashed_internal/2]).
 
+-export([confirm_to_sender/3,
+         send_rejection/3]).
+
 is_enabled() -> true.
 
 declare(Q, Node) when ?amqqueue_is_classic(Q) ->
@@ -490,3 +493,24 @@ update_msg_status(confirm, Pid, #msg_status{pending = P,
     S#msg_status{pending = Rem, confirmed = [Pid | C]};
 update_msg_status(down, Pid, #msg_status{pending = P} = S) ->
     S#msg_status{pending = lists:delete(Pid, P)}.
+
+%% part of channel <-> queue api
+confirm_to_sender(Pid, QName, MsgSeqNos) ->
+    %% the stream queue included the queue type refactoring and thus requires
+    %% a different message format
+    Evt = case rabbit_ff_registry:is_enabled(stream_queue) of
+              true ->
+                  {queue_event, QName, {confirm, MsgSeqNos, self()}};
+              false ->
+                  {confirm, MsgSeqNos, self()}
+          end,
+    gen_server2:cast(Pid, Evt).
+
+send_rejection(Pid, QName, MsgSeqNo) ->
+    case rabbit_ff_registry:is_enabled(stream_queue) of
+        true ->
+            gen_server2:cast(Pid, {queue_event, QName,
+                                   {reject_publish, MsgSeqNo, self()}});
+        false ->
+            gen_server2:cast(Pid, {reject_publish, MsgSeqNo, self()})
+    end.
