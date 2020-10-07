@@ -10,6 +10,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
@@ -35,7 +36,10 @@ all() ->
 groups() ->
     [
      {all_tests, [], all_tests()},
-     {single_node, [], [is_quorum_critical_single_node_test,
+     {single_node, [], [
+                        alarms_test,
+                        local_alarms_test,
+                        is_quorum_critical_single_node_test,
                         is_mirror_sync_critical_single_node_test]}
     ].
 
@@ -48,6 +52,7 @@ all_tests() -> [
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
+
 init_per_group(Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
@@ -96,6 +101,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
 health_checks_test(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
     http_get(Config, "/health/checks/certificate-expiration/1/days", ?OK),
@@ -105,6 +111,51 @@ health_checks_test(Config) ->
     http_get(Config, "/health/checks/node-is-mirror-sync-critical", ?OK),
     http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
     passed.
+
+alarms_test(Config) ->
+    EndpointPath = "/health/checks/alarms",
+    Check0 = http_get(Config, EndpointPath, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
+    rabbit_ct_helpers:await_condition(
+        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
+    ),
+
+    Body = http_get_failed(Config, EndpointPath),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
+    ?assert(is_list(maps:get(<<"alarms">>, Body))),
+
+    ok = rabbit_ct_broker_helpers:clear_alarm(Config, Server, memory),
+    rabbit_ct_helpers:await_condition(
+        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =:= [] end
+    ),
+
+    passed.
+
+local_alarms_test(Config) ->
+    EndpointPath = "/health/checks/local-alarms",
+    Check0 = http_get(Config, EndpointPath, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, file_descriptor_limit),
+    rabbit_ct_helpers:await_condition(
+        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
+    ),
+
+    Body = http_get_failed(Config, EndpointPath),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
+    ?assert(is_list(maps:get(<<"alarms">>, Body))),
+
+    ok = rabbit_ct_broker_helpers:clear_alarm(Config, Server, file_descriptor_limit),
+    rabbit_ct_helpers:await_condition(
+        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =:= [] end
+    ),
+
+    passed.
+
 
 is_quorum_critical_single_node_test(Config) ->
     Check0 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
@@ -214,7 +265,7 @@ is_mirror_sync_critical_test(Config) ->
 
 http_get_failed(Config, Path) ->
     {ok, {{_, Code, _}, _, ResBody}} = req(Config, get, Path, [auth_header("guest", "guest")]),
-    ?assertEqual(Code, 503),
+    ?assertEqual(Code, ?HEALTH_CHECK_FAILURE_STATUS),
     rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)).
 
 delete_queues() ->
