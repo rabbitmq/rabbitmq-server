@@ -728,13 +728,24 @@ handle_cast({mandatory_received, _MsgSeqNo}, State) ->
 handle_cast({reject_publish, _MsgSeqNo, QPid} = Evt, State) ->
     %% For backwards compatibility
     QRef = find_queue_name_from_pid(QPid, State#ch.queue_states),
-    handle_cast({queue_event, QRef, Evt}, State);
+    case QRef of
+        undefined ->
+            %% ignore if no queue could be found for the given pid
+            noreply(State);
+        _ ->
+            handle_cast({queue_event, QRef, Evt}, State)
+    end;
 
 handle_cast({confirm, _MsgSeqNo, QPid} = Evt, State) ->
     %% For backwards compatibility
     QRef = find_queue_name_from_pid(QPid, State#ch.queue_states),
-    handle_cast({queue_event, QRef, Evt}, State);
-
+    case QRef of
+        undefined ->
+            %% ignore if no queue could be found for the given pid
+            noreply(State);
+        _ ->
+            handle_cast({queue_event, QRef, Evt}, State)
+    end;
 handle_cast({queue_event, QRef, Evt},
             #ch{queue_states = QueueStates0} = State0) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QueueStates0) of
@@ -2716,13 +2727,17 @@ handle_queue_actions(Actions, #ch{} = State0) ->
 
 find_queue_name_from_pid(Pid, QStates) when is_pid(Pid) ->
     Fun = fun(K, _V, undefined) ->
-                  {ok, Q} = rabbit_amqqueue:lookup(K),
-                  Pids = get_queue_pids(Q),
-                  case lists:member(Pid, Pids) of
-                      true ->
-                          K;
-                      false ->
-                          undefined
+                  case rabbit_amqqueue:lookup(K) of
+                      {error, not_found} ->
+                          undefined;
+                      {ok, Q} ->
+                          Pids = get_queue_pids(Q),
+                          case lists:member(Pid, Pids) of
+                              true ->
+                                  K;
+                              false ->
+                                  undefined
+                          end
                   end;
              (_K, _V, Acc) ->
                   Acc
