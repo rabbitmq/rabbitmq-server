@@ -33,17 +33,22 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Port = binary_to_integer(port(ReqData)),
-    Listeners = rabbit_networking:active_listeners(),
-    Local = [L || #listener{node = N} = L <- Listeners, N == node()],
-    PortListeners = [L || #listener{port = P} = L <- Local, P == Port],
-    case PortListeners of
-        [] ->
-            Msg = <<"No active listener">>,
-            failure(Msg, Port, [P || #listener{port = P} <- Local], ReqData, Context);
-        _ ->
-            rabbit_mgmt_util:reply([{status, ok},
-                                    {port, Port}], ReqData, Context)
+    try
+        Port = binary_to_integer(port(ReqData)),
+        Listeners = rabbit_networking:active_listeners(),
+        Local = [L || #listener{node = N} = L <- Listeners, N == node()],
+        PortListeners = [L || #listener{port = P} = L <- Local, P == Port],
+        case PortListeners of
+            [] ->
+                Msg = <<"No active listener">>,
+                failure(Msg, Port, [P || #listener{port = P} <- Local], ReqData, Context);
+            _ ->
+                rabbit_mgmt_util:reply([{status, ok},
+                                        {port, Port}], ReqData, Context)
+        end
+    catch
+        error:badarg ->
+            rabbit_mgmt_util:bad_request(<<"Invalid port">>, ReqData, Context)
     end.
 
 failure(Message, Missing, Ports, ReqData, Context) ->

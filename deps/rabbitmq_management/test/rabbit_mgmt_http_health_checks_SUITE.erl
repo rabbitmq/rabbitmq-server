@@ -46,7 +46,11 @@ groups() ->
 all_tests() -> [
                 health_checks_test,
                 is_quorum_critical_test,
-                is_mirror_sync_critical_test
+                is_mirror_sync_critical_test,
+                virtual_hosts_test,
+                protocol_listener_test,
+                port_listener_test,
+                certificate_expiration_test
                ].
 
 %% -------------------------------------------------------------------
@@ -225,8 +229,6 @@ is_mirror_sync_critical_single_node_test(Config) ->
 
     passed.
 
-%% TODO clear policy
-
 is_mirror_sync_critical_test(Config) ->
     Path = "/health/checks/node-is-mirror-sync-critical",
     Check0 = http_get(Config, Path, ?OK),
@@ -263,6 +265,113 @@ is_mirror_sync_critical_test(Config) ->
 
     passed.
 
+virtual_hosts_test(Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
+    add_vhost(Config, VHost1),
+    add_vhost(Config, VHost2),
+
+    Path = "/health/checks/virtual-hosts",
+    Check0 = http_get(Config, Path, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost1),
+    
+    Body1 = http_get_failed(Config, Path),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body1)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body1)),
+    ?assertEqual([VHost1], maps:get(<<"virtual-hosts">>, Body1)),
+
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost2),
+    
+    Body2 = http_get_failed(Config, Path),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body2)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body2)),
+    VHosts = lists:sort([VHost1, VHost2]),
+    ?assertEqual(VHosts, lists:sort(maps:get(<<"virtual-hosts">>, Body2))),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
+    http_get(Config, Path, ?OK),
+
+    passed.
+
+protocol_listener_test(Config) ->
+    Check0 = http_get(Config, "/health/checks/protocol-listener/http", ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    http_get(Config, "/health/checks/protocol-listener/amqp", ?OK),
+    http_get(Config, "/health/checks/protocol-listener/amqp0.9.1", ?OK),
+    http_get(Config, "/health/checks/protocol-listener/amqp0-9-1", ?OK),
+
+    Body0 = http_get_failed(Config, "/health/checks/protocol-listener/mqtt"),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body0)),
+    ?assertEqual(<<"mqtt">>, maps:get(<<"missing">>, Body0)),
+    ?assert(lists:member(<<"http">>, maps:get(<<"protocols">>, Body0))),
+    ?assert(lists:member(<<"clustering">>, maps:get(<<"protocols">>, Body0))),
+    ?assert(lists:member(<<"amqp">>, maps:get(<<"protocols">>, Body0))),
+
+    http_get_failed(Config, "/health/checks/protocol-listener/doe"),
+    http_get_failed(Config, "/health/checks/protocol-listener/mqtts"),
+    http_get_failed(Config, "/health/checks/protocol-listener/stomp"),
+    http_get_failed(Config, "/health/checks/protocol-listener/stomp1.0"),
+
+    passed.
+
+port_listener_test(Config) ->
+    AMQP = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    MGMT = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
+    MQTT = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+
+    Path = fun(Port) ->
+                   lists:flatten(io_lib:format("/health/checks/port-listener/~p", [Port]))
+           end,
+    
+    Check0 = http_get(Config, Path(AMQP), ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    Check1 = http_get(Config, Path(MGMT), ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check1)),
+
+    http_get(Config, "/health/checks/port-listener/bananas", ?BAD_REQUEST),
+
+    Body0 = http_get_failed(Config, Path(MQTT)),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body0)),
+    ?assertEqual(MQTT, maps:get(<<"missing">>, Body0)),
+    ?assert(lists:member(AMQP, maps:get(<<"ports">>, Body0))),
+    ?assert(lists:member(MGMT, maps:get(<<"ports">>, Body0))),
+
+    passed.
+
+certificate_expiration_test(Config) ->
+    Check0 = http_get(Config, "/health/checks/certificate-expiration/1/weeks", ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    http_get(Config, "/health/checks/certificate-expiration/1/days", ?OK),
+    http_get(Config, "/health/checks/certificate-expiration/1/months", ?OK),
+
+    http_get(Config, "/health/checks/certificate-expiration/two/weeks", ?BAD_REQUEST),
+    http_get(Config, "/health/checks/certificate-expiration/2/week", ?BAD_REQUEST),
+    http_get(Config, "/health/checks/certificate-expiration/2/doe", ?BAD_REQUEST),
+
+    Body0 = http_get_failed(Config, "/health/checks/certificate-expiration/10/years"),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body0)),
+    [Expired] = maps:get(<<"expired">>, Body0),
+    ?assertEqual(<<"amqp/ssl">>, maps:get(<<"protocol">>, Expired)),
+    AMQP_TLS = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
+    ?assertEqual(AMQP_TLS, maps:get(<<"port">>, Expired)),
+    Node = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename), utf8),
+    ?assertEqual(Node, maps:get(<<"node">>, Expired)),
+    ?assertEqual(true, maps:is_key(<<"cacertfile">>, Expired)),
+    ?assertEqual(true, maps:is_key(<<"certfile">>, Expired)),
+    ?assertEqual(true, maps:is_key(<<"certfile_expires_on">>, Expired)),
+    ?assertEqual(true, maps:is_key(<<"interface">>, Expired)),
+
+    passed.
+
 http_get_failed(Config, Path) ->
     {ok, {{_, Code, _}, _, ResBody}} = req(Config, get, Path, [auth_header("guest", "guest")]),
     ?assertEqual(Code, ?HEALTH_CHECK_FAILURE_STATUS),
@@ -271,3 +380,7 @@ http_get_failed(Config, Path) ->
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
+
+add_vhost(Config, VHost) ->
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost).

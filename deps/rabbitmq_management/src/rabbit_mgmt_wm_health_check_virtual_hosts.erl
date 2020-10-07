@@ -40,7 +40,7 @@ to_json(ReqData, Context) ->
 failure(Message, Vs, ReqData, Context) ->
     {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
                                                              {reason, Message},
-                                                             {virtual_hosts, Vs}],
+                                                             {'virtual-hosts', Vs}],
                                                             ReqData, Context),
     {stop, cowboy_req:reply(503, #{}, Response, ReqData1), Context1}.
 
