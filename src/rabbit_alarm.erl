@@ -21,7 +21,8 @@
 -behaviour(gen_event).
 
 -export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
-         clear_alarm/1, get_alarms/0, on_node_up/1, on_node_down/1]).
+         clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
+         format_as_map/1, format_as_maps/1, is_local/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -30,7 +31,9 @@
 
 -define(SERVER, ?MODULE).
 
-
+-define(FILE_DESCRIPTOR_RESOURCE, <<"file descriptors">>).
+-define(MEMORY_RESOURCE, <<"memory">>).
+-define(DISK_SPACE_RESOURCE, <<"disk space">>).
 
 %%----------------------------------------------------------------------------
 
@@ -92,15 +95,66 @@ set_alarm(Alarm)   -> gen_event:notify(?SERVER, {set_alarm,   Alarm}).
 clear_alarm(Alarm) -> gen_event:notify(?SERVER, {clear_alarm, Alarm}).
 
 -spec get_alarms() -> [{alarm(), []}].
-
 get_alarms() -> gen_event:call(?SERVER, ?MODULE, get_alarms, infinity).
 
--spec on_node_up(node()) -> 'ok'.
+-spec get_alarms(timeout()) -> [{alarm(), []}].
+get_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_alarms, Timeout).
 
+-spec get_local_alarms() -> [alarm()].
+get_local_alarms() -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, infinity).
+
+-spec get_local_alarms(timeout()) -> [alarm()].
+get_local_alarms(Timeout) -> gen_event:call(?SERVER, ?MODULE, get_local_alarms, Timeout).
+
+-spec filter_local_alarms([alarm()]) -> [alarm()].
+filter_local_alarms(Alarms) ->
+    lists:filter(fun is_local/1, Alarms).
+
+-spec is_local({alarm(), any()}) -> boolean().
+is_local({file_descriptor_limit, _}) -> true;
+is_local({{resource_limit, _Resource, Node}, _}) when Node =:= node() -> true;
+is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
+
+-spec format_as_map(alarm()) -> #{binary() => term()}.
+format_as_map(file_descriptor_limit) ->
+    #{
+        <<"resource">> => ?FILE_DESCRIPTOR_RESOURCE,
+        <<"node">> => node()
+    };
+format_as_map({resource_limit, disk, Node}) ->
+    #{
+        <<"resource">> => ?DISK_SPACE_RESOURCE,
+        <<"node">> => Node
+    };
+format_as_map({resource_limit, memory, Node}) ->
+    #{
+        <<"resource">> => ?MEMORY_RESOURCE,
+        <<"node">> => Node
+    };
+format_as_map({resource_limit, Limit, Node}) ->
+    #{
+        <<"resource">> => rabbit_data_coercion:to_binary(Limit),
+        <<"node">> => Node
+    }.
+
+-spec format_as_maps([{alarm(), []}]) -> [#{any() => term()}].
+format_as_maps(Alarms) when is_list(Alarms) ->
+    %% get_alarms/0 returns
+    %%
+    %%  [
+    %%    {file_descriptor_limit, []},
+    %%    {{resource_limit, disk,   rabbit@warp10}, []},
+    %%    {{resource_limit, memory, rabbit@warp10}, []}
+    %%  ]
+    lists:map(fun({Resource, _}) -> format_as_map(Resource);
+                 (Resource)      -> format_as_map(Resource)
+              end, Alarms).
+
+
+-spec on_node_up(node()) -> 'ok'.
 on_node_up(Node)   -> gen_event:notify(?SERVER, {node_up,   Node}).
 
 -spec on_node_down(node()) -> 'ok'.
-
 on_node_down(Node) -> gen_event:notify(?SERVER, {node_down, Node}).
 
 remote_conserve_resources(Pid, Source, {true, _, _}) ->
@@ -123,7 +177,10 @@ handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
      internal_register(Pid, AlertMFA, State)};
 
 handle_call(get_alarms, State) ->
-    {ok, get_alarms(State), State};
+    {ok, compute_alarms(State), State};
+
+handle_call(get_local_alarms, State) ->
+    {ok, filter_local_alarms(compute_alarms(State)), State};
 
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
@@ -302,7 +359,7 @@ is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->
             false
     end.
 
-get_alarms(#alarms{alarms = Alarms,
+compute_alarms(#alarms{alarms = Alarms,
                    alarmed_nodes = AN}) ->
     Alarms ++ [ {{resource_limit, Source, Node}, []}
                 || {Node, Sources} <- dict:to_list(AN), Source <- Sources ].
