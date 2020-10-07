@@ -1384,16 +1384,21 @@ publish_and_confirm(Q, Payload, Count) ->
 wait_for_confirms(Unconfirmed) ->
     case gb_sets:is_empty(Unconfirmed) of
         true  -> ok;
-        false -> receive {'$gen_cast',
-                          {queue_event, _QName,
-                          {confirm, Confirmed, _}}} ->
-                         wait_for_confirms(
-                           rabbit_misc:gb_sets_difference(
-                             Unconfirmed, gb_sets:from_list(Confirmed)))
-                 after ?TIMEOUT ->
-                           flush(),
-                           exit(timeout_waiting_for_confirm)
-                 end
+        false ->
+            receive
+                {'$gen_cast',
+                 {queue_event, _QName, {confirm, Confirmed, _}}} ->
+                    wait_for_confirms(
+                      rabbit_misc:gb_sets_difference(
+                        Unconfirmed, gb_sets:from_list(Confirmed)));
+                {'$gen_cast', {confirm, Confirmed, _}} ->
+                    wait_for_confirms(
+                      rabbit_misc:gb_sets_difference(
+                        Unconfirmed, gb_sets:from_list(Confirmed)))
+            after ?TIMEOUT ->
+                      flush(),
+                      exit(timeout_waiting_for_confirm)
+            end
     end.
 
 with_fresh_variable_queue(Fun, Mode) ->
