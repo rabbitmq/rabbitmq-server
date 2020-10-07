@@ -27,7 +27,6 @@
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
--export([confirm_to_sender/3]).
 -export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
          filter_exit_map/2]).
 -export([with_user/2]).
@@ -502,10 +501,6 @@ report_coverage_percentage(File, Cov, NotCov, Mod) ->
                    true -> 100.0
                end,
                Mod]).
-
-confirm_to_sender(Pid, QName, MsgSeqNos) ->
-    Evt = {queue_event, QName, {confirm, MsgSeqNos, self()}},
-    gen_server2:cast(Pid, Evt).
 
 %% @doc Halts the emulator returning the given status code to the os.
 %% On Windows this function will block indefinitely so as to give the io
