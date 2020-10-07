@@ -30,7 +30,7 @@ fi
 ensure_thread_pool_size() {
     if [ -z "${RABBITMQ_IO_THREAD_POOL_SIZE}" ]; then
         RABBITMQ_IO_THREAD_POOL_SIZE=$(
-            erl \
+            ${ERL_DIR}erl \
                 -noinput \
                 -boot "${CLEAN_BOOT_FILE}" \
                 -s rabbit_misc report_default_thread_pool_size
@@ -87,7 +87,7 @@ start_rabbitmq_server() {
 
     check_start_params
 
-    exec erl \
+    exec ${ERL_DIR}erl \
         -pa "$RABBITMQ_SERVER_CODE_PATH" \
         ${RABBITMQ_START_RABBIT} \
         -boot "${SASL_BOOT_FILE}" \
