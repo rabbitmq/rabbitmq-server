@@ -24,7 +24,8 @@
          context_to_code_path/1]).
 
 -ifdef(TEST).
--export([value_is_yes/1]).
+-export([parse_conf_env_file_output2/2,
+         value_is_yes/1]).
 -endif.
 
 -define(USED_ENV_VARS,
@@ -1586,11 +1587,12 @@ parse_conf_env_file_output(Context, _, []) ->
     Context;
 parse_conf_env_file_output(Context, Marker, [Marker | Lines]) ->
     %% Found our marker, let's parse variables.
-    parse_conf_env_file_output1(Context, Lines, #{});
+    parse_conf_env_file_output1(Context, Lines);
 parse_conf_env_file_output(Context, Marker, [_ | Lines]) ->
     parse_conf_env_file_output(Context, Marker, Lines).
 
-parse_conf_env_file_output1(Context, [], Vars) ->
+parse_conf_env_file_output1(Context, Lines) ->
+    Vars = parse_conf_env_file_output2(Lines, #{}),
     %% Re-export variables.
     lists:foreach(
       fun(Var) ->
@@ -1606,27 +1608,30 @@ parse_conf_env_file_output1(Context, [], Vars) ->
                       ok
               end
       end, lists:sort(maps:keys(Vars))),
-    Context;
-parse_conf_env_file_output1(Context, [Line | Lines], Vars) ->
+    Context.
+
+parse_conf_env_file_output2([], Vars) ->
+    Vars;
+parse_conf_env_file_output2([Line | Lines], Vars) ->
     SetXOutput = is_sh_set_x_output(Line),
     ShFunction = is_sh_function(Line, Lines),
     if
         SetXOutput ->
-            parse_conf_env_file_output1(Context, Lines, Vars);
+            parse_conf_env_file_output2(Lines, Vars);
         ShFunction ->
-            skip_sh_function(Context, Lines, Vars);
+            skip_sh_function(Lines, Vars);
         true ->
             case string:split(Line, "=") of
                 [Var, IncompleteValue] ->
-                    {Value, Lines1} = parse_sh_literal(IncompleteValue, Lines),
+                    {Value, Lines1} = parse_sh_literal(IncompleteValue, Lines, ""),
                     Vars1 = Vars#{Var => Value},
-                    parse_conf_env_file_output1(Context, Lines1, Vars1);
+                    parse_conf_env_file_output2(Lines1, Vars1);
                 _ ->
                     %% Parsing failed somehow.
                     rabbit_log_prelaunch:warning(
                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p",
                       [Line]),
-                    Context
+                    #{}
             end
     end.
 
@@ -1640,16 +1645,18 @@ is_sh_function(Line, Lines) ->
     andalso
     re:run(hd(Lines), "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
 
-parse_sh_literal("'" ++ SingleQuoted, Lines) ->
-    parse_single_quoted_literal(SingleQuoted, Lines, "");
-parse_sh_literal("$'" ++ DollarSingleQuoted, Lines) ->
-    parse_dollar_single_quoted_literal(DollarSingleQuoted, Lines, "");
-parse_sh_literal(Unquoted, Lines) ->
-    {Unquoted, Lines}.
+parse_sh_literal("'" ++ SingleQuoted, Lines, Literal) ->
+    parse_single_quoted_literal(SingleQuoted, Lines, Literal);
+parse_sh_literal("\"" ++ DoubleQuoted, Lines, Literal) ->
+    parse_double_quoted_literal(DoubleQuoted, Lines, Literal);
+parse_sh_literal("$'" ++ DollarSingleQuoted, Lines, Literal) ->
+    parse_dollar_single_quoted_literal(DollarSingleQuoted, Lines, Literal);
+parse_sh_literal(Unquoted, Lines, Literal) ->
+    {lists:reverse(Literal) ++ Unquoted, Lines}.
 
-parse_single_quoted_literal([$'], Lines, Literal) ->
+parse_single_quoted_literal([$' | Rest], Lines, Literal) ->
     %% We reached the closing single quote.
-    {lists:reverse(Literal), Lines};
+    parse_sh_literal(Rest, Lines, Literal);
 parse_single_quoted_literal([], [Line | Lines], Literal) ->
     %% We reached the end of line before finding the closing single
     %% quote. The literal continues on the next line and includes that
@@ -1657,6 +1664,17 @@ parse_single_quoted_literal([], [Line | Lines], Literal) ->
     parse_single_quoted_literal(Line, Lines, [$\n | Literal]);
 parse_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_single_quoted_literal(Rest, Lines, [C | Literal]).
+
+parse_double_quoted_literal([$" | Rest], Lines, Literal) ->
+    %% We reached the closing double quote.
+    parse_sh_literal(Rest, Lines, Literal);
+parse_double_quoted_literal([], [Line | Lines], Literal) ->
+    %% We reached the end of line before finding the closing double
+    %% quote. The literal continues on the next line and includes that
+    %% newline character.
+    parse_double_quoted_literal(Line, Lines, [$\n | Literal]);
+parse_double_quoted_literal([C | Rest], Lines, Literal) ->
+    parse_double_quoted_literal(Rest, Lines, [C | Literal]).
 
 parse_dollar_single_quoted_literal([$'], Lines, Literal) ->
     %% We reached the closing single quote.
@@ -1669,10 +1687,10 @@ parse_dollar_single_quoted_literal([], [Line | Lines], Literal) ->
 parse_dollar_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]).
 
-skip_sh_function(Context, ["}" | Lines], Vars) ->
-    parse_conf_env_file_output1(Context, Lines, Vars);
-skip_sh_function(Context, [_ | Lines], Vars) ->
-    skip_sh_function(Context, Lines, Vars).
+skip_sh_function(["}" | Lines], Vars) ->
+    parse_conf_env_file_output2(Lines, Vars);
+skip_sh_function([_ | Lines], Vars) ->
+    skip_sh_function(Lines, Vars).
 
 %% -------------------------------------------------------------------
 %% Helpers.

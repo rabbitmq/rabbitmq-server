@@ -53,7 +53,8 @@
          check_value_is_yes/1,
          check_log_process_env/1,
          check_log_context/1,
-         check_get_used_env_vars/1
+         check_get_used_env_vars/1,
+         check_parse_conf_env_file_output/1
         ]).
 
 all() ->
@@ -92,7 +93,8 @@ all() ->
      check_value_is_yes,
      check_log_process_env,
      check_log_context,
-     check_get_used_env_vars
+     check_get_used_env_vars,
+     check_parse_conf_env_file_output
     ].
 
 suite() ->
@@ -1044,3 +1046,34 @@ get_default_nodename() ->
               "rabbit@\\1",
               [{return, list}]),
     list_to_atom(NodeS).
+
+check_parse_conf_env_file_output(_) ->
+    ?assertEqual(
+       #{},
+       rabbit_env:parse_conf_env_file_output2(
+         [],
+         #{}
+        )),
+    ?assertEqual(
+       #{"UNQUOTED" => "a",
+         "SINGLE_QUOTED" => "b",
+         "DOUBLE_QUOTED" => "c",
+         "SINGLE_DOLLAR" => "d"},
+       rabbit_env:parse_conf_env_file_output2(
+         ["UNQUOTED=a",
+          "SINGLE_QUOTED='b'",
+          "DOUBLE_QUOTED=\"c\"",
+          "SINGLE_DOLLAR=$'d'"],
+         #{}
+        )),
+    ?assertEqual(
+       #{"A" => "a",
+         "B" => "b",
+         "MULTI_LINE" => "\n'foobar'"},
+       rabbit_env:parse_conf_env_file_output2(
+         ["A=a",
+          "MULTI_LINE='",
+          "'\"'\"'foobar'\"'\"",
+          "B=b"],
+         #{}
+        )).
