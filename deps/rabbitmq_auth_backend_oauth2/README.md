@@ -167,7 +167,7 @@ These are the typical permissions examples:
 - `read:vhost1/some*` - read permissions to all the resources, starting with `some` on the `vhost1` vhost
 - `write:vhsot1/some*/routing*` - topic write permissions to publish to an exchange starting with `some` with a routing key starting with `routing`
 
-See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) and [./test/scope_SUITE.erl](scopes test suite) for more examples.
+See the [wildcard matching test suite](./test/wildcard_match_SUITE.erl) and [scopes test suite](./test/scope_SUITE.erl) for more examples.
 
 Scopes should be prefixed with `resource_server_id`. For example,
 if `resource_server_id` is "my_rabbit", a scope to enable read from any vhost will
