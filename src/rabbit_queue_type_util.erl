@@ -16,8 +16,7 @@
 
 -module(rabbit_queue_type_util).
 
--export([check_invalid_arguments/3,
-         args_policy_lookup/3,
+-export([args_policy_lookup/3,
          qname_to_internal_name/1,
          check_auto_delete/1,
          check_exclusive/1,
@@ -25,16 +24,6 @@
 
 -include("rabbit.hrl").
 -include("amqqueue.hrl").
-
-check_invalid_arguments(QueueName, Args, Keys) ->
-    [case rabbit_misc:table_lookup(Args, Key) of
-         undefined -> ok;
-         _TypeVal   -> rabbit_misc:protocol_error(
-                         precondition_failed,
-                         "invalid arg '~s' for ~s",
-                         [Key, rabbit_misc:rs(QueueName)])
-     end || Key <- Keys],
-    ok.
 
 args_policy_lookup(Name, Resolve, Q) when ?is_amqqueue(Q) ->
     Args = amqqueue:get_arguments(Q),

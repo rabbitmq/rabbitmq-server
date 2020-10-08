@@ -188,8 +188,8 @@
 -callback stat(amqqueue:amqqueue()) ->
     {'ok', non_neg_integer(), non_neg_integer()}.
 
--callback is_policy_applicable(amqqueue:amqqueue(), any()) ->
-    boolean().
+-callback capabilities(amqqueue:amqqueue()) ->
+    #{atom() := term()}.
 
 %% TODO: this should be controlled by a registry that is populated on boot
 discover(<<"quorum">>) ->
@@ -212,6 +212,9 @@ is_enabled(Type) ->
     rabbit_types:channel_exit().
 declare(Q, Node) ->
     Mod = amqqueue:get_type(Q),
+    Capabilities = Mod:capabilities(Q),
+    ValidQueueArgs = maps:get(queue_arguments, Capabilities, []),
+    check_invalid_arguments(amqqueue:get_name(Q), amqqueue:get_arguments(Q), ValidQueueArgs),
     Mod:declare(Q, Node).
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -291,8 +294,12 @@ i_down(K, _Q, _DownReason) ->
 
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),
-    Mod:is_policy_applicable(Q, Policy).
-
+    Capabilities = Mod:capabilities(Q),
+    Applicable = maps:get(policies, Capabilities, []),
+    lists:all(fun({P, _}) ->
+                      lists:member(P, Applicable)
+              end, Policy).
+        
 -spec init() -> state().
 init() ->
     #?STATE{}.
@@ -316,6 +323,9 @@ new(Q, State) when ?is_amqqueue(Q) ->
 consume(Q, Spec, State) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
+    Capabilities = Mod:capabilities(Q),
+    ValidConsumerArgs = maps:get(consumer_arguments, Capabilities, []),
+    check_invalid_arguments(amqqueue:get_name(Q), maps:get(args, Spec), ValidConsumerArgs),
     case Mod:consume(Q, Spec, State0) of
         {ok, CtxState, Actions} ->
             return_ok(set_ctx(Q, Ctx#ctx{state = CtxState}, State), Actions);
@@ -556,3 +566,14 @@ return_ok(State0, Actions0) ->
                   {S, [Act | A0]}
           end, {State0, []}, Actions0),
     {ok, State, lists:reverse(Actions)}.
+
+
+check_invalid_arguments(QueueName, Args, Keys) ->
+    [case lists:member(Arg, Keys) of
+         true -> ok;
+         false -> rabbit_misc:protocol_error(
+                    precondition_failed,
+                    "invalid arg '~s' for ~s",
+                    [Arg, rabbit_misc:rs(QueueName)])
+     end || {Arg, _, _} <- Args],
+    ok.

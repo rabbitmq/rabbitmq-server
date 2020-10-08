@@ -43,7 +43,7 @@
 -export([list_with_minimum_quorum/0, list_with_minimum_quorum_for_cli/0,
          filter_quorum_critical/1, filter_quorum_critical/2,
          all_replica_states/0]).
--export([is_policy_applicable/2]).
+-export([capabilities/1]).
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
@@ -134,7 +134,6 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-    check_invalid_arguments(QName, Arguments),
     rabbit_queue_type_util:check_auto_delete(Q),
     rabbit_queue_type_util:check_exclusive(Q),
     rabbit_queue_type_util:check_non_durable(Q),
@@ -331,20 +330,17 @@ filter_quorum_critical(Queues, ReplicaStates) ->
                     length(AllUp) =< MinQuorum
                  end, Queues).
 
--spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
-is_policy_applicable(_Q, Policy) ->
-    Applicable = [<<"max-length">>,
-                  <<"max-length-bytes">>,
-                  <<"overflow">>,
-                  <<"expires">>,
-                  <<"max-in-memory-length">>,
-                  <<"max-in-memory-bytes">>,
-                  <<"delivery-limit">>,
-                  <<"dead-letter-exchange">>,
-                  <<"dead-letter-routing-key">>],
-    lists:all(fun({P, _}) ->
-                      lists:member(P, Applicable)
-              end, Policy).
+capabilities(_Q) ->
+    #{policies => [<<"max-length">>, <<"max-length-bytes">>, <<"overflow">>,
+                   <<"expires">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
+                   <<"delivery-limit">>, <<"dead-letter-exchange">>, <<"dead-letter-routing-key">>],
+      queue_arguments => [<<"x-expires">>, <<"x-dead-letter-exchange">>,
+                          <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
+                          <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
+                          <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
+                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
+                          <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>],
+      consumer_arguments => [<<"x-priority">>]}.
 
 rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),
@@ -1415,12 +1411,6 @@ quorum_ctag(Other) ->
 
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
-
-check_invalid_arguments(QueueName, Args) ->
-    Keys = [<<"x-message-ttl">>,
-            <<"x-max-priority">>,
-            <<"x-queue-mode">>],
-    rabbit_queue_type_util:check_invalid_arguments(QueueName, Args, Keys).
 
 queue_name(RaFifoState) ->
     rabbit_fifo_client:cluster_name(RaFifoState).
