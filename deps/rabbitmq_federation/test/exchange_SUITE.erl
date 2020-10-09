@@ -836,9 +836,11 @@ dynamic_reconfiguration_integrity(Config) ->
 delete_federated_exchange_upstream(Config) ->
     %% If two exchanges in different virtual hosts have the same name, only one should be deleted.
     VH1 = <<"federation-downstream1">>,
+    rabbit_ct_broker_helpers:delete_vhost(Config, VH1),
     rabbit_ct_broker_helpers:add_vhost(Config, VH1),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH1),
     VH2 = <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:delete_vhost(Config, VH2),
     rabbit_ct_broker_helpers:add_vhost(Config, VH2),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH2),
 
@@ -869,10 +871,10 @@ delete_federated_exchange_upstream(Config) ->
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0, VH1,
                                            <<"federation-upstream">>, <<"upstream">>,
-                                           [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+                                           [{<<"uri">>, node_uri_with_virtual_host(Config, VH2)}]),
     rabbit_ct_broker_helpers:set_parameter(Config, 0, VH2,
                                            <<"federation-upstream">>, <<"upstream">>,
-                                           [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+                                           [{<<"uri">>, node_uri_with_virtual_host(Config, VH1)}]),
 
     ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
     ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH2))),
@@ -891,24 +893,14 @@ delete_federated_exchange_upstream(Config) ->
 delete_federated_queue_upstream(Config) ->
     %% If two queues in different virtual hosts have the same name, only one should be deleted.
     VH1 = <<"federation-downstream1">>,
+    rabbit_ct_broker_helpers:delete_vhost(Config, VH1),
     rabbit_ct_broker_helpers:add_vhost(Config, VH1),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH1),
     VH2 = <<"federation-downstream2">>,
+    rabbit_ct_broker_helpers:delete_vhost(Config, VH2),
     rabbit_ct_broker_helpers:add_vhost(Config, VH2),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH2),
-
-    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH1),
-    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH2),
-    {ok, Ch1} = amqp_connection:open_channel(Conn1),
-    {ok, Ch2} = amqp_connection:open_channel(Conn2),
-
-    #'queue.declare_ok'{} = declare_queue(Ch1,
-                                          #'queue.declare'{queue = <<"federated.queue">>,
-                                                           durable = true}),
-    #'queue.declare_ok'{} = declare_queue(Ch2,
-                                          #'queue.declare'{queue = <<"federated.queue">>,
-                                                           durable = true}),
-
+    
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
                                  [VH1,
@@ -924,11 +916,30 @@ delete_federated_queue_upstream(Config) ->
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0, VH1,
                                            <<"federation-upstream">>, <<"upstream">>,
-                                           [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+                                           [{<<"uri">>, node_uri_with_virtual_host(Config, VH2)}]),
     rabbit_ct_broker_helpers:set_parameter(Config, 0, VH2,
                                            <<"federation-upstream">>, <<"upstream">>,
-                                           [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+                                           [{<<"uri">>, node_uri_with_virtual_host(Config, VH1)}]),
 
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH1),
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VH2),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    #'queue.declare_ok'{} = declare_queue(Ch1,
+                                          #'queue.declare'{queue = <<"federated.queue">>,
+                                                           durable = true}),
+    #'queue.declare_ok'{} = declare_queue(Ch2,
+                                          #'queue.declare'{queue = <<"federated.queue">>,
+                                                           durable = true}),
+
+    
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            length(federation_links_in_vhost(Config, 0, VH1)) > 0 andalso
+            length(federation_links_in_vhost(Config, 0, VH2)) > 0
+        end),
+    
     ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
     ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH2))),
 
