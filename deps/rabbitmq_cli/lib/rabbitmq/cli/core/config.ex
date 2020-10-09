@@ -92,7 +92,7 @@ defmodule RabbitMQ.CLI.Core.Config do
     val = cond do
       remote_node != nil and
       val0 == :undefined and
-      (name == :plugins_dir or name == :enabled_plugins_file) ->
+      (name == :mnesia_dir or name == :feature_flags_file or name == :plugins_dir or name == :enabled_plugins_file) ->
         context1 = get_env_context(nil, true)
         get_val_from_env_context(context1, name)
       true ->
