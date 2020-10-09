@@ -37,7 +37,7 @@
          update/2,
          state_info/1,
          stat/1,
-         capabilities/1]).
+         capabilities/0]).
 
 -export([set_retention_policy/3]).
 -export([add_replica/3,
@@ -649,10 +649,11 @@ msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
             <<"x-routing-key">> => {utf8, RKey}}, R0),
     rabbit_msg_record:to_iodata(R).
 
-capabilities(_Q) ->
+capabilities() ->
     #{policies => [<<"max-length-bytes">>, <<"max-age">>, <<"max-segment-size">>],
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-max-segment-size">>],
-      consumer_arguments => [<<"x-stream-offset">>]}.
+      consumer_arguments => [<<"x-stream-offset">>],
+      server_named => false}.

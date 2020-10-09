@@ -43,7 +43,7 @@
 -export([list_with_minimum_quorum/0, list_with_minimum_quorum_for_cli/0,
          filter_quorum_critical/1, filter_quorum_critical/2,
          all_replica_states/0]).
--export([capabilities/1]).
+-export([capabilities/0]).
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
@@ -330,7 +330,7 @@ filter_quorum_critical(Queues, ReplicaStates) ->
                     length(AllUp) =< MinQuorum
                  end, Queues).
 
-capabilities(_Q) ->
+capabilities() ->
     #{policies => [<<"max-length">>, <<"max-length-bytes">>, <<"overflow">>,
                    <<"expires">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
                    <<"delivery-limit">>, <<"dead-letter-exchange">>, <<"dead-letter-routing-key">>],
@@ -340,7 +340,8 @@ capabilities(_Q) ->
                           <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>],
-      consumer_arguments => [<<"x-priority">>]}.
+      consumer_arguments => [<<"x-priority">>],
+      server_named => false}.
 
 rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),

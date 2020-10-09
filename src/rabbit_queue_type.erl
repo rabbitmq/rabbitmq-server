@@ -31,7 +31,8 @@
          credit/5,
          dequeue/5,
          fold_state/3,
-         is_policy_applicable/2
+         is_policy_applicable/2,
+         is_server_named_allowed/1
          ]).
 
 %% temporary
@@ -188,7 +189,7 @@
 -callback stat(amqqueue:amqqueue()) ->
     {'ok', non_neg_integer(), non_neg_integer()}.
 
--callback capabilities(amqqueue:amqqueue()) ->
+-callback capabilities() ->
     #{atom() := term()}.
 
 %% TODO: this should be controlled by a registry that is populated on boot
@@ -212,7 +213,7 @@ is_enabled(Type) ->
     rabbit_types:channel_exit().
 declare(Q, Node) ->
     Mod = amqqueue:get_type(Q),
-    Capabilities = Mod:capabilities(Q),
+    Capabilities = Mod:capabilities(),
     ValidQueueArgs = maps:get(queue_arguments, Capabilities, []),
     check_invalid_arguments(amqqueue:get_name(Q), amqqueue:get_arguments(Q), ValidQueueArgs),
     Mod:declare(Q, Node).
@@ -294,11 +295,15 @@ i_down(K, _Q, _DownReason) ->
 
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),
-    Capabilities = Mod:capabilities(Q),
+    Capabilities = Mod:capabilities(),
     Applicable = maps:get(policies, Capabilities, []),
     lists:all(fun({P, _}) ->
                       lists:member(P, Applicable)
               end, Policy).
+
+is_server_named_allowed(Type) ->
+    Capabilities = Type:capabilities(),
+    maps:get(server_named, Capabilities, false).
         
 -spec init() -> state().
 init() ->
@@ -323,7 +328,7 @@ new(Q, State) when ?is_amqqueue(Q) ->
 consume(Q, Spec, State) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
-    Capabilities = Mod:capabilities(Q),
+    Capabilities = Mod:capabilities(),
     ValidConsumerArgs = maps:get(consumer_arguments, Capabilities, []),
     check_invalid_arguments(amqqueue:get_name(Q), maps:get(args, Spec), ValidConsumerArgs),
     case Mod:consume(Q, Spec, State0) of

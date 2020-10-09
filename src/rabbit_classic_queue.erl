@@ -38,7 +38,7 @@
          dequeue/4,
          info/2,
          state_info/1,
-         capabilities/1
+         capabilities/0
          ]).
 
 -export([delete_crashed/1,
@@ -438,7 +438,7 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
-capabilities(_Q) ->
+capabilities() ->
     #{policies => [<<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
                    <<"dead-letter-routing-key">>, <<"max-length">>,
                    <<"max-length-bytes">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
@@ -453,7 +453,8 @@ capabilities(_Q) ->
                           <<"x-max-in-memory-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-single-active-consumer">>,
                           <<"x-queue-type">>],
-      consumer_arguments => [<<"x-cancel-on-ha-failover">>]}.
+      consumer_arguments => [<<"x-cancel-on-ha-failover">>],
+      server_named => true}.
 
 reject_seq_no(SeqNo, U0) ->
     reject_seq_no(SeqNo, U0, []).
