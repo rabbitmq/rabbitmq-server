@@ -5,12 +5,12 @@
 ## Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Config do
-
   alias RabbitMQ.CLI.{
     CommandBehaviour,
     FormatterBehaviour,
     PrinterBehaviour
   }
+
   alias RabbitMQ.CLI.Core.Helpers
 
   #
@@ -56,60 +56,74 @@ defmodule RabbitMQ.CLI.Core.Config do
   end
 
   def get_system_option(:aliases_file, _) do
-      System.get_env("RABBITMQ_CLI_ALIASES_FILE")
+    System.get_env("RABBITMQ_CLI_ALIASES_FILE")
   end
 
   def get_system_option(:erlang_cookie, _) do
-      System.get_env("RABBITMQ_ERLANG_COOKIE")
+    System.get_env("RABBITMQ_ERLANG_COOKIE")
   end
 
   def get_system_option(:node, %{offline: true} = opts) do
-      remote_node = case opts[:node] do
+    remote_node =
+      case opts[:node] do
         nil -> nil
         val -> Helpers.normalise_node_option(val, opts[:longnames], opts)
       end
-      context = get_env_context(remote_node, true)
-      get_val_from_env_context(context, :node)
+
+    context = get_env_context(remote_node, true)
+    get_val_from_env_context(context, :node)
   end
+
   def get_system_option(:node, opts) do
-      remote_node = case opts[:node] do
+    remote_node =
+      case opts[:node] do
         nil -> nil
         val -> Helpers.normalise_node_option(val, opts[:longnames], opts)
       end
-      context = get_env_context(remote_node, false)
-      get_val_from_env_context(context, :node)
+
+    context = get_env_context(remote_node, false)
+    get_val_from_env_context(context, :node)
   end
 
   def get_system_option(name, opts) do
     work_offline = opts[:offline] == true
-    remote_node = case name do
-      :longnames -> nil
-      :rabbitmq_home -> nil
-      _ -> node_flag_or_default(opts)
-    end
+
+    remote_node =
+      case name do
+        :longnames -> nil
+        :rabbitmq_home -> nil
+        _ -> node_flag_or_default(opts)
+      end
+
     context = get_env_context(remote_node, work_offline)
     val0 = get_val_from_env_context(context, name)
-    val = cond do
-      remote_node != nil and
-      val0 == :undefined and
-      (name == :mnesia_dir or name == :feature_flags_file or name == :plugins_dir or name == :enabled_plugins_file) ->
-        context1 = get_env_context(nil, true)
-        get_val_from_env_context(context1, name)
-      true ->
-        val0
-    end
+
+    val =
+      cond do
+        remote_node != nil and
+          val0 == :undefined and
+            (name == :mnesia_dir or name == :feature_flags_file or name == :plugins_dir or
+               name == :enabled_plugins_file) ->
+          context1 = get_env_context(nil, true)
+          get_val_from_env_context(context1, name)
+
+        true ->
+          val0
+      end
+
     case val do
       :undefined -> nil
-      _          -> val
+      _ -> val
     end
   end
 
   def get_env_context(nil, _) do
     :rabbit_env.get_context()
   end
+
   def get_env_context(remote_node, work_offline) do
     case work_offline do
-      true  -> :rabbit_env.get_context(:offline)
+      true -> :rabbit_env.get_context(:offline)
       false -> :rabbit_env.get_context(remote_node)
     end
   end
@@ -133,10 +147,12 @@ defmodule RabbitMQ.CLI.Core.Config do
         # Just in case `opts` was not normalized yet (to get the
         # default node), we do it here as well.
         case Helpers.normalise_node_option(opts) do
-          {:error, _}            -> nil
+          {:error, _} -> nil
           {:ok, normalized_opts} -> normalized_opts[:node]
         end
-      node -> node
+
+      node ->
+        node
     end
   end
 
