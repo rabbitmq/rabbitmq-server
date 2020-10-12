@@ -17,16 +17,17 @@ cache:
   apt: true
 env:
   global:
+
     # $base_rmq_ref is used by rabbitmq-components.mk to select the
     # appropriate branch for dependencies.
     - base_rmq_ref=master
 
 jobs:
   include:
-    - elixir: '1.8'
-      otp_release: '21.3'
     - elixir: '1.10'
-      otp_release: '22.2'
+      otp_release: '22.3'
+    - elixir: '1.10'
+      otp_release: '23.1'
 
 install:
   # This project being an Erlang one (we just set language to Elixir
