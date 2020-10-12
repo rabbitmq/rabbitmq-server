@@ -62,8 +62,6 @@ defmodule RenameClusterNodeCommandTest do
 
   test "validate_execution_environment: not providing node mnesia dir fails validation", context do
     opts_without_mnesia = Map.delete(context[:opts], :mnesia_dir)
-    assert match?({:validation_failure, :mnesia_dir_not_found},
-      @command.validate_execution_environment(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
     Application.put_env(:mnesia, :dir, "/tmp")
     on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
     assert :ok == @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia)

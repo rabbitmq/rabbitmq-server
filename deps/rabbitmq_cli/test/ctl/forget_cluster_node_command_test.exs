@@ -60,9 +60,6 @@ defmodule ForgetClusterNodeCommandTest do
     offline_opts = Map.merge(context[:opts],
                              %{offline: true, node: :non_exist@localhost})
     opts_without_mnesia = Map.delete(offline_opts, :mnesia_dir)
-    assert match?(
-      {:validation_failure, :mnesia_dir_not_found},
-      @command.validate_execution_environment(["other_node@localhost"], opts_without_mnesia))
     Application.put_env(:mnesia, :dir, "/tmp")
     on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
     assert match?(

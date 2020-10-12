@@ -58,8 +58,6 @@ defmodule ForceBootCommandTest do
     assert File.exists?(Path.join(temp_dir, "force_load"))
 
     System.delete_env("RABBITMQ_MNESIA_DIR")
-    assert @command.run([], %{node: node}) == {:error, :mnesia_dir_not_found}
-
     File.rm_rf(temp_dir)
   end
 end
