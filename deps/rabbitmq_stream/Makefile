@@ -6,13 +6,12 @@ define PROJECT_ENV
 [
 	{tcp_listeners, [5555]},
 	{num_tcp_acceptors, 10},
-	{num_ssl_acceptors, 10},
 	{tcp_listen_options, [{backlog,   128},
                           {nodelay,   true}]},
 	{initial_credits, 50000},
 	{credits_required_for_unblocking, 12500},
 	{frame_max, 1048576},
-	{heartbeat, 600},
+	{heartbeat, 60},
 	{advertised_host, undefined},
 	{advertised_port, undefined}
 ]
