@@ -285,7 +285,11 @@ assert_status(Config, Node, XorQs, Names) ->
       ?MODULE, assert_status1, [XorQs, Names]).
 
 assert_status1(XorQs, Names) ->
+    [begin
+         ct:pal("links(XorQ) for ~p: ~p", [XorQ, links(XorQ)])
+     end || XorQ <- XorQs],
     Links = lists:append([links(XorQ) || XorQ <- XorQs]),
+    ?assert(length(Links) > 0),
     Remaining = lists:foldl(fun (Link, Status) ->
                                     assert_link_status(Link, Status, Names)
                             end, rabbit_federation_status:status(), Links),
@@ -304,48 +308,40 @@ assert_link_status({DXorQNameBin, UpstreamName, UXorQNameBin}, Status,
     Rest.
 
 links(#'exchange.declare'{exchange = Name}) ->
-    case rabbit_policy:get(<<"federation-upstream-set">>, xr(Name)) of
-        undefined ->
-            case rabbit_policy:get(<<"federation-upstream-pattern">>, xr(Name)) of
-                undefined -> [];
-                Regex       ->
-                    X = #exchange{name = xr(Name)},
+    case rabbit_exchange:lookup(xr(Name)) of
+        {ok, X} ->
+            case rabbit_policy:get(<<"federation-upstream-set">>, X) of
+                undefined ->
+                    case rabbit_policy:get(<<"federation-upstream-pattern">>, X) of
+                        undefined   -> [];
+                        Regex       ->
+                            [{Name, U#upstream.name, U#upstream.exchange_name} ||
+                                 U <- rabbit_federation_upstream:from_pattern(Regex, X)]
+                    end;
+                Set       ->
                     [{Name, U#upstream.name, U#upstream.exchange_name} ||
-                         U <- rabbit_federation_upstream:from_pattern(Regex, X)]
+                                 U <- rabbit_federation_upstream:from_set(Set, X)]
             end;
-        Set       -> X = #exchange{name = xr(Name)},
-                     [{Name, U#upstream.name, U#upstream.exchange_name} ||
-                         U <- rabbit_federation_upstream:from_set(Set, X)]
+        {error, not_found} ->
+            []
     end;
 links(#'queue.declare'{queue = Name}) ->
-    case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
-        undefined ->
-            case rabbit_policy:get(<<"federation-upstream-pattern">>, qr(Name)) of
-                undefined -> [];
-                Regex       ->
-                    Q = amqqueue:new(qr(Name),
-                                      self(),
-                                      false,
-                                      false,
-                                      none,
-                                      [],
-                                      undefined,
-                                      #{},
-                                      classic),
+    case rabbit_amqqueue:lookup(qr(Name)) of
+        {ok, Q} ->
+            case rabbit_policy:get(<<"federation-upstream-set">>, Q) of
+                undefined ->
+                    case rabbit_policy:get(<<"federation-upstream-pattern">>, Q) of
+                        undefined   -> [];
+                        Regex       ->
+                            [{Name, U#upstream.name, U#upstream.queue_name} ||
+                                U <- rabbit_federation_upstream:from_pattern(Regex, Q)]
+                    end;
+                Set       ->
                     [{Name, U#upstream.name, U#upstream.queue_name} ||
-                        U <- rabbit_federation_upstream:from_pattern(Regex, Q)]
+                                U <- rabbit_federation_upstream:from_set(Set, Q)]
             end;
-        Set       -> Q = amqqueue:new(qr(Name),
-                                      self(),
-                                      false,
-                                      false,
-                                      none,
-                                      [],
-                                      undefined,
-                                      #{},
-                                      classic),
-                     [{Name, U#upstream.name, U#upstream.queue_name} ||
-                         U <- rabbit_federation_upstream:from_set(Set, Q)]
+        {error, not_found} ->
+            []
     end.
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
@@ -355,8 +351,6 @@ with_ch(Config, Fun, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     declare_all(Ch, Qs),
     timer:sleep(2000), %% Time for statuses to get updated
-    assert_status(Config, 0,
-      Qs, {queue, upstream_queue}),
     %% Clean up queues even after test failure.
     try
         Fun(Ch)
