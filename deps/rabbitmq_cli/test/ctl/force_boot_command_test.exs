@@ -4,7 +4,6 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-
 defmodule ForceBootCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -20,10 +19,10 @@ defmodule ForceBootCommandTest do
   setup _ do
     {
       :ok,
-     opts: %{
-       node: get_rabbit_hostname(),
-       timeout: 1000
-     }
+      opts: %{
+        node: get_rabbit_hostname(),
+        timeout: 1000
+      }
     }
   end
 
@@ -33,7 +32,8 @@ defmodule ForceBootCommandTest do
   end
 
   test "validate: the rabbit app running on target node fails validation", context do
-    assert @command.validate_execution_environment([], context[:opts]) == {:validation_failure, :rabbit_app_is_running}
+    assert @command.validate_execution_environment([], context[:opts]) ==
+             {:validation_failure, :rabbit_app_is_running}
   end
 
   test "run: sets a force boot marker file on target node", context do
@@ -49,7 +49,7 @@ defmodule ForceBootCommandTest do
 
   test "run: if RABBITMQ_MNESIA_DIR is defined, creates a force boot marker file" do
     node = :unknown@localhost
-    temp_dir = "#{Mix.Project.config[:elixirc_paths]}/tmp"
+    temp_dir = "#{Mix.Project.config()[:elixirc_paths]}/tmp"
     File.mkdir_p!(temp_dir)
     on_exit(fn -> File.rm_rf!(temp_dir) end)
     System.put_env("RABBITMQ_MNESIA_DIR", temp_dir)
