@@ -27,7 +27,7 @@ jobs:
     - elixir: '1.10'
       otp_release: '22.3'
     - elixir: '1.10'
-      otp_release: '23.1'
+      otp_release: '23.0'
 
 install:
   # This project being an Erlang one (we just set language to Elixir
