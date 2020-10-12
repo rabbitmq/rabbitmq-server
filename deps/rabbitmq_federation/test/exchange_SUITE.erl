@@ -958,7 +958,7 @@ federate_unfederate(Config) ->
       fun (_Ch) ->
               Xs = [<<"dyn.exch1">>, <<"dyn.exch2">>],
 
-              %% Declared non-federated exchanges - no links
+              %% Declareda  non-federated exchanges - no links
               assert_connections(Config, 0, Xs, []),
 
               %% Federate them - links appear
@@ -1057,7 +1057,7 @@ dynamic_plugin_cleanup_stop_start(Config) ->
       fun (_Ch) ->
               set_policy(Config, 0, <<"dyn">>, <<"^dyn\\.">>, <<"localhost">>),
 
-              %% Declare federated exchange - get link
+              %% Declare a federated exchange, a link starts
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
               wait_for_federation(
                 90,
