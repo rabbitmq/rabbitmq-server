@@ -46,7 +46,9 @@ groups() ->
            delete_classic_replica,
            delete_quorum_replica,
            consume_from_replica,
-           leader_failover]},
+           leader_failover,
+           initial_cluster_size_one,
+           initial_cluster_size_two]},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
      {unclustered_size_3_3, [], [grow_coordinator_cluster]},
@@ -1140,6 +1142,42 @@ leader_failover(Config) ->
     NewLeader = proplists:get_value(leader, Info),
     ?assert(NewLeader =/= Server1),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1).
+
+initial_cluster_size_one(Config) ->
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                  {<<"x-initial-cluster-size">>, long, 1}])),
+    check_leader_and_replicas(Config, Q, Server1, []),
+
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
+
+initial_cluster_size_two(Config) ->
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                  {<<"x-initial-cluster-size">>, long, 2}])),
+
+    [Info] = lists:filter(
+               fun(Props) ->
+                       lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+               end,
+               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                            info_all, [<<"/">>, [name, leader, members]])),
+    ?assertEqual(Server1, proplists:get_value(leader, Info)),
+    ?assertEqual(1, length(proplists:get_value(members, Info))),
+
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
 
 invalid_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
