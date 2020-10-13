@@ -85,6 +85,7 @@ queue_status(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
+              timer:sleep(3000),
               [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
                                                     rabbit_federation_status, status, []),
               true = is_binary(proplists:get_value(id, Link))
@@ -107,6 +108,7 @@ lookup_queue_status(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
+              timer:sleep(3000),
               [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
                                                     rabbit_federation_status, status, []),
               Id = proplists:get_value(id, Link),
@@ -120,6 +122,7 @@ lookup_bad_status(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
+              timer:sleep(3000),
               not_found = rabbit_ct_broker_helpers:rpc(
                             Config, 0,
                             rabbit_federation_status, lookup, [<<"justmadeitup">>])

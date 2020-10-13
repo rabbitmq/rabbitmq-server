@@ -323,33 +323,13 @@ links(#'exchange.declare'{exchange = Name}) ->
             end;
         {error, not_found} ->
             []
-    end;
-links(#'queue.declare'{queue = Name}) ->
-    case rabbit_amqqueue:lookup(qr(Name)) of
-        {ok, Q} ->
-            case rabbit_policy:get(<<"federation-upstream-set">>, Q) of
-                undefined ->
-                    case rabbit_policy:get(<<"federation-upstream-pattern">>, Q) of
-                        undefined   -> [];
-                        Regex       ->
-                            [{Name, U#upstream.name, U#upstream.queue_name} ||
-                                U <- rabbit_federation_upstream:from_pattern(Regex, Q)]
-                    end;
-                Set       ->
-                    [{Name, U#upstream.name, U#upstream.queue_name} ||
-                                U <- rabbit_federation_upstream:from_set(Set, Q)]
-            end;
-        {error, not_found} ->
-            []
     end.
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
-qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
 
 with_ch(Config, Fun, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     declare_all(Ch, Qs),
-    timer:sleep(2000), %% Time for statuses to get updated
     %% Clean up queues even after test failure.
     try
         Fun(Ch)
