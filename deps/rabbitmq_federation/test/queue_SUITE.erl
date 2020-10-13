@@ -16,7 +16,8 @@
         [wait_for_federation/2, expect/3, expect/4,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_policy/5, clear_policy/3,
          set_policy_pattern/5, set_policy_upstream/5, q/1, with_ch/3,
-         declare_queue/2, delete_queue/2]).
+         declare_queue/2, delete_queue/2,
+         federation_links_in_vhost/3]).
 
 all() ->
     [
@@ -185,7 +186,7 @@ dynamic_reconfiguration(Config) ->
               clear_upstream(Config, 0, <<"localhost">>),
               expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
 
-              %% Test that readding them and changing them works
+              %% Test that reading them and changing them works
               set_upstream(Config, 0,
                 <<"localhost">>, rabbit_ct_broker_helpers:node_uri(Config, 0)),
               %% Do it twice so we at least hit the no-restart optimisation
@@ -198,70 +199,56 @@ dynamic_reconfiguration(Config) ->
 federate_unfederate(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
-              expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>),
 
-              %% Federate it
-              set_policy(Config, 0, <<"dyn">>,
-                <<"^downstream\$">>, <<"upstream">>),
-              expect_federation(Ch, <<"upstream">>, <<"downstream">>),
-              expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>),
+              %% clear the policy
+              rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"fed">>),
 
-              %% Change policy - upstream changes
-              set_policy(Config, 0, <<"dyn">>,
-                <<"^downstream\$">>, <<"upstream2">>),
-              expect_no_federation(Ch, <<"upstream">>, <<"downstream">>),
-              expect_federation(Ch, <<"upstream2">>, <<"downstream">>),
+              expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+              expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream2">>),
 
-              %% Unfederate it - no federation
-              clear_policy(Config, 0, <<"dyn">>),
-              expect_no_federation(Ch, <<"upstream2">>, <<"downstream">>)
-      end, [q(<<"upstream">>),
-            q(<<"upstream2">>),
-            q(<<"downstream">>)]).
+              rabbit_ct_broker_helpers:set_policy(Config, 0,
+                <<"fed">>, <<"^fed\.">>, <<"all">>, [
+                {<<"federation-upstream-set">>, <<"upstream">>}])
+      end, upstream_downstream() ++ [q(<<"fed.downstream2">>)]).
 
 dynamic_plugin_stop_start(Config) ->
-    Q1 = <<"dyn.q1">>,
-    Q2 = <<"dyn.q2">>,
-    U = <<"upstream">>,
+    DownQ2 = <<"fed.downstream2">>,
     with_ch(Config,
       fun (Ch) ->
-              set_policy(Config, 0, <<"dyn">>, <<"^dyn\\.">>, U),
-              %% Declare federated queue - get link
-              expect_federation(Ch, U, Q1),
+          UpQ = <<"upstream">>,
+          DownQ1 = <<"fed.downstream">>,
+          expect_federation(Ch, UpQ, DownQ1),
+          expect_federation(Ch, UpQ, DownQ2),
 
-              %% Disable plugin, link goes
-              ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0,
-                "rabbitmq_federation"),
-              expect_no_federation(Ch, U, Q1),
+          %% Disable the plugin, the link disappears
+          ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_federation"),
 
-              %% Create exchange then re-enable plugin, links appear
-              declare_queue(Ch, q(Q2)),
-              ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0,
-                "rabbitmq_federation"),
-              wait_for_federation(
-                90,
-                fun() ->
-                        Status = rabbit_ct_broker_helpers:rpc(
-                                   Config, 0,
-                                   rabbit_federation_status, status, []),
-                        L =
-                        [Entry
-                         || Entry <- Status,
-                            proplists:get_value(queue, Entry) =:= Q1 orelse
-                            proplists:get_value(queue, Entry) =:= Q2,
-                            proplists:get_value(status, Entry) =:= running
-                        ],
-                        length(L) =:= 2
-                end),
-              expect_federation(Ch, U, Q1, 120000),
-              expect_federation(Ch, U, Q2, 120000),
+          expect_no_federation(Ch, UpQ, DownQ1),
+          expect_no_federation(Ch, UpQ, DownQ2),
 
-              clear_policy(Config, 0, <<"dyn">>),
-              expect_no_federation(Ch, U, Q1),
-              expect_no_federation(Ch, U, Q2),
-              delete_queue(Ch, Q2)
-      end, [q(Q1), q(U)]).
+          declare_queue(Ch, q(DownQ1)),
+          declare_queue(Ch, q(DownQ2)),
+          ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_federation"),
+
+          %% Declare a queue then re-enable the plugin, the links appear
+          wait_for_federation(
+            90,
+            fun() ->
+                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                               rabbit_federation_status, status, []),
+                    L = [
+                        Entry || Entry <- Status,
+                        proplists:get_value(queue, Entry) =:= DownQ1 orelse
+                        proplists:get_value(queue, Entry) =:= DownQ2,
+                        proplists:get_value(upstream_queue, Entry) =:= UpQ,
+                        proplists:get_value(status, Entry) =:= running
+                    ],
+                    length(L) =:= 2
+            end),
+          expect_federation(Ch, UpQ, DownQ1, 120000)
+      end, upstream_downstream() ++ [q(DownQ2)]).
 
 restart_upstream(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
