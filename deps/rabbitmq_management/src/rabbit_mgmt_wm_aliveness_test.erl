@@ -26,34 +26,41 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
+    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+            not_found -> false;
+            _ -> true
+        end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:with_channel(
-      rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
-      fun(Ch) ->
-              #'queue.declare_ok'{queue = ?QUEUE} = amqp_channel:call(Ch, #'queue.declare'{queue = ?QUEUE}),
-              ok = amqp_channel:call(Ch, #'basic.publish'{routing_key = ?QUEUE}, #amqp_msg{payload = <<"test_message">>}),
-              case amqp_channel:call(Ch, #'basic.get'{queue  = ?QUEUE, no_ack = true}) of
-                  {#'basic.get_ok'{}, _} ->
-                        %% Don't delete the queue. If this is pinged every few
-                        %% seconds we don't want to create a mnesia transaction
-                        %% each time.
-                        rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
-                  #'basic.get_empty'{} ->
-                        Reason = <<"aliveness-test queue is empty">>,
-                        failure(Reason, ReqData, Context);
-                  Error ->
-                        Reason = rabbit_data_coercion:to_binary(Error),
-                        failure(Reason, ReqData, Context)
-              end
-      end).
+        rabbit_mgmt_util:vhost(ReqData),
+        ReqData,
+        Context,
+        fun(Ch) ->
+            #'queue.declare_ok'{queue = ?QUEUE} = amqp_channel:call(Ch, #'queue.declare'{
+                queue = ?QUEUE
+            }),
+            ok = amqp_channel:call(Ch, #'basic.publish'{routing_key = ?QUEUE}, #amqp_msg{
+                payload = <<"test_message">>
+            }),
+            case amqp_channel:call(Ch, #'basic.get'{queue = ?QUEUE, no_ack = true}) of
+                {#'basic.get_ok'{}, _} ->
+                    %% Don't delete the queue. If this is pinged every few
+                    %% seconds we don't want to create a mnesia transaction
+                    %% each time.
+                    rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+                #'basic.get_empty'{} ->
+                    Reason = <<"aliveness-test queue is empty">>,
+                    failure(Reason, ReqData, Context);
+                Error ->
+                    Reason = rabbit_data_coercion:to_binary(Error),
+                    failure(Reason, ReqData, Context)
+            end
+        end
+    ).
 
 failure(Reason, ReqData0, Context0) ->
     Body = #{status => failed, reason => Reason},
@@ -62,4 +69,3 @@ failure(Reason, ReqData0, Context0) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
-
