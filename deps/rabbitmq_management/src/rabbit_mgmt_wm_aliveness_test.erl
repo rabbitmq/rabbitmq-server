@@ -11,6 +11,7 @@
 -export([resource_exists/2]).
 -export([variances/2]).
 
+-include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -37,17 +38,27 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:with_channel(
       rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
       fun(Ch) ->
-              amqp_channel:call(Ch, #'queue.declare'{queue = ?QUEUE}),
-              amqp_channel:call(Ch, #'basic.publish'{routing_key = ?QUEUE},
-                                #amqp_msg{payload = <<"test_message">>}),
-              {#'basic.get_ok'{}, _} =
-                  amqp_channel:call(Ch, #'basic.get'{queue  = ?QUEUE,
-                                                     no_ack = true}),
-              %% Don't delete the queue. If this is pinged every few
-              %% seconds we don't want to create a mnesia transaction
-              %% each time.
-              rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
+              #'queue.declare_ok'{queue = ?QUEUE} = amqp_channel:call(Ch, #'queue.declare'{queue = ?QUEUE}),
+              ok = amqp_channel:call(Ch, #'basic.publish'{routing_key = ?QUEUE}, #amqp_msg{payload = <<"test_message">>}),
+              case amqp_channel:call(Ch, #'basic.get'{queue  = ?QUEUE, no_ack = true}) of
+                  {#'basic.get_ok'{}, _} ->
+                        %% Don't delete the queue. If this is pinged every few
+                        %% seconds we don't want to create a mnesia transaction
+                        %% each time.
+                        rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+                  #'basic.get_empty'{} ->
+                        Reason = <<"aliveness-test queue is empty">>,
+                        failure(Reason, ReqData, Context);
+                  Error ->
+                        Reason = rabbit_data_coercion:to_binary(Error),
+                        failure(Reason, ReqData, Context)
+              end
       end).
+
+failure(Reason, ReqData0, Context0) ->
+    Body = #{status => failed, reason => Reason},
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData0, Context0),
+    {stop, cowboy_req:reply(?HEALTH_CHECK_FAILURE_STATUS, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
