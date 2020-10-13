@@ -20,7 +20,9 @@ main() {
   elif current_user_is_root && calling_rabbitmq_plugins
   then
     run_script_as_rabbitmq "$@"
+    result=$?
     maybe_fixup_erlang_cookie
++   exit $result
   elif current_user_is_root
   then
     exec_script_as_root "$@"
