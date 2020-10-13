@@ -147,8 +147,10 @@ memory_tests() ->
 
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
-    Config = rabbit_ct_helpers:merge_app_env(
+    Config1 = rabbit_ct_helpers:merge_app_env(
                Config0, {rabbit, [{quorum_tick_interval, 1000}]}),
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config1, {aten, [{poll_interval, 1000}]}),
     rabbit_ct_helpers:run_setup_steps(
       Config,
       [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]).
