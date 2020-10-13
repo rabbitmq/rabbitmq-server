@@ -81,6 +81,7 @@ run(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
+              timer:sleep(3000),
               [Link | _] = rabbit_ct_broker_helpers:rpc(Config, 0,
                                                         rabbit_federation_status, status, []),
               Id = proplists:get_value(id, Link),
