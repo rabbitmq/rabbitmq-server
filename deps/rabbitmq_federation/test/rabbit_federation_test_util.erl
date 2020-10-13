@@ -289,7 +289,6 @@ assert_status1(XorQs, Names) ->
          ct:pal("links(XorQ) for ~p: ~p", [XorQ, links(XorQ)])
      end || XorQ <- XorQs],
     Links = lists:append([links(XorQ) || XorQ <- XorQs]),
-    ?assert(length(Links) > 0),
     Remaining = lists:foldl(fun (Link, Status) ->
                                     assert_link_status(Link, Status, Names)
                             end, rabbit_federation_status:status(), Links),
