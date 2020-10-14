@@ -188,6 +188,18 @@
         {2, undefined, queue_messages_paged_out_bytes, gauge, "Size in bytes of messages paged out to disk", message_bytes_paged_out},
         {2, undefined, queue_disk_reads_total, counter, "Total number of times queue read messages from disk", disk_reads},
         {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes}
+    ]},
+
+    {auth_attempt_metrics, [
+        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts on a node"},
+        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authorization attempts on a node"},
+        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authorization attempts on a node"}
+    ]},
+
+    {auth_attempt_detailed_metrics, [
+        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts on a node"},
+        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authorization attempts on a node"},
+        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authorization attempts on a node"}
     ]}
 
 ]).
@@ -214,7 +226,7 @@ collect_mf(_Registry, Callback) ->
     [begin
          Data = get_data(Table, PerObjectMetrics),
          mf(Callback, Contents, Data)
-     end || {Table, Contents} <- ?METRICS_RAW],
+     end || {Table, Contents} <- ?METRICS_RAW, needs_processing(PerObjectMetrics, Table)],
     [begin
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
@@ -222,6 +234,13 @@ collect_mf(_Registry, Callback) ->
     add_metric_family(build_info(), Callback),
     add_metric_family(identity_info(), Callback),
     ok.
+
+needs_processing(false, auth_attempt_detailed_metrics) ->
+    %% When per object metrics are disabled the detailed authentication attempt metrics
+    %% create duplicates. Totals are carried on `auth_attempt_metrics`
+    false;
+needs_processing(_, _) ->
+    true.
 
 build_info() ->
     ProductInfo = rabbit:product_info(),
@@ -334,12 +353,24 @@ label({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
     [{channel, P}, {queue_vhost, QVHost}, {queue, QName},
      {exchange_vhost, EVHost}, {exchange, EName}];
+label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_binary(Username),
+                                                is_atom(Protocol) ->
+    lists:filter(fun({_, V}) ->
+                         V =/= <<>>
+                 end, [{remote_address, RemoteAddress}, {username, Username},
+                       {protocol, atom_to_binary(Protocol, utf8)}]);
 label({I1, I2}) ->
     label(I1) ++ label(I2);
 label(P) when is_pid(P) ->
     [{channel, P}];
 label(A) when is_atom(A) ->
-    [].
+    case is_protocol(A) of
+        true -> [{protocol, atom_to_binary(A, utf8)}];
+        false -> []
+    end.
+
+is_protocol(P) ->
+    lists:member(P, [amqp091, amqp10, mqtt, http]).
 
 metric(counter, Labels, Value) ->
     emit_counter_metric_if_defined(Labels, Value);
@@ -446,6 +477,8 @@ get_data(Table, false) when Table == channel_exchange_metrics;
                        {T, V1 + A1};
                   ({_, V1, _}, {T, A1}) ->
                        {T, V1 + A1};
+                  ({_, V1, V2, V3}, {T, A1, A2, A3}) ->
+                       {T, V1 + A1, V2 + A2, V3 + A3};
                   ({_, V1, V2, V3, _}, {T, A1, A2, A3}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3};
                   ({_, V1, V2, V3, V4, _}, {T, A1, A2, A3, A4}) ->
@@ -479,7 +512,7 @@ accumulate_count_and_sum(Value, {Count, Sum}) ->
 
 empty(T) when T == channel_queue_exchange_metrics; T == channel_process_metrics ->
     {T, 0};
-empty(T) when T == connection_coarse_metrics ->
+empty(T) when T == connection_coarse_metrics; T == auth_attempt_metrics; T == auth_attempt_detailed_metrics ->
     {T, 0, 0, 0};
 empty(T) when T == channel_exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
     {T, 0, 0, 0, 0};
