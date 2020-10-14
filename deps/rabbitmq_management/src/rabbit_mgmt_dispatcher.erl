@@ -179,7 +179,7 @@ dispatcher() ->
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
      {"/rebalance/queues",                                     rabbit_mgmt_wm_rebalance_queues, [{queues, all}]},
      {"/auth",                                                 rabbit_mgmt_wm_auth, []},
-     {"/auth-attempts/:node",                                  rabbit_mgmt_wm_auth_attempts, [all]},
-     {"/auth-attempts/:node/source",                           rabbit_mgmt_wm_auth_attempts, [by_source]},
+     {"/auth/attempts/:node",                                  rabbit_mgmt_wm_auth_attempts, [all]},
+     {"/auth/attempts/:node/source",                           rabbit_mgmt_wm_auth_attempts, [by_source]},
      {"/login",                                                rabbit_mgmt_wm_login, []}
     ].
