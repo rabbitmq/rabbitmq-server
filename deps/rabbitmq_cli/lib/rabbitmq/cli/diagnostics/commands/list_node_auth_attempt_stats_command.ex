@@ -4,11 +4,10 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptStatsCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
@@ -35,6 +34,23 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListNodeAuthAttemptsCommand do
           node_name, :rabbit_core_metrics, :get_auth_attempts, [], timeout)
     end
   end
+
+  def output([], %{node: node_name, formatter: "json"}) do
+    {:ok, %{"result" => "ok", "node" => node_name, "attempts" => []}}
+  end
+  def output([], %{node: node_name})  do
+    {:ok, "Node #{node_name} reported no authentication attempt stats"}
+  end
+  def output(rows, %{node: node_name, formatter: "json"}) do
+    maps = Enum.map(rows, &Map.new/1)
+    {:ok,
+     %{
+       "result"   => "ok",
+       "node"     => node_name,
+       "attempts" => maps
+     }}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "list_node_auth_attempts [--by-source]"
 

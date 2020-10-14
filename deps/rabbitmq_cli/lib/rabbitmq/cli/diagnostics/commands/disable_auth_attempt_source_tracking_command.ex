@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.EnableTrackAuthAttemptSourceCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.DisableAuthAttemptSourceTrackingCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -14,10 +14,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.EnableTrackAuthAttemptSourceCommand 
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :application, :set_env,
-      [:rabbit, :track_auth_attempt_source, :true])
+      [:rabbit, :track_auth_attempt_source, :false])
   end
+  use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "enable_track_auth_attempt_source"
+  def usage, do: "disable_track_auth_attempt_source"
 
   def usage_doc_guides() do
     [
@@ -28,9 +29,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.EnableTrackAuthAttemptSourceCommand 
 
   def help_section(), do: :configuration
 
-  def description(), do: "Disables the tracking of remote address and username of authentication attempts"
+  def description(), do: "Disables the tracking of peer IP address and username of authentication attempts"
 
-  def banner([], _), do: "Disabling the tracking of the source of authentication attempts ..."
-
-  use RabbitMQ.CLI.DefaultOutput
+  def banner([], _), do: "Disabling authentication attempt source tracking ..."
 end
