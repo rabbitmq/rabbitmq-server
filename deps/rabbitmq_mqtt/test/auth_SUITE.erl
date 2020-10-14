@@ -453,13 +453,23 @@ connect_user(User, Pass, Config, ClientID) ->
                        {logger, info}] ++ Creds).
 
 expect_successful_connection(ConnectFun, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
     {ok, C} = ConnectFun(Config),
     receive {mqttc, C, connected} -> emqttc:disconnect(C)
     after ?CONNECT_TIMEOUT -> exit(emqttc_connection_timeout)
-    end.
+    end,
+    [Attempt] =
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
+    ?assertEqual(false, proplists:is_defined(remote_address, Attempt)),
+    ?assertEqual(false, proplists:is_defined(username, Attempt)),
+    ?assertEqual(proplists:get_value(protocol, Attempt), <<"mqtt">>),
+    ?assertEqual(proplists:get_value(auth_attempts, Attempt), 1),
+    ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 0),
+    ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 1).
 
 expect_authentication_failure(ConnectFun, Config) ->
     process_flag(trap_exit, true),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
     {ok, C} = ConnectFun(Config),
     Result = receive
         {mqttc, C, connected} -> {error, unexpected_anonymous_connection};
@@ -468,6 +478,14 @@ expect_authentication_failure(ConnectFun, Config) ->
     after
         ?CONNECT_TIMEOUT -> {error, emqttc_connection_timeout}
     end,
+    [Attempt] =
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []),
+    ?assertEqual(false, proplists:is_defined(remote_address, Attempt), <<>>),
+    ?assertEqual(false, proplists:is_defined(username, Attempt)),
+    ?assertEqual(proplists:get_value(protocol, Attempt), <<"mqtt">>),
+    ?assertEqual(proplists:get_value(auth_attempts, Attempt), 1),
+    ?assertEqual(proplists:get_value(auth_attempts_failed, Attempt), 1),
+    ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 0),
     process_flag(trap_exit, false),
     case Result of
         ok -> ok;
