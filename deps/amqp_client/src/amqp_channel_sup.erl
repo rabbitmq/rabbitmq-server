@@ -29,10 +29,14 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
                           {amqp_channel, start_link,
                            [Type, Connection, ChNumber, ConsumerPid, Identity]},
                           intrinsic, ?WORKER_WAIT, worker, [amqp_channel]}),
-    Writer = start_writer(Sup, Type, InfraArgs, ConnName, ChNumber, ChPid),
-    amqp_channel:set_writer(ChPid, Writer),
-    {ok, AState} = init_command_assembler(Type),
-    {ok, Sup, {ChPid, AState}}.
+    case start_writer(Sup, Type, InfraArgs, ConnName, ChNumber, ChPid) of
+        {ok, Writer} ->
+            amqp_channel:set_writer(ChPid, Writer),
+            {ok, AState} = init_command_assembler(Type),
+            {ok, Sup, {ChPid, AState}};
+        {error, _}=Error ->
+            Error
+    end.
 
 %%---------------------------------------------------------------------------
 %% Internal plumbing
@@ -43,20 +47,17 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 
 start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
-    {ok, RabbitCh} =
-        rpc:call(Node, rabbit_direct, start_channel,
-                 [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
-                  VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]),
-    RabbitCh;
+    rpc:call(Node, rabbit_direct, start_channel,
+             [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
+              VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]);
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     GCThreshold = application:get_env(amqp_client, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),
-    {ok, Writer} = supervisor2:start_child(
-                     Sup,
-                     {writer, {rabbit_writer, start_link,
-                               [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
-                                {ConnName, ChNumber}, false, GCThreshold]},
-                      transient, ?WORKER_WAIT, worker, [rabbit_writer]}),
-    Writer.
+    supervisor2:start_child(
+      Sup,
+      {writer, {rabbit_writer, start_link,
+                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
+                 {ConnName, ChNumber}, false, GCThreshold]},
+       transient, ?WORKER_WAIT, worker, [rabbit_writer]}).
 
 init_command_assembler(direct)  -> {ok, none};
 init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
