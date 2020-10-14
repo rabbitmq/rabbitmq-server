@@ -36,6 +36,7 @@ handle_info(start_gc, State) ->
     gc_exchanges(),
     gc_nodes(),
     gc_gen_server2(),
+    gc_auth_attempts(),
     {noreply, start_timer(State)}.
 
 terminate(_Reason, #state{timer = TRef}) ->
@@ -193,3 +194,6 @@ gc_process_and_entities(Table, QueueGbSet, ExchangeGbSet) ->
                       gc_entity(Q, Table, Key, QueueGbSet),
                       gc_entity(X, Table, Key, ExchangeGbSet)
               end, none, Table).
+
+gc_auth_attempts() ->
+    ets:delete_all_objects(auth_attempt_detailed_metrics).
