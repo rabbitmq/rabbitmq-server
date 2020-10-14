@@ -62,7 +62,7 @@ wait_for_messages(Servers, QName, Number, Fun, N) ->
     end.
 
 wait_for_messages(Config, Stats) ->
-    wait_for_messages(Config, lists:sort(Stats), 10).
+    wait_for_messages(Config, lists:sort(Stats), 60).
 
 wait_for_messages(Config, Stats, 0) ->
     ?assertEqual(Stats,
