@@ -102,9 +102,9 @@ handle_cast({connection_closed, ConnDetails}) ->
             rabbit_log_connection:info(
                 "Closing all channels from connection '~p' "
                 "because it has been closed", [pget(name, ConnDetails)]),
+            %% Shutting down channels will take care of unregistering the
+            %% corresponding tracking.
             shutdown_tracked_items(TrackedChs, undefined),
-            [unregister_tracked(rabbit_tracking:id(ThisNode, Name)) ||
-                #tracked_channel{name = Name} <- TrackedChs],
             ok;
         _DifferentNode ->
             ok
