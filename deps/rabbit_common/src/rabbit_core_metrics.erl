@@ -47,6 +47,12 @@
 
 -export([delete/2]).
 
+-export([auth_attempt_failed/3,
+         auth_attempt_succeeded/3,
+         reset_auth_attempt_metrics/0,
+         get_auth_attempts/0,
+         get_auth_attempts_by_source/0]).
+
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
@@ -384,3 +390,48 @@ get_gen_server2_stats(Pid) ->
         [] ->
             not_found
     end.
+
+auth_attempt_succeeded(RemoteAddress, Username, Protocol) ->
+    %% ETS entry is {Key = {RemoteAddress, Username}, Total, Succeeded, Failed}
+    update_auth_attempt(RemoteAddress, Username, Protocol, [{2, 1}, {3, 1}]).
+
+auth_attempt_failed(RemoteAddress, Username, Protocol) ->
+    %% ETS entry is {Key = {RemoteAddress, Username}, Total, Succeeded, Failed}
+    update_auth_attempt(RemoteAddress, Username, Protocol, [{2, 1}, {4, 1}]).
+
+update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
+    %% It should default to false as per ip/user metrics could keep growing indefinitely
+    %% It's up to the operator to enable them, and reset it required
+    case application:get_env(rabbit, track_auth_attempt_source) of
+        {ok, true} ->
+            case {RemoteAddress, Username} of
+                {<<>>, <<>>} ->
+                    ok;
+                _ ->
+                    Key = {RemoteAddress, Username, Protocol},
+                    _ = ets:update_counter(auth_attempt_detailed_metrics, Key, Incr, {Key, 0, 0, 0})
+            end;
+        {ok, false} ->
+            ok
+    end,
+    _ = ets:update_counter(auth_attempt_metrics, Protocol, Incr, {Protocol, 0, 0, 0}),
+    ok.
+
+reset_auth_attempt_metrics() ->
+    ets:delete_all_objects(auth_attempt_metrics),
+    ets:delete_all_objects(auth_attempt_detailed_metrics),
+    ok.
+
+get_auth_attempts() ->
+    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_metrics)].
+
+get_auth_attempts_by_source() ->
+    [format_auth_attempt(A) || A <- ets:tab2list(auth_attempt_detailed_metrics)].
+
+format_auth_attempt({{RemoteAddress, Username, Protocol}, Total, Succeeded, Failed}) ->
+    [{remote_address, RemoteAddress}, {username, Username},
+     {protocol, atom_to_binary(Protocol, utf8)}, {auth_attempts, Total},
+     {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}];
+format_auth_attempt({Protocol, Total, Succeeded, Failed}) ->
+    [{protocol, atom_to_binary(Protocol, utf8)}, {auth_attempts, Total},
+     {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}].
