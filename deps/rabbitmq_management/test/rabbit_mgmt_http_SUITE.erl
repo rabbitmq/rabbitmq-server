@@ -148,7 +148,8 @@ all_tests() -> [
     oauth_test,
     disable_basic_auth_test,
     login_test,
-    csp_headers_test
+    csp_headers_test,
+    auth_attempts_test
 ].
 
 %% -------------------------------------------------------------------
@@ -3386,6 +3387,62 @@ disable_basic_auth_test(Config) ->
     %% Defaults to 'false' when config is invalid
     http_get(Config, "/overview", ?OK).
 
+auth_attempts_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    {Conn, _Ch} = open_connection_and_channel(Config),
+    close_connection(Conn),
+    [NodeData] = http_get(Config, "/nodes"),
+    Node = binary_to_atom(maps:get(name, NodeData), utf8),
+    Map = http_get(Config, "/auth/attempts/" ++ atom_to_list(Node), ?OK),
+    Http = get_auth_attempts(<<"http">>, Map),
+    Amqp091 = get_auth_attempts(<<"amqp091">>, Map),
+    ?assertEqual(false, maps:is_key(remote_address, Amqp091)),
+    ?assertEqual(false, maps:is_key(username, Amqp091)),
+    ?assertEqual(1, maps:get(auth_attempts, Amqp091)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Amqp091)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091)),
+    ?assertEqual(false, maps:is_key(remote_address, Http)),
+    ?assertEqual(false, maps:is_key(username, Http)),
+    ?assertEqual(2, maps:get(auth_attempts, Http)),
+    ?assertEqual(2, maps:get(auth_attempts_succeeded, Http)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Http)),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, track_auth_attempt_source, true]),
+    {Conn2, _Ch2} = open_connection_and_channel(Config),
+    close_connection(Conn2),
+    Map2 = http_get(Config, "/auth/attempts/" ++ atom_to_list(Node) ++ "/source", ?OK),
+    Map3 = http_get(Config, "/auth/attempts/" ++ atom_to_list(Node), ?OK),
+    Http2 = get_auth_attempts(<<"http">>, Map2),
+    Http3 = get_auth_attempts(<<"http">>, Map3),
+    Amqp091_2 = get_auth_attempts(<<"amqp091">>, Map2),
+    Amqp091_3 = get_auth_attempts(<<"amqp091">>, Map3),
+    ?assertEqual(<<"127.0.0.1">>, maps:get(remote_address, Http2)),
+    ?assertEqual(<<"guest">>, maps:get(username, Http2)),
+    ?assertEqual(1, maps:get(auth_attempts, Http2)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Http2)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Http2)),
+
+    ?assertEqual(false, maps:is_key(remote_address, Http3)),
+    ?assertEqual(false, maps:is_key(username, Http3)),
+    ?assertEqual(4, maps:get(auth_attempts, Http3)),
+    ?assertEqual(4, maps:get(auth_attempts_succeeded, Http3)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Http3)),
+
+    ?assertEqual(true, <<>> =/= maps:get(remote_address, Amqp091_2)),
+    ?assertEqual(<<"guest">>, maps:get(username, Amqp091_2)),
+    ?assertEqual(1, maps:get(auth_attempts, Amqp091_2)),
+    ?assertEqual(1, maps:get(auth_attempts_succeeded, Amqp091_2)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_2)),
+
+    ?assertEqual(false, maps:is_key(remote_address, Amqp091_3)),
+    ?assertEqual(false, maps:is_key(username, Amqp091_3)),
+    ?assertEqual(2, maps:get(auth_attempts, Amqp091_3)),
+    ?assertEqual(2, maps:get(auth_attempts_succeeded, Amqp091_3)),
+    ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_3)),
+
+    passed.
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
@@ -3477,3 +3534,9 @@ format_multipart_filedata(Boundary, Files) ->
     EndingParts = [lists:concat(["--", Boundary, "--"]), ""],
     Parts = lists:append([FileParts2, EndingParts]),
     string:join(Parts, "\r\n").
+
+get_auth_attempts(Protocol, Map) ->
+    [A] = lists:filter(fun(#{protocol := P}) ->
+                               P == Protocol
+                       end, Map),
+    A.
