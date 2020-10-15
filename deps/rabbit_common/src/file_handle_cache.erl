@@ -448,8 +448,15 @@ sync(Ref) ->
 needs_sync(Ref) ->
     %% This must *not* use with_handles/2; see bug 25052
     case get({Ref, fhc_handle}) of
-        #handle { is_dirty = false, write_buffer = [] } -> false;
-        #handle {}                                      -> true
+        undefined ->
+            % rabbitmq/rabbitmq-common#418
+            % Note: returning `false` here propogates to the queue process
+            % next_state/1 method and sets the next state to `hibernate`
+            false;
+        #handle{is_dirty = false, write_buffer = []} ->
+            false;
+        #handle{} ->
+            true
     end.
 
 position(Ref, NewOffset) ->
@@ -757,8 +764,10 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
 
 partition_handles(RefNewOrReopens) ->
     lists:foldr(
-      fun ({Ref, NewOrReopen}, {Open, Closed}) ->
+      fun ({Ref, NewOrReopen}, {Open, Closed}=AccIn) ->
               case get({Ref, fhc_handle}) of
+                  undefined ->
+                      AccIn;
                   #handle { hdl = closed } = Handle ->
                       {Open, [{Ref, NewOrReopen, Handle} | Closed]};
                   #handle {} = Handle ->
