@@ -191,14 +191,17 @@ apply(#{from := From}, {policy_changed, #{stream_id := StreamId}} = Cmd,
             {State#?MODULE{streams = Streams}, '$ra_no_reply', []}
 
     end;
-apply(#{from := From}, {start_cluster, #{queue := Q}}, #?MODULE{streams = Streams} = State) ->
-    #{name := StreamId} = Conf = amqqueue:get_type_state(Q),
+apply(#{from := From,
+        index := RaftIdx}, {start_cluster, #{queue := Q}}, #?MODULE{streams = Streams} = State) ->
+    #{name := StreamId,
+      leader_locator_strategy := LeaderLocatorStrategy} = Conf0 = amqqueue:get_type_state(Q),
+    Conf = apply_leader_locator_strategy(Conf0, RaftIdx, Streams),
     case maps:is_key(StreamId, Streams) of
         true ->
             {State, '$ra_no_reply', wrap_reply(From, {error, already_started})};
         false ->
             Phase = phase_start_cluster,
-            PhaseArgs = [Q],
+            PhaseArgs = [amqqueue:set_type_state(Q, Conf)],
             SState = #{state => start_cluster,
                        phase => Phase,
                        phase_args => PhaseArgs,
@@ -904,3 +907,41 @@ add_unique(Node, Nodes) ->
 
 delete_replica_pid(Node, ReplicaPids) ->
     lists:partition(fun(P) -> node(P) =/= Node end, ReplicaPids).
+
+apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf, _, _) ->
+    Conf;
+apply_leader_locator_strategy(#{leader_node := Leader,
+                                replica_nodes := Replicas0,
+                                leader_locator_strategy := <<"random">>} = Conf, Idx, _) ->
+    Replicas = [Leader | Replicas0],
+    ClusterSize = length(Replicas),
+    Pos = (Idx rem ClusterSize) + 1,
+    NewLeader = lists:nth(Pos, Replicas),
+    NewReplicas = lists:delete(NewLeader, Replicas),
+    Conf#{leader_node => NewLeader,
+          replica_nodes => NewReplicas};
+apply_leader_locator_strategy(#{leader_node := Leader,
+                                replica_nodes := Replicas0,
+                                leader_locator_strategy := <<"least-leaders">>} = Conf,
+                              _, Streams) ->
+    Replicas = [Leader | Replicas0],
+    Counters0 = maps:from_list([{R, 0} || R <- Replicas]),
+    Counters = maps:to_list(maps:fold(fun(_Key, #{conf := #{leader_node := L}}, Acc) ->
+                                              maps:update_with(L, fun(V) -> V + 1 end, 0, Acc)
+                                      end, Counters0, Streams)),
+    Ordered = lists:sort(fun({_, V1}, {_, V2}) ->
+                                 V1 =< V2
+                         end, Counters),
+    %% We could have potentially introduced nodes that are not in the list of replicas if
+    %% initial cluster size is smaller than the cluster size. Let's select the first one
+    %% that is on the list of replicas
+    NewLeader = select_first_matching_node(Ordered, Replicas),
+    NewReplicas = lists:delete(NewLeader, Replicas),
+    Conf#{leader_node => NewLeader,
+          replica_nodes => NewReplicas}.
+
+select_first_matching_node([{N, _} | Rest], Replicas) ->
+    case lists:member(N, Replicas) of
+        true -> N;
+        false -> select_first_matching_node(Rest, Replicas)
+    end.
