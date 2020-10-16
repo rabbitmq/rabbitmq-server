@@ -48,3 +48,22 @@
 -define(DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING, 12500).
 -define(DEFAULT_FRAME_MAX, 1048576). %% 1 MiB
 -define(DEFAULT_HEARTBEAT, 60). %% 60 seconds
+
+-define(INFO_ITEMS,
+  [conn_name,
+    port,
+    peer_port,
+    host,
+    peer_host,
+    user,
+    vhost,
+    subscriptions,
+    connection_state,
+    auth_mechanism,
+    heartbeat,
+    frame_max,
+    client_properties,
+    connected_at
+    ]).
+
+-define(STREAM_GUIDE_URL, <<"https://rabbitmq.com/stream.html">>).

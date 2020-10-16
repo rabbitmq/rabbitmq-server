@@ -19,6 +19,9 @@
 
 -export([start/2, host/0, port/0, kill_connection/1]).
 -export([stop/1]).
+-export([emit_connection_info_local/3,
+    emit_connection_info_all/4,
+    list/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -67,3 +70,25 @@ kill_connection(ConnectionName) ->
             ok
         end
                   end, pg_local:get_members(rabbit_stream_connections)).
+
+emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [spawn_link(Node, rabbit_stream, emit_connection_info_local,
+        [Items, Ref, AggregatorPid])
+        || Node <- Nodes],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_connection_info_local(Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+        AggregatorPid, Ref, fun(Pid) ->
+            rabbit_stream_reader:info(Pid, Items)
+                            end,
+        list()).
+
+list() ->
+    [Client
+        || {_, ListSupPid, _, _} <- supervisor2:which_children(rabbit_stream_sup),
+        {_, RanchSup, supervisor, _} <- supervisor2:which_children(ListSupPid),
+        {ranch_conns_sup, ConnSup, _, _} <- supervisor:which_children(RanchSup),
+        {_, CliSup, _, _} <- supervisor:which_children(ConnSup),
+        {rabbit_stream_reader, Client, _, _} <- supervisor:which_children(CliSup)].
