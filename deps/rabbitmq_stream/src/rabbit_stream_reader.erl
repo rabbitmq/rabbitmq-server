@@ -799,23 +799,29 @@ handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost,
     State,
     <<?COMMAND_CREATE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary,
         ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
-    {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
-    case check_configure_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
-        ok ->
-            case rabbit_stream_manager:create(VirtualHost, Stream, Arguments, Username) of
-                {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
-                    rabbit_log:info("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
-                    response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
-                    {Connection, State, Rest};
-                {error, reference_already_exists} ->
-                    response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
-                    {Connection, State, Rest};
-                {error, _} ->
-                    response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
+    case rabbit_stream_utils:enforce_correct_stream_name(Stream) of
+        {ok, StreamName} ->
+            {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
+            case check_configure_permitted(#resource{name = StreamName, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+                ok ->
+                    case rabbit_stream_manager:create(VirtualHost, StreamName, Arguments, Username) of
+                        {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
+                            rabbit_log:info("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
+                            response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
+                            {Connection, State, Rest};
+                        {error, reference_already_exists} ->
+                            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
+                            {Connection, State, Rest};
+                        {error, _} ->
+                            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_INTERNAL_ERROR),
+                            {Connection, State, Rest}
+                    end;
+                error ->
+                    response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
                     {Connection, State, Rest}
             end;
-        error ->
-            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
+        _ ->
+            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_PRECONDITION_FAILED),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost,
