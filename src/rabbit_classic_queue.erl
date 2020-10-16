@@ -452,7 +452,7 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
                           <<"x-max-in-memory-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-single-active-consumer">>,
-                          <<"x-queue-type">>],
+                          <<"x-queue-type">>, <<"x-queue-master-locator">>],
       consumer_arguments => [<<"x-cancel-on-ha-failover">>],
       server_named => true}.
 
