@@ -83,7 +83,8 @@ init_per_group(quorum_queue, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) ->
+init_per_testcase(Testcase, Config0) ->
+    Config = [{queue_name, atom_to_binary(Testcase, utf8)} | Config0],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -290,7 +291,9 @@ connection_and_channel(Config) ->
     {C, Ch}.
 
 queue_declare(Channel, Config) ->
-    Declare = ?config(single_active_consumer_queue_declare, Config),
+    QueueName = ?config(queue_name, Config),
+    Declare0 = ?config(single_active_consumer_queue_declare, Config),
+    Declare = Declare0#'queue.declare'{queue = QueueName},
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Channel, Declare),
     Q.
 
