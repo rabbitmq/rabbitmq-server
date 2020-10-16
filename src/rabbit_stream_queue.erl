@@ -496,7 +496,9 @@ make_stream_conf(Node, Q) ->
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
     MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
-    Replicas = rabbit_mnesia:cluster_nodes(all) -- [Node],
+    Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
+    Arguments = amqqueue:get_arguments(Q),
+    Replicas = select_stream_nodes(get_initial_cluster_size(Arguments) - 1, Replicas0),
     Formatter = {?MODULE, format_osiris_event, [QName]},
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
@@ -509,6 +511,23 @@ make_stream_conf(Node, Q) ->
                                                        replica_nodes => Replicas,
                                                        event_formatter => Formatter,
                                                        epoch => 1}).
+
+select_stream_nodes(Size, All) when length(All) =< Size ->
+    All;
+select_stream_nodes(Size, All) ->
+    Node = node(),
+    case lists:member(Node, All) of
+        true ->
+            select_stream_nodes(Size - 1, lists:delete(Node, All), [Node]);
+        false ->
+            select_stream_nodes(Size, All, [])
+    end.
+
+select_stream_nodes(0, _, Selected) ->
+    Selected;
+select_stream_nodes(Size, Rest, Selected) ->
+    S = lists:nth(rand:uniform(length(Rest)), Rest),
+    select_stream_nodes(Size - 1, lists:delete(S, Rest), [S | Selected]).
 
 update_stream_conf(#{reference := QName} = Conf) ->
     case rabbit_amqqueue:lookup(QName) of
@@ -655,6 +674,13 @@ capabilities() ->
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-max-age">>, <<"x-max-segment-size">>],
+                          <<"x-max-age">>, <<"x-max-segment-size">>,
+                          <<"x-initial-cluster-size">>],
       consumer_arguments => [<<"x-stream-offset">>],
       server_named => false}.
+
+get_initial_cluster_size(Arguments) ->
+    case rabbit_misc:table_lookup(Arguments, <<"x-initial-cluster-size">>) of
+        undefined -> length(rabbit_mnesia:cluster_nodes(running));
+        {_Type, Val} -> Val
+    end.

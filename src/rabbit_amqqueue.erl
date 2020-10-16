@@ -780,9 +780,10 @@ declare_args() ->
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
      {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
-     {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2},
+     {<<"x-quorum-initial-group-size">>,     fun check_initial_cluster_size_arg/2},
      {<<"x-max-age">>,                 fun check_max_age_arg/2},
-     {<<"x-max-segment-size">>,        fun check_non_neg_int_arg/2}].
+     {<<"x-max-segment-size">>,        fun check_non_neg_int_arg/2},
+     {<<"x-initial-cluster-size">>,    fun check_initial_cluster_size_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -829,7 +830,7 @@ check_single_active_consumer_arg({Type, Val}, Args) ->
         Error -> Error
     end.
 
-check_default_quorum_initial_group_size_arg({Type, Val}, Args) ->
+check_initial_cluster_size_arg({Type, Val}, Args) ->
     case check_non_neg_int_arg({Type, Val}, Args) of
         ok when Val == 0 -> {error, {value_zero, Val}};
         ok               -> ok;
