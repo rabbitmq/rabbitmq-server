@@ -186,7 +186,9 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
               _ ->
                   {error, stream_not_found}
           end,
-    {reply, Res, State}.
+    {reply, Res, State};
+handle_call(which_children, _From, State) ->
+    {reply, [], State}.
 
 handle_cast(_, State) ->
     {noreply, State}.

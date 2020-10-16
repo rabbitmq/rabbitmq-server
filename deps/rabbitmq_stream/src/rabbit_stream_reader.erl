@@ -37,6 +37,16 @@
 
 -record(stream_connection, {
     name :: string(),
+    %% server host
+    host,
+    %% client host
+    peer_host,
+    %% server port
+    port,
+    %% client port
+    peer_port,
+    auth_mechanism,
+    connected_at :: integer(),
     helper_sup :: pid(),
     socket :: rabbit_net:socket(),
     stream_leaders :: #{binary() => pid()},
@@ -47,6 +57,7 @@
     virtual_host :: 'undefined' | binary(),
     connection_step :: atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max :: integer(),
+    heartbeat :: integer(),
     heartbeater :: any(),
     client_properties = #{} :: #{binary() => binary()},
     monitors = #{} :: #{reference() => binary()}
@@ -63,7 +74,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 %% API
--export([start_link/4, init/1]).
+-export([start_link/4, init/1, info/2]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
     Pid = proc_lib:spawn_link(?MODULE, init,
@@ -83,8 +94,15 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
         {ok, ConnStr} ->
             Credits = atomics:new(1, [{signed, true}]),
             init_credit(Credits, InitialCredits),
+            {PeerHost, PeerPort, Host, Port} =
+                socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
             Connection = #stream_connection{
                 name = ConnStr,
+                host = Host,
+                peer_host = PeerHost,
+                port = Port,
+                peer_port = PeerPort,
+                connected_at = os:system_time(milli_seconds),
                 helper_sup = KeepaliveSup,
                 socket = RealSocket,
                 stream_leaders = #{},
@@ -107,6 +125,16 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
             rabbit_log:warning("Closing connection because of ~p ~p~n", [Error, Reason])
+    end.
+
+socket_op(Sock, Fun) ->
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    case Fun(Sock) of
+        {ok, Res}       -> Res;
+        {error, Reason} ->
+            rabbit_log:warning("Error during socket operation ~p~n", [Reason]),
+            rabbit_net:fast_close(RealSocket),
+            exit(normal)
     end.
 
 init_credit(CreditReference, Credits) ->
@@ -141,6 +169,9 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, Sta
                     frame(Transport, Connection1, TuneFrame),
                     listen_loop_pre_auth(Transport, Connection1#stream_connection{connection_step = tuning}, State1, Configuration);
                 opened ->
+                    % TODO remove registration to rabbit_stream_connections
+                    % just meant to be able to close the connection remotely
+                    % should be possible once the connections are available in ctl list_connections
                     pg_local:join(rabbit_stream_connections, self()),
                     listen_loop_post_auth(Transport, Connection1, State1, Configuration);
                 failure ->
@@ -305,6 +336,12 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             close(Transport, C1);
         {infos, From} ->
             From ! {self(), ClientProperties},
+            listen_loop_post_auth(Transport, Connection, State, Configuration);
+        {'$gen_call', From, info} ->
+            gen_server:reply(From, infos(?INFO_ITEMS, Connection, State)),
+            listen_loop_post_auth(Transport, Connection, State, Configuration);
+        {'$gen_call', From, {info, Items}} ->
+            gen_server:reply(From, infos(Items, Connection, State)),
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         {Closed, S} ->
             demonitor_all_streams(Connection),
@@ -499,7 +536,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S, authentication_s
                                                          end,
                                    Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, FrameFragment/binary>>,
                                    frame(Transport, S1, Frame),
-                                   {S1, Rest};
+                                   {S1#stream_connection{auth_mechanism = {Mechanism, AuthMechanism}}, Rest};
                                {error, _} ->
                                    Frame = <<?COMMAND_SASL_AUTHENTICATE:16, ?VERSION_0:16, CorrelationId:32, ?RESPONSE_SASL_MECHANISM_NOT_SUPPORTED:16>>,
                                    frame(Transport, Connection0, Frame),
@@ -525,7 +562,8 @@ handle_frame_pre_auth(_Transport, #stream_connection{helper_sup = SupPid, socket
         SupPid, Sock, ConnectionName,
         Heartbeat, SendFun, Heartbeat, ReceiveFun),
 
-    {Connection#stream_connection{connection_step = tuned, frame_max = FrameMax, heartbeater = Heartbeater}, State, Rest};
+    {Connection#stream_connection{connection_step = tuned, frame_max = FrameMax,
+        heartbeat = Heartbeat, heartbeater = Heartbeater}, State, Rest};
 handle_frame_pre_auth(Transport, #stream_connection{user = User, socket = S} = Connection, State,
     <<?COMMAND_OPEN:16, ?VERSION_0:16, CorrelationId:32,
         VirtualHostLength:16, VirtualHost:VirtualHostLength/binary>>, Rest) ->
@@ -1095,6 +1133,28 @@ check_write_permitted(Resource, User, Context) ->
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
-%%clear_permission_cache() -> erase(permission_cache),
-%%    erase(topic_permission_cache),
-%%    ok.
+info(Pid, InfoItems) ->
+    case InfoItems -- ?INFO_ITEMS of
+        [] ->
+            gen_server2:call(Pid, {info, InfoItems});
+        UnknownItems -> throw({bad_argument, UnknownItems})
+    end.
+
+infos(Items, Connection, State) -> [{Item, i(Item, Connection, State)} || Item <- Items].
+
+i(conn_name,         #stream_connection{name = Name}, _) -> Name;
+i(port,              #stream_connection{port        = Port}, _)     -> Port;
+i(peer_port,         #stream_connection{peer_port   = PeerPort}, _) -> PeerPort;
+i(host,              #stream_connection{host        = Host}, _)     -> Host;
+i(peer_host,         #stream_connection{peer_host   = PeerHost}, _) -> PeerHost;
+i(user,              #stream_connection{user = U}, _) -> U#user.username;
+i(vhost,             #stream_connection{virtual_host = VirtualHost}, _) -> VirtualHost;
+i(subscriptions,     _, #stream_connection_state{consumers = Consumers}) -> maps:size(Consumers);
+i(connection_state,  _Connection, #stream_connection_state{blocked = true}) -> blocked;
+i(connection_state,  _Connection, #stream_connection_state{blocked = false}) -> running;
+i(auth_mechanism,    #stream_connection{auth_mechanism = {Name, _Mod}}, _) -> Name;
+i(heartbeat,         #stream_connection{heartbeat = Heartbeat}, _)  -> Heartbeat;
+i(frame_max,         #stream_connection{frame_max   = FrameMax}, _) -> FrameMax;
+i(client_properties, #stream_connection{client_properties = CP}, _) -> CP;
+i(connected_at,      #stream_connection{connected_at = T}, _) -> T;
+i(Item,              #stream_connection{}, _) -> throw({bad_argument, Item}).
