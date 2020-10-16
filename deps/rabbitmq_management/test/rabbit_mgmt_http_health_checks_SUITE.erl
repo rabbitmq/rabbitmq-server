@@ -7,10 +7,10 @@
 
 -module(rabbit_mgmt_http_health_checks_SUITE).
 
+-include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
