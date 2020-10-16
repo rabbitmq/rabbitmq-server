@@ -809,6 +809,9 @@ handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost,
                             rabbit_log:info("Created cluster with leader ~p and replicas ~p~n", [LeaderPid, ReturnedReplicas]),
                             response_ok(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId),
                             {Connection, State, Rest};
+                        {error, validation_failed} ->
+                            response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_PRECONDITION_FAILED),
+                            {Connection, State, Rest};
                         {error, reference_already_exists} ->
                             response(Transport, Connection, ?COMMAND_CREATE_STREAM, CorrelationId, ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
                             {Connection, State, Rest};
