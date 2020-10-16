@@ -71,30 +71,49 @@ stream_queue_arguments(ArgumentsAcc, #{<<"max-segment-size">> := Value} = Argume
         [{<<"x-max-segment-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
         maps:remove(<<"max-segment-size">>, Arguments)
     );
+stream_queue_arguments(ArgumentsAcc, #{<<"initial-cluster-size">> := Value} = Arguments) ->
+    stream_queue_arguments(
+        [{<<"x-initial-cluster-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
+        maps:remove(<<"initial-cluster-size">>, Arguments)
+    );
 stream_queue_arguments(ArgumentsAcc, _Arguments) ->
     ArgumentsAcc.
 
+validate_stream_queue_arguments([]) ->
+    ok;
+validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long, ClusterSize} | _]) when ClusterSize =< 0 ->
+    error;
+validate_stream_queue_arguments([_ | T]) ->
+    validate_stream_queue_arguments(T).
+
+
 handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
-    Q0 = amqqueue:new(
-        Name,
-        none, true, false, none, stream_queue_arguments(Arguments),
-        VirtualHost, #{user => Username}, rabbit_stream_queue
-    ),
-    try
-        case rabbit_stream_queue:declare(Q0, node()) of
-            {new, Q} ->
-                {reply, {ok, amqqueue:get_type_state(Q)}, State};
-            {existing, _} ->
-                {reply, {error, reference_already_exists}, State};
-            {error, Err} ->
-                rabbit_log:warn("Error while creating ~p stream, ~p~n", [Reference, Err]),
-                {reply, {error, internal_error}, State}
-        end
-    catch
-        exit:Error ->
-            rabbit_log:info("Error while creating ~p stream, ~p~n", [Reference, Error]),
-            {reply, {error, internal_error}, State}
+    StreamQueueArguments = stream_queue_arguments(Arguments),
+    case validate_stream_queue_arguments(StreamQueueArguments) of
+        ok ->
+            Q0 = amqqueue:new(
+                Name,
+                none, true, false, none, StreamQueueArguments,
+                VirtualHost, #{user => Username}, rabbit_stream_queue
+            ),
+            try
+                case rabbit_stream_queue:declare(Q0, node()) of
+                    {new, Q} ->
+                        {reply, {ok, amqqueue:get_type_state(Q)}, State};
+                    {existing, _} ->
+                        {reply, {error, reference_already_exists}, State};
+                    {error, Err} ->
+                        rabbit_log:warn("Error while creating ~p stream, ~p~n", [Reference, Err]),
+                        {reply, {error, internal_error}, State}
+                end
+            catch
+                exit:Error ->
+                    rabbit_log:info("Error while creating ~p stream, ~p~n", [Reference, Error]),
+                    {reply, {error, internal_error}, State}
+            end;
+        error ->
+            {reply, {error, validation_failed}, State}
     end;
 handle_call({delete, VirtualHost, Reference, Username}, _From, State) ->
     Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
