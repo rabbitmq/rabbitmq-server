@@ -59,6 +59,7 @@ all_tests() ->
      declare_max_age,
      declare_invalid_args,
      declare_invalid_properties,
+     declare_server_named,
      declare_queue,
      delete_queue,
      publish,
@@ -262,6 +263,14 @@ declare_invalid_args(Config) ->
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                     {<<"x-quorum-initial-group-size">>, longstr, <<"hop">>}])).
+
+declare_server_named(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
+               <<"">>, [{<<"x-queue-type">>, longstr, <<"stream">>}])).
 
 declare_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

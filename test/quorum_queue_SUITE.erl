@@ -91,6 +91,7 @@ all_tests() ->
      declare_args,
      declare_invalid_args,
      declare_invalid_properties,
+     declare_server_named,
      start_queue,
      stop_queue,
      restart_queue,
@@ -377,6 +378,14 @@ declare_invalid_args(Config) ->
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-quorum-initial-group-size">>, long, 0}])).
+
+declare_server_named(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
+               <<"">>, [{<<"x-queue-type">>, longstr, <<"quorum">>}])).
 
 start_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

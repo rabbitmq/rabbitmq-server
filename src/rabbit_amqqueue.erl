@@ -56,8 +56,10 @@
 -export([collect_info_all/2]).
 
 -export([is_policy_applicable/2]).
+-export([is_server_named_allowed/1]).
 
 -export([check_max_age/1]).
+-export([get_queue_type/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -365,6 +367,10 @@ is_policy_applicable(QName, Policy) ->
             %% Defaults to previous behaviour. Apply always
             true
     end.
+
+is_server_named_allowed(Args) ->
+    Type = get_queue_type(Args),
+    rabbit_queue_type:is_server_named_allowed(Type).
 
 -spec lookup
         (name()) ->

@@ -37,7 +37,7 @@
          update/2,
          state_info/1,
          stat/1,
-         is_policy_applicable/2]).
+         capabilities/0]).
 
 -export([set_retention_policy/3]).
 -export([add_replica/3,
@@ -80,7 +80,6 @@ is_enabled() ->
 declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
     Arguments = amqqueue:get_arguments(Q0),
     QName = amqqueue:get_name(Q0),
-    check_invalid_arguments(QName, Arguments),
     rabbit_queue_type_util:check_auto_delete(Q0),
     rabbit_queue_type_util:check_exclusive(Q0),
     rabbit_queue_type_util:check_non_durable(Q0),
@@ -544,13 +543,6 @@ max_age(Age) ->
 max_age(Age1, Age2) ->
     min(rabbit_amqqueue:check_max_age(Age1), rabbit_amqqueue:check_max_age(Age2)).
 
-check_invalid_arguments(QueueName, Args) ->
-    Keys = [<<"x-expires">>, <<"x-message-ttl">>,
-            <<"x-max-priority">>, <<"x-queue-mode">>, <<"x-overflow">>,
-            <<"x-max-in-memory-length">>, <<"x-max-in-memory-bytes">>,
-            <<"x-quorum-initial-group-size">>, <<"x-cancel-on-ha-failover">>],
-    rabbit_queue_type_util:check_invalid_arguments(QueueName, Args, Keys).
-
 queue_name(#resource{virtual_host = VHost, name = Name}) ->
     Timestamp = erlang:integer_to_binary(erlang:system_time()),
     osiris_util:to_base64uri(erlang:binary_to_list(<<VHost/binary, "_", Name/binary, "_",
@@ -658,9 +650,11 @@ msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
             <<"x-routing-key">> => {utf8, RKey}}, R0),
     rabbit_msg_record:to_iodata(R).
 
--spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
-is_policy_applicable(_Q, Policy) ->
-    Applicable = [<<"max-length-bytes">>, <<"max-age">>, <<"max-segment-size">>],
-    lists:all(fun({P, _}) ->
-                      lists:member(P, Applicable)
-              end, Policy).
+capabilities() ->
+    #{policies => [<<"max-length-bytes">>, <<"max-age">>, <<"max-segment-size">>],
+      queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
+                          <<"x-max-length">>, <<"x-max-length-bytes">>,
+                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
+                          <<"x-max-age">>, <<"x-max-segment-size">>],
+      consumer_arguments => [<<"x-stream-offset">>],
+      server_named => false}.

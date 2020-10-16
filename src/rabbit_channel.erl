@@ -2400,8 +2400,16 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     Durable = DurableDeclare andalso not ExclusiveDeclare,
     ActualNameBin = case StrippedQueueNameBin of
-                        <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
-                                                    "amq.gen");
+                        <<>> ->
+                            case rabbit_amqqueue:is_server_named_allowed(Args) of
+                                true ->
+                                    rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen");
+                                false ->
+                                    rabbit_misc:protocol_error(
+                                      precondition_failed,
+                                      "Cannot declare a server-named queue for type ~p",
+                                      [rabbit_amqqueue:get_queue_type(Args)])
+                            end;
                         Other -> check_name('queue', Other)
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
