@@ -996,10 +996,8 @@ or:
         <td></td>
         <td class="path">/api/health/checks/alarms</td>
         <td>
-          Checks that no alarms are raised. If everything is working correctly, will
-          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
-          something fails, will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","alarms":[{"resource":"string","node":"string"}]}</pre>
+          Responds a 200 OK if there are no alarms in effect in the cluster,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -1009,11 +1007,8 @@ or:
         <td></td>
         <td class="path">/api/health/checks/local-alarms</td>
         <td>
-          Checks that no alarms are raised in the given node.
-          If everything is working correctly, will
-          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
-          something fails, will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","alarms":[{"resource":"string","node":"string"}]}</pre>
+          Responds a 200 OK if there are no local alarms in effect on the target node,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -1024,8 +1019,8 @@ or:
         <td class="path">/api/health/checks/certificate-expiration/<i>within</i>/<i>unit</i></td>
         <td>
           Checks the expiration date on the certificates for every listener configured to use TLS.
-          If all certificates are valid it will return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If any certificate expires, will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","expired":[{"node":"string","protocol":"string","interface":"string","port":"integer","certfile":"string","cacertfile":"string","certfile_expires_on":"string","cacertfile_expires_on":"string"}]}</pre>
+          Responds a 200 OK if all certificates are valid (have not expired),
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -1035,10 +1030,8 @@ or:
         <td></td>
         <td class="path">/api/health/checks/port-listener/<i>port</i></td>
         <td>
-          Checks if there is an active listener in the given node. If there is a listener it will
-          return HTTP status 200 with body: <pre>{"status":"ok","port":"integer"}</pre>.
-          If there is no active listener, will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","missing":"integer","ports":["integer"]}</pre>
+          Responds a 200 OK if there is an active listener on the give port,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -1048,10 +1041,8 @@ or:
         <td></td>
         <td class="path">/api/health/checks/protocol-listener/<i>protocol</i></td>
         <td>
-          Checks if there is an active listener for given protocol. If there is a listener it will
-          return HTTP status 200 with body: <pre>{"status":"ok","protocol":"string"}</pre>.
-          If there is no active listener, will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","missing":"integer","protocols":["string"]}</pre>
+          Responds a 200 OK if there is an active listener for the given protocol,
+          otherwise responds with a 503 Service Unavailable. Valid protocol names are: amqp091, amqp10, mqtt, stomp, web-mqtt, web-stomp.
         </td>
       </tr>
       <tr>
@@ -1061,10 +1052,8 @@ or:
         <td></td>
         <td class="path">/api/health/checks/virtual-hosts</td>
         <td>
-          Checks if all vhosts are running in the given node. If everything is working
-          correctly it will return HTTP status 200 with body: <pre>{"status":"ok"}</pre>.
-          If there is any failure, will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","virtual-hosts":["string"]}</pre>
+          Responds a 200 OK if all virtual hosts and running on the target node,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -1074,13 +1063,10 @@ or:
         <td></td>
         <td class="path">/api/health/checks/node-is-mirror-sync-critical</td>
         <td>
-          Checks if there are classic mirrored queues without online synchronised mirrors
+          Checks if there are classic mirrored queues without synchronised mirrors online
           (queues that would potentially lose data if the target node is shut down).
-          If everything is working correctly it will return HTTP status 200 with body:
-          <pre>{"status":"ok"}</pre>.
-          If there is any classic mirrored queue without online synchronised mirrors,
-          will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","queues":[{"name":"string","readable_name":"string","virtual_host":"string","type":"string"}]}</pre>
+          Responds a 200 OK if there are no such classic mirrored queues,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -1091,12 +1077,9 @@ or:
         <td class="path">/api/health/checks/node-is-quorum-critical</td>
         <td>
           Checks if there are quorum queues with minimum online quorum (queues that
-          would lose their quorum if the target node is shut down).
-          If everything is working correctly it will return HTTP status 200 with body:
-          <pre>{"status":"ok"}</pre>.
-          If there is any quorum queue with minimum online quorum,
-          will return HTTP status 503 with the body of
-          <pre>{"status":"failed","reason":"string","queues":[{"name":"string","readable_name":"string","virtual_host":"string","type":"string"}]}</pre>
+          would lose their quorum and availability if the target node is shut down).
+          Responds a 200 OK if there are no such quorum queues,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
