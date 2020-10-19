@@ -18,6 +18,7 @@
          remove/2,
          info/2,
          state_info/1,
+         info_down/2,
          info_down/3,
          %% stateful client API
          new/2,
@@ -45,6 +46,10 @@
 -type msg_tag() :: term().
 
 -define(STATE, ?MODULE).
+
+%% Recoverable slaves shouldn't really be a generic one, but let's keep it here until
+%% mirrored queues are deprecated.
+-define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, recoverable_slaves, type, state]).
 
 -define(QREF(QueueReference),
     (is_tuple(QueueReference) andalso element(1, QueueReference) == resource)
@@ -274,8 +279,13 @@ state_info(#ctx{state = S,
 state_info(_) ->
     #{}.
 
+down_keys() -> ?DOWN_KEYS.
+
+info_down(Q, DownReason) ->
+    info_down(Q, down_keys(), DownReason).
+
 info_down(Q, all_keys, DownReason) ->
-    info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason);
+    info_down(Q, down_keys(), DownReason);
 info_down(Q, Items, DownReason) ->
     [{Item, i_down(Item, Q, DownReason)} || Item <- Items].
 
@@ -287,11 +297,7 @@ i_down(pid,                Q, _) -> amqqueue:get_pid(Q);
 i_down(recoverable_slaves, Q, _) -> amqqueue:get_recoverable_slaves(Q);
 i_down(type,               Q, _) -> amqqueue:get_type(Q);
 i_down(state, _Q, DownReason)    -> DownReason;
-i_down(K, _Q, _DownReason) ->
-    case lists:member(K, rabbit_amqqueue_process:info_keys()) of
-        true  -> '';
-        false -> throw({bad_argument, K})
-    end.
+i_down(_K, _Q, _DownReason) -> ''.
 
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),

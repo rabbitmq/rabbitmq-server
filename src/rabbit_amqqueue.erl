@@ -1165,6 +1165,9 @@ list_for_count(VHost) ->
 
 -spec info_keys() -> rabbit_types:info_keys().
 
+%% It should no default to classic queue keys, but a subset of those that must be shared
+%% by all queue types. Not sure this is even being used, so will leave it here for backwards
+%% compatibility. Each queue type handles now info(Q, all_keys) with the keys it supports.
 info_keys() -> rabbit_amqqueue_process:info_keys().
 
 map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
@@ -1209,24 +1212,10 @@ info(Q, Items) when ?is_amqqueue(Q) ->
     rabbit_queue_type:info(Q, Items).
 
 info_down(Q, DownReason) ->
-    info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason).
+    rabbit_queue_type:info_down(Q, DownReason).
 
 info_down(Q, Items, DownReason) ->
-    [{Item, i_down(Item, Q, DownReason)} || Item <- Items, Item =/= totals, Item =/= type_specific].
-
-i_down(name,               Q, _) -> amqqueue:get_name(Q);
-i_down(durable,            Q, _) -> amqqueue:is_durable(Q);
-i_down(auto_delete,        Q, _) -> amqqueue:is_auto_delete(Q);
-i_down(arguments,          Q, _) -> amqqueue:get_arguments(Q);
-i_down(pid,                Q, _) -> amqqueue:get_pid(Q);
-i_down(recoverable_slaves, Q, _) -> amqqueue:get_recoverable_slaves(Q);
-i_down(type,               Q, _) -> amqqueue:get_type(Q);
-i_down(state, _Q, DownReason)    -> DownReason;
-i_down(K, _Q, _DownReason) ->
-    case lists:member(K, rabbit_amqqueue_process:info_keys()) of
-        true  -> '';
-        false -> throw({bad_argument, K})
-    end.
+    rabbit_queue_type:info_down(Q, Items, DownReason).
 
 -spec info_all(rabbit_types:vhost()) -> [rabbit_types:infos()].
 

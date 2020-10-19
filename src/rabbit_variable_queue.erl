@@ -975,8 +975,8 @@ info(backing_queue_status, #vqstate {
       {avg_egress_rate     , AvgEgressRate},
       {avg_ack_ingress_rate, AvgAckIngressRate},
       {avg_ack_egress_rate , AvgAckEgressRate} ];
-info(Item, _) ->
-    throw({bad_argument, Item}).
+info(_, _) ->
+    ''.
 
 invoke(?MODULE, Fun, State) -> Fun(?MODULE, State);
 invoke(      _,   _, State) -> State.

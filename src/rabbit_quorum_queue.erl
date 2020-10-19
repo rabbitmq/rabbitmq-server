@@ -80,6 +80,9 @@
          message_bytes_ram
         ]).
 
+-define(INFO_KEYS, [name, durable, auto_delete, arguments, pid, messages, messages_ready,
+                    messages_unacknowledged, local_state, type] ++ ?STATISTICS_KEYS).
+
 -define(RPC_TIMEOUT, 1000).
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
@@ -779,7 +782,8 @@ infos(QName, Keys) ->
             []
     end.
 
-
+info(Q, all_keys) ->
+    info(Q, ?INFO_KEYS);
 info(Q, Items) ->
     lists:foldr(fun(totals, Acc) ->
                         i_totals(Q) ++ Acc;
