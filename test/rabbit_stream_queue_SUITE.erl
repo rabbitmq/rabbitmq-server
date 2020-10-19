@@ -1262,22 +1262,28 @@ leader_locator_random(Config) ->
                                             info_all, [<<"/">>, [name, leader]])),
     Leader = proplists:get_value(leader, Info),
 
+    ?assertMatch(#'queue.delete_ok'{},
+      amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
     repeat_until(
       fun() ->
-              ?assertMatch(#'queue.delete_ok'{},
-                           amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+              QName = base64:encode(crypto:strong_rand_bytes(20)),
 
-              ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                           declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                           {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
+              ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                           declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
 
               [Info2] = lists:filter(
                           fun(Props) ->
-                                  lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+                                  lists:member({name, rabbit_misc:r(<<"/">>, queue, QName)}, Props)
                           end,
                           rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
                                                        info_all, [<<"/">>, [name, leader]])),
               Leader2 = proplists:get_value(leader, Info2),
+
+              ?assertMatch(#'queue.delete_ok'{},
+                amqp_channel:call(Ch, #'queue.delete'{queue = QName})),
+
               Leader =/= Leader2
       end, 10).
 

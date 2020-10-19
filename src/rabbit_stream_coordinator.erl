@@ -13,6 +13,7 @@
 %% Copyright (c) 2012-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbit_stream_coordinator).
+-include("rabbit.hrl").
 
 -behaviour(ra_machine).
 
@@ -191,11 +192,9 @@ apply(#{from := From}, {policy_changed, #{stream_id := StreamId}} = Cmd,
             {State#?MODULE{streams = Streams}, '$ra_no_reply', []}
 
     end;
-apply(#{from := From,
-        index := RaftIdx}, {start_cluster, #{queue := Q}}, #?MODULE{streams = Streams} = State) ->
-    #{name := StreamId,
-      leader_locator_strategy := LeaderLocatorStrategy} = Conf0 = amqqueue:get_type_state(Q),
-    Conf = apply_leader_locator_strategy(Conf0, RaftIdx, Streams),
+apply(#{from := From}, {start_cluster, #{queue := Q}}, #?MODULE{streams = Streams} = State) ->
+    #{name := StreamId} = Conf0 = amqqueue:get_type_state(Q),
+    Conf = apply_leader_locator_strategy(Conf0, Streams),
     case maps:is_key(StreamId, Streams) of
         true ->
             {State, '$ra_no_reply', wrap_reply(From, {error, already_started})};
@@ -908,14 +907,16 @@ add_unique(Node, Nodes) ->
 delete_replica_pid(Node, ReplicaPids) ->
     lists:partition(fun(P) -> node(P) =/= Node end, ReplicaPids).
 
-apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf, _, _) ->
+apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf, _) ->
     Conf;
 apply_leader_locator_strategy(#{leader_node := Leader,
                                 replica_nodes := Replicas0,
-                                leader_locator_strategy := <<"random">>} = Conf, Idx, _) ->
+                                leader_locator_strategy := <<"random">>,
+                                reference := #resource{name = Name}} = Conf, _) ->
     Replicas = [Leader | Replicas0],
     ClusterSize = length(Replicas),
-    Pos = (Idx rem ClusterSize) + 1,
+    Hash = erlang:phash2(Name),
+    Pos = (Hash rem ClusterSize) + 1,
     NewLeader = lists:nth(Pos, Replicas),
     NewReplicas = lists:delete(NewLeader, Replicas),
     Conf#{leader_node => NewLeader,
@@ -923,7 +924,7 @@ apply_leader_locator_strategy(#{leader_node := Leader,
 apply_leader_locator_strategy(#{leader_node := Leader,
                                 replica_nodes := Replicas0,
                                 leader_locator_strategy := <<"least-leaders">>} = Conf,
-                              _, Streams) ->
+                                Streams) ->
     Replicas = [Leader | Replicas0],
     Counters0 = maps:from_list([{R, 0} || R <- Replicas]),
     Counters = maps:to_list(maps:fold(fun(_Key, #{conf := #{leader_node := L}}, Acc) ->
