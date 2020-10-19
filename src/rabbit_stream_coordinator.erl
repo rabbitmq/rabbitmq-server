@@ -13,7 +13,6 @@
 %% Copyright (c) 2012-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbit_stream_coordinator).
--include("rabbit.hrl").
 
 -behaviour(ra_machine).
 
@@ -912,10 +911,10 @@ apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} =
 apply_leader_locator_strategy(#{leader_node := Leader,
                                 replica_nodes := Replicas0,
                                 leader_locator_strategy := <<"random">>,
-                                reference := #resource{name = Name}} = Conf, _) ->
+                                name := StreamId} = Conf, _) ->
     Replicas = [Leader | Replicas0],
     ClusterSize = length(Replicas),
-    Hash = erlang:phash2(Name),
+    Hash = erlang:phash2(StreamId),
     Pos = (Hash rem ClusterSize) + 1,
     NewLeader = lists:nth(Pos, Replicas),
     NewReplicas = lists:delete(NewLeader, Replicas),
