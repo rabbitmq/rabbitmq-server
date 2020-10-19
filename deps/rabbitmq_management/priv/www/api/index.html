@@ -951,12 +951,10 @@ or:
         <td></td>
         <td class="path">/api/aliveness-test/<i>vhost</i></td>
         <td>
-          Declares a test queue, then publishes and consumes a
-          message. Intended for use by monitoring tools. If everything
-          is working correctly, will return HTTP status 200 with
-          body: <pre>{"status":"ok"}</pre> Note: the test queue will
-          not be deleted (to prevent queue churn if this is
-          repeatedly pinged).
+          Declares a test queue on the target node, then publishes and consumes a
+          message. Intended to be used as a very basic health check.
+          Responds a 200 OK if the check succeeded,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -964,14 +962,10 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/healthchecks/node</td>
+        <td class="path">/api/health/checks/alarms</td>
         <td>
-          Runs basic healthchecks in the current node. Checks that the rabbit
-          application is running, channels and queues can be listed successfully, and
-          that no alarms are in effect. If everything is working correctly, will
-          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
-          something fails, will return HTTP status 200 with the body of
-          <pre>{"status":"failed","reason":"string"}</pre>
+          Responds a 200 OK if there are no alarms in effect in the cluster,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
@@ -979,14 +973,88 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/healthchecks/node/<i>node</i></td>
+        <td class="path">/api/health/checks/local-alarms</td>
         <td>
-          Runs basic healthchecks in the given node. Checks that the rabbit
-          application is running, list_channels and list_queues return, and
-          that no alarms are raised. If everything is working correctly, will
-          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
-          something fails, will return HTTP status 200 with the body of
-          <pre>{"status":"failed","reason":"string"}</pre>
+          Responds a 200 OK if there are no local alarms in effect on the target node,
+          otherwise responds with a 503 Service Unavailable.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/health/checks/certificate-expiration/<i>within</i>/<i>unit</i></td>
+        <td>
+          <p>
+            Checks the expiration date on the certificates for every listener configured to use TLS.
+            Responds a 200 OK if all certificates are valid (have not expired),
+            otherwise responds with a 503 Service Unavailable.
+          </p>
+          <p>
+            Valid units: days, weeks, months, years. The value of the <i>within</i> argument is the number of
+            units. So, when <i>within</i> is 2 and <i>unit</i> is "months", the expiration period used by the check
+            will be the next two months.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/health/checks/port-listener/<i>port</i></td>
+        <td>
+          Responds a 200 OK if there is an active listener on the give port,
+          otherwise responds with a 503 Service Unavailable.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/health/checks/protocol-listener/<i>protocol</i></td>
+        <td>
+          Responds a 200 OK if there is an active listener for the given protocol,
+          otherwise responds with a 503 Service Unavailable. Valid protocol names are: amqp091, amqp10, mqtt, stomp, web-mqtt, web-stomp.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/health/checks/virtual-hosts</td>
+        <td>
+          Responds a 200 OK if all virtual hosts and running on the target node,
+          otherwise responds with a 503 Service Unavailable.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/health/checks/node-is-mirror-sync-critical</td>
+        <td>
+          Checks if there are classic mirrored queues without synchronised mirrors online
+          (queues that would potentially lose data if the target node is shut down).
+          Responds a 200 OK if there are no such classic mirrored queues,
+          otherwise responds with a 503 Service Unavailable.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/health/checks/node-is-quorum-critical</td>
+        <td>
+          Checks if there are quorum queues with minimum online quorum (queues that
+          would lose their quorum and availability if the target node is shut down).
+          Responds a 200 OK if there are no such quorum queues,
+          otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>
       <tr>
