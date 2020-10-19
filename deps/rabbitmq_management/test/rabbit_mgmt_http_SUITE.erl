@@ -2470,13 +2470,16 @@ format_output_test(Config) ->
     passed.
 
 columns_test(Config) ->
-    http_put(Config, "/queues/%2F/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
+    Path = "/queues/%2F/columns.test",
+    TTL = 30000,
+    http_delete(Config, Path, [{group, '2xx'}, 404]),
+    http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
-    Item = #{arguments => #{foo => <<"bar">>}, name => <<"test">>},
+    Item = #{arguments => #{'x-message-ttl' => TTL}, name => <<"columns.test">>},
     timer:sleep(2000),
-    [Item] = http_get(Config, "/queues?columns=arguments.foo,name", ?OK),
-    Item = http_get(Config, "/queues/%2F/test?columns=arguments.foo,name", ?OK),
-    http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
+    [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
+    Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
+    http_delete(Config, Path, {group, '2xx'}),
     passed.
 
 get_test(Config) ->
