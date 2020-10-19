@@ -89,6 +89,7 @@ do_drain() ->
                     [length(TransferCandidates), ReadableCandidates]),
     transfer_leadership_of_classic_mirrored_queues(TransferCandidates),
     transfer_leadership_of_quorum_queues(TransferCandidates),
+    stop_local_quorum_queue_followers(),
 
     %% allow plugins to react
     rabbit_event:notify(maintenance_draining, #{
@@ -275,6 +276,28 @@ transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
          end
      end || Q <- Queues],
     rabbit_log:info("Leadership transfer for local classic mirrored queues is complete").
+
+-spec stop_local_quorum_queue_followers() -> ok.
+stop_local_quorum_queue_followers() ->
+    Queues = rabbit_amqqueue:list_local_followers(),
+    rabbit_log:info("Will stop local follower replicas of ~b quorum queues on this node",
+                    [length(Queues)]),
+    [begin
+        Name = amqqueue:get_name(Q),
+        rabbit_log:debug("Will stop a local follower replica of quorum queue ~s",
+                         [rabbit_misc:rs(Name)]),
+        %% shut down Ra nodes so that they are not considered for leader election
+        {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
+        RaNode = {RegisteredName, node()},
+        rabbit_log:debug("Will stop Ra server ~p", [RaNode]),
+        case ra:stop_server(RaNode) of
+            ok     ->
+                rabbit_log:debug("Successfully stopped Ra server ~p", [RaNode]);
+            {error, nodedown} ->
+                rabbit_log:error("Failed to stop Ra server ~p: target node was reported as down")
+        end
+     end || Q <- Queues],
+    rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
 
  -spec primary_replica_transfer_candidate_nodes() -> [node()].
 primary_replica_transfer_candidate_nodes() ->
