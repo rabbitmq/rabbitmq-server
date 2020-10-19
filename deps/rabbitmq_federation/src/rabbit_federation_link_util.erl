@@ -109,13 +109,17 @@ open_monitor(Params, Name) ->
     end.
 
 open(Params, Name) ->
-    case amqp_connection:start(Params, Name) of
+    try
+        amqp_connection:start(Params, Name)
+    of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> {ok, Conn, Ch};
                           E        -> ensure_connection_closed(Conn),
                                       E
                       end;
         E -> E
+    catch
+        _:E -> E
     end.
 
 ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
