@@ -29,10 +29,16 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
       # and false positives can be misleading
       true  -> {:ok, :single_node_cluster}
       false ->
-        case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :list_with_minimum_quorum_for_cli, [], timeout) do
-          [] -> {:ok, []}
-          qs when is_list(qs) -> {:ok, qs}
-          other -> other
+        case :rabbit_misc.rpc_call(node_name, :rabbit_maintenance, :is_being_drained_local_read, [node_name]) do
+          # if target node is under maintenance, it has already transferred all of its quorum queue
+          # replicas. Don't consider it to be quorum critical. See rabbitmq/rabbitmq-server#2469
+          true  -> {:ok, :under_maintenance}
+          false ->
+            case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :list_with_minimum_quorum_for_cli, [], timeout) do
+              [] -> {:ok, []}
+              qs when is_list(qs) -> {:ok, qs}
+              other -> other
+            end
         end
       other -> other
     end
@@ -44,10 +50,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
       "message" => "Target node seems to be the only one in a single node cluster, the check does not apply"
     }}
   end
+  def output({:ok, :under_maintenance}, %{formatter: "json"}) do
+    {:ok, %{
+      "result"  => "ok",
+      "message" => "Target node seems to be in maintenance mode, the check does not apply"
+    }}
+  end
   def output({:ok, []}, %{formatter: "json"}) do
     {:ok, %{"result" => "ok"}}
   end
   def output({:ok, :single_node_cluster}, %{silent: true}) do
+    {:ok, :check_passed}
+  end
+  def output({:ok, :under_maintenance}, %{silent: true}) do
     {:ok, :check_passed}
   end
   def output({:ok, []}, %{silent: true}) do
@@ -55,6 +70,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
   end
   def output({:ok, :single_node_cluster}, %{node: node_name}) do
     {:ok, "Node #{node_name} seems to be the only one in a single node cluster, the check does not apply"}
+  end
+  def output({:ok, :under_maintenance}, %{node: node_name}) do
+    {:ok, "Node #{node_name} seems to be in maintenance mode, the check does not apply"}
   end
   def output({:ok, []}, %{node: node_name}) do
     {:ok, "Node #{node_name} reported no quorum queues with minimum quorum"}
