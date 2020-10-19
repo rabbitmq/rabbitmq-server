@@ -340,7 +340,7 @@ capabilities() ->
                           <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>],
-      consumer_arguments => [<<"x-priority">>],
+      consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => false}.
 
 rpc_delete_metrics(QName) ->
