@@ -57,9 +57,11 @@ end_per_testcase(_, Config) ->
 
 no_config_defaults(_Config) ->
     ?assertEqual([
-        [{cowboy_opts,[
-            {sendfile, false}
-        ]}]
+        [
+            {cowboy_opts,[
+                {sendfile, false}
+            ]},
+            {port, 15672}]
     ], rabbit_mgmt_app:get_listeners_config()).
 
 
@@ -90,6 +92,7 @@ ssl_config_only(_Config) ->
         {cowboy_opts,[
             {sendfile,false}
         ]},
+        {port, 999},
         {ssl, true},
         {ssl_opts, [
             {port, 999},
@@ -122,6 +125,7 @@ multiple_listeners(_Config) ->
             {cowboy_opts,[
                 {sendfile, false}
             ]},
+            {port, 999},
             {ssl, true},
             {ssl_opts, [
                 {port, 999},
