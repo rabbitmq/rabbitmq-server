@@ -1399,9 +1399,6 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
 get_gc_info(Pid) ->
     rabbit_runtime:get_gc_info(Pid).
 
-guess_number_of_cpu_cores() ->
-    rabbit_runtime:guess_number_of_cpu_cores().
-
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
 
