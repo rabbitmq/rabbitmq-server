@@ -18,7 +18,36 @@ defmodule RabbitMQCtl.MixfileBase do
                 emu_args: "-hidden",
                 path: "escript/rabbitmqctl"],
       deps: deps(),
-      aliases: aliases()
+      aliases: aliases(),
+      xref: [
+        exclude: [
+          CSV,
+          CSV.Encode,
+          JSON,
+          :mnesia,
+          :msacc,
+          :observer_cli,
+          :public_key,
+          :pubkey_cert,
+          :rabbit,
+          :rabbit_control_misc,
+          :rabbit_data_coercion,
+          :rabbit_env,
+          :rabbit_event,
+          :rabbit_file,
+          :rabbit_net,
+          :rabbit_lager,
+          :rabbit_log,
+          :rabbit_misc,
+          :rabbit_mnesia,
+          :rabbit_mnesia_rename,
+          :rabbit_nodes_common,
+          :rabbit_pbe,
+          :rabbit_plugins,
+          :rabbit_resource_monitor_misc,
+          :stdout_formatter
+        ]
+      ]
    ]
   end
 
