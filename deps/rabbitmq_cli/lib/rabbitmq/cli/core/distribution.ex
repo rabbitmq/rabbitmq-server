@@ -53,6 +53,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   def per_node_timeout(:infinity, _) do
     :infinity
   end
+
   def per_node_timeout(timeout, node_count) do
     Kernel.trunc(timeout / node_count)
   end
@@ -97,23 +98,41 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   defp generate_cli_node_name(node_name_type) do
     case Helpers.get_rabbit_hostname(node_name_type) do
-      {:error, _} = err -> throw(err)
-      rmq_hostname      -> String.to_atom("rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}")
+      {:error, _} = err ->
+        throw(err)
+
+      rmq_hostname ->
+        # This limits the number of possible unique node names used by CLI tools to avoid
+        # the atom table from growing above the node limit. We must use reasonably unique IDs
+        # to allow for concurrent CLI tool execution.
+        #
+        # Enum.random/1 is constant time and space with range arguments https://hexdocs.pm/elixir/Enum.html#random/1.
+        id = Enum.random(1..1024)
+        String.to_atom("rabbitmqcli-#{id}-#{rmq_hostname}")
     end
   end
 
   defp maybe_warn_about_deprecated_rabbitmq_erlang_cookie_env_variable(options) do
-      case System.get_env("RABBITMQ_ERLANG_COOKIE") do
-        nil -> :ok
-        _   ->
-          case Config.output_less?(options) do
-            true  -> :ok
-            false ->
-              warning = ANSI.bright_red("RABBITMQ_ERLANG_COOKIE env variable support is deprecated and will be REMOVED in a future version. ") <>
-                        ANSI.yellow("Use the $HOME/.erlang.cookie file or the --erlang-cookie switch instead.")
+    case System.get_env("RABBITMQ_ERLANG_COOKIE") do
+      nil ->
+        :ok
 
-              IO.puts(warning)
-          end
-      end
+      _ ->
+        case Config.output_less?(options) do
+          true ->
+            :ok
+
+          false ->
+            warning =
+              ANSI.bright_red(
+                "RABBITMQ_ERLANG_COOKIE env variable support is deprecated and will be REMOVED in a future version. "
+              ) <>
+                ANSI.yellow(
+                  "Use the $HOME/.erlang.cookie file or the --erlang-cookie switch instead."
+                )
+
+            IO.puts(warning)
+        end
+    end
   end
 end
