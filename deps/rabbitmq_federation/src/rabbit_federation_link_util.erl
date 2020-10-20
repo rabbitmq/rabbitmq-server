@@ -112,11 +112,18 @@ open(Params, Name) ->
     try
         amqp_connection:start(Params, Name)
     of
-        {ok, Conn} -> case amqp_connection:open_channel(Conn) of
-                          {ok, Ch} -> {ok, Conn, Ch};
-                          E        -> ensure_connection_closed(Conn),
-                                      E
-                      end;
+        {ok, Conn} ->
+            try
+                amqp_connection:open_channel(Conn)
+            of
+                {ok, Ch} -> {ok, Conn, Ch};
+                E        -> ensure_connection_closed(Conn),
+                            E
+            catch
+                _:E ->
+                    ensure_connection_closed(Conn),
+                    E
+            end;
         E -> E
     catch
         _:E -> E
