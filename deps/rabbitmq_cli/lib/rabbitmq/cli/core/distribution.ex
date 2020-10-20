@@ -102,11 +102,12 @@ defmodule RabbitMQ.CLI.Core.Distribution do
         throw(err)
 
       rmq_hostname ->
-        # https://hexdocs.pm/elixir/Enum.html#random/1
-        # If a range is passed into the function, this function will pick a
-        # random value between the range limits, without traversing the whole
-        # range (thus executing in constant time and constant memory).
-        id = Integer.mod(System.os_time(:second), Enum.random(1..1024))
+        # This limits the number of possible unique node names used by CLI tools to avoid
+        # the atom table from growing above the node limit. We must use reasonably unique IDs
+        # to allow for concurrent CLI tool execution.
+        #
+        # Enum.random/1 is constant time and space with range arguments https://hexdocs.pm/elixir/Enum.html#random/1.
+        id = Enum.random(1..1024)
         String.to_atom("rabbitmqcli-#{id}-#{rmq_hostname}")
     end
   end
