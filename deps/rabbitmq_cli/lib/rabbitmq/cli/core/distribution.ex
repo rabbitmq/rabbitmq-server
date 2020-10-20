@@ -98,7 +98,11 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   defp generate_cli_node_name(node_name_type) do
     case Helpers.get_rabbit_hostname(node_name_type) do
       {:error, _} = err -> throw(err)
-      rmq_hostname      -> String.to_atom("rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}")
+      rmq_hostname ->
+        # https://hexdocs.pm/elixir/Enum.html#random/1
+        # If a range is passed into the function, this function will pick a random value between the range limits, without traversing the whole range (thus executing in constant time and constant memory).
+        id = Integer.mod(System.os_time(:second), Enum.random(1..1024))
+        String.to_atom("rabbitmqcli-#{id}-#{rmq_hostname}")
     end
   end
 
