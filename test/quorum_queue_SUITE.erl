@@ -89,7 +89,6 @@ groups() ->
 all_tests() ->
     [
      declare_args,
-     declare_invalid_args,
      declare_invalid_properties,
      declare_server_named,
      start_queue,
@@ -337,47 +336,6 @@ declare_invalid_properties(Config) ->
          #'queue.declare'{queue     = LQ,
                           durable   = false,
                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})).
-
-declare_invalid_args(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    LQ = ?config(queue_name, Config),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-message-ttl">>, long, 2000}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-max-priority">>, long, 2000}])),
-
-    [?assertExit(
-        {{shutdown, {server_initiated_close, 406, _}}, _},
-        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                     {<<"x-overflow">>, longstr, XOverflow}]))
-     || XOverflow <- [<<"reject-publish-dlx">>]],
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-quorum-initial-group-size">>, longstr, <<"hop">>}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-quorum-initial-group-size">>, long, 0}])).
 
 declare_server_named(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

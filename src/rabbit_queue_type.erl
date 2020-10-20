@@ -213,9 +213,6 @@ is_enabled(Type) ->
     rabbit_types:channel_exit().
 declare(Q, Node) ->
     Mod = amqqueue:get_type(Q),
-    Capabilities = Mod:capabilities(),
-    ValidQueueArgs = maps:get(queue_arguments, Capabilities, []),
-    check_invalid_arguments(amqqueue:get_name(Q), amqqueue:get_arguments(Q), ValidQueueArgs),
     Mod:declare(Q, Node).
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -328,9 +325,6 @@ new(Q, State) when ?is_amqqueue(Q) ->
 consume(Q, Spec, State) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
-    Capabilities = Mod:capabilities(),
-    ValidConsumerArgs = maps:get(consumer_arguments, Capabilities, []),
-    check_invalid_arguments(amqqueue:get_name(Q), maps:get(args, Spec), ValidConsumerArgs),
     case Mod:consume(Q, Spec, State0) of
         {ok, CtxState, Actions} ->
             return_ok(set_ctx(Q, Ctx#ctx{state = CtxState}, State), Actions);
@@ -571,14 +565,3 @@ return_ok(State0, Actions0) ->
                   {S, [Act | A0]}
           end, {State0, []}, Actions0),
     {ok, State, lists:reverse(Actions)}.
-
-
-check_invalid_arguments(QueueName, Args, Keys) ->
-    [case lists:member(Arg, Keys) of
-         true -> ok;
-         false -> rabbit_misc:protocol_error(
-                    precondition_failed,
-                    "invalid arg '~s' for ~s",
-                    [Arg, rabbit_misc:rs(QueueName)])
-     end || {Arg, _, _} <- Args],
-    ok.
