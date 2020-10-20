@@ -59,7 +59,6 @@ all_tests() ->
     [
      declare_args,
      declare_max_age,
-     declare_invalid_args,
      declare_invalid_properties,
      declare_server_named,
      declare_queue,
@@ -225,46 +224,6 @@ declare_invalid_properties(Config) ->
          #'queue.declare'{queue     = Q,
                           durable   = false,
                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})).
-
-declare_invalid_args(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Q = ?config(queue_name, Config),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-expires">>, long, 2000}])),
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-message-ttl">>, long, 2000}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-max-priority">>, long, 2000}])),
-
-    [?assertExit(
-        {{shutdown, {server_initiated_close, 406, _}}, _},
-        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-                Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                     {<<"x-overflow">>, longstr, XOverflow}]))
-     || XOverflow <- [<<"reject-publish">>, <<"reject-publish-dlx">>]],
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-quorum-initial-group-size">>, longstr, <<"hop">>}])).
 
 declare_server_named(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
