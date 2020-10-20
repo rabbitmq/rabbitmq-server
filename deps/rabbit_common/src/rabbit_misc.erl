@@ -76,7 +76,6 @@
 -export([get_channel_operation_timeout/0]).
 -export([random/1]).
 -export([rpc_call/4, rpc_call/5]).
--export([report_default_thread_pool_size/0]).
 -export([get_gc_info/1]).
 -export([group_proplists_by/2]).
 
@@ -255,7 +254,6 @@
 -spec get_env(atom(), atom(), term())  -> term().
 -spec get_channel_operation_timeout() -> non_neg_integer().
 -spec random(non_neg_integer()) -> non_neg_integer().
--spec report_default_thread_pool_size() -> no_return().
 -spec get_gc_info(pid()) -> [any()].
 -spec group_proplists_by(fun((proplists:proplist()) -> any()),
                          list(proplists:proplist())) -> list(list(proplists:proplist())).
@@ -1400,19 +1398,6 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
 
 get_gc_info(Pid) ->
     rabbit_runtime:get_gc_info(Pid).
-
-guess_number_of_cpu_cores() ->
-    rabbit_runtime:guess_number_of_cpu_cores().
-
-%% Discussion of chosen values is at
-%% https://github.com/rabbitmq/rabbitmq-server/issues/151
-guess_default_thread_pool_size() ->
-    PoolSize = 16 * guess_number_of_cpu_cores(),
-    min(1024, max(64, PoolSize)).
-
-report_default_thread_pool_size() ->
-    io:format("~b", [guess_default_thread_pool_size()]),
-    erlang:halt(0).
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
