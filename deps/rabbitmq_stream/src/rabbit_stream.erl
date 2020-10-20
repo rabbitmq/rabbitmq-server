@@ -62,7 +62,7 @@ kill_connection(ConnectionName) ->
     lists:foreach(fun(ConnectionPid) ->
         ConnectionPid ! {infos, self()},
         receive
-            {ConnectionPid, #{<<"name">> := ConnectionNameBin}} ->
+            {ConnectionPid, #{<<"connection_name">> := ConnectionNameBin}} ->
                 exit(ConnectionPid, kill);
             {ConnectionPid, _ClientProperties} ->
                 ok
