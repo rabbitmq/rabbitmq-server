@@ -231,6 +231,12 @@ var HELP = {
     'queue-master-locator':
        'Set the queue into master location mode, determining the rule by which the queue master is located when declared on a cluster of nodes.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/ha.html">x-queue-master-locator</a>" argument.)',
 
+    'queue-leader-locator':
+       'Set the queue into leader location mode, determining the rule by which the queue leader is located when declared on a cluster of nodes. Valid values are <code>client-local</code>, <code>random</code> and <code>least-leaders</code>.',
+
+    'queue-initial-cluster-size':
+       'Set the queue initial cluster size.',
+
     'queue-type':
        'Set the queue type, determining the type of queue to use: raft-based high availability or classic queue. Valid values are <code>quorum</code> or <code>classic</code>. It defaults to <code>classic<code>. <br/>',
 
