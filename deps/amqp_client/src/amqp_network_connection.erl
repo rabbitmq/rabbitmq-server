@@ -119,7 +119,7 @@ do_connect({Addr, Family},
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
            SIF, State) ->
-    obtain(),
+    ok = obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
@@ -135,7 +135,7 @@ do_connect({Addr, Family},
            SIF, State) ->
     {ok, GlobalSslOpts} = application:get_env(amqp_client, ssl_options),
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
-    obtain(),
+    ok = obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
@@ -180,11 +180,20 @@ try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
 
 handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
     ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    network_handshake(AmqpParams, start_infrastructure(SIF, State0)).
+    case start_infrastructure(SIF, State0) of
+      {ok, ChMgr, State1} ->
+        network_handshake(AmqpParams, {ChMgr, State1});
+      {error, Reason} ->
+        {error, Reason}
+    end.
 
 start_infrastructure(SIF, State = #state{sock = Sock, name = Name}) ->
-    {ok, ChMgr, Writer} = SIF(Sock, Name),
-    {ChMgr, State#state{writer0 = Writer}}.
+    case SIF(Sock, Name) of
+      {ok, ChMgr, Writer} ->
+        {ok, ChMgr, State#state{writer0 = Writer}};
+      {error, Reason} ->
+        {error, Reason}
+    end.
 
 network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
                   {ChMgr, State0}) ->

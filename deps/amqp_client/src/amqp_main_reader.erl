@@ -33,7 +33,7 @@ start_link(Sock, Connection, ChMgr, AState, ConnName) ->
       ?MODULE, [Sock, Connection, ConnName, ChMgr, AState], []).
 
 post_init(Reader) ->
-    gen_server:call(Reader, post_init).
+    gen_server:call(Reader, post_init, ?CALL_TIMEOUT).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
