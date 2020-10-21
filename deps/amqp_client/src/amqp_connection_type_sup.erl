@@ -62,8 +62,12 @@ start_infrastructure_fun(Sup, Conn, network) ->
                    transient, ?WORKER_WAIT, worker, [amqp_main_reader]}),
             case rabbit_net:controlling_process(Sock, Reader) of
               ok ->
-                ok = amqp_main_reader:post_init(Reader),
-                {ok, ChMgr, Writer};
+                case amqp_main_reader:post_init(Reader) of
+                  ok ->
+                    {ok, ChMgr, Writer};
+                  {error, Reason} ->
+                    {error, Reason}
+                end;
               {error, Reason} ->
                 {error, Reason}
             end
