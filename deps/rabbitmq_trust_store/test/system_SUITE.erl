@@ -270,7 +270,10 @@ validation_failure_for_AMQP_client1(Config) ->
         %% When this exception reaches the connection process before the
         %% expected TLS error, amqp_connection:start() returns {error,
         %% closed} instead.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% Clean: server TLS/TCP.
@@ -384,7 +387,10 @@ validate_longer_chain1(Config) ->
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% When: a client connects and present `CertUntrusted` and `RootCA` and `CertInter`
@@ -405,7 +411,10 @@ validate_longer_chain1(Config) ->
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% Clean: client & server TLS/TCP
@@ -450,7 +459,10 @@ validate_chain_without_whitelisted1(Config) ->
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -531,7 +543,10 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% Clean: server TLS/TCP
@@ -631,7 +646,10 @@ whitelist_directory_DELTA1(Config) ->
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     {ok, Conn2} = amqp_connection:start(#amqp_params_network{host = Host,
@@ -691,7 +709,10 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
         ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        closed -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
     ok = amqp_connection:close(Con),
 
