@@ -1109,11 +1109,7 @@ leader_failover(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1).
 
 initial_cluster_size_one(Config) ->
-<<<<<<< HEAD
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-=======
-    [Server1, _Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
->>>>>>> master
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
@@ -1127,11 +1123,7 @@ initial_cluster_size_one(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
 
 initial_cluster_size_two(Config) ->
-<<<<<<< HEAD
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-=======
-    [Server1, _Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
->>>>>>> master
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
