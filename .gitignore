@@ -38,6 +38,7 @@
 !/deps/rabbitmq_shovel/
 !/deps/rabbitmq_shovel_management/
 !/deps/rabbitmq_stomp/
+!/deps/rabbitmq_stream/
 !/deps/rabbitmq_top/
 !/deps/rabbitmq_tracing/
 !/deps/rabbitmq_trust_store/
