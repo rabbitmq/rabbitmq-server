@@ -496,6 +496,8 @@ make_stream_conf(Node, Q) ->
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
     MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
+    LeaderLocator = queue_leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
+                                                            fun res_arg/2, Q)),
     Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
     Arguments = amqqueue:get_arguments(Q),
     Replicas = select_stream_nodes(get_initial_cluster_size(Arguments) - 1, Replicas0),
@@ -507,6 +509,7 @@ make_stream_conf(Node, Q) ->
     add_if_defined(max_segment_size, MaxSegmentSize, #{reference => QName,
                                                        name => Name,
                                                        retention => Retention,
+                                                       leader_locator_strategy => LeaderLocator,
                                                        leader_node => Node,
                                                        replica_nodes => Replicas,
                                                        event_formatter => Formatter,
@@ -562,6 +565,12 @@ max_age(Age) ->
 max_age(Age1, Age2) ->
     min(rabbit_amqqueue:check_max_age(Age1), rabbit_amqqueue:check_max_age(Age2)).
 
+queue_leader_locator(undefined) -> <<"client-local">>;
+queue_leader_locator(Val) -> Val.
+
+res_arg(PolVal, undefined) -> PolVal;
+res_arg(_, ArgVal) ->  ArgVal.
+    
 queue_name(#resource{virtual_host = VHost, name = Name}) ->
     Timestamp = erlang:integer_to_binary(erlang:system_time()),
     osiris_util:to_base64uri(erlang:binary_to_list(<<VHost/binary, "_", Name/binary, "_",
@@ -670,12 +679,13 @@ msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
     rabbit_msg_record:to_iodata(R).
 
 capabilities() ->
-    #{policies => [<<"max-length-bytes">>, <<"max-age">>, <<"max-segment-size">>],
+    #{policies => [<<"max-length-bytes">>, <<"max-age">>, <<"max-segment-size">>,
+                   <<"queue-leader-locator">>],
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-max-segment-size">>,
-                          <<"x-initial-cluster-size">>],
+                          <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>],
       server_named => false}.
 
