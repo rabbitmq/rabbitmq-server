@@ -205,6 +205,7 @@ begin_stream(#stream_client{readers = Readers0} = State,
     osiris:register_offset_listener(LocalPid, NextOffset),
     %% TODO: avoid double calls to the same process
     StartOffset = case Offset of
+                      first -> NextOffset;
                       last -> NextOffset;
                       next -> NextOffset;
                       _ -> Offset

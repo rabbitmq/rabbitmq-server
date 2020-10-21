@@ -12,6 +12,11 @@
 
 -compile(export_all).
 
+suite() ->
+    [
+     {timetrap, {minutes, 5}}
+    ].
+
 all() ->
     [
       {group, cluster_size_6}

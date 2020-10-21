@@ -452,8 +452,10 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
                           <<"x-max-in-memory-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-single-active-consumer">>,
-                          <<"x-queue-type">>],
-      consumer_arguments => [<<"x-cancel-on-ha-failover">>],
+                          <<"x-queue-type">>, <<"x-queue-master-locator">>],
+      consumer_arguments => [<<"x-cancel-on-ha-failover">>,
+                             <<"x-priority">>, <<"x-credit">>
+                            ],
       server_named => true}.
 
 reject_seq_no(SeqNo, U0) ->
