@@ -111,8 +111,8 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # possible to work with rabbitmq-public-umbrella.
 
 dep_accept = hex 0.3.5
-dep_cowboy = hex 2.6.1
-dep_cowlib = hex 2.7.0
+dep_cowboy = hex 2.8.0
+dep_cowlib = hex 2.9.1
 dep_jsx = hex 2.11.0
 dep_lager = hex 3.8.0
 dep_prometheus = hex 4.6.0
