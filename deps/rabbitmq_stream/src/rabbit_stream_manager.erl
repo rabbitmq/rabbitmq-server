@@ -76,6 +76,11 @@ stream_queue_arguments(ArgumentsAcc, #{<<"initial-cluster-size">> := Value} = Ar
         [{<<"x-initial-cluster-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
         maps:remove(<<"initial-cluster-size">>, Arguments)
     );
+stream_queue_arguments(ArgumentsAcc, #{<<"queue-leader-locator">> := Value} = Arguments) ->
+    stream_queue_arguments(
+        [{<<"x-queue-leader-locator">>, longstr, Value}] ++ ArgumentsAcc,
+        maps:remove(<<"queue-leader-locator">>, Arguments)
+    );
 stream_queue_arguments(ArgumentsAcc, _Arguments) ->
     ArgumentsAcc.
 
@@ -83,6 +88,15 @@ validate_stream_queue_arguments([]) ->
     ok;
 validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long, ClusterSize} | _]) when ClusterSize =< 0 ->
     error;
+validate_stream_queue_arguments([{<<"x-queue-leader-locator">>, longstr, Locator} | T]) ->
+    case lists:member(Locator, [<<"client-local">>,
+        <<"random">>,
+        <<"least-leaders">>]) of
+        true  ->
+            validate_stream_queue_arguments(T);
+        false ->
+            error
+    end;
 validate_stream_queue_arguments([_ | T]) ->
     validate_stream_queue_arguments(T).
 
