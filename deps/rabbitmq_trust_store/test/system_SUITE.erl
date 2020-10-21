@@ -19,6 +19,13 @@
          {handshake_failure,
           "TLS client: In state cipher received SERVER ALERT: Fatal - "
           "Handshake Failure\n"}}).
+-define(SERVER_REJECT_CONNECTION_ERLANG23,
+        {{socket_error,
+          {tls_alert,
+           {handshake_failure,
+            "TLS client: In state connection received SERVER ALERT: Fatal - "
+            "Handshake Failure\n"}}},
+         {expecting,'connection.start'}}).
 
 all() ->
     [
@@ -242,7 +249,7 @@ validation_failure_for_AMQP_client1(Config) ->
 
     %% Then: a client presenting a certificate rooted with another
     %% authority is REJECTED.
-    Error = amqp_connection:start(
+    {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
                                    ssl_options = [{verify, verify_none},
@@ -250,9 +257,10 @@ validation_failure_for_AMQP_client1(Config) ->
                                                   {key, KeyOther}]}),
     case Error of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% With Erlang 18.3, there is a regression which causes the SSL
         %% connection to crash with the following exception:
@@ -262,7 +270,10 @@ validation_failure_for_AMQP_client1(Config) ->
         %% When this exception reaches the connection process before the
         %% expected TLS error, amqp_connection:start() returns {error,
         %% closed} instead.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% Clean: server TLS/TCP.
@@ -361,7 +372,7 @@ validate_longer_chain1(Config) ->
 
     % %% When: a client connects and present `CertInter` and `RootCA` but NOT `CertTrusted`
     % %% Then: the connection is not succcessful
-    Error1 = amqp_connection:start(
+    {error, Error1} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
                                     ssl_options = [{cacerts, [RootCA]},
@@ -370,18 +381,22 @@ validate_longer_chain1(Config) ->
                                                    {verify, verify_none}]}),
     case Error1 of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% When: a client connects and present `CertUntrusted` and `RootCA` and `CertInter`
     %% Then: the connection is not succcessful
     %% TODO: for some reason this returns `bad certifice` rather than `unknown ca`
-    Error2 = amqp_connection:start(
+    {error, Error2} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
                                     ssl_options = [{cacerts, [RootCA, CertInter]},
@@ -390,12 +405,16 @@ validate_longer_chain1(Config) ->
                                                    {verify, verify_none}]}),
     case Error2 of
         %% Expected error from amqp_client.
-        {error, {tls_alert, "bad certificate"}} -> ok;
-        {error, {tls_alert, {bad_certificate, _}}} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        {tls_alert, "bad certificate"} -> ok;
+        {tls_alert, {bad_certificate, _}} -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% Clean: client & server TLS/TCP
@@ -425,7 +444,7 @@ validate_chain_without_whitelisted1(Config) ->
     %% When: Rabbit validates paths
     %% Then: a client presenting the non-whitelisted certificate `CertUntrusted` and `RootUntrusted`
     %% is rejected
-    Error = amqp_connection:start(
+    {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
                                    ssl_options = [{cacerts, [RootUntrusted]},
@@ -434,12 +453,16 @@ validate_chain_without_whitelisted1(Config) ->
                                                   {verify, verify_none}]}),
     case Error of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -506,7 +529,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
 
     %% Then: a client presenting the removed whitelisted
     %% certificate `CertOther` is denied.
-    Error = amqp_connection:start(
+    {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
                                    ssl_options = [{cert, CertOther},
@@ -514,12 +537,16 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
                                                   {verify, verify_none}]}),
     case Error of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     %% Clean: server TLS/TCP
@@ -605,7 +632,7 @@ whitelist_directory_DELTA1(Config) ->
                                                              ssl_options = [{cert, CertListed1},
                                                                             {key, KeyListed1},
                                                                             {verify, verify_none}]}),
-    Error = amqp_connection:start(
+    {error, Error} = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
                                    ssl_options = [{cert, CertRevoked},
@@ -613,12 +640,16 @@ whitelist_directory_DELTA1(Config) ->
                                                   {verify, verify_none}]}),
     case Error of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
     {ok, Conn2} = amqp_connection:start(#amqp_params_network{host = Host,
@@ -664,7 +695,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                                {key, KeyFirst},
                                                                {verify, verify_none}]}),
     %% verify the other certificate is not accepted
-    Error1 = amqp_connection:start(
+    {error, Error1} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
                                     ssl_options = [{cert, CertUpdated},
@@ -672,12 +703,16 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                    {verify, verify_none}]}),
     case Error1 of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression;
+
+        %% ssl:setopts/2 hangs indefinitely on occasion
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
     ok = amqp_connection:close(Con),
 
@@ -687,7 +722,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     wait_for_trust_store_refresh(),
 
     %% Then: the first certificate should be rejected
-    Error2 = amqp_connection:start(
+    {error, Error2} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
                                     ssl_options = [{cert, CertFirst},
@@ -700,12 +735,13 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                    {verify, verify_none}]}),
     case Error2 of
         %% Expected error from amqp_client.
-        {error, ?SERVER_REJECT_CLIENT} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_NEW} -> ok;
-        {error, ?SERVER_REJECT_CLIENT_ERLANG24} -> ok;
+        ?SERVER_REJECT_CLIENT -> ok;
+        ?SERVER_REJECT_CLIENT_NEW -> ok;
+        ?SERVER_REJECT_CLIENT_ERLANG24 -> ok;
+        ?SERVER_REJECT_CONNECTION_ERLANG23 -> ok;
 
         %% See previous comment in validation_failure_for_AMQP_client1/1.
-        {error, closed} -> expected_erlang_18_ssl_regression
+        closed -> expected_erlang_18_ssl_regression
     end,
 
     %% And: the updated certificate should allow the user to connect
