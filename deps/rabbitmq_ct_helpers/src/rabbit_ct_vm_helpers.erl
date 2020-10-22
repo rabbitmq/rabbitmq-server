@@ -634,6 +634,7 @@ do_poll_vms(Config, TRef) ->
     Cmd = [
            Terraform,
            "apply",
+           "-auto-approve=true",
            {"-state=~s", [TfState]},
            {"-var=uuid=~s", [Uuid]},
            {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]},
