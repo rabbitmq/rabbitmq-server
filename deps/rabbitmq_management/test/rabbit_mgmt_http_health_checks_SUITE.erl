@@ -178,7 +178,7 @@ is_quorum_critical_single_node_test(Config) ->
     Check0 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
     ?assertEqual(<<"single node cluster">>, maps:get(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
-    
+
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
@@ -197,7 +197,7 @@ is_quorum_critical_test(Config) ->
     Check0 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
     ?assertEqual(false, maps:is_key(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
-    
+
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
@@ -209,7 +209,7 @@ is_quorum_critical_test(Config) ->
                                                         arguments = Args})),
     Check1 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
     ?assertEqual(false, maps:is_key(reason, Check1)),
-    
+
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
 
@@ -225,7 +225,7 @@ is_mirror_sync_critical_single_node_test(Config) ->
     Check0 = http_get(Config, "/health/checks/node-is-mirror-sync-critical", ?OK),
     ?assertEqual(<<"single node cluster">>, maps:get(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
-    
+
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"ha">>, <<"is_mirror_sync.*">>, <<"queues">>,
            [{<<"ha-mode">>, <<"all">>}]),
@@ -247,7 +247,7 @@ is_mirror_sync_critical_test(Config) ->
     Check0 = http_get(Config, Path, ?OK),
     ?assertEqual(false, maps:is_key(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
-    
+
     ok = rabbit_ct_broker_helpers:set_policy(
             Config, 0, <<"ha">>, <<"is_mirror_sync.*">>, <<"queues">>,
             [{<<"ha-mode">>, <<"all">>}]),
@@ -289,14 +289,14 @@ virtual_hosts_test(Config) ->
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
     rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost1),
-    
+
     Body1 = http_get_failed(Config, Path),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body1)),
     ?assertEqual(true, maps:is_key(<<"reason">>, Body1)),
     ?assertEqual([VHost1], maps:get(<<"virtual-hosts">>, Body1)),
 
     rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost2),
-    
+
     Body2 = http_get_failed(Config, Path),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body2)),
     ?assertEqual(true, maps:is_key(<<"reason">>, Body2)),
@@ -340,7 +340,7 @@ port_listener_test(Config) ->
     Path = fun(Port) ->
                    lists:flatten(io_lib:format("/health/checks/port-listener/~p", [Port]))
            end,
-    
+
     Check0 = http_get(Config, Path(AMQP), ?OK),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
