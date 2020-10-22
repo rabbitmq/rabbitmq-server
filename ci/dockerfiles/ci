@@ -37,6 +37,6 @@ RUN chown --recursive ${UNPRIVILEGED_USER} /workspace
 USER ${UNPRIVILEGED_USER}
 
 RUN BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
-    buildevents cmd ${GITHUB_RUN_ID} prepare deps -- \
+    buildevents cmd ${GITHUB_RUN_ID} ${GITHUB_RUN_ID}-prepare deps -- \
             make deps test-deps \
                 RABBITMQ_VERSION=${RABBITMQ_VERSION}
