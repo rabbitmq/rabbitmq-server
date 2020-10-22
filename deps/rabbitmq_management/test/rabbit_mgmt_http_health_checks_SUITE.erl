@@ -13,14 +13,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
--import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
-                                   open_unmanaged_connection/1]).
--import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
-                                assert_keys/2, assert_no_keys/2,
-                                http_get/2, http_get/3, http_get/5,
-                                req/4, auth_header/2]).
-
--import(rabbit_misc, [pget/2]).
+-import(rabbit_mgmt_test_util, [http_get/3,
+                                req/4,
+                                auth_header/2]).
 
 -define(COLLECT_INTERVAL, 1000).
 -define(PATH_PREFIX, "/custom-prefix").
