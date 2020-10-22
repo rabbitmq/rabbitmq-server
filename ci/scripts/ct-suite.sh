@@ -14,7 +14,7 @@ catch() {
     fi
 }
 
-buildevents cmd ${GITHUB_RUN_ID} ${project} ct-${CT_SUITE} -- \
+buildevents cmd ${GITHUB_RUN_ID} ${GITHUB_RUN_ID}-${project} ct-${CT_SUITE} -- \
             make ct-${CT_SUITE} \
                  FULL= \
                  FAIL_FAST=1 \

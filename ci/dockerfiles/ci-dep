@@ -8,11 +8,11 @@ ARG project
 WORKDIR /workspace/rabbitmq/deps/${project}
 
 RUN BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
-    buildevents cmd ${GITHUB_RUN_ID} ${project} test-build -- \
+    buildevents cmd ${GITHUB_RUN_ID} ${GITHUB_RUN_ID}-${project} test-build -- \
             make test-build
 
 RUN BUILDEVENT_APIKEY=${BUILDEVENT_APIKEY} \
-    buildevents cmd ${GITHUB_RUN_ID} ${project} tests -- \
+    buildevents cmd ${GITHUB_RUN_ID} ${GITHUB_RUN_ID}-${project} tests -- \
             make eunit \
                  FULL= \
                  FAIL_FAST=1 \
