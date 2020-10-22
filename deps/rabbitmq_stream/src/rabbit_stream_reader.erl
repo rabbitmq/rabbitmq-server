@@ -237,9 +237,10 @@ close(Transport, S) ->
 listen_loop_post_auth(Transport, #stream_connection{socket = S,
     stream_subscriptions = StreamSubscriptions, credits = Credits,
     heartbeater = Heartbeater, monitors = Monitors, client_properties = ClientProperties,
-    send_file_oct = SendFileOct} = Connection,
+    send_file_oct = SendFileOct} = Connection0,
     #stream_connection_state{consumers = Consumers, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
+    Connection = ensure_stats_timer(Connection0),
     {OK, Closed, Error} = Transport:messages(),
     receive
         {OK, S, Data} ->
