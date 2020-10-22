@@ -34,7 +34,7 @@ start_link(Sock, Connection, ChMgr, AState, ConnName) ->
 
 post_init(Reader) ->
     try
-      gen_server:call(Reader, post_init, ?CALL_TIMEOUT)
+      gen_server:call(Reader, post_init)
     catch
       exit:{timeout, Timeout} ->
         {error, {timeout, Timeout}}
