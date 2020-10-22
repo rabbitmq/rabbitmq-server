@@ -19,6 +19,9 @@
          declare_queue/2, delete_queue/2,
          federation_links_in_vhost/3]).
 
+-define(INITIAL_WAIT, 6000).
+-define(EXPECT_FEDERATION_TIMEOUT, 30000).
+
 all() ->
     [
       {group, without_disambiguate},
@@ -142,11 +145,10 @@ multiple_upstreams_pattern(Config) ->
 
     set_policy_pattern(Config, 0, <<"pattern">>, <<"^pattern\.">>, <<"local\\d+x">>),
 
-    Timeout = 60000,
     with_ch(Config,
       fun (Ch) ->
-              expect_federation(Ch, <<"upstream">>, <<"pattern.downstream">>, Timeout),
-              expect_federation(Ch, <<"upstream2">>, <<"pattern.downstream">>, Timeout)
+              expect_federation(Ch, <<"upstream">>, <<"pattern.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream2">>, <<"pattern.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, [q(<<"upstream">>),
             q(<<"upstream2">>),
             q(<<"pattern.downstream">>)]),
@@ -158,17 +160,17 @@ multiple_upstreams_pattern(Config) ->
 multiple_downstreams(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(2000),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, 3000),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, 3000)
+              timer:sleep(?INITIAL_WAIT),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream() ++ [q(<<"fed.downstream2">>)]).
 
 bidirectional(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(2000),
-              publish_expect(Ch, <<>>, <<"one">>, <<"one">>, <<"first one">>, 3000),
-              publish_expect(Ch, <<>>, <<"two">>, <<"two">>, <<"first two">>, 3000),
+              timer:sleep(?INITIAL_WAIT),
+              publish_expect(Ch, <<>>, <<"one">>, <<"one">>, <<"first one">>, ?EXPECT_FEDERATION_TIMEOUT),
+              publish_expect(Ch, <<>>, <<"two">>, <<"two">>, <<"first two">>, ?EXPECT_FEDERATION_TIMEOUT),
               Seq = lists:seq(1, 100),
               [publish(Ch, <<>>, <<"one">>, <<"bulk">>) || _ <- Seq],
               [publish(Ch, <<>>, <<"two">>, <<"bulk">>) || _ <- Seq],
@@ -182,8 +184,8 @@ bidirectional(Config) ->
 dynamic_reconfiguration(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(2000),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, 3000),
+              timer:sleep(?INITIAL_WAIT),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
 
               %% Test that clearing connections works
               clear_upstream(Config, 0, <<"localhost">>),
@@ -202,9 +204,9 @@ dynamic_reconfiguration(Config) ->
 federate_unfederate(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(2000),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, 3000),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, 3000),
+              timer:sleep(?INITIAL_WAIT),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, ?EXPECT_FEDERATION_TIMEOUT),
 
               %% clear the policy
               rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"fed">>),
@@ -221,11 +223,11 @@ dynamic_plugin_stop_start(Config) ->
     DownQ2 = <<"fed.downstream2">>,
     with_ch(Config,
       fun (Ch) ->
-          timer:sleep(2000),
+          timer:sleep(?INITIAL_WAIT),
           UpQ = <<"upstream">>,
           DownQ1 = <<"fed.downstream">>,
-          expect_federation(Ch, UpQ, DownQ1, 3000),
-          expect_federation(Ch, UpQ, DownQ2, 3000),
+          expect_federation(Ch, UpQ, DownQ1, ?EXPECT_FEDERATION_TIMEOUT),
+          expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
           %% Disable the plugin, the link disappears
           ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_federation"),
