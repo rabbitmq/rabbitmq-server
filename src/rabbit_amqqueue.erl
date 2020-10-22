@@ -783,7 +783,8 @@ declare_args() ->
      {<<"x-quorum-initial-group-size">>,     fun check_initial_cluster_size_arg/2},
      {<<"x-max-age">>,                 fun check_max_age_arg/2},
      {<<"x-max-segment-size">>,        fun check_non_neg_int_arg/2},
-     {<<"x-initial-cluster-size">>,    fun check_initial_cluster_size_arg/2}].
+     {<<"x-initial-cluster-size">>,    fun check_initial_cluster_size_arg/2},
+     {<<"x-queue-leader-locator">>,    fun check_queue_leader_locator_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -900,6 +901,16 @@ check_overflow({longstr, Val}, _Args) ->
         false -> {error, invalid_overflow}
     end;
 check_overflow({Type,    _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
+
+check_queue_leader_locator_arg({longstr, Val}, _Args) ->
+    case lists:member(Val, [<<"client-local">>,
+                            <<"random">>,
+                            <<"least-leaders">>]) of
+        true  -> ok;
+        false -> {error, invalid_queue_locator_arg}
+    end;
+check_queue_leader_locator_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 check_queue_mode({longstr, Val}, _Args) ->

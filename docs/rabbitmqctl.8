@@ -1429,18 +1429,6 @@ is located on the current node.
 .Sp
 .Dl rabbitmqctl list_unresponsive_queues --local name
 .\" ------------------------------------------------------------------
-.It Cm node_health_check
-.Pp
-DEPRECATED. Performs intrusive, opinionated health checks on a fully booted node.
-To learn more, see the
-.Lk https://www.rabbitmq.com/monitoring.html#health-checks "Health Checks documentation"
-.Pp
-Verifies the RabbitMQ application is running and alarms are not set,
-then checks that every queue and channel on the node can emit basic stats.
-.sp
-Example:
-.Dl rabbitmqctl node_health_check -n rabbit@hostname
-.\" ------------------------------------------------------------------
 .It Cm ping
 .Pp
 Checks that the node OS process is up, registered with EPMD and CLI tools can authenticate with it

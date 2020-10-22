@@ -41,6 +41,7 @@ register() ->
                           {policy_validator, <<"delivery-limit">>},
                           {policy_validator, <<"max-age">>},
                           {policy_validator, <<"max-segment-size">>},
+                          {policy_validator, <<"queue-leader-locator">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -146,6 +147,15 @@ validate_policy0(<<"max-age">>, Value) ->
         _ ->
             ok
     end;
+
+validate_policy0(<<"queue-leader-locator">>, <<"client-local">>) ->
+    ok;
+validate_policy0(<<"queue-leader-locator">>, <<"random">>) ->
+    ok;
+validate_policy0(<<"queue-leader-locator">>, <<"least-leaders">>) ->
+    ok;
+validate_policy0(<<"queue-leader-locator">>, Value) ->
+    {error, "~p is not a valid queue leader locator value", [Value]};
 
 validate_policy0(<<"max-segment-size">>, Value)
   when is_integer(Value), Value >= 0 ->

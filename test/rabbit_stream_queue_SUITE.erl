@@ -48,7 +48,11 @@ groups() ->
            consume_from_replica,
            leader_failover,
            initial_cluster_size_one,
-           initial_cluster_size_two]},
+           initial_cluster_size_two,
+           leader_locator_client_local,
+           leader_locator_random,
+           leader_locator_least_leaders,
+           leader_locator_policy]},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
      {unclustered_size_3_3, [], [grow_coordinator_cluster]},
@@ -59,7 +63,6 @@ all_tests() ->
     [
      declare_args,
      declare_max_age,
-     declare_invalid_args,
      declare_invalid_properties,
      declare_server_named,
      declare_queue,
@@ -225,46 +228,6 @@ declare_invalid_properties(Config) ->
          #'queue.declare'{queue     = Q,
                           durable   = false,
                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})).
-
-declare_invalid_args(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Q = ?config(queue_name, Config),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-expires">>, long, 2000}])),
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-message-ttl">>, long, 2000}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-max-priority">>, long, 2000}])),
-
-    [?assertExit(
-        {{shutdown, {server_initiated_close, 406, _}}, _},
-        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-                Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                     {<<"x-overflow">>, longstr, XOverflow}]))
-     || XOverflow <- [<<"reject-publish">>, <<"reject-publish-dlx">>]],
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])),
-
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                    {<<"x-quorum-initial-group-size">>, longstr, <<"hop">>}])).
 
 declare_server_named(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -1146,7 +1109,7 @@ leader_failover(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1).
 
 initial_cluster_size_one(Config) ->
-    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
@@ -1160,7 +1123,7 @@ initial_cluster_size_one(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
 
 initial_cluster_size_two(Config) ->
-    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
@@ -1180,6 +1143,184 @@ initial_cluster_size_two(Config) ->
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
+
+leader_locator_client_local(Config) ->
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+
+    [Info] = lists:filter(
+               fun(Props) ->
+                       lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+               end,
+               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                            info_all, [<<"/">>, [name, leader]])),
+    ?assertEqual(Server1, proplists:get_value(leader, Info)),
+
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
+    %% Try second node
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+
+    [Info2] = lists:filter(
+                fun(Props) ->
+                        lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+                end,
+                rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                             info_all, [<<"/">>, [name, leader]])),
+    ?assertEqual(Server2, proplists:get_value(leader, Info2)),
+
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = Q})),
+
+    %% Try third node
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server3),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                  {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+
+    [Info3] = lists:filter(
+                fun(Props) ->
+                        lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+                end,
+                rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                             info_all, [<<"/">>, [name, leader]])),
+    ?assertEqual(Server3, proplists:get_value(leader, Info3)),
+
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch3, #'queue.delete'{queue = Q})).
+
+leader_locator_random(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
+
+    [Info] = lists:filter(
+               fun(Props) ->
+                       lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+               end,
+               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                            info_all, [<<"/">>, [name, leader]])),
+    Leader = proplists:get_value(leader, Info),
+
+    ?assertMatch(#'queue.delete_ok'{},
+      amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
+    repeat_until(
+      fun() ->
+              ?assertMatch(#'queue.delete_ok'{},
+                           amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
+              ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                           declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
+
+              [Info2] = lists:filter(
+                          fun(Props) ->
+                                  lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+                          end,
+                          rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                       info_all, [<<"/">>, [name, leader]])),
+              Leader2 = proplists:get_value(leader, Info2),
+
+              Leader =/= Leader2
+      end, 10).
+
+leader_locator_least_leaders(Config) ->
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0},
+                 declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                  {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                  {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-queue-leader-locator">>, longstr, <<"least-leaders">>}])),
+
+    [Info] = lists:filter(
+               fun(Props) ->
+                       lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+               end,
+               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                            info_all, [<<"/">>, [name, leader]])),
+    Leader = proplists:get_value(leader, Info),
+
+    ?assert(lists:member(Leader, [Server2, Server3])).
+
+leader_locator_policy(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"leader-locator">>, <<"leader_locator_.*">>, <<"queues">>,
+           [{<<"queue-leader-locator">>, <<"random">>}]),
+
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    [Info] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                          info_all, [<<"/">>, [policy, operator_policy,
+                                                               effective_policy_definition,
+                                                               name, leader]]),
+
+    ?assertEqual(<<"leader-locator">>, proplists:get_value(policy, Info)),
+    ?assertEqual('', proplists:get_value(operator_policy, Info)),
+    ?assertEqual([{<<"queue-leader-locator">>, <<"random">>}],
+                 proplists:get_value(effective_policy_definition, Info)),
+
+    Leader = proplists:get_value(leader, Info),
+
+    repeat_until(
+      fun() ->
+              ?assertMatch(#'queue.delete_ok'{},
+                           amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
+              ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                           declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+              [Info2] = lists:filter(
+                          fun(Props) ->
+                                  lists:member({name, rabbit_misc:r(<<"/">>, queue, Q)}, Props)
+                          end,
+                          rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                       info_all, [<<"/">>, [name, leader]])),
+              Leader2 = proplists:get_value(leader, Info2),
+              Leader =/= Leader2
+      end, 10),
+
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"leader-locator">>).
+
+repeat_until(_, 0) ->
+    ct:fail("Condition did not materialize in the expected amount of attempts");
+repeat_until(Fun, N) ->
+    case Fun() of
+        true -> ok;
+        false -> repeat_until(Fun, N - 1)
+    end.
 
 invalid_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

@@ -23,25 +23,9 @@ if [ "x" = "x$ERL_MAX_ETS_TABLES" ]; then
     ERL_MAX_ETS_TABLES=50000
 fi
 
-# Lazy initialization of threed pool size - if it wasn't set
-# explicitly. This parameter is only needed when server is starting,
-# so it makes no sense to do this calculations in rabbitmq-env or
-# rabbitmq-defaults scripts.
-ensure_thread_pool_size() {
-    if [ -z "${RABBITMQ_IO_THREAD_POOL_SIZE}" ]; then
-        RABBITMQ_IO_THREAD_POOL_SIZE=$(
-            erl \
-                -noinput \
-                -boot "${CLEAN_BOOT_FILE}" \
-                -s rabbit_misc report_default_thread_pool_size
-        )
-    fi
-}
-
 check_start_params() {
     check_not_empty RABBITMQ_BOOT_MODULE
     check_not_empty SASL_BOOT_FILE
-    check_not_empty RABBITMQ_IO_THREAD_POOL_SIZE
 }
 
 check_not_empty() {
@@ -59,7 +43,6 @@ start_rabbitmq_server() {
     set -e
 
     _rmq_env_set_erl_libs
-    ensure_thread_pool_size
 
     RABBITMQ_START_RABBIT=
     [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
@@ -92,7 +75,6 @@ start_rabbitmq_server() {
         ${RABBITMQ_START_RABBIT} \
         -boot "${SASL_BOOT_FILE}" \
         +W w \
-        +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
         ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
         ${RABBITMQ_SERVER_ERL_ARGS} \
         ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
