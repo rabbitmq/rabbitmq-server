@@ -535,8 +535,8 @@ i(master_pid, #state{q = Q}) when ?is_amqqueue(Q) ->
     amqqueue:get_pid(Q);
 i(is_synchronised, #state{depth_delta = DD}) ->
     DD =:= 0;
-i(Item, _State) ->
-    throw({bad_argument, Item}).
+i(_, _) ->
+    ''.
 
 bq_init(BQ, Q, Recover) ->
     Self = self(),

@@ -48,6 +48,10 @@
 -include("rabbit.hrl").
 -include("amqqueue.hrl").
 
+-define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
+                    messages, messages_ready, messages_unacknowledged, committed_offset,
+                    policy, operator_policy, effective_policy_definition, type]).
+
 -type appender_seq() :: non_neg_integer().
 
 -record(stream, {name :: rabbit_types:r('queue'),
@@ -342,6 +346,8 @@ settle(_, _, _, #stream_client{name = Name}) ->
       "basic.nack and basic.reject not supported by stream queues ~s",
       [rabbit_misc:rs(Name)]).
 
+info(Q, all_items) ->
+    info(Q, ?INFO_KEYS);
 info(Q, Items) ->
     lists:foldr(fun(Item, Acc) ->
                         [{Item, i(Item, Q)} | Acc]
@@ -409,7 +415,9 @@ i(effective_policy_definition, Q) ->
         Def       -> Def
     end;
 i(type, _) ->
-    stream.
+    stream;
+i(_, _) ->
+    ''.
 
 init(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
