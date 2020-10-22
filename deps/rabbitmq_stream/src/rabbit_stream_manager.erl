@@ -66,6 +66,11 @@ stream_queue_arguments(ArgumentsAcc, #{<<"max-length-bytes">> := Value} = Argume
         [{<<"x-max-length-bytes">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
         maps:remove(<<"max-length-bytes">>, Arguments)
     );
+stream_queue_arguments(ArgumentsAcc, #{<<"max-age">> := Value} = Arguments) ->
+    stream_queue_arguments(
+        [{<<"x-max-age">>, longstr, Value}] ++ ArgumentsAcc,
+        maps:remove(<<"max-age">>, Arguments)
+    );
 stream_queue_arguments(ArgumentsAcc, #{<<"max-segment-size">> := Value} = Arguments) ->
     stream_queue_arguments(
         [{<<"x-max-segment-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
