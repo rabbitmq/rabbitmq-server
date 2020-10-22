@@ -30,6 +30,7 @@ groups() ->
                 consume_from_empty_queue,
                 consume_and_autoack,
                 subscribe,
+                subscribe_consumers,
                 subscribe_with_autoack,
                 consume_and_ack,
                 consume_and_multiple_ack,
@@ -57,7 +58,9 @@ groups() ->
                                                  trigger_message_store_compaction]},
        {quorum_queue, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
-       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]}
+       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
+       {stream_queue, [parallel], [publish,
+                                   subscribe]}
       ]}
     ].
 
@@ -81,6 +84,7 @@ init_per_group(classic_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+       {consumer_args, []},
        {queue_durable, true}]);
 init_per_group(quorum_queue, Config) ->
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
@@ -88,6 +92,7 @@ init_per_group(quorum_queue, Config) ->
             rabbit_ct_helpers:set_config(
               Config,
               [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+               {consumer_args, []},
                {queue_durable, true}]);
         Skip ->
             Skip
@@ -99,6 +104,7 @@ init_per_group(quorum_queue_in_memory_limit, Config) ->
               Config,
               [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                              {<<"x-max-in-memory-length">>, long, 1}]},
+               {consumer_args, []},
                {queue_durable, true}]);
         Skip ->
             Skip
@@ -110,6 +116,7 @@ init_per_group(quorum_queue_in_memory_bytes, Config) ->
               Config,
               [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                              {<<"x-max-in-memory-bytes">>, long, 1}]},
+               {consumer_args, []},
                {queue_durable, true}]);
         Skip ->
             Skip
@@ -120,6 +127,7 @@ init_per_group(mirrored_queue, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{is_mirrored, true},
                          {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+                         {consumer_args, []},
                          {queue_durable, true}]),
     rabbit_ct_helpers:run_steps(Config1, []);
 init_per_group(stream_queue, Config) ->
@@ -128,6 +136,7 @@ init_per_group(stream_queue, Config) ->
             rabbit_ct_helpers:set_config(
               Config,
               [{queue_args, [{<<"x-queue-type">>, longstr, <<"stream">>}]},
+               {consumer_args, [{<<"x-stream-offset">>, long, 0}]},
                {queue_durable, true}]);
         Skip ->
             Skip
@@ -221,20 +230,35 @@ consume_and_autoack(Config) ->
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]).
 
 subscribe(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
 
+    %% Let's set consumer prefetch so it works with stream queues
     ?assertMatch(#'basic.qos_ok'{},
                  amqp_channel:call(Ch, #'basic.qos'{global = false,
                                                     prefetch_count = 10})),
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
 
-    subscribe(Ch, QName, false),
+    CArgs = ?config(consumer_args, Config),
+    subscribe(Ch, QName, false, CArgs),
     receive_basic_deliver(false),
-    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]).
+
+subscribe_consumers(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+
+    CArgs = ?config(consumer_args, Config),
+    ?assertMatch(#'basic.qos_ok'{},
+                 amqp_channel:call(Ch, #'basic.qos'{global = false,
+                                                    prefetch_count = 10})),
+    subscribe(Ch, QName, false, CArgs),
 
     %% validate we can retrieve the consumers
     Consumers = rpc:call(Server, rabbit_amqqueue, consumers_all, [<<"/">>]),
@@ -248,17 +272,17 @@ subscribe(Config) ->
     ?assertEqual(10, proplists:get_value(prefetch_count, Consumer)),
     ?assertEqual([], proplists:get_value(arguments, Consumer)),
 
-    rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]).
+    rabbit_ct_client_helpers:close_channel(Ch).    
 
 subscribe_with_autoack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>, <<"msg2">>]),
     wait_for_messages(Config, [[QName, <<"2">>, <<"2">>, <<"0">>]]),
-    subscribe(Ch, QName, true),
+    subscribe(Ch, QName, true, CArgs),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
@@ -297,11 +321,12 @@ consume_and_multiple_ack(Config) ->
 subscribe_and_ack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    subscribe(Ch, QName, false, CArgs),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
             wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
@@ -314,11 +339,12 @@ subscribe_and_ack(Config) ->
 subscribe_and_multiple_ack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>, <<"msg2">>, <<"msg3">>]),
     wait_for_messages(Config, [[QName, <<"3">>, <<"3">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    subscribe(Ch, QName, false, CArgs),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
@@ -355,11 +381,12 @@ trigger_message_store_compaction(Config) ->
 subscribe_and_requeue_multiple_nack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>, <<"msg2">>, <<"msg3">>]),
     wait_for_messages(Config, [[QName, <<"3">>, <<"3">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    subscribe(Ch, QName, false, CArgs),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
@@ -450,11 +477,12 @@ consume_and_multiple_nack(Config) ->
 subscribe_and_requeue_nack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    subscribe(Ch, QName, false, CArgs),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
@@ -476,11 +504,12 @@ subscribe_and_requeue_nack(Config) ->
 subscribe_and_nack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    subscribe(Ch, QName, false, CArgs),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
@@ -496,11 +525,12 @@ subscribe_and_nack(Config) ->
 subscribe_and_multiple_nack(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>, <<"msg2">>, <<"msg3">>]),
     wait_for_messages(Config, [[QName, <<"3">>, <<"3">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    subscribe(Ch, QName, false, CArgs),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
@@ -520,17 +550,14 @@ basic_cancel(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
+    CArgs = ?config(consumer_args, Config),
     declare_queue(Ch, Config, QName),
 
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     CTag = atom_to_binary(?FUNCTION_NAME, utf8),
 
-    %% Let's set consumer prefetch so it works with stream queues
-    ?assertMatch(#'basic.qos_ok'{},
-                 amqp_channel:call(Ch, #'basic.qos'{global = false,
-                                                    prefetch_count = 1})),
-    subscribe(Ch, QName, false, CTag),
+    subscribe(Ch, QName, false, CTag, CArgs),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
             wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
@@ -669,13 +696,14 @@ consume_empty(Ch, QName) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = QName})).
 
-subscribe(Ch, Queue, NoAck) ->
-    subscribe(Ch, Queue, NoAck, <<"ctag">>).
+subscribe(Ch, Queue, NoAck, CArgs) ->
+    subscribe(Ch, Queue, NoAck, <<"ctag">>, CArgs).
 
-subscribe(Ch, Queue, NoAck, Ctag) ->
+subscribe(Ch, Queue, NoAck, Ctag, CArgs) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
                                                 no_ack = NoAck,
-                                                consumer_tag = Ctag},
+                                                consumer_tag = Ctag,
+                                                arguments = CArgs},
                            self()),
     receive
         #'basic.consume_ok'{consumer_tag = Ctag} ->
