@@ -201,7 +201,7 @@ listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, Sta
                     ),
                     rabbit_core_metrics:connection_created(self(), Infos),
                     rabbit_event:notify(connection_created, Infos),
-                    rabbit_networking:register_external_connection(self()),
+                    rabbit_networking:register_non_amqp_connection(self()),
                     listen_loop_post_auth(Transport, Connection3, State1, Configuration);
                 failure ->
                     close(Transport, S);
@@ -245,7 +245,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             case Step of
                 closing ->
                     close(Transport, S),
-                    rabbit_networking:unregister_external_connection(self()),
+                    rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
                 close_sent ->
                     rabbit_log:debug("Transitioned to close_sent ~n"),
@@ -401,19 +401,19 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             gen_server:reply(From, ok),
             rabbit_log:info("Forcing stream connection ~p closing: ~p~n", [self(), Explanation]),
             demonitor_all_streams(Connection),
-            rabbit_networking:unregister_external_connection(self()),
+            rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
             close(Transport, S),
             ok;
         {Closed, S} ->
             demonitor_all_streams(Connection),
-            rabbit_networking:unregister_external_connection(self()),
+            rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
             rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
             demonitor_all_streams(Connection),
-            rabbit_networking:unregister_external_connection(self()),
+            rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
             rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]);
         M ->
@@ -435,21 +435,21 @@ listen_loop_post_close(Transport, #stream_connection{socket = S} = Connection, S
                 closing_done ->
                     rabbit_log:debug("Received close confirmation from client"),
                     close(Transport, S),
-                    rabbit_networking:unregister_external_connection(self()),
+                    rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
                 _ ->
                     Transport:setopts(S, [{active, once}]),
                     listen_loop_post_close(Transport, Connection1, State1, Configuration)
             end;
         {Closed, S} ->
-            rabbit_networking:unregister_external_connection(self()),
+            rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
             rabbit_log:info("Socket ~w closed [~w]~n", [S, self()]),
             ok;
         {Error, S, Reason} ->
             rabbit_log:info("Socket error ~p [~w]~n", [Reason, S, self()]),
             close(Transport, S),
-            rabbit_networking:unregister_external_connection(self()),
+            rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State);
         M ->
             rabbit_log:warning("Ignored message on closing ~p~n", [M])
