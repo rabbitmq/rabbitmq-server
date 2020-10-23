@@ -38,7 +38,6 @@ Requires: erlang-sasl >= %{erlang_minver}
 Requires: erlang-ssl >= %{erlang_minver}
 Requires: erlang-syntax_tools >= %{erlang_minver}
 Requires: erlang-xmerl >= %{erlang_minver}
-Requires: epmd >= %{erlang_minver}
 %else
 Requires: erlang >= %{erlang_minver}
 %endif
