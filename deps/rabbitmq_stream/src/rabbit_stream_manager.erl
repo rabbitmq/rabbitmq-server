@@ -95,8 +95,8 @@ validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long, ClusterSiz
     error;
 validate_stream_queue_arguments([{<<"x-queue-leader-locator">>, longstr, Locator} | T]) ->
     case lists:member(Locator, [<<"client-local">>,
-        <<"random">>,
-        <<"least-leaders">>]) of
+                                <<"random">>,
+                                <<"least-leaders">>]) of
         true  ->
             validate_stream_queue_arguments(T);
         false ->
