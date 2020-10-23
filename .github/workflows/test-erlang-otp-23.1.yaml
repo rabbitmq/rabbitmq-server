@@ -138,7 +138,7 @@ jobs:
           export BASE_RMQ_REF=master
           export ERLANG_VERSION=23.1
           export ELIXIR_VERSION=1.10.4
-          make ct-backing_queue t=variable_queue_default:variable_queue_fold \
+          make ct-backing_queue \
             base_rmq_ref=master \
             current_rmq_ref=$branch_or_tag_name \
             FULL= \
