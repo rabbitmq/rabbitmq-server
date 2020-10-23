@@ -1,42 +1,45 @@
 # RabbitMQ Certificate Trust Store
 
-This plugin provides support for TLS (x509) certificate whitelisting.
-All plugins which use the global TLS options will be configured with
-the same whitelist.
+This plugin provides an alternative [TLS (x.509) certificate verification](https://www.rabbitmq.com/ssl.html#peer-verification)
+strategy. Instead of the traditional PKI chain traversal mechanism,
+this strategy simply checks the leaf certificate presented by a client
+against an approved ("whitelisted") set of certificates.
+
 
 ## Rationale
 
-RabbitMQ can be configured to accepted self-signed certificates
-through various TLS socket options, namely the `ca_certs` and
-`partial_chain` properties. However, this configuration is largely static.
-There is no convenient means with which to change it in realtime, that
-is, without making configuration changes to TLS listening sockets.
+When RabbitMQ is configured to use TLS for client connections, by default it will
+use the standard [PKI certificate verification](https://www.rabbitmq.com/ssl.html#peer-verification) process.
+What certificates are trusted is ultimately controlled by adjusting the set of trusted CA certificates.
 
-This plugin maintains a list of trusted .PEM formatted TLS (x509) certificates,
-refreshing at configurable intervals, or when `rabbitmqctl
-eval 'rabbit_trust_store:refresh().'` is invoked. Said certificates are then used
-to verify inbound TLS connections for the entire RabbitMQ node (all plugins and protocols).
-The list is node-local.
+This configuration is standard for data services and it works well for many use cases. However,
+this configuration is largely static: a change in trusted CA certificates requires a cluster
+reconfiguration (redeployment).
+There is no convenient means with which to change the set in realtime, and in particular
+without affecting existing client connections.
 
-Certificates can be loaded from different sources (e.g. filesystem, HTTP server)
-Sources are loaded using "providers" - erlang modules, implementing `rabbit_trust_store_certificate_provider`
-behaviour.
+This plugin offers an alternative. It maintains a set (list) of trusted .PEM formatted TLS (x509) certificates,
+refreshed at configurable intervals. Said certificates are then used
+to verify inbound TLS-enabled client connections across the entire RabbitMQ node (affects all plugins and protocols).
+The set is node-local.
+
+Certificates can be loaded into the trusted list from different sources. Sources are loaded using "providers".
+Two providers ship with the plugin: the local filesystem and an HTTPS endpoint.
+
+New providers can be added by implementing the `rabbit_trust_store_certificate_provider` behaviour.
 
 The default provider is `rabbit_trust_store_file_provider`, which will load certificates
 from a configured local filesystem directory.
 
-## RabbitMQ Version Requirements
 
-This plugin requires RabbitMQ `3.6.1` or later.
+## Installation
 
-## Erlang Version Requirements
+This plugin ships with modern RabbitMQ versions. Like all [plugins](https://www.rabbitmq.com/plugins.html),
+it has to be enabled before it can be used:
 
-This plugin requires Erlang version 17.3 or later.
-
-## Installation and Binary Builds
-
-This plugin is now available from the [RabbitMQ community plugins page](https://www.rabbitmq.com/community-plugins.html).
-Please consult the docs on [how to install RabbitMQ plugins](https://www.rabbitmq.com/plugins.html#installing-plugins).
+``` sh
+rabbitmq-plugins enable rabbitmq_trust_store
+```
 
 ## Usage
 
