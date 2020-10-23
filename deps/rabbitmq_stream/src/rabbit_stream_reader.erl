@@ -396,6 +396,15 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             rabbit_event:notify(connection_created, Infos, Ref),
             Connection1 = rabbit_event:init_stats_timer(Connection, #stream_connection.stats_timer),
             listen_loop_post_auth(Transport, Connection1, State, Configuration);
+        {'$gen_call', From, {shutdown, Explanation}} ->
+            % likely closing call from the management plugin
+            gen_server:reply(From, ok),
+            rabbit_log:info("Forcing stream connection ~p closing: ~p~n", [self(), Explanation]),
+            demonitor_all_streams(Connection),
+            rabbit_networking:unregister_external_connection(self()),
+            notify_connection_closed(Connection, State),
+            close(Transport, S),
+            ok;
         {Closed, S} ->
             demonitor_all_streams(Connection),
             rabbit_networking:unregister_external_connection(self()),
