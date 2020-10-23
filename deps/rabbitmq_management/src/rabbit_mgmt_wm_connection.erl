@@ -90,6 +90,9 @@ force_close_connection(ReqData, Conn, Pid) ->
              end,
             case proplists:get_value(type, Conn) of
                 direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
-                network -> rabbit_networking:close_connection(Pid, Reason)
+                network -> rabbit_networking:close_connection(Pid, Reason);
+                _       ->
+                    % best effort, this will work for connections to the stream plugin
+                    gen_server:call(Pid, {shutdown, Reason}, infinity)
             end,
     ok.
