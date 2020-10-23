@@ -1073,7 +1073,7 @@ force_event_refresh(Ref) ->
     ok = rabbit_networking:force_connection_event_refresh(Ref),
     % "external" connections, which are not handled by the "AMQP core",
     % e.g. connections to the stream plugin
-    ok = rabbit_networking:force_external_connection_event_refresh(Ref),
+    ok = rabbit_networking:force_non_amqp_connection_event_refresh(Ref),
     ok = rabbit_channel:force_event_refresh(Ref),
     ok = rabbit_amqqueue:force_event_refresh(Ref).
 
