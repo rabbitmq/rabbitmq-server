@@ -1069,6 +1069,7 @@ config_locations() ->
 force_event_refresh(Ref) ->
     ok = rabbit_direct:force_event_refresh(Ref),
     ok = rabbit_networking:force_connection_event_refresh(Ref),
+    ok = rabbit_networking:force_external_connection_event_refresh(Ref),
     ok = rabbit_channel:force_event_refresh(Ref),
     ok = rabbit_amqqueue:force_event_refresh(Ref).
 
