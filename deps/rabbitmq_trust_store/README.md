@@ -9,7 +9,7 @@ against an approved ("whitelisted") set of certificates.
 ## Rationale
 
 When RabbitMQ is configured to use TLS for client connections, by default it will
-use the standard [PKI certificate verification](https://www.rabbitmq.com/ssl.html#peer-verification) process.
+use the standard [PKI certificate chain traversal](https://www.rabbitmq.com/ssl.html#peer-verification) process.
 What certificates are trusted is ultimately controlled by adjusting the set of trusted CA certificates.
 
 This configuration is standard for data services and it works well for many use cases. However,
@@ -48,24 +48,16 @@ rabbitmq-plugins enable rabbitmq_trust_store
 Configure the trust store with a directory of whitelisted certificates
 and a refresh interval:
 
-```
-trust_store.directory        = $HOME/rabbit/whitelist ## trusted certificate directory path
-trust_store.refresh_interval = 30                     ## refresh interval in seconds (only)
-```
-
-In the erlang terms format:
-
-```
-    {rabbitmq_trust_store,
-     [{directory,        "$HOME/rabbit/whitelist"}, %% trusted certificate directory path
-      {refresh_interval, {seconds, 30}}             %% refresh interval in seconds (only)
-    ]}
+``` ini
+## trusted certificate directory path
+trust_store.directory        = $HOME/rabbit/whitelist
+trust_store.refresh_interval = 30
 ```
 
 Setting `refresh_interval` to `0` seconds will disable automatic refresh.
 
-Certificates are distinguished by their **filenames**, file modification time and
-the hash of file contents.
+Certificates are identified and distinguished by their **filenames**, file modification time and
+a hash value of file contents.
 
 #### Installing a Certificate
 
