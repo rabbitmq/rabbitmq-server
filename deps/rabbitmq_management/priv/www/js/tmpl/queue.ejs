@@ -377,6 +377,7 @@
   </div>
 </div>
 
+<% if (!is_stream(queue)) { %>
 <div class="section-hidden">
   <h2>Purge</h2>
   <div class="hider">
@@ -388,6 +389,7 @@
     </form>
   </div>
 </div>
+<% } %>
 
 <% if(queue.reductions || queue.garbage_collection) { %>
 <div class="section-hidden">
