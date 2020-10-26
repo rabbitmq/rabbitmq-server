@@ -13,34 +13,15 @@ Source3: rabbitmq-server.service
 Source4: rabbitmq-server.tmpfiles
 URL: https://www.rabbitmq.com/
 BuildArch: noarch
-%if 0%{?suse_version} >= 1315
-BuildRequires: erlang-otp >= %{erlang_minver}
-BuildRequires: erlang-otp-devel >= %{erlang_minver}
-BuildRequires: elixir
-BuildRequires: elixir-mix
-%else
 BuildRequires: erlang >= %{erlang_minver}
-%endif
+BuildRequires: elixir
 BuildRequires: gzip, sed, zip, rsync
 
 %if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 BuildRequires:  systemd
 %endif
 
-%if 0%{?suse_version} >= 1315
 Requires: erlang >= %{erlang_minver}
-Requires: erlang-crypto >= %{erlang_minver}
-Requires: erlang-eldap >= %{erlang_minver}
-Requires: erlang-hipe >= %{erlang_minver}
-Requires: erlang-mnesia >= %{erlang_minver}
-Requires: erlang-os_mon >= %{erlang_minver}
-Requires: erlang-sasl >= %{erlang_minver}
-Requires: erlang-ssl >= %{erlang_minver}
-Requires: erlang-syntax_tools >= %{erlang_minver}
-Requires: erlang-xmerl >= %{erlang_minver}
-%else
-Requires: erlang >= %{erlang_minver}
-%endif
 Requires: logrotate, socat
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
