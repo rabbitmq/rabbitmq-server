@@ -51,6 +51,8 @@ with_vhost_store(VHost, Type, Fun) ->
     case vhost_store_pid(VHost, Type) of
         no_pid ->
             throw({message_store_not_started, Type, VHost});
+        undefined ->
+            throw({message_store_terminated, Type, VHost});
         Pid when is_pid(Pid) ->
             Fun(Pid)
     end.
