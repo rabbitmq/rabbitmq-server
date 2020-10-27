@@ -16,7 +16,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -rabbit_boot_step({?MODULE,
-                   [{description, "auth mechanism external"},
+                   [{description, "external TLS peer verification-based authentication mechanism"},
                     {mfa,         {rabbit_registry, register,
                                    [auth_mechanism, <<"EXTERNAL">>, ?MODULE]}},
                     {requires,    rabbit_registry},
@@ -31,7 +31,7 @@
 %% mean the peer certificate's subject's DN or CN.
 
 description() ->
-    [{description, <<"SSL authentication mechanism using SASL EXTERNAL">>}].
+    [{description, <<"TLS peer verification-based authentication plugin. Used in combination with the EXTERNAL SASL mechanism.">>}].
 
 should_offer(Sock) ->
     case rabbit_net:peercert(Sock) of
@@ -48,15 +48,14 @@ init(Sock) ->
     Username = case rabbit_net:peercert(Sock) of
                    {ok, C} ->
                        case rabbit_ssl:peer_cert_auth_name(C) of
-                           unsafe    -> {refused, none,
-                                         "configuration unsafe", []};
+                           unsafe    -> {refused, none, "TLS configuration is unsafe", []};
                            not_found -> {refused, none, "no name found", []};
                            Name      -> Name
                        end;
                    {error, no_peercert} ->
-                       {refused, none, "no peer certificate", []};
+                       {refused, none, "connection peer presented no TLS (x.509) certificate", []};
                    nossl ->
-                       {refused, none, "not SSL connection", []}
+                       {refused, none, "not a TLS-enabled connection", []}
                end,
     #state{username = Username}.
 
