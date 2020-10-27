@@ -155,7 +155,8 @@ auth_config_sane() ->
     {ok, Opts} = application:get_env(rabbit, ssl_options),
     case proplists:get_value(verify, Opts) of
         verify_peer -> true;
-        V           -> rabbit_log:warning("SSL certificate authentication "
-                                          "disabled, verify=~p~n", [V]),
+        V           -> rabbit_log:warning("TLS peer verification (authentication) is "
+                                          "disabled, ssl_options.verify value used: ~p. "
+                                          "See https://www.rabbitmq.com/ssl.html#peer-verification to learn more.", [V]),
                        false
     end.
