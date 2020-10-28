@@ -346,7 +346,8 @@ from_091(double, V) -> {double, V};
 from_091(float, V) -> {float, V};
 from_091(bool, V) -> {boolean, V};
 from_091(binary, V) -> {binary, V};
-from_091(timestamp, V) -> {timestamp, V * 1000}.
+from_091(timestamp, V) -> {timestamp, V * 1000};
+from_091(byte, V) -> {byte, V}.
 
 % convert_header(signedint, V) -> [$I, <<V:32/signed>>];
 % convert_header(decimal, V) -> {Before, After} = V,
