@@ -669,9 +669,9 @@ client_read3(#msg_location { msg_id = MsgId, file = File }, Defer,
                         Release(), %% this MUST NOT fail with badarg
                         {{ok, Msg}, CState2}
                     catch
-                        T:R:S ->
-                            rabbit_log:debug("MSG STORE EXCEPTION in client_read3: ~p:~p~n~p", [T, R, S]),
-                            erlang:error(R)
+                        Class:Reason:Stack ->
+                            rabbit_log:debug("MSG STORE EXCEPTION in client_read3: ~p:~p~n~p", [Class, Reason, Stack]),
+                            erlang:Class(Reason)
                     end;
                 #msg_location {} = MsgLocation -> %% different file!
                     Release(), %% this MUST NOT fail with badarg
