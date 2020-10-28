@@ -664,9 +664,15 @@ client_read3(#msg_location { msg_id = MsgId, file = File }, Defer,
                     %% closed? No: marks for closing are issued only
                     %% when the msg_store has locked the file.
                     %% This will never be the current file
-                    {Msg, CState2} = read_from_disk(MsgLocation, CState1),
-                    Release(), %% this MUST NOT fail with badarg
-                    {{ok, Msg}, CState2};
+                    try
+                        {Msg, CState2} = read_from_disk(MsgLocation, CState1),
+                        Release(), %% this MUST NOT fail with badarg
+                        {{ok, Msg}, CState2}
+                    catch
+                        T:R:S ->
+                            rabbit_log:debug("MSG STORE EXCEPTION in client_read3: ~p:~p~n~p", [T, R, S]),
+                            erlang:error(R)
+                    end;
                 #msg_location {} = MsgLocation -> %% different file!
                     Release(), %% this MUST NOT fail with badarg
                     client_read1(MsgLocation, Defer, CState);
