@@ -26,23 +26,22 @@
 
 -record(state, {username = undefined}).
 
-%% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
-%% established by means external to the mechanism". We define that to
-%% mean the peer certificate's subject's DN or CN.
-
 description() ->
     [{description, <<"TLS peer verification-based authentication plugin. Used in combination with the EXTERNAL SASL mechanism.">>}].
 
 should_offer(Sock) ->
+    %% SASL EXTERNAL. SASL says EXTERNAL means "use credentials
+    %% established by means external to the mechanism". The username
+    %% is extracted from the the client certificate.
     case rabbit_net:peercert(Sock) of
         nossl                -> false;
-        {error, no_peercert} -> true; %% [0]
+        %% We offer EXTERNAL even if there is no peercert since that leads to
+        %% a more comprehensible error message: authentication is refused
+        %% below with "no peer certificate" rather than have the client fail
+        %% to negotiate an authentication mechanism.
+        {error, no_peercert} -> true;
         {ok, _}              -> true
     end.
-%% We offer EXTERNAL even if there is no peercert since that leads to
-%% a more comprehensible error message - authentication is refused
-%% below with "no peer certificate" rather than have the client fail
-%% to negotiate an authentication mechanism.
 
 init(Sock) ->
     Username = case rabbit_net:peercert(Sock) of
@@ -50,13 +49,14 @@ init(Sock) ->
                        case rabbit_ssl:peer_cert_auth_name(C) of
                            unsafe    -> {refused, none, "TLS configuration is unsafe", []};
                            not_found -> {refused, none, "no name found", []};
-                           Name      -> Name
+                           Name      -> rabbit_data_coercion:to_binary(Name)
                        end;
                    {error, no_peercert} ->
                        {refused, none, "connection peer presented no TLS (x.509) certificate", []};
                    nossl ->
                        {refused, none, "not a TLS-enabled connection", []}
                end,
+    rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Username]),
     #state{username = Username}.
 
 handle_response(_Response, #state{username = Username}) ->
