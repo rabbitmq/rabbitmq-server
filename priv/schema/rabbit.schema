@@ -408,12 +408,27 @@ end}.
 %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
 %% details.
 %%
-%% To use the SSL cert's CN instead of its DN as the username
+%% To use the peer certificate's Common Name (CN) field
+%% instead of its Distinguished Name (DN) for username extraction.
 %%
 %% {ssl_cert_login_from, common_name},
+%%
+%% To use the first SAN value of type DNS:
+%%
+%% {ssl_cert_login_from,      subject_alternative_name},
+%% {ssl_cert_login_san_type,  dns},
+%% {ssl_cert_login_san_index, 0}
 
 {mapping, "ssl_cert_login_from", "rabbit.ssl_cert_login_from", [
-    {datatype, {enum, [distinguished_name, common_name]}}
+    {datatype, {enum, [distinguished_name, common_name, subject_alternative_name, subject_alt_name]}}
+]}.
+
+{mapping, "ssl_cert_login_san_type", "rabbit.ssl_cert_login_san_type", [
+    {datatype, {enum, [dns, ip, email, uri, other_name]}}
+]}.
+
+{mapping, "ssl_cert_login_san_index", "rabbit.ssl_cert_login_san_index", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
 ]}.
 
 %% TLS handshake timeout, in milliseconds.
