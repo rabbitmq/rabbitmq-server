@@ -637,9 +637,13 @@ client_read3(#msg_location { msg_id = MsgId, file = File }, Defer,
             %% badarg scenario: we lookup, msg_store locks, GC starts,
             %% GC ends, we +1 readers, msg_store ets:deletes (and
             %% unlocks the dest)
-            try Release(),
-                 Defer()
-            catch error:badarg -> read(MsgId, CState)
+            try
+                Release(),
+                rabbit_log:debug("MSG STORE calling Defer() 1 in client_read3", []),
+                Defer()
+            catch error:badarg:Stack ->
+                rabbit_log:debug("MSG STORE EXCEPTION badarg 1 in client_read3: ~p", [Stack]),
+                read(MsgId, CState)
             end;
         [#file_summary { locked = false }] ->
             %% Ok, we're definitely safe to continue - a GC involving
@@ -669,11 +673,15 @@ client_read3(#msg_location { msg_id = MsgId, file = File }, Defer,
                     {{ok, Msg}, CState2};
                 #msg_location {} = MsgLocation -> %% different file!
                     Release(), %% this MUST NOT fail with badarg
+                    rabbit_log:debug("MSG STORE calling client_read1 in client_read3", []),
                     client_read1(MsgLocation, Defer, CState);
                 not_found -> %% it seems not to exist. Defer, just to be sure.
                     try Release() %% this can badarg, same as locked case, above
-                    catch error:badarg -> ok
+                    catch error:badarg:Stack ->
+                        rabbit_log:debug("MSG STORE EXCEPTION badarg 2 in client_read3: ~p", [Stack]),
+                        ok
                     end,
+                    rabbit_log:debug("MSG STORE calling Defer() 2 in client_read3", []),
                     Defer()
             end
     end.
@@ -1306,7 +1314,7 @@ safe_ets_update_counter(Tab, Key, UpdateOp, SuccessFun, FailThunk) ->
         SuccessFun(ets:update_counter(Tab, Key, UpdateOp))
     catch error:badarg:Stack ->
               rabbit_log:debug(
-                "MSG STORE EXCEPTION in safe_ets_update_counter: ~p -- ~p -- ~p",
+                "MSG STORE EXCEPTION badarg in safe_ets_update_counter: ~p -- ~p -- ~p",
                 [SuccessFun, FailThunk, Stack]),
               FailThunk()
     end.
