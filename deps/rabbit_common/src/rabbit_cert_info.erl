@@ -11,8 +11,11 @@
 
 -export([issuer/1,
          subject/1,
+         subject_alternative_names/1,
          validity/1,
-         subject_items/2]).
+         subject_items/2,
+         extensions/1
+]).
 
 %%--------------------------------------------------------------------------
 
@@ -54,6 +57,23 @@ subject_items(Cert, Type) ->
                        subject = Subject }}) ->
                       find_by_type(Type, Subject)
               end, Cert).
+
+-spec extensions(certificate()) -> [#'Extension'{}].
+extensions(Cert) ->
+    cert_info(fun(#'OTPCertificate' {
+                     tbsCertificate = #'OTPTBSCertificate' {
+                       extensions = Extensions }}) ->
+                      Extensions
+              end, Cert).
+
+-spec subject_alternative_names(certificate()) -> [{atom(), string()}].
+subject_alternative_names(Cert) ->
+    Extensions = extensions(Cert),
+    try lists:keyfind(?'id-ce-subjectAltName', #'Extension'.extnID, Extensions) of
+        false                         -> [];
+        #'Extension'{extnValue = Val} -> Val
+    catch _:_ -> []
+    end.
 
 %% Return a string describing the certificate's validity.
 -spec validity(certificate()) -> string().
