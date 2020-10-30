@@ -120,6 +120,11 @@ peer_cert_subject(Cert) ->
 peer_cert_subject_items(Cert, Type) ->
     rabbit_cert_info:subject_items(Cert, Type).
 
+%% Filters certificate SAN extensions by (OTP) SAN type name.
+peer_cert_subject_alternative_names(Cert, Type) ->
+    SANs = rabbit_cert_info:subject_alternative_names(Cert),
+    lists:filter(fun({Key, _}) -> Key =:= Type end, SANs).
+
 %% Return a string describing the certificate's validity.
 peer_cert_validity(Cert) ->
     rabbit_cert_info:validity(Cert).
@@ -135,6 +140,27 @@ peer_cert_auth_name(Cert) ->
 peer_cert_auth_name(distinguished_name, Cert) ->
     case auth_config_sane() of
         true  -> iolist_to_binary(peer_cert_subject(Cert));
+        false -> unsafe
+    end;
+
+peer_cert_auth_name(subject_alt_name, Cert) ->
+    peer_cert_auth_name(subject_alternative_name, Cert);
+
+peer_cert_auth_name(subject_alternative_name, Cert) ->
+    case auth_config_sane() of
+        true  ->
+            Type   = application:get_env(rabbit, ssl_cert_login_san_type,  dns),
+            %% lists:nth/2 is 1-based
+            Index  = application:get_env(rabbit, ssl_cert_login_san_index, 0) + 1,
+            OfType = peer_cert_subject_alternative_names(Cert, otp_san_type(Type)),
+            rabbit_log:debug("Peer certificate SANs of type ~s: ~p, index to use with lists:nth/2: ~b", [Type, OfType, Index]),
+            case length(OfType) of
+                0                 -> not_found;
+                N when N < Index  -> not_found;
+                N when N >= Index ->
+                    {_, Value} = lists:nth(Index, OfType),
+                    rabbit_data_coercion:to_binary(Value)
+            end;
         false -> unsafe
     end;
 
@@ -160,3 +186,10 @@ auth_config_sane() ->
                                           "See https://www.rabbitmq.com/ssl.html#peer-verification to learn more.", [V]),
                        false
     end.
+
+otp_san_type(dns)        -> dNSName;
+otp_san_type(ip)         -> iPAddress;
+otp_san_type(email)      -> rfc822Name;
+otp_san_type(uri)        -> uniformResourceIdentifier;
+otp_san_type(other_name) -> otherName;
+otp_san_type(Other)      -> Other.
