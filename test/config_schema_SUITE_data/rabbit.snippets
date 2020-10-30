@@ -452,10 +452,28 @@ tcp_listen_options.exit_on_close = false",
              {fail_if_no_peer_cert, false},
              {honor_ecc_order, true}]}]}],
   []},
- {ssl_cert_login_from,
+  
+ {ssl_cert_login_from_cn,
   "ssl_cert_login_from = common_name",
-  [{rabbit,[{ssl_cert_login_from,common_name}]}],
+  [{rabbit,[{ssl_cert_login_from, common_name}]}],
   []},
+  
+ {ssl_cert_login_from_dn,
+  "ssl_cert_login_from = distinguished_name",
+  [{rabbit,[{ssl_cert_login_from, distinguished_name}]}],
+  []},
+ 
+ {ssl_cert_login_from_san_dns,
+  "ssl_cert_login_from      = subject_alternative_name
+   ssl_cert_login_san_type  = dns
+   ssl_cert_login_san_index = 0",
+  [{rabbit,[
+      {ssl_cert_login_from,      subject_alternative_name},
+      {ssl_cert_login_san_type,  dns},
+      {ssl_cert_login_san_index, 0}
+  ]}],
+  []},
+  
  {tcp_listen_options_linger_on,
   "tcp_listen_options.linger.on = true
    tcp_listen_options.linger.timeout = 100",
