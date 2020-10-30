@@ -2374,11 +2374,15 @@ ifold(Fun, Acc, Its, State) ->
                         {#msg_status{seq_id = SeqId2}, _, _}) ->
                            SeqId1 =< SeqId2
                    end, Its),
+    rabbit_log:debug("IFOLD: reading message using msstate ~p", [State#vqstate.msg_store_clients]),
     {Msg, State1} = read_msg(MsgStatus, State),
+    rabbit_log:debug("IFOLD: message returned with new msstate ~p", [State1#vqstate.msg_store_clients]),
     case Fun(Msg, MsgStatus#msg_status.msg_props, Unacked, Acc) of
         {stop, Acc1} ->
+            rabbit_log:debug("IFOLD: stopping recursion, discarding latest msstate", []),
             {Acc1, State};
         {cont, Acc1} ->
+            rabbit_log:debug("IFOLD: recurse, keeping latest msstate", []),
             {Its1, IndexState1} = inext(It, {Rest, State1#vqstate.index_state}),
             ifold(Fun, Acc1, Its1, State1#vqstate{index_state = IndexState1})
     end.
