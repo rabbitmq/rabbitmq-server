@@ -1037,7 +1037,7 @@ max_length_bytes(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     %% We don't yet have reliable metrics, as the committed offset doesn't work
     %% as a counter once we start applying retention policies.
@@ -1063,13 +1063,13 @@ max_age(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     timer:sleep(10000),
 
     %% Let's publish again so the new segments will trigger the retention policy
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     timer:sleep(5000),
 
