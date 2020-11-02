@@ -254,7 +254,7 @@ recovery_barrier(BarrierPid) ->
 
 -spec init_with_backing_queue_state
         (amqqueue:amqqueue(), atom(), tuple(), any(),
-         [rabbit_types:delivery()], pmon:pmon(), maps:map()) ->
+         [rabbit_types:delivery()], pmon:pmon(), map()) ->
             #q{}.
 
 init_with_backing_queue_state(Q, BQ, BQS,

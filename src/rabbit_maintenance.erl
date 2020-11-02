@@ -38,6 +38,7 @@
 -define(DRAINING_STATUS, draining).
 
 -type maintenance_status() :: ?DEFAULT_STATUS | ?DRAINING_STATUS.
+-type mnesia_table() :: atom().
 
 -export_type([
     maintenance_status/0
@@ -47,7 +48,7 @@
 %% API
 %%
 
--spec status_table_name() -> mnesia:table().
+-spec status_table_name() -> mnesia_table().
 status_table_name() ->
     ?TABLE.
 
