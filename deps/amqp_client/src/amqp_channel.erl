@@ -215,6 +215,8 @@ next_publish_seqno(Channel) ->
 %% @doc Wait until all messages published since the last call have
 %% been either ack'd or nack'd by the broker.  Note, when called on a
 %% non-Confirm channel, waitForConfirms returns an error.
+%% @param Channel: the channel on which to wait.
+%% @end
 wait_for_confirms(Channel) ->
     wait_for_confirms(Channel, amqp_util:call_timeout()).
 
@@ -226,6 +228,9 @@ wait_for_confirms(Channel) ->
 %% been either ack'd or nack'd by the broker or the timeout expires.
 %% Note, when called on a non-Confirm channel, waitForConfirms throws
 %% an exception.
+%% @param Channel: the channel on which to wait.
+%% @param Timeout: the wait timeout in seconds.
+%% @end
 wait_for_confirms(Channel, Timeout) ->
     case gen_server:call(Channel, {wait_for_confirms, Timeout}, amqp_util:call_timeout()) of
         {error, Reason} -> throw(Reason);
@@ -238,6 +243,8 @@ wait_for_confirms(Channel, Timeout) ->
 %% @doc Behaves the same as wait_for_confirms/1, but if a nack is
 %% received, the calling process is immediately sent an
 %% exit(nack_received).
+%% @param Channel: the channel on which to wait.
+%% @end
 wait_for_confirms_or_die(Channel) ->
     wait_for_confirms_or_die(Channel, amqp_util:call_timeout()).
 
@@ -249,6 +256,9 @@ wait_for_confirms_or_die(Channel) ->
 %% received, the calling process is immediately sent an
 %% exit(nack_received). If the timeout expires, the calling process is
 %% sent an exit(timeout).
+%% @param Channel: the channel on which to wait.
+%% @param Timeout: the wait timeout in seconds.
+%% @end
 wait_for_confirms_or_die(Channel, Timeout) ->
     case wait_for_confirms(Channel, Timeout) of
         timeout -> close(Channel, 200, <<"Confirm Timeout">>),
