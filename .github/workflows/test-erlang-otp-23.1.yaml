@@ -712,8 +712,8 @@ jobs:
         dockerfile: ci/dockerfiles/ci-dep
         build_args: IMAGE_TAG=erlang-23.1-rabbitmq-${{ github.sha }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},project=rabbit
         tags: erlang-23.1-rabbitmq-${{ github.sha }}
-  rabbit-ct-per_user_connection_channel_limit-plus-22-more:
-    name: rabbit-ct-per_user_connection_channel_limit-plus-22-more
+  rabbit-ct-rabbit_confirms-plus-16-more:
+    name: rabbit-ct-rabbit_confirms-plus-16-more
     needs:
     - prepare
     - rabbit-checks
@@ -727,74 +727,6 @@ jobs:
       run: |
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
-    - name: RUN ct-per_user_connection_channel_limit
-      run: |
-        mkdir ct-per_user_connection_channel_limit-logs && chmod 777 ct-per_user_connection_channel_limit-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=per_user_connection_channel_limit \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-per_user_connection_channel_limit-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-per_user_connection_channel_limit-logs
-        path: ct-per_user_connection_channel_limit-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-per_user_connection_channel_limit_partitions
-      run: |
-        mkdir ct-per_user_connection_channel_limit_partitions-logs && chmod 777 ct-per_user_connection_channel_limit_partitions-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=per_user_connection_channel_limit_partitions \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-per_user_connection_channel_limit_partitions-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-per_user_connection_channel_limit_partitions-logs
-        path: ct-per_user_connection_channel_limit_partitions-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-per_user_connection_channel_tracking
-      run: |
-        mkdir ct-per_user_connection_channel_tracking-logs && chmod 777 ct-per_user_connection_channel_tracking-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=per_user_connection_channel_tracking \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-per_user_connection_channel_tracking-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-per_user_connection_channel_tracking-logs
-        path: ct-per_user_connection_channel_tracking-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-queue_type
-      run: |
-        mkdir ct-queue_type-logs && chmod 777 ct-queue_type-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=queue_type \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-queue_type-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-queue_type-logs
-        path: ct-queue_type-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbit_confirms
       run: |
         mkdir ct-rabbit_confirms-logs && chmod 777 ct-rabbit_confirms-logs
@@ -812,23 +744,6 @@ jobs:
       with:
         name: rabbit-ct-rabbit_confirms-logs
         path: ct-rabbit_confirms-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_fifo_v0
-      run: |
-        mkdir ct-rabbit_fifo_v0-logs && chmod 777 ct-rabbit_fifo_v0-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_fifo_v0 \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-rabbit_fifo_v0-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_fifo_v0-logs
-        path: ct-rabbit_fifo_v0-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-rabbit_msg_record
       run: |
         mkdir ct-rabbit_msg_record-logs && chmod 777 ct-rabbit_msg_record-logs
@@ -846,23 +761,23 @@ jobs:
       with:
         name: rabbit-ct-rabbit_msg_record-logs
         path: ct-rabbit_msg_record-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_stream_queue
+    - name: RUN ct-rabbit_fifo_v0
       run: |
-        mkdir ct-rabbit_stream_queue-logs && chmod 777 ct-rabbit_stream_queue-logs
+        mkdir ct-rabbit_fifo_v0-logs && chmod 777 ct-rabbit_fifo_v0-logs
         docker run \
           --env project=rabbit \
-          --env CT_SUITE=rabbit_stream_queue \
+          --env CT_SUITE=rabbit_fifo_v0 \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-rabbit_stream_queue-logs:/workspace/ct-logs \
+          --volume ${PWD}/ct-rabbit_fifo_v0-logs:/workspace/ct-logs \
           eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
       if: always()
       with:
-        name: rabbit-ct-rabbit_stream_queue-logs
-        path: ct-rabbit_stream_queue-logs/*-ct-logs-*.tar.xz
+        name: rabbit-ct-rabbit_fifo_v0-logs
+        path: ct-rabbit_fifo_v0-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_connection_tracking
       run: |
         mkdir ct-unit_connection_tracking-logs && chmod 777 ct-unit_connection_tracking-logs
@@ -897,6 +812,40 @@ jobs:
       with:
         name: rabbit-ct-unit_plugin_directories-logs
         path: ct-unit_plugin_directories-logs/*-ct-logs-*.tar.xz
+    - name: RUN ct-per_user_connection_channel_limit_partitions
+      run: |
+        mkdir ct-per_user_connection_channel_limit_partitions-logs && chmod 777 ct-per_user_connection_channel_limit_partitions-logs
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=per_user_connection_channel_limit_partitions \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}/ct-per_user_connection_channel_limit_partitions-logs:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-per_user_connection_channel_limit_partitions-logs
+        path: ct-per_user_connection_channel_limit_partitions-logs/*-ct-logs-*.tar.xz
+    - name: RUN ct-queue_type
+      run: |
+        mkdir ct-queue_type-logs && chmod 777 ct-queue_type-logs
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=queue_type \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}/ct-queue_type-logs:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-queue_type-logs
+        path: ct-queue_type-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_cluster_formation_locking_mocks
       run: |
         mkdir ct-unit_cluster_formation_locking_mocks-logs && chmod 777 ct-unit_cluster_formation_locking_mocks-logs
@@ -1067,6 +1016,21 @@ jobs:
       with:
         name: rabbit-ct-unit_amqp091_content_framing-logs
         path: ct-unit_amqp091_content_framing-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-unit_pg_local-plus-11-more:
+    name: rabbit-ct-unit_pg_local-plus-11-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_pg_local
       run: |
         mkdir ct-unit_pg_local-logs && chmod 777 ct-unit_pg_local-logs
@@ -1101,6 +1065,23 @@ jobs:
       with:
         name: rabbit-ct-unit_policy_validators-logs
         path: ct-unit_policy_validators-logs/*-ct-logs-*.tar.xz
+    - name: RUN ct-per_user_connection_channel_limit
+      run: |
+        mkdir ct-per_user_connection_channel_limit-logs && chmod 777 ct-per_user_connection_channel_limit-logs
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=per_user_connection_channel_limit \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}/ct-per_user_connection_channel_limit-logs:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-per_user_connection_channel_limit-logs
+        path: ct-per_user_connection_channel_limit-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-unit_plugin_versioning
       run: |
         mkdir ct-unit_plugin_versioning-logs && chmod 777 ct-unit_plugin_versioning-logs
@@ -1118,21 +1099,6 @@ jobs:
       with:
         name: rabbit-ct-unit_plugin_versioning-logs
         path: ct-unit_plugin_versioning-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-unit_priority_queue-plus-10-more:
-    name: rabbit-ct-unit_priority_queue-plus-10-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_priority_queue
       run: |
         mkdir ct-unit_priority_queue-logs && chmod 777 ct-unit_priority_queue-logs
@@ -1269,6 +1235,21 @@ jobs:
       with:
         name: rabbit-ct-topic_permission-logs
         path: ct-topic_permission-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-message_size_limit-plus-10-more:
+    name: rabbit-ct-message_size_limit-plus-10-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-message_size_limit
       run: |
         mkdir ct-message_size_limit-logs && chmod 777 ct-message_size_limit-logs
@@ -1320,21 +1301,6 @@ jobs:
       with:
         name: rabbit-ct-single_active_consumer-logs
         path: ct-single_active_consumer-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-rabbit_fifo-plus-10-more:
-    name: rabbit-ct-rabbit_fifo-plus-10-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo
       run: |
         mkdir ct-rabbit_fifo-logs && chmod 777 ct-rabbit_fifo-logs
@@ -1471,6 +1437,21 @@ jobs:
       with:
         name: rabbit-ct-mirrored_supervisor-logs
         path: ct-mirrored_supervisor-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-definition_import-plus-9-more:
+    name: rabbit-ct-definition_import-plus-9-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-definition_import
       run: |
         mkdir ct-definition_import-logs && chmod 777 ct-definition_import-logs
@@ -1522,21 +1503,6 @@ jobs:
       with:
         name: rabbit-ct-cluster-logs
         path: ct-cluster-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-list_queues_online_and_offline-plus-9-more:
-    name: rabbit-ct-list_queues_online_and_offline-plus-9-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_queues_online_and_offline
       run: |
         mkdir ct-list_queues_online_and_offline-logs && chmod 777 ct-list_queues_online_and_offline-logs
@@ -1656,6 +1622,21 @@ jobs:
       with:
         name: rabbit-ct-disconnect_detected_during_alarm-logs
         path: ct-disconnect_detected_during_alarm-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-unit_stats_and_metrics-plus-8-more:
+    name: rabbit-ct-unit_stats_and_metrics-plus-8-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_stats_and_metrics
       run: |
         mkdir ct-unit_stats_and_metrics-logs && chmod 777 ct-unit_stats_and_metrics-logs
@@ -1673,6 +1654,23 @@ jobs:
       with:
         name: rabbit-ct-unit_stats_and_metrics-logs
         path: ct-unit_stats_and_metrics-logs/*-ct-logs-*.tar.xz
+    - name: RUN ct-per_user_connection_channel_tracking
+      run: |
+        mkdir ct-per_user_connection_channel_tracking-logs && chmod 777 ct-per_user_connection_channel_tracking-logs
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=per_user_connection_channel_tracking \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}/ct-per_user_connection_channel_tracking-logs:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-per_user_connection_channel_tracking-logs
+        path: ct-per_user_connection_channel_tracking-logs/*-ct-logs-*.tar.xz
     - name: RUN ct-priority_queue_recovery
       run: |
         mkdir ct-priority_queue_recovery-logs && chmod 777 ct-priority_queue_recovery-logs
@@ -1707,21 +1705,6 @@ jobs:
       with:
         name: rabbit-ct-unit_access_control-logs
         path: ct-unit_access_control-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-product_info-plus-8-more:
-    name: rabbit-ct-product_info-plus-8-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-product_info
       run: |
         mkdir ct-product_info-logs && chmod 777 ct-product_info-logs
@@ -1807,6 +1790,21 @@ jobs:
       with:
         name: rabbit-ct-rabbitmqctl_integration-logs
         path: ct-rabbitmqctl_integration-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-feature_flags-plus-7-more:
+    name: rabbit-ct-feature_flags-plus-7-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-feature_flags
       run: |
         mkdir ct-feature_flags-logs && chmod 777 ct-feature_flags-logs
@@ -1875,21 +1873,6 @@ jobs:
       with:
         name: rabbit-ct-unit_log_management-logs
         path: ct-unit_log_management-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-many_node_ha-plus-6-more:
-    name: rabbit-ct-many_node_ha-plus-6-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-many_node_ha
       run: |
         mkdir ct-many_node_ha-logs && chmod 777 ct-many_node_ha-logs
@@ -1958,6 +1941,21 @@ jobs:
       with:
         name: rabbit-ct-per_vhost_connection_limit_partitions-logs
         path: ct-per_vhost_connection_limit_partitions-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-crashing_queues-plus-5-more:
+    name: rabbit-ct-crashing_queues-plus-5-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-crashing_queues
       run: |
         mkdir ct-crashing_queues-logs && chmod 777 ct-crashing_queues-logs
@@ -2009,21 +2007,6 @@ jobs:
       with:
         name: rabbit-ct-sync_detection-logs
         path: ct-sync_detection-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-publisher_confirms_parallel-plus-5-more:
-    name: rabbit-ct-publisher_confirms_parallel-plus-5-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-publisher_confirms_parallel
       run: |
         mkdir ct-publisher_confirms_parallel-logs && chmod 777 ct-publisher_confirms_parallel-logs
@@ -2075,6 +2058,21 @@ jobs:
       with:
         name: rabbit-ct-peer_discovery_classic_config-logs
         path: ct-peer_discovery_classic_config-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-per_vhost_queue_limit-plus-4-more:
+    name: rabbit-ct-per_vhost_queue_limit-plus-4-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_queue_limit
       run: |
         mkdir ct-per_vhost_queue_limit-logs && chmod 777 ct-per_vhost_queue_limit-logs
@@ -2126,21 +2124,6 @@ jobs:
       with:
         name: rabbit-ct-metrics-logs
         path: ct-metrics-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-signal_handling-plus-3-more:
-    name: rabbit-ct-signal_handling-plus-3-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-signal_handling
       run: |
         mkdir ct-signal_handling-logs && chmod 777 ct-signal_handling-logs
@@ -2175,6 +2158,21 @@ jobs:
       with:
         name: rabbit-ct-rabbit_fifo_prop-logs
         path: ct-rabbit_fifo_prop-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-dead_lettering-plus-3-more:
+    name: rabbit-ct-dead_lettering-plus-3-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dead_lettering
       run: |
         mkdir ct-dead_lettering-logs && chmod 777 ct-dead_lettering-logs
@@ -2209,21 +2207,6 @@ jobs:
       with:
         name: rabbit-ct-maintenance_mode-logs
         path: ct-maintenance_mode-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-vhost-plus-2-more:
-    name: rabbit-ct-vhost-plus-2-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-vhost
       run: |
         mkdir ct-vhost-logs && chmod 777 ct-vhost-logs
@@ -2258,6 +2241,21 @@ jobs:
       with:
         name: rabbit-ct-rabbit_core_metrics_gc-logs
         path: ct-rabbit_core_metrics_gc-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-dynamic_qq-plus-2-more:
+    name: rabbit-ct-dynamic_qq-plus-2-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_qq
       run: |
         mkdir ct-dynamic_qq-logs && chmod 777 ct-dynamic_qq-logs
@@ -2275,21 +2273,6 @@ jobs:
       with:
         name: rabbit-ct-dynamic_qq-logs
         path: ct-dynamic_qq-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-priority_queue-plus-2-more:
-    name: rabbit-ct-priority_queue-plus-2-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue
       run: |
         mkdir ct-priority_queue-logs && chmod 777 ct-priority_queue-logs
@@ -2324,6 +2307,21 @@ jobs:
       with:
         name: rabbit-ct-per_vhost_connection_limit-logs
         path: ct-per_vhost_connection_limit-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-queue_parallel-plus-2-more:
+    name: rabbit-ct-queue_parallel-plus-2-more
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_parallel
       run: |
         mkdir ct-queue_parallel-logs && chmod 777 ct-queue_parallel-logs
@@ -2341,21 +2339,6 @@ jobs:
       with:
         name: rabbit-ct-queue_parallel-logs
         path: ct-queue_parallel-logs/*-ct-logs-*.tar.xz
-  rabbit-ct-cluster_rename-plus-1-more:
-    name: rabbit-ct-cluster_rename-plus-1-more
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster_rename
       run: |
         mkdir ct-cluster_rename-logs && chmod 777 ct-cluster_rename-logs
@@ -2471,6 +2454,38 @@ jobs:
       with:
         name: rabbit-ct-eager_sync-logs
         path: ct-eager_sync-logs/*-ct-logs-*.tar.xz
+  rabbit-ct-rabbit_stream_queue:
+    name: rabbit-ct-rabbit_stream_queue
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+    - name: RUN ct-rabbit_stream_queue
+      run: |
+        mkdir ct-rabbit_stream_queue-logs && chmod 777 ct-rabbit_stream_queue-logs
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=rabbit_stream_queue \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}/ct-rabbit_stream_queue-logs:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-rabbit_stream_queue-logs
+        path: ct-rabbit_stream_queue-logs/*-ct-logs-*.tar.xz
   rabbit-ct-quorum_queue:
     name: rabbit-ct-quorum_queue
     needs:
@@ -2571,19 +2586,20 @@ jobs:
     name: rabbit
     needs:
     - rabbit-checks
-    - rabbit-ct-per_user_connection_channel_limit-plus-22-more
-    - rabbit-ct-unit_priority_queue-plus-10-more
-    - rabbit-ct-rabbit_fifo-plus-10-more
-    - rabbit-ct-list_queues_online_and_offline-plus-9-more
-    - rabbit-ct-product_info-plus-8-more
-    - rabbit-ct-many_node_ha-plus-6-more
-    - rabbit-ct-publisher_confirms_parallel-plus-5-more
-    - rabbit-ct-signal_handling-plus-3-more
-    - rabbit-ct-vhost-plus-2-more
-    - rabbit-ct-priority_queue-plus-2-more
-    - rabbit-ct-cluster_rename-plus-1-more
+    - rabbit-ct-rabbit_confirms-plus-16-more
+    - rabbit-ct-unit_pg_local-plus-11-more
+    - rabbit-ct-message_size_limit-plus-10-more
+    - rabbit-ct-definition_import-plus-9-more
+    - rabbit-ct-unit_stats_and_metrics-plus-8-more
+    - rabbit-ct-feature_flags-plus-7-more
+    - rabbit-ct-crashing_queues-plus-5-more
+    - rabbit-ct-per_vhost_queue_limit-plus-4-more
+    - rabbit-ct-dead_lettering-plus-3-more
+    - rabbit-ct-dynamic_qq-plus-2-more
+    - rabbit-ct-queue_parallel-plus-2-more
     - rabbit-ct-queue_master_location-plus-1-more
     - rabbit-ct-eager_sync
+    - rabbit-ct-rabbit_stream_queue
     - rabbit-ct-quorum_queue
     - rabbit-ct-clustering_management
     - rabbit-ct-dynamic_ha

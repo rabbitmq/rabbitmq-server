@@ -69,11 +69,11 @@ deps:
   - name: peer_discovery_dns
     time: 76
   - name: per_user_connection_channel_limit
-    time: 0
+    time: 69
   - name: per_user_connection_channel_limit_partitions
-    time: 0
+    time: 56
   - name: per_user_connection_channel_tracking
-    time: 0
+    time: 89
   - name: per_user_connection_tracking
     time: 132
   - name: per_vhost_connection_limit
@@ -103,11 +103,11 @@ deps:
   - name: queue_parallel
     time: 260
   - name: queue_type
-    time: 0
+    time: 56
   - name: quorum_queue
     time: 687
   - name: rabbit_confirms
-    time: 0
+    time: 4
   - name: rabbit_core_metrics_gc
     time: 221
   - name: rabbit_fifo
@@ -117,11 +117,11 @@ deps:
   - name: rabbit_fifo_prop
     time: 169
   - name: rabbit_fifo_v0
-    time: 0
+    time: 6
   - name: rabbit_msg_record
-    time: 0
+    time: 4
   - name: rabbit_stream_queue
-    time: 0
+    time: 592
   - name: rabbitmq_queues_cli_integration
     time: 85
   - name: rabbitmqctl_integration
@@ -159,7 +159,7 @@ deps:
   - name: unit_config_value_encryption
     time: 99
   - name: unit_connection_tracking
-    time: 0
+    time: 16
   - name: unit_credit_flow
     time: 81
   - name: unit_disk_monitor
