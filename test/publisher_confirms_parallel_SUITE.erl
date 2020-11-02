@@ -36,7 +36,11 @@ groups() ->
       [
        {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
        {mirrored_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {quorum_queue, [parallel], PublisherConfirmTests ++ [confirm_minority]}
+       {quorum_queue, [],
+        [
+         {parllel_tests, [parallel], PublisherConfirmTests},
+         confirm_minority
+        ]}
       ]}
     ].
 
@@ -91,7 +95,7 @@ init_per_group(Group, Config) ->
               rabbit_ct_broker_helpers:setup_steps() ++
               rabbit_ct_client_helpers:setup_steps());
         false ->
-            rabbit_ct_helpers:run_steps(Config, [])
+            Config
     end.
 
 end_per_group(Group, Config) ->
