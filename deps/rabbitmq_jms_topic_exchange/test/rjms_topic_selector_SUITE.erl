@@ -77,7 +77,7 @@ test_topic_selection(Config) ->
     bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
 
     publish_two_messages(Channel, Exchange, <<"select-key">>),
-    amqp_channel:wait_for_confirms(Channel, 5000),
+    amqp_channel:wait_for_confirms(Channel, 5),
 
     get_and_check(Channel, Q, 0, <<"true">>),
 
