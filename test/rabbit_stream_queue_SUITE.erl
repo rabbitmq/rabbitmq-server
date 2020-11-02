@@ -1454,7 +1454,7 @@ receive_batch(Ch, N, N) ->
          #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, N}]}}} ->
             ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                     multiple     = false})
-    after 5000 ->
+    after 60000 ->
             exit({missing_offset, N})
     end;
 receive_batch(Ch, N, M) ->
@@ -1468,7 +1468,7 @@ receive_batch(Ch, N, M) ->
             ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                     multiple     = false}),
             receive_batch(Ch, N + 1, M)
-    after 5000 ->
+    after 60000 ->
             exit({missing_offset, N})
     end.
 
