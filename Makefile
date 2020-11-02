@@ -135,6 +135,8 @@ BUILD_DEPS = rabbitmq_cli syslog
 DEPS = cuttlefish ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli osiris amqp10_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
+PLT_APPS += mnesia
+
 dep_cuttlefish = hex 2.4.1
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
 dep_osiris = git https://github.com/rabbitmq/osiris master

@@ -61,7 +61,7 @@
     %% indicate to the queue type module that a message has been delivered
     %% fully to the queue
     {settled, Success :: boolean(), [msg_tag()]} |
-    {deliver, rabbit_type:ctag(), boolean(), [rabbit_amqqueue:qmsg()]}.
+    {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]}.
 
 -type actions() :: [action()].
 
