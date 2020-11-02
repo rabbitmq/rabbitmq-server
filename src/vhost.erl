@@ -79,7 +79,7 @@ new(Name, Limits) ->
           vhost_v1:new(Name, Limits)
     end.
 
--spec new(rabbit_vhost:name(), list(), map()) -> vhost().
+-spec new(name(), list(), map()) -> vhost().
 new(Name, Limits, Metadata) ->
     case record_version_to_use() of
         ?record_version ->

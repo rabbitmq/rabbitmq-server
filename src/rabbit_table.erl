@@ -22,6 +22,7 @@
 %%----------------------------------------------------------------------------
 
 -type retry() :: boolean().
+-type mnesia_table() :: atom().
 
 %%----------------------------------------------------------------------------
 %% Main interface
@@ -36,7 +37,7 @@ create() ->
     ensure_secondary_indexes(),
     ok.
 
--spec create(mnesia:table(), list()) -> rabbit_types:ok_or_error(any()).
+-spec create(mnesia_table(), list()) -> rabbit_types:ok_or_error(any()).
 
 create(TableName, TableDefinition) ->
     TableDefinition1 = proplists:delete(match, TableDefinition),
@@ -49,7 +50,7 @@ create(TableName, TableDefinition) ->
             throw({error, {table_creation_failed, TableName, TableDefinition1, Reason}})
     end.
 
--spec exists(mnesia:table()) -> boolean().
+-spec exists(mnesia_table()) -> boolean().
 exists(Table) ->
     lists:member(Table, mnesia:system_info(tables)).
 
@@ -64,7 +65,7 @@ ensure_secondary_index(Table, Field) ->
     {aborted, {already_exists, Table, _}} -> ok
   end.
 
--spec ensure_table_copy(mnesia:table(), node()) -> ok | {error, any()}.
+-spec ensure_table_copy(mnesia_table(), node()) -> ok | {error, any()}.
 ensure_table_copy(TableName, Node) ->
     rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
     case mnesia:add_table_copy(TableName, Node, disc_copies) of

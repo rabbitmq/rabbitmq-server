@@ -59,7 +59,7 @@
                  max :: non_neg_integer(),
                  start_offset = 0 :: non_neg_integer(),
                  listening_offset = 0 :: non_neg_integer(),
-                 log :: undefined | orisis_log:state()}).
+                 log :: undefined | osiris_log:state()}).
 
 -record(stream_client, {name :: term(),
                         leader :: pid(),

@@ -57,11 +57,11 @@
               vhost_v1_pattern/0]).
 
 
--spec new(rabbit_vhost:name(), list()) -> vhost().
+-spec new(vhost:name(), list()) -> vhost().
 new(Name, Limits) ->
   #vhost{virtual_host = Name, limits = Limits}.
 
--spec new(rabbit_vhost:name(), list(), map()) -> vhost().
+-spec new(vhost:name(), list(), map()) -> vhost().
 new(Name, Limits, _Metadata) ->
   #vhost{virtual_host = Name, limits = Limits}.
 
