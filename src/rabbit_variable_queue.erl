@@ -2366,21 +2366,23 @@ inext(It, {Its, IndexState}) ->
             {[{MsgStatus1, Unacked, It1} | Its], IndexState1}
     end.
 
-ifold(_Fun, Acc, [], State) ->
-    {Acc, State};
-ifold(Fun, Acc, Its, State) ->
+ifold(_Fun, Acc, [], State0) ->
+    {Acc, State0};
+ifold(Fun, Acc, Its0, State0) ->
     [{MsgStatus, Unacked, It} | Rest] =
         lists:sort(fun ({#msg_status{seq_id = SeqId1}, _, _},
                         {#msg_status{seq_id = SeqId2}, _, _}) ->
                            SeqId1 =< SeqId2
-                   end, Its),
-    {Msg, State1} = read_msg(MsgStatus, State),
+                   end, Its0),
+    {Msg, State1} = read_msg(MsgStatus, State0),
     case Fun(Msg, MsgStatus#msg_status.msg_props, Unacked, Acc) of
         {stop, Acc1} ->
-            {Acc1, State};
+            {Acc1, State1};
         {cont, Acc1} ->
-            {Its1, IndexState1} = inext(It, {Rest, State1#vqstate.index_state}),
-            ifold(Fun, Acc1, Its1, State1#vqstate{index_state = IndexState1})
+            IndexState0 = State1#vqstate.index_state,
+            {Its1, IndexState1} = inext(It, {Rest, IndexState0}),
+            State2 = State1#vqstate{index_state = IndexState1},
+            ifold(Fun, Acc1, Its1, State2)
     end.
 
 %%----------------------------------------------------------------------------
