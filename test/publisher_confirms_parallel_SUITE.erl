@@ -127,7 +127,7 @@ publisher_confirms(Config) ->
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
     amqp_channel:unregister_confirm_handler(Ch),
     ok.
 
@@ -139,7 +139,7 @@ publisher_confirms_with_deleted_queue(Config) ->
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QName, [<<"msg1">>]),
     amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    amqp_channel:wait_for_confirms_or_die(Ch, 5000),
+    amqp_channel:wait_for_confirms_or_die(Ch, 5),
     amqp_channel:unregister_confirm_handler(Ch).
 
 %% Depending on whether no-wait was set or not, the broker may respond with a confirm.select-ok

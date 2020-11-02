@@ -465,7 +465,7 @@ publish_confirm(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]).
 
 restart_single_node(Config) ->
@@ -546,7 +546,7 @@ consume(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -574,7 +574,7 @@ consume_offset(Config) ->
     amqp_channel:register_confirm_handler(Ch, self()),
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 1000)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     run_proper(
       fun () ->
@@ -634,7 +634,7 @@ consume_and_nack(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -664,7 +664,7 @@ basic_cancel(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -693,7 +693,7 @@ consume_and_reject(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -722,7 +722,7 @@ consume_and_ack(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -753,7 +753,7 @@ consume_from_last(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -783,7 +783,7 @@ consume_from_last(Config) ->
 
     %% Publish a few more
     [publish(Ch, Q, <<"msg2">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     %% Yeah! we got them
     receive_batch(Ch1, 100, 199).
@@ -806,7 +806,7 @@ consume_from_next(Config, Args) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -833,7 +833,7 @@ consume_from_next(Config, Args) ->
 
     %% Publish a few more
     [publish(Ch, Q, <<"msg2">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     %% Yeah! we got them
     receive_batch(Ch1, 100, 199).
@@ -850,7 +850,7 @@ consume_from_replica(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch1, self()),
     [publish(Ch1, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch1, 5000),
+    amqp_channel:wait_for_confirms(Ch1, 5),
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     qos(Ch2, 10, false),
@@ -877,7 +877,7 @@ consume_credit(Config) ->
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
     [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, NumMsgs)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
 
@@ -937,7 +937,7 @@ consume_credit_out_of_order_ack(Config) ->
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
     [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, NumMsgs)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
 
@@ -998,7 +998,7 @@ consume_credit_multiple_ack(Config) ->
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
     [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, NumMsgs)],
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
 
@@ -1090,7 +1090,7 @@ leader_failover(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch1, self()),
     [publish(Ch1, Q, <<"msg">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch1, 5000),
+    amqp_channel:wait_for_confirms(Ch1, 5),
 
     check_leader_and_replicas(Config, Q, Server1, [Server2, Server3]),
 

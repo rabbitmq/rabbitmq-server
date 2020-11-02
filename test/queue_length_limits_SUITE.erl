@@ -260,7 +260,7 @@ check_max_length_requeue(Config, QName, Ch, Payload1, Payload2) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     %% A single message is published and consumed
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     {#'basic.get_ok'{delivery_tag = DeliveryTag},
      #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
@@ -268,7 +268,7 @@ check_max_length_requeue(Config, QName, Ch, Payload1, Payload2) ->
 
     %% Another message is published
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
@@ -286,7 +286,7 @@ check_max_length_drops_publish(Config, QName, Ch, Payload1, Payload2, Payload3) 
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     %% A single message is published and consumed
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
@@ -294,7 +294,7 @@ check_max_length_drops_publish(Config, QName, Ch, Payload1, Payload2, Payload3) 
     %% Message 2 is dropped, message 1 stays
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
 
@@ -302,7 +302,7 @@ check_max_length_drops_publish(Config, QName, Ch, Payload1, Payload2, Payload3) 
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
 
@@ -348,7 +348,7 @@ check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     %% A single message is published and consumed
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
@@ -356,7 +356,7 @@ check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
     %% Message 1 is replaced by message 2
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
 
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload2}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
@@ -365,7 +365,7 @@ check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
-    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:wait_for_confirms(Ch, 5),
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload3}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
 
