@@ -1229,6 +1229,13 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
                 %% The vhost terminated while we were checking again.
                 exit:{shutdown, _} ->
                     timer:sleep(300),
+                    force_vhost_failure(Config, Node, VHost, Attempts - 1);
+                exit:{badmatch,
+                      {error,
+                       {vhost_supervisor_not_running, VHost}}} ->
+                    %% This badmatch may occur in get_message_store_pid/3 as a
+                    %% result of `{ok, VHostSup} = rpc(...)`.
+                    timer:sleep(300),
                     force_vhost_failure(Config, Node, VHost, Attempts - 1)
             end;
         false -> ok
