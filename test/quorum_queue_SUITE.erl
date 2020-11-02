@@ -562,12 +562,21 @@ restart_all_types(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server),
 
-    %% Check that the application and two ra nodes are up
+    %% Check that the application and two ra nodes are up. Queues are restored
+    %% after the broker is marked as "ready", that's why we need to wait for
+    %% the condition.
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
     Expected = length(Children) + 2,
-    Got = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
-    ?assertMatch(Expected, Got),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() ->
+                   Expected =:= length(
+                                  rpc:call(
+                                    Server,
+                                    supervisor,
+                                    which_children,
+                                    [ra_server_sup_sup]))
+           end, 60000),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
