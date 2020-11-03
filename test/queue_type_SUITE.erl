@@ -22,7 +22,8 @@ all() ->
 
 all_tests() ->
     [
-     smoke
+     smoke,
+     ack_after_queue_delete
     ].
 
 groups() ->
@@ -171,7 +172,44 @@ smoke(Config) ->
     basic_ack(Ch, basic_get(Ch, QName)),
     ok.
 
+ack_after_queue_delete(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QName = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr,
+                                      ?config(queue_type, Config)}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    publish(Ch, QName, <<"msg1">>),
+    ct:pal("waiting for confirms from ~s", [QName]),
+    ok = receive
+             #'basic.ack'{} -> ok;
+             #'basic.nack'{} ->
+                 ct:fail("confirm nack - expected ack")
+         after 2500 ->
+                   flush(),
+                   exit(confirm_timeout)
+         end,
+
+    DTag = basic_get(Ch, QName),
+
+    ChRef = erlang:monitor(process, Ch),
+    #'queue.delete_ok'{} = delete(Ch, QName),
+
+    basic_ack(Ch, DTag),
+    %% assert no channel error
+    receive
+        {'DOWN', ChRef, process, _, _} ->
+            ct:fail("unexpected channel closure")
+    after 1000 ->
+              ok
+    end,
+    flush(),
+    ok.
+
 %% Utility
+%%
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
@@ -181,6 +219,9 @@ declare(Ch, Q, Args) ->
                                            durable = true,
                                            auto_delete = false,
                                            arguments = Args}).
+
+delete(Ch, Q) ->
+    amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
 publish(Ch, Queue, Msg) ->
     ok = amqp_channel:cast(Ch,
