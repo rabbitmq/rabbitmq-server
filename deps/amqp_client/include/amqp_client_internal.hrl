@@ -26,3 +26,5 @@
      {<<"consumer_cancel_notify">>,       bool, true},
      {<<"connection.blocked">>,           bool, true},
      {<<"authentication_failure_close">>, bool, true}]).
+
+-define(WAIT_FOR_CONFIRMS_TIMEOUT, {60000, millisecond}).
