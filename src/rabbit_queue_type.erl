@@ -36,9 +36,6 @@
          is_server_named_allowed/1
          ]).
 
-%% temporary
--export([with/3]).
-
 %% gah what is a good identity of a classic queue including all replicas
 -type queue_name() :: rabbit_types:r(queue).
 -type queue_ref() :: queue_name() | atom().
@@ -498,13 +495,6 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
         {error, _} = Err ->
             Err
     end.
-
-%% temporary
-with(QRef, Fun, Ctxs) ->
-    #ctx{state = State0} = Ctx = get_ctx(QRef, Ctxs),
-    {Res, State} = Fun(State0),
-    {Res, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs)}.
-
 
 get_ctx(Q, #?STATE{ctxs = Contexts}) when ?is_amqqueue(Q) ->
     Ref = qref(Q),
