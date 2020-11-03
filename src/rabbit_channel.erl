@@ -1472,7 +1472,6 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
             QName = amqqueue:get_name(Q),
 
             ConsumerMapping1 = maps:remove(ConsumerTag, ConsumerMapping),
-            % QRef = qpid_to_ref(QPid),
             QCons1 =
                 case maps:find(QName, QCons) of
                     error       -> QCons;

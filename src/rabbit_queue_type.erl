@@ -249,12 +249,9 @@ stat(Q) ->
 remove(QRef, #?STATE{ctxs = Ctxs0} = State) ->
     case maps:take(QRef, Ctxs0) of
         error ->
-            State#?STATE{ctxs = Ctxs0};
+            State;
         {_, Ctxs} ->
-            %% remove all linked queue refs
-            State#?STATE{ctxs = maps:filter(fun (_, V) ->
-                                                    V == QRef
-                                            end, Ctxs)}
+            State#?STATE{ctxs = Ctxs}
     end.
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
@@ -307,7 +304,7 @@ is_policy_applicable(Q, Policy) ->
 is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
-        
+
 -spec init() -> state().
 init() ->
     #?STATE{}.
@@ -329,9 +326,9 @@ new(Q, State) when ?is_amqqueue(Q) ->
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
     {ok, state(), actions()} | {error, term()}.
 consume(Q, Spec, State) ->
-    #ctx{state = State0} = Ctx = get_ctx(Q, State),
+    #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
-    case Mod:consume(Q, Spec, State0) of
+    case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState, Actions} ->
             return_ok(set_ctx(Q, Ctx#ctx{state = CtxState}, State), Actions);
         Err ->
@@ -466,10 +463,16 @@ deliver(Qs, Delivery, #?STATE{} = State0) ->
              [non_neg_integer()], state()) -> {ok, state(), actions()}.
 settle(QRef, Op, CTag, MsgIds, Ctxs)
   when ?QREF(QRef) ->
-    #ctx{state = State0,
-         module = Mod} = Ctx = get_ctx(QRef, Ctxs),
-    {State, Actions} = Mod:settle(Op, CTag, MsgIds, State0),
-    {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions}.
+    case get_ctx(QRef, Ctxs, undefined) of
+        undefined ->
+            %% if we receive a settlement and there is no queue state it means
+            %% the queue was deleted with active consumers
+            {ok, Ctxs, []};
+        #ctx{state = State0,
+             module = Mod} = Ctx ->
+            {State, Actions} = Mod:settle(Op, CTag, MsgIds, State0),
+            {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions}
+    end.
 
 -spec credit(amqqueue:amqqueue() | queue_ref(),
              rabbit_types:ctag(), non_neg_integer(),
@@ -561,7 +564,7 @@ return_ok(State0, Actions0) ->
                           {S0, A0};
                       #{Pid := _} ->
                           %% TODO: allow multiple Qrefs to monitor the same pid
-                          exit(return_ok_duplicate_montored_pid);
+                          exit(return_ok_duplicate_monitored_pid);
                       _ ->
                           _ = erlang:monitor(process, Pid),
                           M = M0#{Pid => QRef},
