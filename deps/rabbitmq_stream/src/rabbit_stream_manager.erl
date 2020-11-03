@@ -123,7 +123,7 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
                     {existing, _} ->
                         {reply, {error, reference_already_exists}, State};
                     {error, Err} ->
-                        rabbit_log:warn("Error while creating ~p stream, ~p~n", [Reference, Err]),
+                        rabbit_log:warning("Error while creating ~p stream, ~p~n", [Reference, Err]),
                         {reply, {error, internal_error}, State}
                 end
             catch
