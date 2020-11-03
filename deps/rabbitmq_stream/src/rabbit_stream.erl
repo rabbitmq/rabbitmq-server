@@ -31,10 +31,19 @@ start(_Type, _Args) ->
 host() ->
     case application:get_env(rabbitmq_stream, advertised_host, undefined) of
         undefined ->
-            {ok, Host} = inet:gethostname(),
-            list_to_binary(Host);
+            hostname_from_node();
         Host ->
             rabbit_data_coercion:to_binary(Host)
+    end.
+
+hostname_from_node() ->
+    case re:split(rabbit_data_coercion:to_binary(node()),
+                  "@",
+                  [{return, binary}, {parts, 2}]) of
+        [_, Hostname] ->
+            Hostname;
+        [_] ->
+            rabbit_data_coercion:to_binary(inet:gethostname())
     end.
 
 port() ->
