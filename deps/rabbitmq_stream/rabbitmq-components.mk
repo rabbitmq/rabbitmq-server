@@ -89,6 +89,7 @@ dep_rabbitmq_sharding                 = git_rmq rabbitmq-sharding $(current_rmq_
 dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel_management        = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stomp                    = git_rmq rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream                   = git_rmq rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_top                      = git_rmq rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
@@ -111,17 +112,17 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # possible to work with rabbitmq-public-umbrella.
 
 dep_accept = hex 0.3.5
-dep_cowboy = hex 2.6.1
-dep_cowlib = hex 2.7.0
-dep_jsx = hex 2.9.0
+dep_cowboy = hex 2.8.0
+dep_cowlib = hex 2.9.1
+dep_jsx = hex 2.11.0
 dep_lager = hex 3.8.0
 dep_prometheus = git https://github.com/deadtrickster/prometheus.erl.git master
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
-dep_recon = hex 2.5.0
-dep_observer_cli = hex 1.5.3
-dep_stdout_formatter = hex 0.2.2
-dep_sysmon_handler = hex 1.2.0
+dep_recon = hex 2.5.1
+dep_observer_cli = hex 1.5.4
+dep_stdout_formatter = hex 0.2.4
+dep_sysmon_handler = hex 1.3.0
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
@@ -175,6 +176,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
+		      rabbitmq_stream \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
@@ -316,21 +318,41 @@ prepare-dist::
 # Umbrella-specific settings.
 # --------------------------------------------------------------------
 
-# If this project is under the Umbrella project, we override $(DEPS_DIR)
-# to point to the Umbrella's one. We also disable `make distclean` so
-# $(DEPS_DIR) is not accidentally removed.
+# If the top-level project is a RabbitMQ component, we override
+# $(DEPS_DIR) for this project to point to the top-level's one.
+#
+# We also verify that the guessed DEPS_DIR is actually named `deps`,
+# to rule out any situation where it is a coincidence that we found a
+# `rabbitmq-components.mk` up upper directories.
 
-ifneq ($(wildcard ../../UMBRELLA.md),)
-UNDER_UMBRELLA = 1
-DEPS_DIR ?= $(abspath ..)
-else ifneq ($(wildcard ../../../../UMBRELLA.md),)
-UNDER_UMBRELLA = 1
-DEPS_DIR ?= $(abspath ../../..)
-else ifneq ($(wildcard UMBRELLA.md),)
-UNDER_UMBRELLA = 1
+possible_deps_dir_1 = $(abspath ..)
+possible_deps_dir_2 = $(abspath ../../..)
+
+ifeq ($(notdir $(possible_deps_dir_1)),deps)
+ifneq ($(wildcard $(possible_deps_dir_1)/../rabbitmq-components.mk),)
+deps_dir_overriden = 1
+DEPS_DIR ?= $(possible_deps_dir_1)
+DISABLE_DISTCLEAN = 1
+endif
 endif
 
-ifeq ($(UNDER_UMBRELLA),1)
+ifeq ($(deps_dir_overriden),)
+ifeq ($(notdir $(possible_deps_dir_2)),deps)
+ifneq ($(wildcard $(possible_deps_dir_2)/../rabbitmq-components.mk),)
+deps_dir_overriden = 1
+DEPS_DIR ?= $(possible_deps_dir_2)
+DISABLE_DISTCLEAN = 1
+endif
+endif
+endif
+
+ifneq ($(wildcard UMBRELLA.md),)
+DISABLE_DISTCLEAN = 1
+endif
+
+# We disable `make distclean` so $(DEPS_DIR) is not accidentally removed.
+
+ifeq ($(DISABLE_DISTCLEAN),1)
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
 endif
