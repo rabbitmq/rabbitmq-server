@@ -2499,7 +2499,7 @@ get_test(Config) ->
                                              routing_key = <<"myqueue">>},
                         #amqp_msg{props = #'P_basic'{headers = Headers},
                                   payload = Payload}),
-                      amqp_channel:wait_for_confirms_or_die(Ch, 5000)
+                      amqp_channel:wait_for_confirms_or_die(Ch, 5)
               end,
     Publish(<<"1aaa">>),
     Publish(<<"2aaa">>),
