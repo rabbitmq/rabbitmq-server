@@ -482,7 +482,9 @@ restart_queue(Config) ->
                                            rpc:call(Server, application, which_applications, []))),
     Expected = Children + 1,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))).
+                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    delete_queues(Ch2, [LQ]).
 
 idempotent_recover(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -586,7 +588,8 @@ restart_all_types(Config) ->
     delete_queues(Ch2, [QQ1, QQ2, CQ1, CQ2]).
 
 delete_queues(Ch, Queues) ->
-    [amqp_channel:call(Ch, #'queue.delete'{queue = Q}) ||  Q <- Queues].
+    [amqp_channel:call(Ch, #'queue.delete'{queue = Q}) ||  Q <- Queues],
+    ok.
 
 stop_start_rabbit_app(Config) ->
     %% Test start/stop of rabbit app with both types of queues (quorum and
