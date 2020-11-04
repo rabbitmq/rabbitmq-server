@@ -847,12 +847,16 @@ format_arg(Arg) ->
     Arg.
 
 port_receive_loop(Port, Stdout, Options, Until) ->
+    port_receive_loop(Port, Stdout, Options, Until, stdout_dump_timer()).
+
+port_receive_loop(Port, Stdout, Options, Until, DumpTimer) ->
   Timeout = case Until of
                 infinity -> infinity;
                 _ -> max(0, Until - erlang:system_time(millisecond))
             end,
   receive
       {Port, {exit_status, X}} ->
+          erlang:cancel_timer(DumpTimer),
           DropStdout = lists:member(drop_stdout, Options) orelse
               Stdout =:= "",
           if
@@ -875,12 +879,26 @@ port_receive_loop(Port, Stdout, Options, Until) ->
                       nomatch -> {error, X, Stdout}
                   end
           end;
+      {timeout, DumpTimer, _} ->
+          DropStdout = lists:member(drop_stdout, Options) orelse
+              Stdout =:= "",
+          if
+              DropStdout ->
+                  ok;
+              true ->
+                  ct:pal(?LOW_IMPORTANCE, "~ts~n[Command still in progress] (pid ~p)",
+                         [Stdout, self()])
+          end,
+          port_receive_loop(Port, Stdout, Options, Until, stdout_dump_timer());
       {Port, {data, Out}} ->
-          port_receive_loop(Port, Stdout ++ Out, Options, Until)
+          port_receive_loop(Port, Stdout ++ Out, Options, Until, DumpTimer)
   after
       Timeout ->
           {error, timeout, Stdout}
   end.
+
+stdout_dump_timer() ->
+    erlang:start_timer(30000, self(), dump_output, []).
 
 make(Config, Dir, Args) ->
     make(Config, Dir, Args, []).
