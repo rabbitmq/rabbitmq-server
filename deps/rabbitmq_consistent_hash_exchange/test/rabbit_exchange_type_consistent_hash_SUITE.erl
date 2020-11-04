@@ -228,7 +228,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, Itera
     [amqp_channel:call(Chan,
                        MakeMethod(CHX),
                        MakeMsg()) || _ <- lists:duplicate(IterationCount, const)],
-    amqp_channel:wait_for_confirms(Chan, 60),
+    amqp_channel:wait_for_confirms(Chan, 300),
     timer:sleep(500),
 
     Counts =
