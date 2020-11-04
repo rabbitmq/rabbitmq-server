@@ -327,7 +327,7 @@ test_durable_exchange_hash_ring_recovery_between_node_restarts(Config) ->
     rabbit_ct_broker_helpers:restart_node(Config, 0),
     rabbit_ct_helpers:await_condition(
         fun () -> count_buckets_of_exchange(Config, X) > 0 end, 15000),
-    
+
     ?assertEqual(9, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
 
@@ -456,7 +456,7 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case(Config, XAsList, Key) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    
+
     X = atom_to_binary(XAsList, utf8),
     amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
 
