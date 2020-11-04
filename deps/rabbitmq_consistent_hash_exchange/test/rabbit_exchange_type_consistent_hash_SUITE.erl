@@ -238,7 +238,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, Itera
                                                            exclusive = true}),
              M
          end || Q <- Queues],
-    IterationCount = lists:sum(Counts), %% All messages got routed
+    ?assertEqual(IterationCount, lists:sum(Counts)), %% All messages got routed
 
     %% Chi-square test
     %% H0: routing keys are not evenly distributed according to weight
