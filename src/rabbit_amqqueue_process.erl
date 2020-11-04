@@ -1601,9 +1601,10 @@ handle_cast(update_mirroring, State = #q{q = Q,
 handle_cast({credit, ChPid, CTag, Credit, Drain},
             State = #q{consumers           = Consumers,
                        backing_queue       = BQ,
-                       backing_queue_state = BQS}) ->
+                       backing_queue_state = BQS,
+                       q = Q}) ->
     Len = BQ:len(BQS),
-    rabbit_channel:send_credit_reply(ChPid, Len),
+    rabbit_classic_queue:send_queue_event(ChPid, amqqueue:get_name(Q), {send_credit_reply, Len}),
     noreply(
       case rabbit_queue_consumers:credit(Len == 0, Credit, Drain, ChPid, CTag,
                                          Consumers) of

@@ -172,7 +172,7 @@
 
 -callback credit(rabbit_types:ctag(),
                  non_neg_integer(), Drain :: boolean(), queue_state()) ->
-    queue_state().
+    {queue_state(), actions()}.
 
 -callback dequeue(NoAck :: boolean(), LimiterPid :: pid(),
                   rabbit_types:ctag(), queue_state()) ->
@@ -477,8 +477,8 @@ settle(QRef, Op, CTag, MsgIds, Ctxs)
 credit(Q, CTag, Credit, Drain, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(Q, Ctxs),
-    State = Mod:credit(CTag, Credit, Drain, State0),
-    set_ctx(Q, Ctx#ctx{state = State}, Ctxs).
+    {State, Actions} = Mod:credit(CTag, Credit, Drain, State0),
+    {ok, set_ctx(Q, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
               pid(), rabbit_types:ctag(), state()) ->

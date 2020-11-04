@@ -368,7 +368,7 @@ discard(ConsumerTag, [_|_] = MsgIds,
                state()) -> {ok, state()} | {error | timeout, term()}.
 checkout(ConsumerTag, NumUnsettled, ConsumerInfo, State0)
   when is_map(ConsumerInfo) ->
-    checkout(ConsumerTag, NumUnsettled, simple_prefetch, ConsumerInfo, State0).
+    checkout(ConsumerTag, NumUnsettled, get_credit_mode(ConsumerInfo), ConsumerInfo, State0).
 
 %% @doc Register with the rabbit_fifo queue to "checkout" messages as they
 %% become available.
@@ -434,7 +434,7 @@ credit(ConsumerTag, Credit, Drain,
     case send_command(Node, undefined, Cmd, normal, State0) of
         {_, S} ->
             % turn slow into ok for this function
-            S
+            {S, []}
     end.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
@@ -906,3 +906,13 @@ find_leader([Server | Servers]) ->
 
 qref({Ref, _}) -> Ref;
 qref(Ref) -> Ref.
+
+get_credit_mode(#{args := Args}) ->
+    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
+        {_Key, Value} ->
+            Value;
+        _ ->
+            simple_prefetch
+    end;
+get_credit_mode(_) ->
+    simple_prefetch.
