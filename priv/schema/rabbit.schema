@@ -1754,9 +1754,9 @@ fun(Port) when is_integer(Port) ->
     Port > 0 andalso Port < 65535
 end}.
 
-{validator, "byte", "Integer is not 0<i<255",
+{validator, "byte", "Integer must be in the range [0, 255]",
 fun(Int) when is_integer(Int) ->
-    Int > 0 andalso Int < 255
+    Int >= 0 andalso Int =< 255
 end}.
 
 {validator, "dir_writable", "Cannot create file in dir",
