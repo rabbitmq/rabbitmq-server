@@ -412,6 +412,24 @@ tcp_listen_options.exit_on_close = false",
              {verify,verify_peer},
              {fail_if_no_peer_cert,false}]}]}],
   []},
+ {ssl_options_depth_0,
+  "listeners.ssl.1 = 5671
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.depth      = 0
+   ssl_options.verify     = verify_peer
+   ssl_options.fail_if_no_peer_cert = false",
+  [{rabbit,
+       [{ssl_listeners,[5671]},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {depth,2},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,false}]}]}],
+  []},
  {ssl_options_honor_cipher_order,
   "listeners.ssl.1 = 5671
    ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
