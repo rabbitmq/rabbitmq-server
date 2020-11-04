@@ -28,7 +28,7 @@ wait_for_messages_total(Servers, QName, Total) ->
 
 wait_for_messages(Servers, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Servers, QName, Fun),
-    ?assertEqual(Msgs, [Number || _ <- lists:seq(1, length(Servers))]);
+    ?assertEqual([Number || _ <- lists:seq(1, length(Servers))], Msgs);
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
     ct:pal("Got messages ~p ~p", [QName, Msgs]),
