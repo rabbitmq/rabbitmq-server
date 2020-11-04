@@ -506,9 +506,11 @@ make_stream_conf(Node, Q) ->
     MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
     LeaderLocator = queue_leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
                                                             fun res_arg/2, Q)),
+    InitialClusterSize = initial_cluster_size(args_policy_lookup(<<"initial-cluster-size">>,
+                                                                 fun res_arg/2, Q)),
     Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
     Arguments = amqqueue:get_arguments(Q),
-    Replicas = select_stream_nodes(get_initial_cluster_size(Arguments) - 1, Replicas0),
+    Replicas = select_stream_nodes(InitialClusterSize - 1, Replicas0),
     Formatter = {?MODULE, format_osiris_event, [QName]},
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
@@ -575,6 +577,11 @@ max_age(Age1, Age2) ->
 
 queue_leader_locator(undefined) -> <<"client-local">>;
 queue_leader_locator(Val) -> Val.
+
+initial_cluster_size(undefined) ->
+    length(rabbit_mnesia:cluster_nodes(running));
+initial_cluster_size(Val) ->
+    Val.
 
 res_arg(PolVal, undefined) -> PolVal;
 res_arg(_, ArgVal) ->  ArgVal.
@@ -688,7 +695,7 @@ msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
 
 capabilities() ->
     #{policies => [<<"max-length-bytes">>, <<"max-age">>, <<"max-segment-size">>,
-                   <<"queue-leader-locator">>],
+                   <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
@@ -696,9 +703,3 @@ capabilities() ->
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>],
       server_named => false}.
-
-get_initial_cluster_size(Arguments) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-initial-cluster-size">>) of
-        undefined -> length(rabbit_mnesia:cluster_nodes(running));
-        {_Type, Val} -> Val
-    end.

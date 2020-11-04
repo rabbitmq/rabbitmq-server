@@ -49,6 +49,7 @@ groups() ->
            leader_failover,
            initial_cluster_size_one,
            initial_cluster_size_two,
+           initial_cluster_size_one_policy,
            leader_locator_client_local,
            leader_locator_random,
            leader_locator_least_leaders,
@@ -1143,6 +1144,26 @@ initial_cluster_size_two(Config) ->
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
+
+initial_cluster_size_one_policy(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"cluster-size">>, <<"initial_cluster_size_one_policy">>, <<"queues">>,
+           [{<<"initial-cluster-size">>, 1}]),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                  {<<"x-initial-cluster-size">>, long, 1}])),
+    check_leader_and_replicas(Config, Q, Server1, []),
+
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"cluster-size">>).
 
 leader_locator_client_local(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

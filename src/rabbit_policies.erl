@@ -42,6 +42,7 @@ register() ->
                           {policy_validator, <<"max-age">>},
                           {policy_validator, <<"max-segment-size">>},
                           {policy_validator, <<"queue-leader-locator">>},
+                          {policy_validator, <<"initial-cluster-size">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -156,6 +157,12 @@ validate_policy0(<<"queue-leader-locator">>, <<"least-leaders">>) ->
     ok;
 validate_policy0(<<"queue-leader-locator">>, Value) ->
     {error, "~p is not a valid queue leader locator value", [Value]};
+
+validate_policy0(<<"initial-cluster-size">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"initial-cluster-size">>, Value) ->
+    {error, "~p is not a valid cluster size", [Value]};
 
 validate_policy0(<<"max-segment-size">>, Value)
   when is_integer(Value), Value >= 0 ->
