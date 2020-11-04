@@ -115,7 +115,9 @@ delete_replica(StreamId, Node) ->
     process_command({delete_replica, #{stream_id => StreamId, node => Node}}).
 
 process_command(Cmd) ->
+    global:set_lock(?STREAM_COORDINATOR_STARTUP),
     Servers = ensure_coordinator_started(),
+    global:del_lock(?STREAM_COORDINATOR_STARTUP),
     process_command(Servers, Cmd).
 
 process_command([], _Cmd) ->
