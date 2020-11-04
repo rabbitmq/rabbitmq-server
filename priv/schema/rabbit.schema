@@ -1756,7 +1756,7 @@ end}.
 
 {validator, "byte", "Integer is not 0<i<255",
 fun(Int) when is_integer(Int) ->
-    Int > 0 andalso Int < 255
+    Int >= 0 andalso Int < 255
 end}.
 
 {validator, "dir_writable", "Cannot create file in dir",
