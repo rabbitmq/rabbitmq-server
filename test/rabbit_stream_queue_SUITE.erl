@@ -90,7 +90,8 @@ all_tests() ->
      max_age,
      invalid_policy,
      max_age_policy,
-     max_segment_size_policy
+     max_segment_size_policy,
+     purge
     ].
 
 %% -------------------------------------------------------------------
@@ -1408,6 +1409,17 @@ max_segment_size_policy(Config) ->
     ?assertEqual([{<<"max-segment-size">>, 5000}],
                  proplists:get_value(effective_policy_definition, Info)),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"segment">>).
+
+purge(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+                amqp_channel:call(Ch, #'queue.purge'{queue = Q})).
 
 %%----------------------------------------------------------------------------
 

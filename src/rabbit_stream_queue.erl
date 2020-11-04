@@ -132,8 +132,11 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
 
 -spec purge(amqqueue:amqqueue()) ->
     {'ok', non_neg_integer()}.
-purge(_Q) ->
-    {ok, 0}.
+purge(Q) ->
+    rabbit_misc:protocol_error(
+      not_implemented,
+      "queue.purge not supported by stream queues ~s",
+      [rabbit_misc:rs(amqqueue:get_name(Q))]).
 
 -spec policy_changed(amqqueue:amqqueue()) -> 'ok'.
 policy_changed(Q) ->
