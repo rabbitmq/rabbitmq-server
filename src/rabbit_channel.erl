@@ -2540,7 +2540,17 @@ handle_method(#'queue.purge'{queue = QueueNameBin},
     check_read_permitted(QueueName, User, AuthzContext),
     rabbit_amqqueue:with_exclusive_access_or_die(
       QueueName, ConnPid,
-      fun (Q) -> rabbit_amqqueue:purge(Q) end);
+      fun (Q) ->
+              case rabbit_queue_type:purge(Q) of
+                  {ok, _} = Res ->
+                      Res;
+                  {error, not_supported} ->
+                      rabbit_misc:protocol_error(
+                        not_implemented,
+                        "queue.purge not supported by stream queues ~s",
+                        [rabbit_misc:rs(amqqueue:get_name(Q))])
+              end
+      end);
 handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   type        = TypeNameBin,
                                   passive     = false,
