@@ -73,7 +73,6 @@
 }).
 
 -define(RESPONSE_FRAME_SIZE, 10). % 2 (key) + 2 (version) + 4 (correlation ID) + 2 (response code)
--define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CREATION_EVENT_KEYS,
     [pid, name, port, peer_port, host,
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
@@ -487,17 +486,6 @@ handle_inbound_data(Transport, Connection, #stream_connection_state{data = Lefto
     %% see osiris_replica:parse_chunk/3
     handle_inbound_data(Transport, Connection, State1, <<Leftover/binary, Data/binary>>, HandleFrameFun).
 
-write_messages(_ClusterLeader, _PublisherId, <<>>) ->
-    ok;
-write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
-    % FIXME handle write error
-    ok = osiris:write(ClusterLeader, {PublisherId, PublishingId}, Message),
-    write_messages(ClusterLeader, PublisherId, Rest);
-write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
-    % FIXME handle write error
-    ok = osiris:write(ClusterLeader, {PublisherId, PublishingId}, {batch, MessageCount, CompressionType, Batch}),
-    write_messages(ClusterLeader, PublisherId, Rest).
-
 generate_publishing_error_details(Acc, _Code, <<>>) ->
     Acc;
 generate_publishing_error_details(Acc, Code, <<PublishingId:64, MessageSize:32, _Message:MessageSize/binary, Rest/binary>>) ->
@@ -510,7 +498,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S} = Connection, St
     <<?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, CorrelationId:32,
         ClientPropertiesCount:32, ClientPropertiesFrame/binary>>, Rest) ->
 
-    {ClientProperties, _} = parse_map(ClientPropertiesFrame, ClientPropertiesCount),
+    {ClientProperties, _} = rabbit_stream_utils:parse_map(ClientPropertiesFrame, ClientPropertiesCount),
 
     {ok, Product} = application:get_key(rabbit, description),
     {ok, Version} = application:get_key(rabbit, vsn),
@@ -551,7 +539,7 @@ handle_frame_pre_auth(Transport, #stream_connection{socket = S} = Connection, St
 handle_frame_pre_auth(Transport, #stream_connection{socket = S} = Connection, State,
     <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, CorrelationId:32>>, Rest) ->
 
-    Mechanisms = auth_mechanisms(S),
+    Mechanisms = rabbit_stream_utils:auth_mechanisms(S),
     MechanismsFragment = lists:foldl(fun(M, Acc) ->
         Size = byte_size(M),
         <<Acc/binary, Size:16, M:Size/binary>>
@@ -578,7 +566,7 @@ handle_frame_pre_auth(Transport,
                       SaslBinary
               end,
 
-    {Connection1, Rest1} = case auth_mechanism_to_module(Mechanism, S) of
+    {Connection1, Rest1} = case rabbit_stream_utils:auth_mechanism_to_module(Mechanism, S) of
                                {ok, AuthMechanism} ->
                                    AuthState = case AuthState0 of
                                                    none ->
@@ -700,7 +688,10 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
         StreamSize:16, Stream:StreamSize/binary,
         PublisherId:8/unsigned,
         MessageCount:32, Messages/binary>>, Rest) ->
-    case check_write_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+    case rabbit_stream_utils:check_write_permitted(
+                #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                User,
+                #{}) of
         ok ->
             case lookup_leader(Stream, Connection) of
                 cluster_not_found ->
@@ -711,7 +702,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credi
                         MessageCount:32, Details/binary>>]),
                     {Connection, State, Rest};
                 {ClusterLeader, Connection1} ->
-                    write_messages(ClusterLeader, PublisherId, Messages),
+                    rabbit_stream_utils:write_messages(ClusterLeader, PublisherId, Messages),
                     sub_credits(Credits, MessageCount),
                     {Connection1, State, Rest}
             end;
@@ -729,7 +720,10 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
     #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:8/unsigned, StreamSize:16, Stream:StreamSize/binary,
         OffsetType:16/signed, OffsetAndCredit/binary>>, Rest) ->
-    case check_read_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+    case rabbit_stream_utils:check_read_permitted(
+                #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                User,
+                #{}) of
         ok ->
             case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
                 {error, not_available} ->
@@ -860,7 +854,10 @@ handle_frame_post_auth(_Transport, #stream_connection{virtual_host = VirtualHost
       ReferenceSize:16, Reference:ReferenceSize/binary,
       StreamSize:16, Stream:StreamSize/binary, Offset:64>>, Rest) ->
 
-    case check_write_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+    case rabbit_stream_utils:check_write_permitted(
+                #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                User,
+                #{}) of
         ok ->
             case lookup_leader(Stream, Connection) of
                 cluster_not_found ->
@@ -882,7 +879,10 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
         ReferenceSize:16, Reference:ReferenceSize/binary,
         StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
     FrameSize = ?RESPONSE_FRAME_SIZE + 8,
-    {ResponseCode, Offset} = case check_read_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+    {ResponseCode, Offset} = case rabbit_stream_utils:check_read_permitted(
+                #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                User,
+                #{}) of
         ok ->
             case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
                 {error, not_found} ->
@@ -907,8 +907,11 @@ handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost,
         ArgumentsCount:32, ArgumentsBinary/binary>>, Rest) ->
     case rabbit_stream_utils:enforce_correct_stream_name(Stream) of
         {ok, StreamName} ->
-            {Arguments, _Rest} = parse_map(ArgumentsBinary, ArgumentsCount),
-            case check_configure_permitted(#resource{name = StreamName, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+            {Arguments, _Rest} = rabbit_stream_utils:parse_map(ArgumentsBinary, ArgumentsCount),
+            case rabbit_stream_utils:check_configure_permitted(
+                       #resource{name = StreamName, kind = queue, virtual_host = VirtualHost},
+                       User,
+                       #{}) of
                 ok ->
                     case rabbit_stream_manager:create(VirtualHost, StreamName, Arguments, Username) of
                         {ok, #{leader_pid := LeaderPid, replica_pids := ReturnedReplicas}} ->
@@ -936,7 +939,10 @@ handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost,
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost,
     user = #user{username = Username} = User} = Connection, State,
     <<?COMMAND_DELETE_STREAM:16, ?VERSION_0:16, CorrelationId:32, StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
-    case check_configure_permitted(#resource{name = Stream, kind = queue, virtual_host = VirtualHost}, User, #{}) of
+    case rabbit_stream_utils:check_configure_permitted(
+                    #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                    User,
+                    #{}) of
         ok ->
             case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
                 {ok, deleted} ->
@@ -962,7 +968,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost} = Connection, State,
     <<?COMMAND_METADATA:16, ?VERSION_0:16, CorrelationId:32, StreamCount:32, BinaryStreams/binary>>, Rest) ->
-    Streams = extract_stream_list(BinaryStreams, []),
+    Streams = rabbit_stream_utils:extract_stream_list(BinaryStreams, []),
 
     %% get the nodes involved in the streams
     NodesMap = lists:foldl(fun(Stream, Acc) ->
@@ -1061,21 +1067,6 @@ notify_connection_closed(#stream_connection{name = Name} = Connection, Connectio
     rabbit_event:notify(connection_closed,
         augment_infos_with_user_provided_connection_name(EventProperties, Connection)).
 
-parse_map(<<>>, _Count) ->
-    {#{}, <<>>};
-parse_map(Content, 0) ->
-    {#{}, Content};
-parse_map(Arguments, Count) ->
-    parse_map(#{}, Arguments, Count).
-
-parse_map(Acc, <<>>, _Count) ->
-    {Acc, <<>>};
-parse_map(Acc, Content, 0) ->
-    {Acc, Content};
-parse_map(Acc, <<KeySize:16, Key:KeySize/binary, ValueSize:16, Value:ValueSize/binary, Rest/binary>>, Count) ->
-    parse_map(maps:put(Key, Value, Acc), Rest, Count - 1).
-
-
 handle_frame_post_close(_Transport, Connection, State,
     <<?COMMAND_CLOSE:16, ?VERSION_0:16, _CorrelationId:32, _ResponseCode:16>>, Rest) ->
     rabbit_log:info("Received close confirmation~n"),
@@ -1086,32 +1077,6 @@ handle_frame_post_close(_Transport, Connection, State, <<?COMMAND_HEARTBEAT:16, 
 handle_frame_post_close(_Transport, Connection, State, Frame, Rest) ->
     rabbit_log:warning("ignored frame on close ~p ~p.~n", [Frame, Rest]),
     {Connection, State, Rest}.
-
-auth_mechanisms(Sock) ->
-    {ok, Configured} = application:get_env(rabbit, auth_mechanisms),
-    [rabbit_data_coercion:to_binary(Name) || {Name, Module} <- rabbit_registry:lookup_all(auth_mechanism),
-        Module:should_offer(Sock), lists:member(Name, Configured)].
-
-auth_mechanism_to_module(TypeBin, Sock) ->
-    case rabbit_registry:binary_to_type(TypeBin) of
-        {error, not_found} ->
-            rabbit_log:warning("Unknown authentication mechanism '~p'~n", [TypeBin]),
-            {error, not_found};
-        T ->
-            case {lists:member(TypeBin, auth_mechanisms(Sock)),
-                rabbit_registry:lookup_module(auth_mechanism, T)} of
-                {true, {ok, Module}} ->
-                    {ok, Module};
-                _ ->
-                    rabbit_log:warning("Invalid authentication mechanism '~p'~n", [T]),
-                    {error, invalid}
-            end
-    end.
-
-extract_stream_list(<<>>, Streams) ->
-    Streams;
-extract_stream_list(<<Length:16, Stream:Length/binary, Rest/binary>>, Streams) ->
-    extract_stream_list(Rest, [Stream | Streams]).
 
 clean_state_after_stream_deletion_or_failure(Stream, #stream_connection{stream_leaders = StreamLeaders, stream_subscriptions = StreamSubscriptions} = Connection,
     #stream_connection_state{consumers = Consumers} = State) ->
@@ -1228,37 +1193,6 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry, Co
                     {{segment, Segment1}, {credit, Credit}}
             end
     end.
-
-check_resource_access(User, Resource, Perm, Context) ->
-    V = {Resource, Context, Perm},
-
-    Cache = case get(permission_cache) of
-                undefined -> [];
-                Other -> Other
-            end,
-    case lists:member(V, Cache) of
-        true -> ok;
-        false ->
-            try
-                rabbit_access_control:check_resource_access(
-                    User, Resource, Perm, Context),
-                CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
-                put(permission_cache, [V | CacheTail]),
-                ok
-            catch
-                exit:_ ->
-                    error
-            end
-    end.
-
-check_configure_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, configure, Context).
-
-check_write_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, write, Context).
-
-check_read_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, read, Context).
 
 emit_stats(Connection, ConnectionState) ->
     [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
