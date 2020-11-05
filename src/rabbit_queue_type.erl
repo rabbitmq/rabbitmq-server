@@ -226,7 +226,7 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
     Mod:delete(Q, IfUnused, IfEmpty, ActingUser).
 
 -spec purge(amqqueue:amqqueue()) ->
-    {'ok', non_neg_integer()}.
+    {'ok', non_neg_integer()} | {error, term()}.
 purge(Q) ->
     Mod = amqqueue:get_type(Q),
     Mod:purge(Q).
