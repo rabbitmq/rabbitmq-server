@@ -512,7 +512,6 @@ make_stream_conf(Node, Q) ->
     InitialClusterSize = initial_cluster_size(args_policy_lookup(<<"initial-cluster-size">>,
                                                                  fun res_arg/2, Q)),
     Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
-    Arguments = amqqueue:get_arguments(Q),
     Replicas = select_stream_nodes(InitialClusterSize - 1, Replicas0),
     Formatter = {?MODULE, format_osiris_event, [QName]},
     Retention = lists:filter(fun({_, R}) ->
