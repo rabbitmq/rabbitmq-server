@@ -3835,6 +3835,11 @@ jobs:
         export_default_credentials: true
     - name: RECORD BUILD FINISH
       run: |
+        echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion
+
+        gsutil cp conclusion \
+          'gs://monorepo_github_actions_conclusions/${{ github.sha }}/${{ github.workflow }}'
+
         gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         docker run \
