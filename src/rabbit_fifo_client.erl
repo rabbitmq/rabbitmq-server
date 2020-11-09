@@ -421,7 +421,7 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
              Credit :: non_neg_integer(),
              Drain :: boolean(),
              state()) ->
-    state().
+          {state(), actions()}.
 credit(ConsumerTag, Credit, Drain,
        #state{consumer_deliveries = CDels} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),

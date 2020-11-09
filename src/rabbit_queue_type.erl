@@ -473,7 +473,7 @@ settle(QRef, Op, CTag, MsgIds, Ctxs)
 
 -spec credit(amqqueue:amqqueue() | queue_ref(),
              rabbit_types:ctag(), non_neg_integer(),
-             boolean(), state()) -> state().
+             boolean(), state()) -> {ok, state(), actions()}.
 credit(Q, CTag, Credit, Drain, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(Q, Ctxs),
