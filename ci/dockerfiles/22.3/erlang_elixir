@@ -16,9 +16,3 @@ RUN set -xe \
 	&& rm elixir-src.tar.gz \
 	&& cd /usr/local/src/elixir \
 	&& make install clean
-
-RUN apt-get update && apt-get install -y rsync
-
-RUN curl -L -o buildevents https://github.com/honeycombio/buildevents/releases/latest/download/buildevents-linux-amd64
-RUN chmod 755 buildevents
-RUN mv buildevents /usr/bin/
