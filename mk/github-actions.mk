@@ -155,14 +155,3 @@ docker: local-ci-image
 		--oom-score-adj -500 \
 		$(LOCAL_IMAGE) \
 		/bin/bash
-
-# A literal space.
-space :=
-space +=
-
-comma := ,
-
-# Joins elements of the list in arg 2 with the given separator.
-#   1. Element separator.
-#   2. The list.
-join-with = $(subst $(space),$1,$(strip $(comma)))
