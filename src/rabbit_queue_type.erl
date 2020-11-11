@@ -115,14 +115,15 @@
 -callback declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
-    rabbit_types:channel_exit().
+    {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback delete(amqqueue:amqqueue(),
                  boolean(),
                  boolean(),
                  rabbit_types:username()) ->
     rabbit_types:ok(non_neg_integer()) |
-    rabbit_types:error(in_use | not_empty).
+    rabbit_types:error(in_use | not_empty) |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback recover(rabbit_types:vhost(), [amqqueue:amqqueue()]) ->
     {Recovered :: [amqqueue:amqqueue()],
@@ -148,7 +149,8 @@
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
                   queue_state()) ->
-    {ok, queue_state(), actions()} | {error, term()}.
+    {ok, queue_state(), actions()} | {error, term()} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback cancel(amqqueue:amqqueue(),
                  rabbit_types:ctag(),
@@ -161,14 +163,16 @@
 %% this
 -callback handle_event(Event :: event(),
                        queue_state()) ->
-    {ok, queue_state(), actions()} | {error, term()} | eol.
+    {ok, queue_state(), actions()} | {error, term()} | eol |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback deliver([{amqqueue:amqqueue(), queue_state()}],
                   Delivery :: term()) ->
     {[{amqqueue:amqqueue(), queue_state()}], actions()}.
 
 -callback settle(settle_op(), rabbit_types:ctag(), [non_neg_integer()], queue_state()) ->
-    {queue_state(), actions()}.
+    {queue_state(), actions()} |
+    {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
 -callback credit(rabbit_types:ctag(),
                  non_neg_integer(), Drain :: boolean(), queue_state()) ->
@@ -178,7 +182,8 @@
                   rabbit_types:ctag(), queue_state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
-    {error, term()}.
+    {error, term()} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 
 %% return a map of state summary information
 -callback state_info(queue_state()) ->
@@ -212,7 +217,7 @@ is_enabled(Type) ->
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
-    rabbit_types:channel_exit().
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(Q, Node) ->
     Mod = amqqueue:get_type(Q),
     Mod:declare(Q, Node).
@@ -220,7 +225,8 @@ declare(Q, Node) ->
 -spec delete(amqqueue:amqqueue(), boolean(),
              boolean(), rabbit_types:username()) ->
     rabbit_types:ok(non_neg_integer()) |
-    rabbit_types:error(in_use | not_empty).
+    rabbit_types:error(in_use | not_empty) |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     Mod = amqqueue:get_type(Q),
     Mod:delete(Q, IfUnused, IfEmpty, ActingUser).
@@ -394,7 +400,8 @@ handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
 
 %% messages sent from queues
 -spec handle_event(queue_ref(), term(), state()) ->
-    {ok, state(), actions()} | eol | {error, term()}.
+    {ok, state(), actions()} | eol | {error, term()} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 handle_event(QRef, Evt, Ctxs) ->
     %% events can arrive after a queue state has been cleared up
     %% so need to be defensive here
@@ -457,7 +464,9 @@ deliver(Qs, Delivery, #?STATE{} = State0) ->
 
 
 -spec settle(queue_ref(), settle_op(), rabbit_types:ctag(),
-             [non_neg_integer()], state()) -> {ok, state(), actions()}.
+             [non_neg_integer()], state()) ->
+          {ok, state(), actions()} |
+          {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 settle(QRef, Op, CTag, MsgIds, Ctxs)
   when ?QREF(QRef) ->
     case get_ctx(QRef, Ctxs, undefined) of
@@ -467,8 +476,12 @@ settle(QRef, Op, CTag, MsgIds, Ctxs)
             {ok, Ctxs, []};
         #ctx{state = State0,
              module = Mod} = Ctx ->
-            {State, Actions} = Mod:settle(Op, CTag, MsgIds, State0),
-            {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions}
+            case Mod:settle(Op, CTag, MsgIds, State0) of
+                {State, Actions} ->
+                    {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
+                Err ->
+                    Err
+            end
     end.
 
 -spec credit(amqqueue:amqqueue() | queue_ref(),
@@ -493,6 +506,8 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
         {empty, State} ->
             {empty, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {error, _} = Err ->
+            Err;
+        {protocol_error, _, _, _} = Err ->
             Err
     end.
 

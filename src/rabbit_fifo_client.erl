@@ -759,14 +759,18 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
             %% When the node is disconnected the leader will return all checked
             %% out messages to the main queue to ensure they don't get stuck in
             %% case the node never comes back.
-            Missing = get_missing_deliveries(Leader, Prev+1, FstId-1, Tag),
-            XDel = {deliver, Tag, Ack, transform_msgs(QName, QRef,
-                                                      Missing ++ IdMsgs)},
-            maybe_auto_ack(Ack, XDel,
-                           State0#state{consumer_deliveries =
-                                        update_consumer(Tag, LastId,
-                                                        length(IdMsgs) + NumMissing,
-                                                        C, CDels0)});
+            case get_missing_deliveries(Leader, Prev+1, FstId-1, Tag) of
+                {protocol_error, _, _, _} = Err ->
+                    Err;
+                Missing ->
+                    XDel = {deliver, Tag, Ack, transform_msgs(QName, QRef,
+                                                              Missing ++ IdMsgs)},
+                    maybe_auto_ack(Ack, XDel,
+                                   State0#state{consumer_deliveries =
+                                                    update_consumer(Tag, LastId,
+                                                                    length(IdMsgs) + NumMissing,
+                                                                    C, CDels0)})
+            end;
         #consumer{last_msg_id = Prev}
           when FstId =< Prev ->
             case lists:dropwhile(fun({Id, _}) -> Id =< Prev end, IdMsgs) of
@@ -816,13 +820,11 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
         {ok, {_, Missing}, _} ->
             Missing;
         {error, Error} ->
-            rabbit_misc:protocol_error(internal_error,
-                                       "Cannot query missing deliveries from ~p: ~p",
-                                       [Leader, Error]);
+            {protocol_error, internal_error, "Cannot query missing deliveries from ~p: ~p",
+             [Leader, Error]};
         {timeout, _} ->
-            rabbit_misc:protocol_error(internal_error,
-                                       "Cannot query missing deliveries from ~p: timeout",
-                                       [Leader])
+            {protocol_error, internal_error, "Cannot query missing deliveries from ~p: timeout",
+             [Leader]}
     end.
 
 pick_server(#state{leader = undefined,
