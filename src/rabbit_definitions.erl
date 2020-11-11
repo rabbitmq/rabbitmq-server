@@ -680,14 +680,13 @@ binding_definition(#binding{source      = S,
                             key         = RoutingKey,
                             destination = D,
                             args        = Args}) ->
-    Arguments = [{Key, Value} || {Key, _Type, Value} <- Args],
     #{
         <<"source">> => S#resource.name,
         <<"vhost">> => S#resource.virtual_host,
         <<"destination">> => D#resource.name,
         <<"destination_type">> => D#resource.kind,
         <<"routing_key">> => RoutingKey,
-        <<"arguments">> => rabbit_misc:amqp_table(Arguments)
+        <<"arguments">> => rabbit_misc:amqp_table(Args)
     }.
 
 list_vhosts() ->
