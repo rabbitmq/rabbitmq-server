@@ -15,7 +15,6 @@
          init/2,
          init/3,
          init/5,
-         checkout/4,
          checkout/5,
          cancel_checkout/2,
          enqueue/2,
@@ -348,27 +347,6 @@ discard(ConsumerTag, [_|_] = MsgIds,
                                       {Settles, Returns, Discards ++ MsgIds}
                               end, {[], [], MsgIds}, Unsent0),
     {State0#state{unsent_commands = Unsent}, []}.
-
-
-%% @doc Register with the rabbit_fifo queue to "checkout" messages as they
-%% become available.
-%%
-%% This is a synchronous call. I.e. the call will block until the command
-%% has been accepted by the ra process or it times out.
-%%
-%% @param ConsumerTag a unique tag to identify this particular consumer.
-%% @param NumUnsettled the maximum number of in-flight messages. Once this
-%% number of messages has been received but not settled no further messages
-%% will be delivered to the consumer.
-%% @param State The {@module} state.
-%%
-%% @returns `{ok, State}' or `{error | timeout, term()}'
--spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
-               rabbit_fifo:consumer_meta(),
-               state()) -> {ok, state()} | {error | timeout, term()}.
-checkout(ConsumerTag, NumUnsettled, ConsumerInfo, State0)
-  when is_map(ConsumerInfo) ->
-    checkout(ConsumerTag, NumUnsettled, get_credit_mode(ConsumerInfo), ConsumerInfo, State0).
 
 %% @doc Register with the rabbit_fifo queue to "checkout" messages as they
 %% become available.
