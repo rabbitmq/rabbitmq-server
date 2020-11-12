@@ -46,7 +46,8 @@
          delete_crashed_internal/2]).
 
 -export([confirm_to_sender/3,
-         send_rejection/3]).
+         send_rejection/3,
+         send_queue_event/3]).
 
 is_enabled() -> true.
 
@@ -219,7 +220,7 @@ credit(CTag, Credit, Drain, State) ->
     delegate:invoke_no_result(State#?STATE.pid,
                               {gen_server2, cast,
                                [{credit, ChPid, CTag, Credit, Drain}]}),
-    State.
+    {State, []}.
 
 handle_event({confirm, MsgSeqNos, Pid}, #?STATE{qref = QRef,
                                                 unconfirmed = U0} = State) ->
@@ -282,7 +283,9 @@ handle_event({down, Pid, Info}, #?STATE{qref = QRef,
             U = maps:without(MsgIds, U0),
             {ok, State0#?STATE{unconfirmed = U},
              [{rejected, QRef, MsgIds} | Actions0]}
-    end.
+    end;
+handle_event({send_credit_reply, _} = Action, State) ->
+    {ok, State, [Action]}.
 
 settlement_action(_Type, _QRef, [], Acc) ->
     Acc;
@@ -519,3 +522,6 @@ send_rejection(Pid, QName, MsgSeqNo) ->
         false ->
             gen_server2:cast(Pid, {reject_publish, MsgSeqNo, self()})
     end.
+
+send_queue_event(Pid, QName, Evt) ->
+    gen_server2:cast(Pid, {queue_event, QName, Evt}).
