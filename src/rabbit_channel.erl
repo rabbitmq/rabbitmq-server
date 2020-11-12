@@ -1718,8 +1718,8 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                              queue_states = QStates0}) ->
     case maps:find(CTag, Consumers) of
         {ok, {Q, _CParams}} ->
-            QStates = rabbit_amqqueue:credit(Q, CTag, Credit, Drain, QStates0),
-            {noreply, State#ch{queue_states = QStates}};
+            {ok, QStates, Actions} = rabbit_amqqueue:credit(Q, CTag, Credit, Drain, QStates0),
+            {noreply, handle_queue_actions(Actions, State#ch{queue_states = QStates})};
         error -> precondition_failed(
                    "unknown consumer tag '~s'", [CTag])
     end;

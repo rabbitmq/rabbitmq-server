@@ -420,12 +420,12 @@ credit(Config) ->
                                        (D, _) -> error({unexpected_delivery, D})
                                    end),
     %% provide some credit
-    F6 = rabbit_fifo_client:credit(<<"tag">>, 1, false, F5),
+    {F6, []} = rabbit_fifo_client:credit(<<"tag">>, 1, false, F5),
     {[{_, _, _, _, m1}], [{send_credit_reply, _}], F7} =
         process_ra_events(receive_ra_events(1, 1), F6),
 
     %% credit and drain
-    F8 = rabbit_fifo_client:credit(<<"tag">>, 4, true, F7),
+    {F8, []} = rabbit_fifo_client:credit(<<"tag">>, 4, true, F7),
     {[{_, _, _, _, m2}], [{send_credit_reply, _}, {send_drained, _}], F9} =
         process_ra_events(receive_ra_events(1, 1), F8),
     flush(),
@@ -439,7 +439,7 @@ credit(Config) ->
                                         (D, _) -> error({unexpected_delivery, D})
                                     end),
     %% credit again and receive the last message
-    F12 = rabbit_fifo_client:credit(<<"tag">>, 10, false, F11),
+    {F12, []} = rabbit_fifo_client:credit(<<"tag">>, 10, false, F11),
     {[{_, _, _, _, m3}], _, _} = process_ra_events(receive_ra_events(1, 1), F12),
     ok.
 

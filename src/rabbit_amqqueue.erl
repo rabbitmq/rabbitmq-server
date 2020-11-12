@@ -1496,7 +1496,7 @@ activate_limit_all(QRefs, ChPid) ->
              non_neg_integer(),
              boolean(),
              rabbit_queue_type:state()) ->
-    rabbit_queue_type:state().
+    {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()}.
 credit(Q, CTag, Credit, Drain, QStates) ->
     rabbit_queue_type:credit(Q, CTag, Credit, Drain, QStates).
 
