@@ -182,6 +182,8 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                              last;
                          {_, <<"next">>} ->
                              next;
+                         {timestamp, V} ->
+                             {timestamp, V};
                          {_, V} ->
                              V
                      end,
@@ -219,6 +221,7 @@ begin_stream(#stream_client{readers = Readers0} = State,
                       first -> NextOffset;
                       last -> NextOffset;
                       next -> NextOffset;
+                      {timestamp, _} -> NextOffset;
                       _ -> Offset
                   end,
     Str0 = #stream{name = amqqueue:get_name(Q),
