@@ -1,0 +1,80 @@
+# vim:sw=2:et:
+
+os: linux
+dist: xenial
+notifications:
+  email:
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
+
+services:
+  - docker
+
+git:
+  depth: 5
+
+env:
+  global:
+    TRAVIS_BRANCH=travis_ocf_ra
+    VAGRANT_VERSION=2.2.5
+    DOCKER_IMAGE=bogdando/rabbitmq-cluster-ocf
+    UPLOAD_METHOD=none
+    OCF_RA_PROVIDER=rabbitmq
+    OCF_RA_TYPE=rabbitmq-server-ha
+    STORAGE=/var/tmp/rmq
+    POLICY_BASE64=IyBUaGlzIHNjcmlwdCBpcyBjYWxsZWQgYnkgcmFiYml0bXEtc2VydmVyLWhhLm9jZiBkdXJpbmcgUmFiYml0TVEKIyBjbHVzdGVyIHN0YXJ0IHVwLiBJdCBpcyBhIGNvbnZlbmllbnQgcGxhY2UgdG8gc2V0IHlvdXIgY2x1c3RlcgojIHBvbGljeSBoZXJlLCBmb3IgZXhhbXBsZToKIyAke09DRl9SRVNLRVlfY3RsfSBzZXRfcG9saWN5IGhhLWFsbCAiLiIgJ3siaGEtbW9kZSI6ImFsbCIsICJoYS1zeW5jLW1vZGUiOiJhdXRvbWF0aWMiLCAiaGEtc3luYy1iYXRjaC1zaXplIjoxMDAwMH0nCgojIEVuYWJsZSBoYS1wb2xpY3kgd2l0aCB0aGUgcmVwbGljYSBmYWN0b3Igb2YgNSBmb3IgamVwc2VuIHF1ZXVlcwpvY2ZfbG9nIGluZm8gIiR7TEh9IFNldHRpbmcgSEEgcG9saWN5IGZvciBhbGwgcXVldWVzIgoke09DRl9SRVNLRVlfY3RsfSBzZXRfcG9saWN5IGhhLWFsbCAiamVwc2VuLiIgJ3siaGEtbW9kZSI6ImV4YWN0bHkiLCAiaGEtcGFyYW1zIjoyLCAiaGEtc3luYy1tb2RlIjoiYXV0b21hdGljIn0nCg==
+    CACHE=/var/tmp/releases
+    DOCKER_MOUNTS="${HOME}/${OCF_RA_PROVIDER}:/usr/lib/ocf/resource.d/${OCF_RA_PROVIDER}/${OCF_RA_PROVIDER}:ro jepsen:/jepsen"
+    DOCKER_DRIVER=aufs
+  matrix:
+    - >-
+      USE_JEPSEN=false
+      QUIET=true
+      SMOKETEST_WAIT=360
+      CPU=500
+      MEMORY=512M
+    - >-
+      USE_JEPSEN=true
+      QUIET=false
+      SMOKETEST_WAIT=1800
+      CPU=333
+      MEMORY=512M
+
+matrix:
+  allow_failures:
+    - env: USE_JEPSEN=true QUIET=false SMOKETEST_WAIT=900 CPU=333 MEMORY=512M
+
+before_cache:
+  # Save tagged docker images
+  - mkdir -p $CACHE
+  - docker save $(docker images -a --filter='dangling=false' --format '{{.Repository}}:{{.Tag}} {{.ID}}') -o $CACHE/all.tar
+
+cache:
+  - directories:
+    - $CACHE
+
+before_install:
+  # Prepare and run a smoke test against the RabbitMQ OCF RA only if
+  # the scripts/rabbitmq-server-ha.ocf has changes
+  - if ! git diff HEAD~ --name-only | grep -q scripts/rabbitmq-server-ha.ocf; then exit 0; fi
+  # Load cached docker images
+  - if [ -f $CACHE/all.tar ]; then docker load < $CACHE/all.tar; fi
+  - cp -f scripts/rabbitmq-server-ha.ocf "$HOME/$OCF_RA_PROVIDER"
+  - chmod +x "$HOME/$OCF_RA_PROVIDER"
+  - sudo apt-get install -qq git wget
+  - echo "Downloading vagrant ${VAGRANT_VERSION}..."
+  - >
+    if [ ! -f $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb ]; then
+    wget --no-verbose https://releases.hashicorp.com/vagrant/${VAGRANT_VERSION}/vagrant_${VAGRANT_VERSION}_x86_64.deb
+    -O $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb; fi
+  - echo "Installing vagrant ${VAGRANT_VERSION}..."
+  - sudo dpkg -i --force-all $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb
+  - echo "Pulling docker images..."
+  - docker pull $DOCKER_IMAGE
+  - git clone https://github.com/bogdando/rabbitmq-cluster-ocf-vagrant
+  - cd rabbitmq-cluster-ocf-vagrant
+
+script:
+  - vagrant up

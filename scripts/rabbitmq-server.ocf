@@ -1,0 +1,385 @@
+#!/bin/sh
+
+## This Source Code Form is subject to the terms of the Mozilla Public
+## License, v. 2.0. If a copy of the MPL was not distributed with this
+## file, You can obtain one at https://mozilla.org/MPL/2.0/.
+##
+## Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+##
+
+##
+##   OCF Resource Agent compliant rabbitmq-server resource script.
+##
+
+## OCF instance parameters
+##   OCF_RESKEY_server
+##   OCF_RESKEY_ctl
+##   OCF_RESKEY_nodename
+##   OCF_RESKEY_ip
+##   OCF_RESKEY_port
+##   OCF_RESKEY_config_file
+##   OCF_RESKEY_log_base
+##   OCF_RESKEY_mnesia_base
+##   OCF_RESKEY_server_start_args
+##   OCF_RESKEY_pid_file
+##   OCF_RESKEY_limit_nofile
+
+#######################################################################
+# Initialization:
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/resource.d/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/.ocf-shellfuncs
+
+#######################################################################
+
+OCF_RESKEY_server_default="/usr/sbin/rabbitmq-server"
+OCF_RESKEY_ctl_default="/usr/sbin/rabbitmqctl"
+OCF_RESKEY_nodename_default="rabbit@localhost"
+OCF_RESKEY_log_base_default="/var/log/rabbitmq"
+OCF_RESKEY_pid_file_default="/var/run/rabbitmq/pid"
+OCF_RESKEY_limit_nofile_default=65535
+: ${OCF_RESKEY_server=${OCF_RESKEY_server_default}}
+: ${OCF_RESKEY_ctl=${OCF_RESKEY_ctl_default}}
+: ${OCF_RESKEY_nodename=${OCF_RESKEY_nodename_default}}
+: ${OCF_RESKEY_log_base=${OCF_RESKEY_log_base_default}}
+: ${OCF_RESKEY_pid_file=${OCF_RESKEY_pid_file_default}}
+: ${OCF_RESKEY_limit_nofile=${OCF_RESKEY_limit_nofile_default}}
+
+meta_data() {
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="rabbitmq-server">
+<version>1.0</version>
+
+<longdesc lang="en">
+Resource agent for RabbitMQ-server
+</longdesc>
+
+<shortdesc lang="en">Resource agent for RabbitMQ-server</shortdesc>
+
+<parameters>
+<parameter name="server" unique="0" required="0">
+<longdesc lang="en">
+The path to the rabbitmq-server script
+</longdesc>
+<shortdesc lang="en">Path to rabbitmq-server</shortdesc>
+<content type="string" default="${OCF_RESKEY_server_default}" />
+</parameter>
+
+<parameter name="ctl" unique="0" required="0">
+<longdesc lang="en">
+The path to the rabbitmqctl script
+</longdesc>
+<shortdesc lang="en">Path to rabbitmqctl</shortdesc>
+<content type="string" default="${OCF_RESKEY_ctl_default}" />
+</parameter>
+
+<parameter name="nodename" unique="0" required="0">
+<longdesc lang="en">
+The node name for rabbitmq-server
+</longdesc>
+<shortdesc lang="en">Node name</shortdesc>
+<content type="string" default="${OCF_RESKEY_nodename_default}" />
+</parameter>
+
+<parameter name="ip" unique="0" required="0">
+<longdesc lang="en">
+The IP address for rabbitmq-server to listen on
+</longdesc>
+<shortdesc lang="en">IP Address</shortdesc>
+<content type="string" default="" />
+</parameter>
+
+<parameter name="port" unique="0" required="0">
+<longdesc lang="en">
+The IP Port for rabbitmq-server to listen on
+</longdesc>
+<shortdesc lang="en">IP Port</shortdesc>
+<content type="integer" default="" />
+</parameter>
+
+<parameter name="config_file" unique="0" required="0">
+<longdesc lang="en">
+Location of the config file (without the .config suffix)
+</longdesc>
+<shortdesc lang="en">Config file path (without the .config suffix)</shortdesc>
+<content type="string" default="" />
+</parameter>
+
+<parameter name="log_base" unique="0" required="0">
+<longdesc lang="en">
+Location of the directory under which logs will be created
+</longdesc>
+<shortdesc lang="en">Log base path</shortdesc>
+<content type="string" default="${OCF_RESKEY_log_base_default}" />
+</parameter>
+
+<parameter name="mnesia_base" unique="0" required="0">
+<longdesc lang="en">
+Location of the directory under which mnesia will store data
+</longdesc>
+<shortdesc lang="en">Mnesia base path</shortdesc>
+<content type="string" default="" />
+</parameter>
+
+<parameter name="server_start_args" unique="0" required="0">
+<longdesc lang="en">
+Additional arguments provided to the server on startup
+</longdesc>
+<shortdesc lang="en">Server start arguments</shortdesc>
+<content type="string" default="" />
+</parameter>
+
+<parameter name="pid_file" unique="0" required="0">
+<longdesc lang="en">
+Location of the file in which the pid will be stored
+</longdesc>
+<shortdesc lang="en">Pid file path</shortdesc>
+<content type="string" default="${OCF_RESKEY_pid_file_default}" />
+</parameter>
+
+<parameter name="limit_nofile" unique="0" required="0">
+<longdesc lang="en">
+Soft and hard limit for NOFILE
+</longdesc>
+<shortdesc lang="en">NOFILE limit</shortdesc>
+<content type="string" default="${OCF_RESKEY_limit_nofile_default}" />
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start"        timeout="600" />
+<action name="stop"         timeout="120" />
+<action name="status"       timeout="20" interval="10" />
+<action name="monitor"      timeout="20" interval="10" />
+<action name="validate-all" timeout="30" />
+<action name="meta-data"    timeout="5" />
+</actions>
+</resource-agent>
+END
+}
+
+rabbit_usage() {
+    cat <<END
+usage: $0 {start|stop|status|monitor|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+END
+}
+
+RABBITMQ_SERVER=$OCF_RESKEY_server
+RABBITMQ_CTL=$OCF_RESKEY_ctl
+RABBITMQ_NODENAME=$OCF_RESKEY_nodename
+RABBITMQ_NODE_IP_ADDRESS=$OCF_RESKEY_ip
+RABBITMQ_NODE_PORT=$OCF_RESKEY_port
+RABBITMQ_CONFIG_FILE=$OCF_RESKEY_config_file
+RABBITMQ_LOG_BASE=$OCF_RESKEY_log_base
+RABBITMQ_MNESIA_BASE=$OCF_RESKEY_mnesia_base
+RABBITMQ_SERVER_START_ARGS=$OCF_RESKEY_server_start_args
+RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
+RABBITMQ_LIMIT_NOFILE=$OCF_RESKEY_limit_nofile
+[ ! -z $RABBITMQ_NODENAME ] && NODENAME_ARG="-n $RABBITMQ_NODENAME"
+[ ! -z $RABBITMQ_NODENAME ]            && export RABBITMQ_NODENAME
+
+ensure_pid_dir () {
+    PID_DIR=`dirname ${RABBITMQ_PID_FILE}`
+    if [ ! -d ${PID_DIR} ] ; then
+        mkdir -p ${PID_DIR}
+        chown -R rabbitmq:rabbitmq ${PID_DIR}
+        chmod 755 ${PID_DIR}
+    fi
+    return $OCF_SUCCESS
+}
+
+remove_pid () {
+    rm -f ${RABBITMQ_PID_FILE}
+    rmdir `dirname ${RABBITMQ_PID_FILE}` || :
+}
+
+export_vars() {
+    [ ! -z $RABBITMQ_NODE_IP_ADDRESS ]     && export RABBITMQ_NODE_IP_ADDRESS
+    [ ! -z $RABBITMQ_NODE_PORT ]           && export RABBITMQ_NODE_PORT
+    [ ! -z $RABBITMQ_CONFIG_FILE ]         && export RABBITMQ_CONFIG_FILE
+    [ ! -z $RABBITMQ_LOG_BASE ]            && export RABBITMQ_LOG_BASE
+    [ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
+    [ ! -z $RABBITMQ_SERVER_START_ARGS ]   && export RABBITMQ_SERVER_START_ARGS
+    [ ! -z $RABBITMQ_PID_FILE ]            && ensure_pid_dir && export RABBITMQ_PID_FILE
+}
+
+set_limits() {
+    local current_limit=$(su rabbitmq -s /bin/sh -c "ulimit -n")
+    if [ ! -z $RABBITMQ_LIMIT_NOFILE -a $RABBITMQ_LIMIT_NOFILE -gt $current_limit ] ; then
+        ulimit -n $RABBITMQ_LIMIT_NOFILE
+    fi
+}
+
+rabbit_validate_partial() {
+    if [ ! -x $RABBITMQ_SERVER ]; then
+        ocf_log err "rabbitmq-server server $RABBITMQ_SERVER does not exist or is not executable";
+        exit $OCF_ERR_INSTALLED;
+    fi
+
+    if [ ! -x $RABBITMQ_CTL ]; then
+        ocf_log err "rabbitmq-server ctl $RABBITMQ_CTL does not exist or is not executable";
+        exit $OCF_ERR_INSTALLED;
+    fi
+}
+
+rabbit_validate_full() {
+    if [ ! -z $RABBITMQ_CONFIG_FILE ] && [ ! -e "${RABBITMQ_CONFIG_FILE}.config" ]; then
+        ocf_log err "rabbitmq-server config_file ${RABBITMQ_CONFIG_FILE}.config does not exist or is not a file";
+        exit $OCF_ERR_INSTALLED;
+    fi
+
+    if [ ! -z $RABBITMQ_LOG_BASE ] && [ ! -d $RABBITMQ_LOG_BASE ]; then
+        ocf_log err "rabbitmq-server log_base $RABBITMQ_LOG_BASE does not exist or is not a directory";
+        exit $OCF_ERR_INSTALLED;
+    fi
+
+    if [ ! -z $RABBITMQ_MNESIA_BASE ] && [ ! -d $RABBITMQ_MNESIA_BASE ]; then
+        ocf_log err "rabbitmq-server mnesia_base $RABBITMQ_MNESIA_BASE does not exist or is not a directory";
+        exit $OCF_ERR_INSTALLED;
+    fi
+
+    rabbit_validate_partial
+
+    return $OCF_SUCCESS
+}
+
+rabbit_status() {
+    rabbitmqctl_action "status"
+}
+
+rabbit_wait() {
+    rabbitmqctl_action "wait" $1
+}
+
+rabbitmqctl_action() {
+    local rc
+    local action
+    action=$@
+    ocf_run -q -info $RABBITMQ_CTL $NODENAME_ARG $action
+    rc=$?
+    case "$rc" in
+        0)
+            ocf_log debug "RabbitMQ server is running normally"
+            return $OCF_SUCCESS
+            ;;
+        1|2|69)
+            ocf_log debug "RabbitMQ server is not running"
+            return $OCF_NOT_RUNNING
+            ;;
+        *)
+            ocf_log err "Unexpected return from rabbitmqctl $NODENAME_ARG $action: $rc"
+            exit $OCF_ERR_GENERIC
+    esac
+}
+
+rabbit_start() {
+    local rc
+
+    if rabbit_status; then
+        ocf_log info "Resource already running."
+        return $OCF_SUCCESS
+    fi
+
+    export_vars
+
+    # RabbitMQ requires high soft and hard limits for NOFILE
+    set_limits
+
+    setsid sh -c "$RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err" &
+
+    # Wait for the server to come up.
+    # Let the CRM/LRM time us out if required
+    rabbit_wait $RABBITMQ_PID_FILE
+    rc=$?
+    if [ "$rc" != $OCF_SUCCESS ]; then
+        remove_pid
+        ocf_log info "rabbitmq-server start failed: $rc"
+        exit $OCF_ERR_GENERIC
+    fi
+
+    return $OCF_SUCCESS
+}
+
+rabbit_stop() {
+    local rc
+
+    if ! rabbit_status; then
+        ocf_log info "Resource not running."
+        return $OCF_SUCCESS
+    fi
+
+    rabbitmqctl_action stop ${RABBITMQ_PID_FILE}
+    rc=$?
+
+    if [ "$rc" != 0 ]; then
+        ocf_log err "rabbitmq-server stop command failed: $RABBITMQ_CTL stop, $rc"
+        return $rc
+    fi
+
+    # Spin waiting for the server to shut down.
+    # Let the CRM/LRM time us out if required
+    stop_wait=1
+    while [ $stop_wait = 1 ]; do
+        rabbit_status
+        rc=$?
+        if [ "$rc" = $OCF_NOT_RUNNING ]; then
+            remove_pid
+            stop_wait=0
+            break
+        elif [ "$rc" != $OCF_SUCCESS ]; then
+            ocf_log info "rabbitmq-server stop failed: $rc"
+            exit $OCF_ERR_GENERIC
+        fi
+        sleep 1
+    done
+
+    return $OCF_SUCCESS
+}
+
+rabbit_monitor() {
+    rabbit_status
+    return $?
+}
+
+case $__OCF_ACTION in
+    meta-data)
+        meta_data
+        exit $OCF_SUCCESS
+        ;;
+    usage|help)
+        rabbit_usage
+        exit $OCF_SUCCESS
+        ;;
+esac
+
+if ocf_is_probe; then
+    rabbit_validate_partial
+else
+    rabbit_validate_full
+fi
+
+case $__OCF_ACTION in
+    start)
+        rabbit_start
+        ;;
+    stop)
+        rabbit_stop
+        ;;
+    status|monitor)
+        rabbit_monitor
+        ;;
+    validate-all)
+        exit $OCF_SUCCESS
+        ;;
+    *)
+        rabbit_usage
+        exit $OCF_ERR_UNIMPLEMENTED
+        ;;
+esac
+
+exit $?

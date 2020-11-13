@@ -1,0 +1,124 @@
+--- .travis.yml	2020-03-31 12:13:44.168273000 +0200
++++ dot.travis.yml	2020-03-31 12:14:39.620017000 +0200
+@@ -2,58 +2,79 @@
+ 
+ os: linux
+ dist: xenial
+-language: elixir
+ notifications:
+   email:
+     recipients:
+       - alerts@rabbitmq.com
+     on_success: never
+     on_failure: always
+-addons:
+-  apt:
+-    packages:
+-      - awscli
+-cache:
+-  apt: true
+-env:
+-  global:
+ 
+-    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+-    # appropriate branch for dependencies.
+-    - base_rmq_ref=v3.8.x
++services:
++  - docker
+ 
+-elixir:
+-  - '1.9'
+-otp_release:
+-  - '21.3'
+-  - '22.2'
++git:
++  depth: 5
+ 
+-install:
+-  # This project being an Erlang one (we just set language to Elixir
+-  # to ensure it is installed), we don't want Travis to run mix(1)
+-  # automatically as it will break.
+-  skip
++env:
++  global:
++    TRAVIS_BRANCH=travis_ocf_ra
++    VAGRANT_VERSION=2.2.5
++    DOCKER_IMAGE=bogdando/rabbitmq-cluster-ocf
++    UPLOAD_METHOD=none
++    OCF_RA_PROVIDER=rabbitmq
++    OCF_RA_TYPE=rabbitmq-server-ha
++    STORAGE=/var/tmp/rmq
++    POLICY_BASE64=IyBUaGlzIHNjcmlwdCBpcyBjYWxsZWQgYnkgcmFiYml0bXEtc2VydmVyLWhhLm9jZiBkdXJpbmcgUmFiYml0TVEKIyBjbHVzdGVyIHN0YXJ0IHVwLiBJdCBpcyBhIGNvbnZlbmllbnQgcGxhY2UgdG8gc2V0IHlvdXIgY2x1c3RlcgojIHBvbGljeSBoZXJlLCBmb3IgZXhhbXBsZToKIyAke09DRl9SRVNLRVlfY3RsfSBzZXRfcG9saWN5IGhhLWFsbCAiLiIgJ3siaGEtbW9kZSI6ImFsbCIsICJoYS1zeW5jLW1vZGUiOiJhdXRvbWF0aWMiLCAiaGEtc3luYy1iYXRjaC1zaXplIjoxMDAwMH0nCgojIEVuYWJsZSBoYS1wb2xpY3kgd2l0aCB0aGUgcmVwbGljYSBmYWN0b3Igb2YgNSBmb3IgamVwc2VuIHF1ZXVlcwpvY2ZfbG9nIGluZm8gIiR7TEh9IFNldHRpbmcgSEEgcG9saWN5IGZvciBhbGwgcXVldWVzIgoke09DRl9SRVNLRVlfY3RsfSBzZXRfcG9saWN5IGhhLWFsbCAiamVwc2VuLiIgJ3siaGEtbW9kZSI6ImV4YWN0bHkiLCAiaGEtcGFyYW1zIjoyLCAiaGEtc3luYy1tb2RlIjoiYXV0b21hdGljIn0nCg==
++    CACHE=/var/tmp/releases
++    DOCKER_MOUNTS="${HOME}/${OCF_RA_PROVIDER}:/usr/lib/ocf/resource.d/${OCF_RA_PROVIDER}/${OCF_RA_PROVIDER}:ro jepsen:/jepsen"
++    DOCKER_DRIVER=aufs
++  matrix:
++    - >-
++      USE_JEPSEN=false
++      QUIET=true
++      SMOKETEST_WAIT=360
++      CPU=500
++      MEMORY=512M
++    - >-
++      USE_JEPSEN=true
++      QUIET=false
++      SMOKETEST_WAIT=1800
++      CPU=333
++      MEMORY=512M
+ 
+-script:
+-  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+-  # the appropriate branch for dependencies.
+-  - make check-rabbitmq-components.mk
+-    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+-  - make xref
+-    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+-  - make tests
+-    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
++matrix:
++  allow_failures:
++    - env: USE_JEPSEN=true QUIET=false SMOKETEST_WAIT=900 CPU=333 MEMORY=512M
+ 
+-after_failure:
+-  - |
+-    cd "$TRAVIS_BUILD_DIR"
+-    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+-      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
++before_cache:
++  # Save tagged docker images
++  - mkdir -p $CACHE
++  - docker save $(docker images -a --filter='dangling=false' --format '{{.Repository}}:{{.Tag}} {{.ID}}') -o $CACHE/all.tar
+ 
+-      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+-        xz > "${archive_name}.tar.xz"
++cache:
++  - directories:
++    - $CACHE
+ 
+-      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+-        --region eu-west-1 \
+-        --acl public-read
+-    fi
++before_install:
++  # Prepare and run a smoke test against the RabbitMQ OCF RA only if
++  # the scripts/rabbitmq-server-ha.ocf has changes
++  - if ! git diff HEAD~ --name-only | grep -q scripts/rabbitmq-server-ha.ocf; then exit 0; fi
++  # Load cached docker images
++  - if [ -f $CACHE/all.tar ]; then docker load < $CACHE/all.tar; fi
++  - cp -f scripts/rabbitmq-server-ha.ocf "$HOME/$OCF_RA_PROVIDER"
++  - chmod +x "$HOME/$OCF_RA_PROVIDER"
++  - sudo apt-get install -qq git wget
++  - echo "Downloading vagrant ${VAGRANT_VERSION}..."
++  - >
++    if [ ! -f $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb ]; then
++    wget --no-verbose https://releases.hashicorp.com/vagrant/${VAGRANT_VERSION}/vagrant_${VAGRANT_VERSION}_x86_64.deb
++    -O $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb; fi
++  - echo "Installing vagrant ${VAGRANT_VERSION}..."
++  - sudo dpkg -i --force-all $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb
++  - echo "Pulling docker images..."
++  - docker pull $DOCKER_IMAGE
++  - git clone https://github.com/bogdando/rabbitmq-cluster-ocf-vagrant
++  - cd rabbitmq-cluster-ocf-vagrant
++
++script:
++  - vagrant up
