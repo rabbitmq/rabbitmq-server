@@ -1,0 +1,19 @@
+{
+    "description": "Example RabbitMQ http auth backend php",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Anthony",
+            "email": "instabledesign@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.4",
+        "symftony/rabbitmq-auth-backend-http-php": "dev-master",
+        "monolog/monolog": "^1.23"
+    },
+    "scripts": {
+        "start": "php -S 127.0.0.1:8080 -t src"
+    }
+}

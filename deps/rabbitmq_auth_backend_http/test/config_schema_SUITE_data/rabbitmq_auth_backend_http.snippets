@@ -1,0 +1,26 @@
+[{all_keys,
+  "auth_backends.1        = http
+   auth_http.http_method   = post
+   auth_http.user_path     = http://some-server/auth/user
+   auth_http.vhost_path    = http://some-server/auth/vhost
+   auth_http.resource_path = http://some-server/auth/resource",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_http]}]},
+   {rabbitmq_auth_backend_http,
+    [{http_method, post},
+     {user_path,"http://some-server/auth/user"},
+     {vhost_path,"http://some-server/auth/vhost"},
+     {resource_path,"http://some-server/auth/resource"}]}],
+  [rabbitmq_auth_backend_http]}
+
+, {default_http_method,
+  "auth_backends.1        = http
+   auth_http.user_path     = http://some-server/auth/user
+   auth_http.vhost_path    = http://some-server/auth/vhost
+   auth_http.resource_path = http://some-server/auth/resource",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_http]}]},
+   {rabbitmq_auth_backend_http,
+    [{user_path,"http://some-server/auth/user"},
+     {vhost_path,"http://some-server/auth/vhost"},
+     {resource_path,"http://some-server/auth/resource"}]}],
+  [rabbitmq_auth_backend_http]}
+  ].
