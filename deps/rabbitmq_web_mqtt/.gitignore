@@ -1,0 +1,17 @@
+*.swp
+/.erlang.mk/
+/cover/
+/deps/
+/ebin/
+/escript/
+/escript.lock
+/logs/
+/plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
+/test/*.beam
+
+/rabbitmq_web_mqtt.d
+
+test/config_schema_SUITE_data/schema/
