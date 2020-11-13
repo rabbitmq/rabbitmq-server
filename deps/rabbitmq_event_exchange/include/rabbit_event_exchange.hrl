@@ -1,0 +1,1 @@
+-define(EXCH_NAME, <<"amq.rabbitmq.event">>).
