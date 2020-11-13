@@ -12,8 +12,8 @@
          publish/6, publish_delivered/5,
          batch_publish/4, batch_publish_delivered/4,
          discard/4, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         dropwhile/2, fetchwhile/4, fetch/2, fetch_delivery/2, drop/2, ack/2,
+         requeue/2, ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -670,7 +670,10 @@ fetchwhile(Pred, Fun, Acc, State) ->
          fetch_by_predicate(Pred, Fun, Acc, State),
     {MsgProps, Acc1, a(State1)}.
 
-fetch(AckRequired, State) ->
+%% Non-destructive fetch operation. Delivery counts are not incremented, hence
+%% any delivery-limit policies will never result in messages being dropped.
+%% Used for internal dead-lettering fetch operations.
+fetch(AckRequired, Delivery, State) ->
     case queue_out(State) of
         {empty, State1} ->
             {empty, a(State1)};
@@ -681,6 +684,31 @@ fetch(AckRequired, State) ->
             {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
+
+%% Delivery counts are incremented. Messages will be impacted delivery-limit
+%% policies and could be dropped of limits are exceeded. Ignore 'lazy' queues.
+fetch_delivery(AckRequired, State = #vqstate { mode = lazy }) ->
+    fetch(AckRequired, State);
+
+fetch_delivery(AckRequired, State) ->
+    case queue_out(State) of
+        {empty, State1} ->
+            {empty, a(State1)};
+        {{value, MsgStatus}, State1} ->
+            %% see fetch/2 explanation on reading message at this point
+            {Msg, State2} = read_msg(MsgStatus, State1),
+            {Msg1, MsgStatus1} = inc_delivery_count(Msg, MsgStatus),
+            {AckTag, State3} = remove(AckRequired, MsgStatus1, State2),
+            {{Msg1, MsgStatus1#msg_status.is_delivered, AckTag}, a(State3)}
+    end.
+
+inc_delivery_count(Msg, MsgStatus = #msg_status{msg = undefined, msg_props = Props}) ->
+    %% Message read from msg-store. Ensure delivery-count is '0'
+    {Msg2, Props1} = rabbit_basic:inc_delivery_count(Msg, Props),
+    {Msg2, MsgStatus#msg_status{msg_props = Props1}};
+inc_delivery_count(_Msg, MsgStatus = #msg_status{msg = Msg1, msg_props = Props}) ->
+    {Msg2, Props1} = rabbit_basic:inc_delivery_count(Msg1, Props),
+    {Msg2, MsgStatus#msg_status{msg = Msg2, msg_props = Props1}}.
 
 drop(AckRequired, State) ->
     case queue_out(State) of

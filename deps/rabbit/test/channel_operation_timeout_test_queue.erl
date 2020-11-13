@@ -12,8 +12,8 @@
          publish/6, publish_delivered/5,
          batch_publish/4, batch_publish_delivered/4,
          discard/4, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         dropwhile/2, fetchwhile/4, fetch/2, fetch_delivery/2, drop/2, ack/2,
+         requeue/2, ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -235,6 +235,9 @@ fetchwhile(Pred, Fun, Acc, State) ->
 
 fetch(AckRequired, State) ->
     rabbit_variable_queue:fetch(AckRequired, State).
+
+fetch_delivery(AckRequired, State) ->
+    rabbit_variable_queue:fetch_delivery(AckRequired, State).
 
 drop(AckRequired, State) ->
     rabbit_variable_queue:drop(AckRequired, State).

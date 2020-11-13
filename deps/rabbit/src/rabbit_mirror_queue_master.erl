@@ -10,8 +10,8 @@
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, purge_acks/1, publish/6, publish_delivered/5,
          batch_publish/4, batch_publish_delivered/4,
-         discard/4, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
-         len/1, is_empty/1, depth/1, drain_confirmed/1,
+         discard/4, fetch/2, fetch_delivery/2, drop/2, ack/2, requeue/2, ackfold/4,
+         fold/3, len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
          msg_rates/1, info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -341,11 +341,19 @@ drain_confirmed(State = #state { backing_queue       = BQ,
 fetch(AckRequired, State = #state { backing_queue       = BQ,
                                     backing_queue_state = BQS }) ->
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
+    {Result, process_fetch(AckRequired, Result, BQS1, State)}.
+
+fetch_delivery(AckRequired, State = #state { backing_queue       = BQ,
+                                             backing_queue_state = BQS }) ->
+    {Result, BQS1} = BQ:fetch_delivery(AckRequired, BQS),
+    {Result, process_fetch(AckRequired, Result, BQS1, State)}.
+
+process_fetch(AckRequired, Result, BQS1, State) ->
     State1 = State #state { backing_queue_state = BQS1 },
-    {Result, case Result of
-                 empty                          -> State1;
-                 {_MsgId, _IsDelivered, _AckTag} -> drop_one(AckRequired, State1)
-             end}.
+    case Result of
+        empty                           -> State1;
+        {_MsgId, _IsDelivered, _AckTag} -> drop_one(AckRequired, State1)
+    end.
 
 drop(AckRequired, State = #state { backing_queue       = BQ,
                                    backing_queue_state = BQS }) ->

@@ -168,6 +168,10 @@
 -callback fetch(true,  state()) -> {fetch_result(ack()), state()};
                (false, state()) -> {fetch_result(undefined), state()}.
 
+%% Produce the next message for delivery to a channel (i.e. consumer).
+-callback fetch_delivery(true,  state()) -> {fetch_result(ack()), state()};
+                        (false, state()) -> {fetch_result(undefined), state()}.
+
 %% Remove the next message.
 -callback drop(true,  state()) -> {drop_result(ack()), state()};
               (false, state()) -> {drop_result(undefined), state()}.
