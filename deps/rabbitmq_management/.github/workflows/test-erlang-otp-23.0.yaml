@@ -1,0 +1,1060 @@
+# vim:sw=2:et:
+# https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow
+name: "Test - Erlang 23.0"
+on:
+  push:
+  repository_dispatch:
+    types:
+      - new-commit-to-dep-release-branch
+jobs:
+  # vim:sw=2:et:
+  checks:
+    name: checks
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: CHECK RABBITMQ COMPONENTS
+        # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
+        id: ref
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
+          make check-rabbitmq-components.mk base_rmq_ref=master current_rmq_ref=$branch_or_tag_name
+      - name: RESOLVE & COMPILE DEPS
+        run: |
+          make deps test-deps base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+          echo "Capture versions of the RabbitMQ components used in this workflow..."
+          make rabbitmq_management-rabbitmq-deps.mk
+          echo "Remove directories not used in the subsequent jobs..."
+          rm -fr deps/*/{.git,test}
+      - name: UPLOAD DEPS VERSIONS
+        uses: actions/upload-artifact@v2
+        with:
+          name: rabbitmq_management-rabbitmq-deps.mk
+          path: rabbitmq_management-rabbitmq-deps.mk
+      - name: CREATE DEPS ARCHIVE
+        run: |
+          tar cf - deps | xz > deps.tar.xz
+      - name: UPLOAD DEPS ARCHIVE
+        uses: actions/upload-artifact@v2
+        with:
+          name: deps.tar.xz
+          path: deps.tar.xz
+      - name: CHECK CROSS REFERENCES
+        run: |
+          make xref base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+      - name: COMPILE FOR TEST
+        run: |
+          make test-build base_rmq_ref=master current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+      - name: CACHE SECONDARY UMBRELLAS
+        if: success() && 'latest' == 'oldest'
+        uses: actions/cache@v1
+        with:
+          path: umbrellas
+          key: secondary-umbrellas-v3.7.28-v3.8.9-erlang-23.0-rev4
+      - name: PREPARE SECONDARY UMBRELLA COPIES
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          for version in v3.7.28 v3.8.9; do
+            umbrella="umbrellas/$version"
+            if ! test -d "$umbrella"  ||
+               ! make -C "$umbrella/deps/rabbitmq_management" test-dist; then
+              rm -rf "$umbrella"
+
+              # Fetch the master Umbrella; the final umbrellas are created from
+              # the master copy.
+              if ! test -d umbrellas/master; then
+                git config --global advice.detachedHead false
+                git clone \
+                  https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
+                  umbrellas/master
+                make -C umbrellas/master co # To get RabbitMQ components.
+              fi
+
+              # We copy the master Umbrella and checkout the appropriate tag.
+              cp -a umbrellas/master "$umbrella"
+              git -C "$umbrella" checkout "master"
+              make -C "$umbrella" up BRANCH="$version"
+              # To remove third-party deps which were checked out when the
+              # projects were on the `master` branch. Thus, possibly not the
+              # version pinning we expect. We update the Umbrella one last time
+              # to fetch the correct third-party deps.
+              make -C "$umbrella" clean-3rd-party-repos
+              make -C "$umbrella" up
+              make -C "$umbrella/deps/rabbitmq_management" test-dist
+              rm -rf "$umbrella"/deps/rabbitmq_website
+              rm -rf "$umbrella"/deps/rabbitmq_prometheus/docker
+              rm -rf "$umbrella"/deps/*/{.git,test} "$umbrella"/.git
+            fi
+          done
+          rm -fr umbrellas/master
+      - name: CREATE SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar cf - umbrellas | xz > secondary-umbrellas.tar.xz
+      - name: UPLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+          path: secondary-umbrellas.tar.xz
+  # vim:sw=2:et:
+  eunit:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: eunit
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+          rm deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          ! test -d ebin || touch ebin/*
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          make eunit \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+  # vim:sw=2:et:
+  ct-cache:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-cache
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-cache \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-cache \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-cache-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-clustering:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-clustering
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-clustering \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-clustering \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-clustering-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-clustering_prop:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-clustering_prop
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-clustering_prop \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-clustering_prop \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-clustering_prop-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-config_schema:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-config_schema
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-config_schema \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-config_schema \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-config_schema-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-listener_config:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-listener_config
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-listener_config \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-listener_config \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-listener_config-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-rabbit_mgmt_http:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-rabbit_mgmt_http
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-rabbit_mgmt_http \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-rabbit_mgmt_http \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-rabbit_mgmt_http-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-rabbit_mgmt_only_http:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-rabbit_mgmt_only_http
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-rabbit_mgmt_only_http \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-rabbit_mgmt_only_http \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-rabbit_mgmt_only_http-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-rabbit_mgmt_rabbitmqadmin:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-rabbit_mgmt_rabbitmqadmin
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-rabbit_mgmt_rabbitmqadmin \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-rabbit_mgmt_rabbitmqadmin \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-rabbit_mgmt_rabbitmqadmin-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-rabbit_mgmt_stats:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-rabbit_mgmt_stats
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-rabbit_mgmt_stats \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-rabbit_mgmt_stats \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-rabbit_mgmt_stats-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-rabbit_mgmt_test_db:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-rabbit_mgmt_test_db
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-rabbit_mgmt_test_db \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-rabbit_mgmt_test_db \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-rabbit_mgmt_test_db-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-rabbit_mgmt_test_unit:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-rabbit_mgmt_test_unit
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-rabbit_mgmt_test_unit \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-rabbit_mgmt_test_unit \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-rabbit_mgmt_test_unit-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  ct-stats:
+    needs: [checks]
+    # https://help.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#contexts
+    name: ct-stats
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: 23.0
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: 1.10.4
+      - name: DOWNLOAD DEPS ARCHIVE
+        uses: actions/download-artifact@v2
+        with:
+          name: deps.tar.xz
+      - name: UNPACK DEPS ARCHIVE
+        run: |
+          tar Jxf deps.tar.xz
+      - name: RUN TESTS
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          ! test -d ebin || touch ebin/*
+          make ct-stats \
+            base_rmq_ref=master \
+            current_rmq_ref=$branch_or_tag_name \
+            FULL= \
+            FAIL_FAST=1 \
+            SKIP_AS_ERROR=1
+      - name: DOWNLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        uses: actions/download-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+      - name: UNPACK SECONDARY UMBRELLAS ARCHIVE
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          tar Jxf secondary-umbrellas.tar.xz
+          rm secondary-umbrellas.tar.xz
+      - name: RUN TESTS [mixed-versions]
+        if: success() && 'latest' == 'oldest'
+        run: |
+          set -ex
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          for umbrella in umbrellas/*; do
+            test -d "$umbrella"
+            printf '\n\033[1;32mMixing clusters with RabbitMQ %s\033[0m' \
+              $(basename "$umbrella")
+            make distclean-ct ct-stats \
+              base_rmq_ref=master \
+              current_rmq_ref=$branch_or_tag_name \
+              FULL= \
+              FAIL_FAST=1 \
+              SKIP_AS_ERROR=1 \
+              SECONDARY_UMBRELLA=$PWD/$umbrella \
+              RABBITMQ_FEATURE_FLAGS=
+          done
+      - name: ON FAILURE ARCHIVE TESTS LOGS
+        if: failure()
+        run: |
+          make ct-logs-archive
+      - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+        # https://github.com/marketplace/actions/upload-artifact
+        uses: actions/upload-artifact@v2-preview
+        if: failure()
+        with:
+          name: ct-stats-logs
+          path: "*-ct-logs-*.tar.xz"
+  # vim:sw=2:et:
+  capture-tested-deps-versions:
+    needs:
+      - eunit
+      - ct-cache
+      - ct-clustering
+      - ct-clustering_prop
+      - ct-config_schema
+      - ct-listener_config
+      - ct-rabbit_mgmt_http
+      - ct-rabbit_mgmt_only_http
+      - ct-rabbit_mgmt_rabbitmqadmin
+      - ct-rabbit_mgmt_stats
+      - ct-rabbit_mgmt_test_db
+      - ct-rabbit_mgmt_test_unit
+      - ct-stats
+    runs-on: ubuntu-18.04
+    steps:
+      - if: github.ref == 'refs/heads/master'
+        uses: actions/download-artifact@v2
+        with:
+          name: rabbitmq_management-rabbitmq-deps.mk
+      - name: FORMAT GIT REF
+        if: github.ref == 'refs/heads/master'
+        # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
+        id: ref
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
+      - name: UPLOAD TO S3
+        if: github.ref == 'refs/heads/master'
+        # https://github.com/marketplace/actions/s3-file-upload
+        uses: zdurham/s3-upload-github-action@master
+        env:
+         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+         AWS_REGION: ${{ secrets.AWS_REGION }}
+         FILE: rabbitmq_management-rabbitmq-deps.mk
+         S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+         S3_KEY: rabbitmq-management/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-23.0/rabbitmq_management-rabbitmq-deps.mk

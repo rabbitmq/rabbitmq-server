@@ -1,0 +1,25 @@
+<%
+   var mode = span.attr('for');
+%>
+
+<form action="#/column-options" method="put" class="auto-submit">
+  <input type="hidden" name="mode" value="<%= mode %>"/>
+  <table class="form" width="100%">
+    <tr>
+      <td colspan="2">
+        <h3>Columns for this table</h3>
+      </td>
+    </tr>
+<% for (var group in COLUMNS[mode]) {
+   var options = COLUMNS[mode][group];  %>
+    <tr>
+      <th><label><%= group %>:</label></th>
+      <td>
+      <% for (var i = 0; i < options.length; i++) { %>
+          <%= fmt_checkbox(mode + '-' + options[i][0], options[i][1], get_pref('column-' + mode + '-' + options[i][0]) == 'true') %>
+      <% } %>
+      </td>
+<% } %>
+    </tr>
+  </table>
+</form>

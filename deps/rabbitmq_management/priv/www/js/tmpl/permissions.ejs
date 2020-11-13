@@ -1,0 +1,91 @@
+<div class="section">
+  <h2>Permissions</h2>
+  <div class="hider">
+    <h3>Current permissions</h3>
+    <% if (permissions.length > 0) { %>
+    <table class="list">
+      <thead>
+        <tr>
+<% if (mode == 'vhost') { %>
+          <th>User</th>
+<% } else { %>
+          <th>Virtual host</th>
+<% } %>
+          <th>Configure regexp</th>
+          <th>Write regexp</th>
+          <th>Read regexp</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+<%
+for (var i = 0; i < permissions.length; i++) {
+    var permission = permissions[i];
+%>
+           <tr<%= alt_rows(i)%>>
+<% if (mode == 'vhost') { %>
+             <td><%= link_user(permission.user) %></td>
+<% } else { %>
+             <td><%= link_vhost(permission.vhost) %></td>
+<% } %>
+             <td><%= fmt_string(permission.configure) %></td>
+             <td><%= fmt_string(permission.write) %></td>
+             <td><%= fmt_string(permission.read) %></td>
+             <td class="c">
+               <form action="#/permissions" method="delete" class="confirm">
+                 <input type="hidden" name="username" value="<%= fmt_string(permission.user) %>"/>
+                 <input type="hidden" name="vhost" value="<%= fmt_string(permission.vhost) %>"/>
+                 <input type="submit" value="Clear"/>
+               </form>
+             </td>
+           </tr>
+           <% } %>
+      </tbody>
+    </table>
+    <% } else { %>
+      <p>... no permissions ...</p>
+    <% } %>
+
+    <h3>Set permission</h3>
+    <form action="#/permissions" method="put">
+      <table class="form">
+        <tr>
+<% if (mode == 'vhost') { %>
+          <th>User</th>
+          <td>
+            <input type="hidden" name="vhost" value="<%= fmt_string(parent.name) %>"/>
+            <select name="username">
+              <% for (var i = 0; i < users.length; i++) { %>
+              <option value="<%= fmt_string(users[i].name) %>"><%= fmt_string(users[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+<% } else { %>
+          <th><label>Virtual Host:</label></th>
+          <td>
+            <input type="hidden" name="username" value="<%= fmt_string(parent.name) %>"/>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+<% } %>
+        </tr>
+        <tr>
+          <th><label>Configure regexp:</label></th>
+          <td><input type="text" name="configure" value=".*"/></td>
+        </tr>
+        <tr>
+          <th><label>Write regexp:</label></th>
+          <td><input type="text" name="write" value=".*"/></td>
+        </tr>
+        <tr>
+          <th><label>Read regexp:</label></th>
+          <td><input type="text" name="read" value=".*"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Set permission"/>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,25 @@
+<% if (node.running) { %>
+<table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+<% if (show_enabled) { %>
+      <th>Enabled</th>
+<% } %>
+    </tr>
+    <%
+      for (var i = 0; i < list.length; i++) {
+        var item = list[i];
+    %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= fmt_string(item.name) %></td>
+         <td><%= fmt_string(item.description) %></td>
+<% if (show_enabled) { %>
+         <td class="c"><%= fmt_boolean(item.enabled) %></td>
+<% } %>
+       </tr>
+    <% } %>
+</table>
+<% } else {%>
+<p>...node not running...</p>
+<% } %>

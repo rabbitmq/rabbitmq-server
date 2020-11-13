@@ -1,0 +1,525 @@
+[{http_log,
+  "listeners.tcp.default = 5672
+   collect_statistics_interval = 10000
+   management.http_log_dir = test/config_schema_SUITE_data/rabbit-mgmt
+   management.rates_mode = basic",
+  [{rabbit,[{tcp_listeners,[5672]},{collect_statistics_interval,10000}]},
+   {rabbitmq_management,
+       [{http_log_dir,"test/config_schema_SUITE_data/rabbit-mgmt"},
+        {rates_mode,basic}]}],
+  [rabbitmq_management]},
+
+ %%
+ %% TCP listener
+ %%
+
+ {tcp_listener_port_only,
+  "management.tcp.port = 15674",
+  [{rabbitmq_management,[
+                         {tcp_config,[
+                                      {port,15674}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tcp_listener_interface_port,
+  "management.tcp.ip   = 192.168.1.2
+   management.tcp.port = 15674",
+  [{rabbitmq_management,[
+                         {tcp_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15674}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tcp_listener_server_opts_compress,
+  "management.tcp.compress = true",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_compress_and_idle_timeout,
+  "management.tcp.compress     = true
+   management.tcp.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{compress,     true},
+                                                     {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_compress_and_multiple_timeouts,
+  "management.tcp.compress     = true
+   management.tcp.idle_timeout = 123
+   management.tcp.inactivity_timeout = 456
+   management.tcp.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{compress,           true},
+                                                     {idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_multiple_timeouts_only,
+  "management.tcp.idle_timeout = 123
+   management.tcp.inactivity_timeout = 456
+   management.tcp.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_shutdown_timeout,
+  "management.tcp.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_max_keepalive,
+  "management.tcp.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+
+ %%
+ %% TLS listener
+ %%
+
+ {tls_listener_port_only,
+  "management.ssl.port = 15671",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {port,15671}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tls_listener_interface_port,
+  "management.ssl.ip   = 192.168.1.2
+   management.ssl.port = 15671",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15671}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tls_listener,
+  "management.ssl.ip   = 192.168.1.2
+   management.ssl.port = 15671
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   management.ssl.verify   = verify_none
+   management.ssl.fail_if_no_peer_cert = false",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15671},
+                                      {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                      {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                      {verify, verify_none},
+                                      {fail_if_no_peer_cert, false}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tls_listener_cipher_suites,
+  "management.ssl.ip   = 192.168.1.2
+   management.ssl.port = 15671
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+
+   management.ssl.honor_cipher_order   = true
+   management.ssl.honor_ecc_order      = true
+   management.ssl.client_renegotiation = false
+   management.ssl.secure_renegotiate   = true
+
+   management.ssl.verify   = verify_peer
+   management.ssl.fail_if_no_peer_cert = false
+
+   management.ssl.versions.1 = tlsv1.2
+   management.ssl.versions.2 = tlsv1.1
+
+   management.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+   management.ssl.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+   management.ssl.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+   management.ssl.ciphers.4 = ECDHE-RSA-AES256-SHA384
+   management.ssl.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+   management.ssl.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+   management.ssl.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+   management.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
+   management.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15671},
+                                      {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                      {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+
+                                      {verify, verify_peer},
+                                      {fail_if_no_peer_cert, false},
+
+                                      {honor_cipher_order,   true},
+                                      {honor_ecc_order,      true},
+                                      {client_renegotiation, false},
+                                      {secure_renegotiate,   true},
+
+                                      {versions,['tlsv1.2','tlsv1.1']},
+                                      {ciphers, [
+                                        "ECDHE-ECDSA-AES256-GCM-SHA384",
+                                        "ECDHE-RSA-AES256-GCM-SHA384",
+                                        "ECDHE-ECDSA-AES256-SHA384",
+                                        "ECDHE-RSA-AES256-SHA384",
+                                        "ECDH-ECDSA-AES256-GCM-SHA384",
+                                        "ECDH-RSA-AES256-GCM-SHA384",
+                                        "ECDH-ECDSA-AES256-SHA384",
+                                        "ECDH-RSA-AES256-SHA384",
+                                        "DHE-RSA-AES256-GCM-SHA384"
+                                        ]}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tls_listener_server_opts_compress,
+  "management.ssl.compress = true",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_compress_and_idle_timeout,
+  "management.ssl.compress     = true
+   management.ssl.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{compress,     true},
+                                                       {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_compress_and_multiple_timeouts,
+  "management.ssl.compress     = true
+   management.ssl.idle_timeout = 123
+   management.ssl.inactivity_timeout = 456
+   management.ssl.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{compress,           true},
+                                                       {idle_timeout,       123},
+                                                       {inactivity_timeout, 456},
+                                                       {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_multiple_timeouts_only,
+  "management.ssl.idle_timeout = 123
+   management.ssl.inactivity_timeout = 456
+   management.ssl.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{idle_timeout,       123},
+                                                       {inactivity_timeout, 456},
+                                                       {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_shutdown_timeout,
+  "management.ssl.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_max_keepalive,
+  "management.ssl.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% Retention Policies
+ %%
+
+ {retention_policies,
+  "management.sample_retention_policies.global.minute  = 5
+   management.sample_retention_policies.global.hour    = 60
+   management.sample_retention_policies.global.day = 1200
+
+   management.sample_retention_policies.basic.minute = 5
+   management.sample_retention_policies.basic.hour   = 60
+
+   management.sample_retention_policies.detailed.10 = 5",
+  [{rabbitmq_management,
+       [{sample_retention_policies,
+            [{global,[{60,5},{3600,60},{86400,1200}]},
+             {basic,[{60,5},{3600,60}]},
+             {detailed,[{10,5}]}]}]}],
+  [rabbitmq_management]},
+
+ {path_prefix,
+  "management.path_prefix = /a/prefix",
+  [
+   {rabbitmq_management, [
+                          {path_prefix, "/a/prefix"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {login_session_timeout,
+  "management.login_session_timeout = 30",
+  [
+   {rabbitmq_management, [
+                          {login_session_timeout, 30}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% Inter-node query result caching
+ %%
+ 
+ {db_cache_multiplier,
+  "management.db_cache_multiplier = 7",
+  [
+   {rabbitmq_management, [
+                          {management_db_cache_multiplier, 7}
+                         ]}
+  ], [rabbitmq_management]
+ },
+ 
+ %%
+ %% CORS
+ %%
+
+ {cors_settings,
+  "management.cors.allow_origins.1 = https://origin1.org
+   management.cors.allow_origins.2 = https://origin2.org
+   management.cors.max_age         = 3600",
+  [
+   {rabbitmq_management, [
+                          {cors_allow_origins, ["https://origin1.org", "https://origin2.org"]},
+                          {cors_max_age, 3600}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {cors_wildcard,
+  "management.cors.allow_origins.1 = *
+   management.cors.max_age         = 3600",
+  [
+   {rabbitmq_management, [
+                          {cors_allow_origins, ["*"]},
+                          {cors_max_age, 3600}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+
+ %%
+ %% CSP
+ %%
+
+ {csp_policy_case1,
+  "management.csp.policy = default-src 'self'",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self'"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_policy_case2,
+  "management.csp.policy = default-src https://onlinebanking.examplebank.com",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src https://onlinebanking.examplebank.com"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_policy_case3,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% HSTS
+ %%
+
+ {hsts_policy_case1,
+  "management.hsts.policy = max-age=31536000; includeSubDomains",
+  [
+   {rabbitmq_management, [
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_and_hsts_combined,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
+   management.hsts.policy = max-age=31536000; includeSubDomains",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+
+ %%
+ %% Legacy listener configuration
+ %%
+
+ {legacy_tcp_listener,
+  "management.listener.port = 12345",
+  [{rabbitmq_management,[{listener,[{port,12345}]}]}],
+  [rabbitmq_management]},
+
+ {legacy_ssl_listener,
+  "management.listener.port = 15671
+   management.listener.ssl = true
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.listener.ssl_opts.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.listener.ssl_opts.keyfile = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,
+       [{listener,
+            [{port,15671},
+             {ssl,true},
+             {ssl_opts,
+                 [{cacertfile,
+                      "test/config_schema_SUITE_data/certs/cacert.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                  {keyfile,
+                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+  [rabbitmq_management]},
+
+ {legacy_tcp_listener_ip,
+  "management.listener.port = 15672
+   management.listener.ip   = 127.0.0.1",
+  [{rabbitmq_management,[{listener,[{port,15672},{ip,"127.0.0.1"}]}]}],
+  [rabbitmq_management]},
+ {legacy_ssl_listener_port,
+  "management.listener.port = 15672
+   management.listener.ssl  = true
+
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.listener.ssl_opts.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   management.listener.ssl_opts.keyfile    = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,
+       [{listener,
+            [{port,15672},
+             {ssl,true},
+             {ssl_opts,
+                 [{cacertfile,
+                      "test/config_schema_SUITE_data/certs/cacert.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                  {keyfile,
+                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+  [rabbitmq_management]},
+
+ {legacy_server_opts_compress,
+  "management.listener.server.compress = true",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {legacy_server_opts_compress_and_idle_timeout,
+  "management.listener.server.compress     = true
+   management.listener.server.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress,     true},
+                                                     {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {legacy_server_opts_compress_and_multiple_timeouts,
+  "management.listener.server.compress     = true
+   management.listener.server.idle_timeout = 123
+   management.listener.server.inactivity_timeout = 456
+   management.listener.server.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress,           true},
+                                                     {idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {legacy_server_opts_multiple_timeouts_only,
+  "management.listener.server.idle_timeout = 123
+   management.listener.server.inactivity_timeout = 456
+   management.listener.server.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {legacy_server_opts_shutdown_timeout,
+  "management.listener.server.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {legacy_server_opts_max_keepalive,
+  "management.listener.server.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ }
+
+].

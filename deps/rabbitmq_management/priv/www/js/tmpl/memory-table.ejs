@@ -1,0 +1,28 @@
+<%
+  for (var i in key) {
+%>
+<table class="facts">
+<%
+  for (var j in key[i]) {
+   var group = key[i][j];
+%>
+  <tr>
+    <th><div class="colour-key memory_<%= group.colour %>"></div><%= group.name %></th>
+    <td>
+      <table class="mini">
+<%
+  for (var k in group.keys) {
+    var name  = group.keys[k][0];
+    var label = group.keys[k][1];
+%>
+        <tr>
+          <td class="r"><%= fmt_bytes(memory[name]) %></td>
+          <td><%= label %></td>
+        </tr>
+<% } %>
+      </table>
+    </td>
+  </tr>
+<% } %>
+</table>
+<% } %>

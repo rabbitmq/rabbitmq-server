@@ -1,0 +1,105 @@
+<div class="updatable">
+<%
+   var partitions = [];
+   for (var i = 0; i < nodes.length; i++) {
+     var node = nodes[i];
+     if (node.partitions != undefined && node.partitions.length != 0) {
+       partitions.push({'node': node.name,
+                        'others': node.partitions});
+     }
+   }
+   if (partitions.length > 0) {
+%>
+<p class="status-error">
+  Network partition detected<br/><br/>
+  Mnesia reports that this RabbitMQ cluster has experienced a
+  network partition. There is a risk of losing data. Please read
+  <a href="https://www.rabbitmq.com/partitions.html">RabbitMQ
+  documentation about network partitions and the possible solutions</a>.
+</p>
+<p>
+  The nature of the partition is as follows:
+</p>
+  <table class="list">
+    <tr>
+      <th>Node</th><th>Was partitioned from</th>
+    </tr>
+
+<%
+   for (var i = 0; i < partitions.length; i++) {
+     var partition = partitions[i];
+%>
+    <tr<%= alt_rows(i)%>>
+      <td><%= fmt_node(partition.node) %></td>
+      <td>
+<%
+   for (var j = 0; j < partition.others.length; j++) {
+     var other = partition.others[j];
+%>
+          <%= other %><br/>
+<% } %>
+      </td>
+    </tr>
+<% } %>
+  </table>
+<p>
+  While running in this partitioned state, changes (such as queue or
+  exchange declaration and binding) which take place in one partition
+  will not be visible to other partition(s). Other behaviour is not
+  guaranteed.
+</p>
+<p>
+  <a target="_blank"
+  href="https://www.rabbitmq.com/partitions.html">More information on
+  network partitions.</a>
+</p>
+<% } %>
+<%
+   var ticktime = null;
+   var ticktimes_unequal = false;
+   for (var i = 0; i < nodes.length; i++) {
+     var node_ticktime = nodes[i].net_ticktime;
+     if (node_ticktime != undefined) {
+
+       if (ticktime != null && node_ticktime != ticktime) {
+         ticktimes_unequal = true;
+       }
+       ticktime = nodes[i].net_ticktime;
+     }
+   }
+   if (ticktimes_unequal) {
+%>
+<p class="status-error">
+  The <code>kernel</code> <code>net_ticktime</code> values are set
+  differently for different nodes in this cluster.
+</p>
+<p>
+  The values are:
+</p>
+  <table class="list">
+    <tr><th>Node</th><th>net_ticktime</th></tr>
+<%
+   for (var i = 0; i < nodes.length; i++) {
+%>
+      <tr<%= alt_rows(i)%>>
+        <td><%= nodes[i].name %></td>
+        <td><%= nodes[i].net_ticktime %></td>
+      </tr>
+<%
+   }
+%>
+  </table>
+<p>
+  This is a dangerous configuration; use of substantially
+  unequal <code>net_ticktime</code> values can lead to partitions
+  being falsely detected.
+</p>
+<p>
+  <a target="_blank"
+  href="https://www.rabbitmq.com/nettick.html">More information on
+  <code>net_ticktime</code>.</a>
+</p>
+<%
+   }
+%>
+</div>

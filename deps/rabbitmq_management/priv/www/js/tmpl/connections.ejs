@@ -1,0 +1,155 @@
+<h1>Connections</h1>
+<div class="section">
+ <%= paginate_ui(connections, 'connections') %>
+</div>
+<div class="updatable">
+<% if (connections.items.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <%= group_heading('connections', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <% if (!disable_stats) { %>
+    <%= group_heading('connections', 'Details', []) %>
+    <%= group_heading('connections', 'Network', []) %>
+    <% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="connections">+/-</span></th>
+  </tr>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
+<% if(disable_stats) { %>
+    <th><%= fmt_sort('Name',           'name') %></th>
+<% } else { %>
+    <th><%= fmt_sort('Name',           'client_properties.connection_name') %></th>
+<% } %>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',           'node') %></th>
+<% } %>
+<% if (show_column('connections',      'user')) { %>
+    <th><%= fmt_sort('User name',      'user') %></th>
+<% } %>
+<% if (!disable_stats) { %>
+<% if (show_column('connections',      'state')) { %>
+    <th><%= fmt_sort('State',          'state') %></th>
+<% } %>
+<% if (show_column('connections',      'ssl')) { %>
+    <th><%= fmt_sort('SSL / TLS',      'ssl') %></th>
+<% } %>
+<% if (show_column('connections',      'ssl_info')) { %>
+    <th>SSL Details</th>
+<% } %>
+<% if (show_column('connections',      'protocol')) { %>
+    <th><%= fmt_sort('Protocol',       'protocol') %></th>
+<% } %>
+<% if (show_column('connections',      'channels')) { %>
+    <th><%= fmt_sort('Channels',       'channels') %></th>
+<% } %>
+<% if (show_column('connections',      'channel_max')) { %>
+    <th><%= fmt_sort('Channel max',    'channel_max') %></th>
+<% } %>
+<% if (show_column('connections',      'frame_max')) { %>
+    <th><%= fmt_sort('Frame max',      'frame_max') %></th>
+<% } %>
+<% if (show_column('connections',      'auth_mechanism')) { %>
+    <th><%= fmt_sort('Auth mechanism', 'auth_mechanism') %></th>
+<% } %>
+<% if (show_column('connections',      'client')) { %>
+    <th><%= fmt_sort('Client',         'properties') %></th>
+<% } %>
+<% if (show_column('connections',      'from_client')) { %>
+    <th><%= fmt_sort('From client',    'recv_oct_details.rate') %></th>
+<% } %>
+<% if (show_column('connections',      'to_client')) { %>
+    <th><%= fmt_sort('To client',      'send_oct_details.rate') %></th>
+<% } %>
+<% if (show_column('connections',      'heartbeat')) { %>
+    <th><%= fmt_sort('Heartbeat',      'timeout') %></th>
+<% } %>
+<% if (show_column('connections',      'connected_at')) { %>
+    <th><%= fmt_sort('Connected at',   'connected_at') %></th>
+<% } %>
+<% } %>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < connections.items.length; i++) {
+    var connection = connections.items[i];
+%>
+  <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+    <td><%= fmt_string(connection.vhost) %></td>
+<% } %>
+<% if(connection.client_properties) { %>
+    <td>
+      <%= link_conn(connection.name) %>
+      <sub><%= fmt_string(short_conn(connection.client_properties.connection_name)) %></sub>
+    </td>
+<% } else { %>
+    <td><%= link_conn(connection.name) %></td>
+<% } %>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_node(connection.node) %></td>
+<% } %>
+<% if (show_column('connections', 'user')) { %>
+    <td class="c"><%= fmt_string(connection.user) %></td>
+<% } %>
+<% if (!disable_stats) { %>
+<% if (show_column('connections', 'state')) { %>
+    <td><%= fmt_object_state(connection) %></td>
+<% } %>
+<% if (show_column('connections', 'ssl')) { %>
+    <td class="c"><%= fmt_boolean(connection.ssl, '') %></td>
+<% } %>
+<% if (show_column('connections', 'ssl_info')) { %>
+    <td>
+    <% if (connection.ssl) { %>
+      <%= connection.ssl_protocol %>
+      <sub>
+        <%= connection.ssl_key_exchange %>
+        <%= connection.ssl_cipher %>
+        <%= connection.ssl_hash %>
+      </sub>
+    <% } %>
+    </td>
+<% } %>
+<% if (show_column('connections', 'protocol')) { %>
+    <td class="c"><%= connection.protocol %></td>
+<% } %>
+<% if (show_column('connections', 'channels')) { %>
+    <td class="r"><%= fmt_string(connection.channels, '') %></td>
+<% } %>
+<% if (show_column('connections', 'channel_max')) { %>
+    <td class="r"><%= fmt_string(connection.channel_max, '') %></td>
+<% } %>
+<% if (show_column('connections', 'frame_max')) { %>
+    <td class="r"><%= fmt_string(connection.frame_max, '') %></td>
+<% } %>
+<% if (show_column('connections', 'auth_mechanism')) { %>
+    <td class="c"><%= fmt_string(connection.auth_mechanism, '') %></td>
+<% } %>
+<% if (show_column('connections', 'client')) { %>
+    <td><%= fmt_client_name(connection.client_properties) %></td>
+<% } %>
+<% if (show_column('connections', 'from_client')) { %>
+    <td><%= fmt_detail_rate_bytes(connection, 'recv_oct') %></td>
+<% } %>
+<% if (show_column('connections', 'to_client')) { %>
+    <td><%= fmt_detail_rate_bytes(connection, 'send_oct') %></td>
+<% } %>
+<% if (show_column('connections', 'heartbeat')) { %>
+    <td class="r"><%= fmt_time(connection.timeout, 's') %></td>
+<% } %>
+<% if (show_column('connections', 'connected_at')) { %>
+    <td><%= fmt_timestamp_mini(connection.connected_at) %></td>
+<% } %>
+  <% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no connections ...</p>
+<% } %>
+</div>

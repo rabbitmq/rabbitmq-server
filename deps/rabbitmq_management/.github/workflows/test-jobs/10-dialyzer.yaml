@@ -1,0 +1,7 @@
+dialyzer:
+    name: No-op Dialyzer
+    runs-on: ubuntu-latest
+    steps:
+    - name: no-op
+        run: |
+        true
