@@ -1,0 +1,18 @@
+{
+    "extension": {
+	"name": "demo",
+	"version": "1.0",
+	"copyright": "Copyright (C) 2009-2020 VMware, Inc. or its affiliates."
+    },
+    "domains": [
+	["foo-domain", "shortstr"]
+    ],
+    "constants": [
+	{"name": "FOO-CONSTANT", "value": 121212}
+    ],
+    "classes": [
+	{"name": "demo",
+	 "id": 555,
+	 "methods": [{"name": "one", "id": 1, "arguments": []}]}
+    ]
+}
