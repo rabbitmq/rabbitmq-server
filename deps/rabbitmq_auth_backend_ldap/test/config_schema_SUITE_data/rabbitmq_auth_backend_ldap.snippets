@@ -1,0 +1,259 @@
+[{ldap_servers,
+  "auth_ldap.servers.1 = DC1.domain.com
+   auth_ldap.servers.2 = DC1.eng.domain.com",
+  [{rabbitmq_auth_backend_ldap,
+       [{servers,["DC1.domain.com","DC1.eng.domain.com"]}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {ldap_servers_short,
+  "auth_ldap.servers.1 = hostname1
+   auth_ldap.servers.2 = hostname2",
+  [{rabbitmq_auth_backend_ldap,[{servers,["hostname1","hostname2"]}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_port,
+  "auth_ldap.port = 1234",
+  [{rabbitmq_auth_backend_ldap,[
+                                {port, 1234}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_connection_pool_size,
+  "auth_ldap.connection_pool_size = 128",
+  [{rabbitmq_auth_backend_ldap,[
+                                {pool_size, 128}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_servers_short,
+  "auth_ldap.servers.1 = hostname1
+   auth_ldap.servers.2 = hostname2",
+  [{rabbitmq_auth_backend_ldap,[{servers,["hostname1","hostname2"]}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_timeouts,
+  "auth_ldap.timeout = 50000
+   auth_ldap.idle_timeout = 90000",
+  [{rabbitmq_auth_backend_ldap,[
+                                {timeout, 50000},
+                                {idle_timeout, 90000}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_use_ssl_true,
+  "auth_ldap.use_ssl = true",
+  [{rabbitmq_auth_backend_ldap,[
+                                {use_ssl, true}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_use_ssl_false,
+  "auth_ldap.use_ssl = false",
+  [{rabbitmq_auth_backend_ldap,[
+                                {use_ssl, false}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_use_starttls_true,
+  "auth_ldap.use_starttls = true",
+  [{rabbitmq_auth_backend_ldap,[
+                                {use_starttls, true}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_false,
+  "auth_ldap.log = false",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, false}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_true,
+  "auth_ldap.log = true",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, true}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_network,
+  "auth_ldap.log = network",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, network}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_network_unsafe,
+  "auth_ldap.log = network_unsafe",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, network_unsafe}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+
+ {group_lookup_base,
+  "auth_ldap.group_lookup_base = DC=gopivotal,DC=com",
+  [{rabbitmq_auth_backend_ldap,
+       [{group_lookup_base, "DC=gopivotal,DC=com"}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {dn_lookup,
+  "auth_ldap.dn_lookup_attribute = userPrincipalName
+   auth_ldap.dn_lookup_base = DC=gopivotal,DC=com
+   auth_ldap.dn_lookup_bind = as_user",
+  [{rabbitmq_auth_backend_ldap,
+       [{dn_lookup_attribute,"userPrincipalName"},
+        {dn_lookup_base,"DC=gopivotal,DC=com"},
+        {dn_lookup_bind,as_user}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {db_lookup_bind,
+  "auth_ldap.dn_lookup_bind.user_dn = username
+   auth_ldap.dn_lookup_bind.password = password",
+  [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,{"username","password"}}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {db_lookup_bind_anon,
+  "auth_ldap.dn_lookup_bind = anon",
+  [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,anon}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {other_bind_anon,
+  "auth_ldap.other_bind = anon",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,anon}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {both_binds_anon,
+  "auth_ldap.dn_lookup_bind = anon
+   auth_ldap.other_bind = anon",
+  [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,anon},
+                                {other_bind,anon}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {other_bind_as_user,
+  "auth_ldap.other_bind = as_user",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,as_user}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {other_bind_pass,
+  "auth_ldap.other_bind.user_dn = username
+   auth_ldap.other_bind.password = password",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,{"username","password"}}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ssl_options,
+  "auth_ldap.use_ssl                          = true
+   auth_ldap.ssl_options.cacertfile           = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile             = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile              = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.verify               = verify_peer
+   auth_ldap.ssl_options.fail_if_no_peer_cert = true",
+  [{rabbitmq_auth_backend_ldap, [
+        {use_ssl, true},
+        {ssl_options,
+            [{cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,   "test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,    "test/config_schema_SUITE_data/certs/key.pem"},
+             {verify,               verify_peer},
+             {fail_if_no_peer_cert, true}]}
+   ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ssl_options_verify_peer,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.verify = verify_peer
+   auth_ldap.ssl_options.fail_if_no_peer_cert = false",
+  [{rabbitmq_auth_backend_ldap,
+       [{use_ssl, true},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,false}]}]}],
+  []},
+ {ssl_options_password,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.password   = t0p$3kRe7",
+  [{rabbitmq_auth_backend_ldap,
+       [{use_ssl, true},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {password,"t0p$3kRe7"}]}]}],
+  []},
+ {ssl_options_tls_versions,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_ldap.ssl_options.versions.tls1_1 = tlsv1.1",
+  [],
+  [{rabbitmq_auth_backend_ldap,
+       [{ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {versions,['tlsv1.2','tlsv1.1']}]},
+        {use_ssl, true}]}],
+  []},
+ {ssl_options_depth,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.depth      = 2
+   auth_ldap.ssl_options.verify     = verify_peer
+   auth_ldap.ssl_options.fail_if_no_peer_cert = false",
+  [{rabbitmq_auth_backend_ldap,
+       [{use_ssl, true},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {depth,2},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,false}]}]}],
+  []},
+ {ssl_options_honor_cipher_order,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.depth      = 2
+   auth_ldap.ssl_options.verify     = verify_peer
+   auth_ldap.ssl_options.fail_if_no_peer_cert = false
+   auth_ldap.ssl_options.honor_cipher_order   = true",
+  [{rabbitmq_auth_backend_ldap,
+       [{use_ssl, true},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {depth,2},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert, false},
+             {honor_cipher_order, true}]}]}],
+  []},
+ {ssl_options_honor_ecc_order,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.depth      = 2
+   auth_ldap.ssl_options.verify     = verify_peer
+   auth_ldap.ssl_options.fail_if_no_peer_cert = false
+   auth_ldap.ssl_options.honor_ecc_order      = true",
+  [{rabbitmq_auth_backend_ldap,
+       [{use_ssl, true},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {depth,2},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert, false},
+             {honor_ecc_order, true}]}]}],
+  []}
+
+].
