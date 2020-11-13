@@ -1,0 +1,27 @@
+# Load modules for database type
+dn: cn=module,cn=config
+objectclass: olcModuleList
+cn: module
+olcModuleLoad: back_bdb.la
+
+# Create directory database
+dn: olcDatabase=bdb,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcBdbConfig
+olcDatabase: bdb
+# Domain name (e.g. rabbitmq.com)
+olcSuffix: dc=rabbitmq,dc=com
+# Location on system where database is stored
+olcDbDirectory: /var/lib/ldap
+# Manager of the database
+olcRootDN: cn=admin,dc=rabbitmq,dc=com
+olcRootPW: admin
+olcAccess: to attrs=userPassword
+  by self write
+  by anonymous auth
+  by dn.base="cn=admin,dc=rabbitmq,dc=com" write
+  by * none
+olcAccess: to *
+  by self write
+  by dn.base="cn=admin,dc=rabbitmq,dc=com" write
+  by * read
