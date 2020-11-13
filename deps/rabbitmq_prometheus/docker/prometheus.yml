@@ -1,0 +1,71 @@
+# https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+global:
+  # This is higher than RabbitMQ's collect_statistics_interval,
+  # but still close enough to capture metrics that were refreshed within this interval
+  # This value determines the range that we use with rate():
+  # https://www.robustperception.io/what-range-should-i-use-with-rate
+  scrape_interval: 15s # Default is every 1 minute.
+  # scrape_timeout: 10s # Default is 10 seconds.
+  # evaluation_interval: 60s # Default is every 1 minute.
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      # - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['docker.for.mac.localhost:9323']
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+  - job_name: 'rabbitmq-server'
+    static_configs:
+      - targets:
+          - 'rmq0:15692'
+          - 'rmq1:15692'
+          - 'rmq2:15692'
+          - 'rmq0-dist-tls:15692'
+          - 'rmq1-dist-tls:15692'
+          - 'rmq2-dist-tls:15692'
+          - 'rmq0-qq:15692'
+          - 'rmq1-qq:15692'
+          - 'rmq2-qq:15692'
+  - job_name: 'rabbitmq-perf-test'
+    static_configs:
+      - targets:
+          # docker-compose-overview.yml
+          - 'basic-get:8080'
+          - 'basic-get-auto:8080'
+          - 'greedy-consumer:8080'
+          - 'publisher-confirms:8080'
+          - 'slow-consumer-persistent:8080'
+          - 'nack:8080'
+          - 'unroutable-return:8080'
+          - 'unroutable-drop:8080'
+          # docker-compose-dist-tls.yml
+          - 'stress-dist-tls:8080'
+          # docker-compose-qq.yml
+          - 'stress-qq:8080'
+  - job_name: 'rabbitmq-exporter'
+    scrape_interval: 60s
+    scrape_timeout: 59s
+    static_configs:
+      - targets:
+          # docker-compose-dist-tls.yml
+          - 'rabbitmq-exporter:9090'

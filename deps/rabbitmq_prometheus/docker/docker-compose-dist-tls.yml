@@ -1,0 +1,81 @@
+# https://docs.docker.com/compose/compose-file/
+version: "3.6"
+
+# https://docs.docker.com/compose/compose-file/#networks
+networks:
+  rabbitmq-prometheus:
+
+# https://docs.docker.com/compose/compose-file/#volumes
+volumes:
+  rabbitmq-prometheus_prometheus:
+  rabbitmq-prometheus_grafana:
+
+services:
+  rmq0-dist-tls: &rabbitmq
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.76-2019.10.30
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "5676:5672"
+      - "15676:15672"
+      - "15696:15692"
+    # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
+    # https://en.wikipedia.org/wiki/Tcpkill
+    # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
+    cap_add:
+      - ALL
+    hostname: rmq0-dist-tls
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rmq0-dist-tls
+    volumes:
+      - ./rabbitmq-dist-tls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
+      - ./rabbitmq-ssl_dist.config:/etc/rabbitmq/ssl_dist.config:ro
+      - ./rabbitmq-dist-tls-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+      - ./rabbitmq-ssl:/etc/rabbitmq/ssl:ro
+    # we want to simulate hitting thresholds
+    ulimits:
+      nofile:
+        soft: "2000"
+        hard: "2000"
+  rmq1-dist-tls:
+    << : *rabbitmq
+    hostname: rmq1-dist-tls
+    ports:
+      - "5677:5672"
+      - "15677:15672"
+      - "15697:15692"
+  rmq2-dist-tls:
+    << : *rabbitmq
+    hostname: rmq2-dist-tls
+    ports:
+      - "5678:5672"
+      - "15678:15672"
+      - "15698:15692"
+  stress-dist-tls:
+    # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.9.1-ubuntu
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq0-dist-tls:5672/%2f"
+      QUEUE_PATTERN: "ha3-stress_dist-%d"
+      QUEUE_PATTERN_FROM: 1
+      QUEUE_PATTERN_TO: 10
+      PRODUCERS: 10
+      CONSUMERS: 10
+      ROUTING_KEY: max1
+      SIZE: 512000
+      QOS: 100
+      AUTOACK: "false"
+      VARIABLE_RATE: "1:30,20:30,40:30"
+      SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
+      METRICS_PROMETHEUS: "true"
+  rabbitmq-exporter:
+    # https://hub.docker.com/r/kbudde/rabbitmq-exporter/tags
+    image: kbudde/rabbitmq-exporter:v0.29.0
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      RABBIT_URL: "http://rmq0-dist-tls:15672"
