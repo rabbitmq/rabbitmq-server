@@ -700,13 +700,15 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                  Props, Delivered, State = #q{q                   = Q,
                                               backing_queue       = BQ,
                                               backing_queue_state = BQS,
-                                              msg_id_to_channel   = MTC}) ->
+                                              msg_id_to_channel   = MTC,
+                                              delivery_limit      = DL}) ->
     case rabbit_queue_consumers:deliver(
            fun (true)  -> true = BQ:is_empty(BQS),
+                          {Message1, Props1} = maybe_inc_delivery_count(DL, Message, Props),
                           {AckTag, BQS1} =
                               BQ:publish_delivered(
-                                Message, Props, SenderPid, Flow, BQS),
-                          {{Message, Delivered, AckTag}, {BQS1, MTC}};
+                                Message1, Props1, SenderPid, Flow, BQS),
+                          {{Message1, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
                            discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q))}
            end, qname(State), State#q.consumers, State#q.single_active_consumer_on, State#q.active_consumer) of
@@ -721,6 +723,10 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                             ActiveConsumersChanged,
                             State#q{consumers = Consumers})}
     end.
+
+maybe_inc_delivery_count(infinity, Message, Props) -> {Message, Props};
+maybe_inc_delivery_count(_DL, Message, Props) ->
+    rabbit_basic:inc_delivery_count(Message, Props).
 
 maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                          Delivered,
@@ -789,10 +795,12 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
             %% remains unchanged, or if the newly published message
             %% has no expiry and becomes the head of the queue then
             %% the call is unnecessary.
-            case {Dropped, QLen =:= 1, Props#message_properties.expiry} of
-                {false, false,         _} -> State3;
-                {true,  true,  undefined} -> State3;
-                {_,     _,             _} -> drop_expired_msgs(State3)
+            Expiry = message_properties:get_expiry(Props),
+            ShouldExpire = (Expiry =/= undefined) or (DL =/= infinity),
+            case {Dropped, QLen =:= 1, ShouldExpire} of
+                {false, false,     _} -> State3;
+                {true,  true,  false} -> State3;
+                {_,     _,         _} -> drop_expired_msgs(State3)
             end
     end.
 
@@ -1021,8 +1029,13 @@ drop_expired_msgs(State) ->
     end.
 
 drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
-                                  backing_queue       = BQ }) ->
-    ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
+                                  backing_queue       = BQ,
+                                  delivery_limit      = DL}) ->
+    ExpirePred = fun (MessageProps) ->
+                      Exp = message_properties:get_expiry(MessageProps),
+                      DC = message_properties:get_delivery_count(MessageProps),
+                      (Now >= Exp) or (DC >= DL)
+                 end,
     {Props, State1} =
         with_dlx(
           State#q.dlx,
@@ -1030,8 +1043,9 @@ drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
           fun () -> {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
                     {Next, State#q{backing_queue_state = BQS1}} end),
     ensure_ttl_timer(case Props of
-                         undefined                         -> undefined;
-                         #message_properties{expiry = Exp} -> Exp
+                         undefined    -> undefined;
+                         MessageProps ->
+                             message_properties:get_expiry(MessageProps)
                      end, State1).
 
 with_dlx(undefined, _With,  Without) -> Without();
@@ -1695,7 +1709,8 @@ handle_info({maybe_expire, _Vsn}, State) ->
 
 handle_info({drop_expired, Vsn}, State = #q{args_policy_version = Vsn}) ->
     WasEmpty = is_empty(State),
-    State1 = drop_expired_msgs(State#q{ttl_timer_ref = undefined}),
+    State1 = drop_expired_msgs(State#q{ttl_timer_ref = undefined,
+                                       delivery_limit_ttl_timer_ref = undefined}),
     noreply(maybe_send_drained(WasEmpty, State1));
 
 handle_info({drop_expired, _Vsn}, State) ->
