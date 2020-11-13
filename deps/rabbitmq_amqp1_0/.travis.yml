@@ -1,0 +1,66 @@
+# vim:sw=2:et:
+
+os: linux
+dist: xenial
+language: elixir
+notifications:
+  email:
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
+addons:
+  apt:
+    sources:
+      - sourceline: deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-trusty-prod trusty main
+        key_url: https://packages.microsoft.com/keys/microsoft.asc
+    packages:
+      - awscli
+      - dotnet-sdk-2.0.0
+      - maven
+cache:
+  apt: true
+env:
+  global:
+    - secure: hsWxOPcSAXQU9CKQSh829aPLt7oFim8lYVPMSfR0GH0JsnxWgayk2w3tyAblOJqpXTKPqYb+TfyeTOc+QQM8pcEtvi5jtr+GAqovI3UkXpR08J5ImVZVf3sfD4s92uoRjw0u8ift/qZxpDLpdDCKJibe3hRMxlvo5LQ5kCkNGFs=
+    - secure: D2xypqCxIxyhX2/PtXhiWa8kZF9itwhvDK3mxEI+67AM8zJBtrIlIcHifnFMM1RDjFzuBWq5t0BAbyuAGUw0EcjOnc3xW01N/ZG4DaHgXjurDSY0rCfkYLHltFjxJTbx2bH6nmgjdKYRb4W9hQJVcB7vtd1g7kVlzYkNevz4Sfk=
+
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=v3.7.x
+
+elixir:
+  - '1.9'
+otp_release:
+  - '21.3'
+  - '22.2'
+
+install:
+  # This project being an Erlang one (we just set language to Elixir
+  # to ensure it is installed), we don't want Travis to run mix(1)
+  # automatically as it will break.
+  skip
+
+script:
+  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+  # the appropriate branch for dependencies.
+  - make check-rabbitmq-components.mk
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make xref
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make tests
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
