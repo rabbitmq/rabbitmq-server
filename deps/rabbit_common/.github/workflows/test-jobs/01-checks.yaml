@@ -1,0 +1,101 @@
+  # vim:sw=2:et:
+  checks:
+    name: checks
+    runs-on: ubuntu-18.04
+    steps:
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v2
+      # https://github.com/marketplace/actions/setup-elixir
+      - name: CONFIGURE OTP & ELIXIR
+        uses: actions/setup-elixir@v1
+        with:
+          otp-version: $(ERLANG_VERSION)
+          # https://github.com/elixir-lang/elixir/releases
+          elixir-version: $(ELIXIR_VERSION)
+      - name: CHECK RABBITMQ COMPONENTS
+        # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
+        id: ref
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
+          make check-rabbitmq-components.mk base_rmq_ref=$(base_rmq_ref) current_rmq_ref=$branch_or_tag_name
+      - name: RESOLVE & COMPILE DEPS
+        run: |
+          make deps test-deps base_rmq_ref=$(base_rmq_ref) current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+          echo "Capture versions of the RabbitMQ components used in this workflow..."
+          make $(PROJECT)-rabbitmq-deps.mk
+          echo "Remove directories not used in the subsequent jobs..."
+          rm -fr deps/*/{.git,test}
+      - name: UPLOAD DEPS VERSIONS
+        uses: actions/upload-artifact@v2
+        with:
+          name: $(PROJECT)-rabbitmq-deps.mk
+          path: $(PROJECT)-rabbitmq-deps.mk
+      - name: CREATE DEPS ARCHIVE
+        run: |
+          tar cf - deps | xz > deps.tar.xz
+      - name: UPLOAD DEPS ARCHIVE
+        uses: actions/upload-artifact@v2
+        with:
+          name: deps.tar.xz
+          path: deps.tar.xz
+      - name: CHECK CROSS REFERENCES
+        run: |
+          make xref base_rmq_ref=$(base_rmq_ref) current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+      - name: COMPILE FOR TEST
+        run: |
+          make test-build base_rmq_ref=$(base_rmq_ref) current_rmq_ref=${{ steps.ref.outputs.branch_or_tag_name }}
+      - name: CACHE SECONDARY UMBRELLAS
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        uses: actions/cache@v1
+        with:
+          path: umbrellas
+          key: $(SECONDARY_UMBRELLAS_CACHE_KEY)
+      - name: PREPARE SECONDARY UMBRELLA COPIES
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        run: |
+          set -ex
+          for version in $(MIXED_VERSION_TESTING_WITH); do
+            umbrella="umbrellas/$version"
+            if ! test -d "$umbrella"  ||
+               ! make -C "$umbrella/deps/$(PROJECT)" test-dist; then
+              rm -rf "$umbrella"
+
+              # Fetch the master Umbrella; the final umbrellas are created from
+              # the master copy.
+              if ! test -d umbrellas/master; then
+                git config --global advice.detachedHead false
+                git clone \
+                  https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
+                  umbrellas/master
+                make -C umbrellas/master co # To get RabbitMQ components.
+              fi
+
+              # We copy the master Umbrella and checkout the appropriate tag.
+              cp -a umbrellas/master "$umbrella"
+              git -C "$umbrella" checkout "$(base_rmq_ref)"
+              make -C "$umbrella" up BRANCH="$version"
+              # To remove third-party deps which were checked out when the
+              # projects were on the `master` branch. Thus, possibly not the
+              # version pinning we expect. We update the Umbrella one last time
+              # to fetch the correct third-party deps.
+              make -C "$umbrella" clean-3rd-party-repos
+              make -C "$umbrella" up
+              make -C "$umbrella/deps/$(PROJECT)" test-dist
+              rm -rf "$umbrella"/deps/rabbitmq_website
+              rm -rf "$umbrella"/deps/rabbitmq_prometheus/docker
+              rm -rf "$umbrella"/deps/*/{.git,test} "$umbrella"/.git
+            fi
+          done
+          rm -fr umbrellas/master
+      - name: CREATE SECONDARY UMBRELLAS ARCHIVE
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        run: |
+          set -ex
+          tar cf - umbrellas | xz > secondary-umbrellas.tar.xz
+      - name: UPLOAD SECONDARY UMBRELLAS ARCHIVE
+        if: success() && '$(ERLANG_VERSION_IS)' == 'oldest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: secondary-umbrellas.tar.xz
+          path: secondary-umbrellas.tar.xz

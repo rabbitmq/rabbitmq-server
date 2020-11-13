@@ -1,0 +1,338 @@
+#!/usr/bin/env escript
+%% vim:ft=erlang:
+
+%% The code is copied from xref_runner.
+%% https://github.com/inaka/xref_runner
+%%
+%% The only change is the support of our erlang_version_support
+%% attribute: we don't want any warnings about functions which will be
+%% dropped at load time.
+%%
+%% It's also a plain text escript instead of a compiled one because we
+%% want to support Erlang R16B03 and the version of xref_runner uses
+%% maps and is built with something like Erlang 18.
+
+%% This mode allows us to reference local function. For instance:
+%%   lists:map(fun generate_comment/1, Comments)
+-mode(compile).
+
+-define(DIRS, ["ebin", "test"]).
+
+-define(CHECKS, [undefined_function_calls,
+                 undefined_functions,
+                 locals_not_used]).
+
+main(_) ->
+    Checks = ?CHECKS,
+    ElixirDeps = get_elixir_deps_paths(),
+    [true = code:add_path(P) || P <- ElixirDeps],
+    XrefWarnings = lists:append([check(Check) || Check <- Checks]),
+    warnings_prn(XrefWarnings),
+    case XrefWarnings of
+        [] -> ok;
+        _  -> halt(1)
+    end.
+
+get_elixir_deps_paths() ->
+    case os:getenv("ERLANG_MK_RECURSIVE_DEPS_LIST") of
+        false ->
+            [];
+        Filename ->
+            {ok, Fd} = file:open(Filename, [read]),
+            get_elixir_deps_paths1(Fd, [])
+    end.
+
+get_elixir_deps_paths1(Fd, Paths) ->
+    case file:read_line(Fd) of
+        {ok, Line0} ->
+            Line = Line0 -- [$\r, $\n],
+            RootPath = case os:type() of
+                           {unix, _} ->
+                               Line;
+                           {win32, _} ->
+                               case os:find_executable("cygpath.exe") of
+                                   false ->
+                                       Line;
+                                   Cygpath ->
+                                       os:cmd(
+                                         io_lib:format("~s --windows \"~s\"",
+                                                       [Cygpath, Line]))
+                                       -- [$\r, $\n]
+                               end
+                       end,
+            Glob = filename:join([RootPath, "_build", "dev", "lib", "*", "ebin"]),
+            NewPaths = filelib:wildcard(Glob),
+            get_elixir_deps_paths1(Fd, Paths ++ NewPaths);
+        eof ->
+            add_elixir_stdlib_path(Paths)
+    end.
+
+add_elixir_stdlib_path(Paths) ->
+    case find_elixir_home() of
+        false        -> Paths;
+        ElixirLibDir -> [ElixirLibDir | Paths]
+    end.
+
+find_elixir_home() ->
+    ElixirExe = case os:type() of
+                    {unix, _}  -> "elixir";
+                    {win32, _} -> "elixir.bat"
+                end,
+    case os:find_executable(ElixirExe) of
+        false   -> false;
+        ExePath -> resolve_symlink(ExePath)
+    end.
+
+resolve_symlink(ExePath) ->
+    case file:read_link_all(ExePath) of
+        {error, einval} ->
+            determine_elixir_home(ExePath);
+        {ok, ResolvedLink} ->
+            ExePath1 = filename:absname(ResolvedLink,
+                                        filename:dirname(ExePath)),
+            resolve_symlink(ExePath1);
+        {error, _} ->
+            false
+    end.
+
+determine_elixir_home(ExePath) ->
+    LibPath = filename:join([filename:dirname(filename:dirname(ExePath)),
+                             "lib",
+                             "elixir",
+                             "ebin"]),
+    case filelib:is_dir(LibPath) of
+        true  -> LibPath;
+        false -> {skip, "Failed to locate Elixir lib dir"}
+    end.
+check(Check) ->
+    Dirs = ?DIRS,
+    lists:foreach(fun code:add_path/1, Dirs),
+
+    {ok, Xref} = xref:start([]),
+    try
+        ok = xref:set_library_path(Xref, code:get_path()),
+
+        lists:foreach(
+          fun(Dir) ->
+                  case filelib:is_dir(Dir) of
+                      true  -> {ok, _} = xref:add_directory(Xref, Dir);
+                      false -> ok
+                  end
+          end, Dirs),
+
+        {ok, Results} = xref:analyze(Xref, Check),
+
+        FilteredResults = filter_xref_results(Check, Results),
+
+        [result_to_warning(Check, Result) || Result <- FilteredResults]
+    after
+        stopped = xref:stop(Xref)
+    end.
+
+%% -------------------------------------------------------------------
+%% Filtering results.
+%% -------------------------------------------------------------------
+
+filter_xref_results(Check, Results) ->
+  SourceModules =
+    lists:usort([source_module(Result) || Result <- Results]),
+
+  Ignores = lists:flatmap(
+              fun(Module) -> get_ignorelist(Module, Check) end, SourceModules),
+
+  UnusedFunctions = lists:flatmap(
+                      fun(Mod) -> get_unused_compat_functions(Mod) end,
+                      SourceModules),
+
+  ToIgnore = case get(results_to_ignore) of
+                 undefined -> [];
+                 RTI       -> RTI
+             end,
+  NewToIgnore = [parse_xref_target(Result)
+                 || Result <- Results,
+                    lists:member(parse_xref_source(Result), UnusedFunctions)],
+  AllToIgnore = ToIgnore ++ NewToIgnore ++ [mfa(M, {F, A})
+                                            || {_, {M, F, A}} <- Ignores],
+  put(results_to_ignore, AllToIgnore),
+
+  [Result || Result <- Results,
+             not lists:member(parse_xref_result(Result), Ignores) andalso
+             not lists:member(parse_xref_result(Result), AllToIgnore) andalso
+             not lists:member(parse_xref_source(Result), UnusedFunctions)].
+
+source_module({Mt, _Ft, _At}) -> Mt;
+source_module({{Ms, _Fs, _As}, _Target}) -> Ms.
+
+%%
+%% Ignore behaviour functions, and explicitly marked functions
+%%
+%% Functions can be ignored by using
+%% -ignore_xref([{F, A}, {M, F, A}...]).
+get_ignorelist(Mod, Check) ->
+  %% Get ignore_xref attribute and combine them in one list
+  Attributes =
+    try
+      Mod:module_info(attributes)
+    catch
+      _Class:_Error -> []
+    end,
+
+  IgnoreXref =
+    [mfa(Mod, Value) || {ignore_xref, Values} <- Attributes, Value <- Values],
+
+  BehaviourCallbacks = get_behaviour_callbacks(Check, Mod, Attributes),
+
+  %% And create a flat {M, F, A} list
+  IgnoreXref ++ BehaviourCallbacks.
+
+get_behaviour_callbacks(exports_not_used, Mod, Attributes) ->
+  Behaviours = [Value || {behaviour, Values} <- Attributes, Value <- Values],
+  [{Mod, {Mod, F, A}}
+   || B <- Behaviours, {F, A} <- B:behaviour_info(callbacks)];
+get_behaviour_callbacks(_Check, _Mod, _Attributes) ->
+  [].
+
+get_unused_compat_functions(Module) ->
+    OTPVersion = code_version:get_otp_version(),
+    Attributes = try
+                     Module:module_info(attributes)
+                 catch
+                     _Class:_Error -> []
+                 end,
+    CompatTuples = [Tuple
+                    || {erlang_version_support, Tuples} <- Attributes,
+                       Tuple <- Tuples],
+    get_unused_compat_functions(Module, OTPVersion, CompatTuples, []).
+
+get_unused_compat_functions(_, _, [], Result) ->
+    Result;
+get_unused_compat_functions(Module,
+                            OTPVersion,
+                            [{MinOTPVersion, Choices} | Rest],
+                            Result) ->
+    Functions = lists:map(
+                  fun({_, Arity, Pre, Post}) ->
+                          if
+                              OTPVersion >= MinOTPVersion ->
+                                  %% We ignore the "pre" function.
+                                  mfa(Module, {Pre, Arity});
+                              true ->
+                                  %% We ignore the "post" function.
+                                  mfa(Module, {Post, Arity})
+                          end
+                  end, Choices),
+    get_unused_compat_functions(Module, OTPVersion, Rest,
+                                Result ++ Functions).
+
+mfa(M, {F, A}) -> {M, {M, F, A}};
+mfa(M, MFA) -> {M, MFA}.
+
+parse_xref_result({{SM, _, _}, MFAt}) -> {SM, MFAt};
+parse_xref_result({TM, _, _} = MFAt) -> {TM, MFAt}.
+
+parse_xref_source({{SM, _, _} = MFAt, _}) -> {SM, MFAt};
+parse_xref_source({TM, _, _} = MFAt) -> {TM, MFAt}.
+
+parse_xref_target({_, {TM, _, _} = MFAt}) -> {TM, MFAt};
+parse_xref_target({TM, _, _} = MFAt) -> {TM, MFAt}.
+
+%% -------------------------------------------------------------------
+%% Preparing results.
+%% -------------------------------------------------------------------
+
+result_to_warning(Check, {MFASource, MFATarget}) ->
+    {Filename, Line} = get_source(MFASource),
+    [{filename, Filename},
+     {line,     Line},
+     {source,   MFASource},
+     {target,   MFATarget},
+     {check,    Check}];
+result_to_warning(Check, MFA) ->
+    {Filename, Line} = get_source(MFA),
+    [{filename, Filename},
+     {line,     Line},
+     {source,   MFA},
+     {check,    Check}].
+
+%%
+%% Given a MFA, find the file and LOC where it's defined. Note that
+%% xref doesn't work if there is no abstract_code, so we can avoid
+%% being too paranoid here.
+%%
+get_source({M, F, A}) ->
+  case code:get_object_code(M) of
+    error -> {"", 0};
+    {M, Bin, _} -> find_function_source(M, F, A, Bin)
+  end.
+
+find_function_source(M, F, A, Bin) ->
+  AbstractCode = beam_lib:chunks(Bin, [abstract_code]),
+  {ok, {M, [{abstract_code, {raw_abstract_v1, Code}}]}} = AbstractCode,
+
+  %% Extract the original source filename from the abstract code
+  [Source|_] = [S || {attribute, _, file, {S, _}} <- Code],
+
+  %% Extract the line number for a given function def
+  Fn = [E || E <- Code,
+             element(1, E) == function,
+             element(3, E) == F,
+             element(4, E) == A],
+
+  case Fn of
+    [{function, Line, F, _, _}] when is_integer(Line) ->
+          {Source, Line};
+    [{function, Line, F, _, _}] ->
+          {Source, erl_anno:line(Line)};
+    %% do not crash if functions are exported, even though they
+    %% are not in the source.
+    %% parameterized modules add new/1 and instance/1 for example.
+    [] -> {Source, 0}
+  end.
+
+%% -------------------------------------------------------------------
+%% Reporting results.
+%% -------------------------------------------------------------------
+
+warnings_prn([]) ->
+    ok;
+warnings_prn(Comments) ->
+    Messages = lists:map(fun generate_comment/1, Comments),
+    lists:foreach(fun warning_prn/1, Messages).
+
+warning_prn(Message) ->
+    FullMessage = Message ++ "~n",
+    io:format(FullMessage, []).
+
+generate_comment(XrefWarning) ->
+    Filename = proplists:get_value(filename, XrefWarning),
+    Line = proplists:get_value(line, XrefWarning),
+    Source = proplists:get_value(source, XrefWarning),
+    Check = proplists:get_value(check, XrefWarning),
+    Target = proplists:get_value(target, XrefWarning),
+    Position = case {Filename, Line} of
+                   {"", _} -> "";
+                   {Filename, 0} -> [Filename, " "];
+                   {Filename, Line} -> [Filename, ":",
+                                        integer_to_list(Line), " "]
+               end,
+    [Position, generate_comment_text(Check, Source, Target)].
+
+generate_comment_text(Check, {SM, SF, SA}, TMFA) ->
+    SMFA = io_lib:format("`~p:~p/~p`", [SM, SF, SA]),
+    generate_comment_text(Check, SMFA, TMFA);
+generate_comment_text(Check, SMFA, {TM, TF, TA}) ->
+    TMFA = io_lib:format("`~p:~p/~p`", [TM, TF, TA]),
+    generate_comment_text(Check, SMFA, TMFA);
+
+generate_comment_text(undefined_function_calls, SMFA, TMFA) ->
+    io_lib:format("~s calls undefined function ~s", [SMFA, TMFA]);
+generate_comment_text(undefined_functions, SMFA, _TMFA) ->
+    io_lib:format("~s is not defined as a function", [SMFA]);
+generate_comment_text(locals_not_used, SMFA, _TMFA) ->
+    io_lib:format("~s is an unused local function", [SMFA]);
+generate_comment_text(exports_not_used, SMFA, _TMFA) ->
+    io_lib:format("~s is an unused export", [SMFA]);
+generate_comment_text(deprecated_function_calls, SMFA, TMFA) ->
+    io_lib:format("~s calls deprecated function ~s", [SMFA, TMFA]);
+generate_comment_text(deprecated_functions, SMFA, _TMFA) ->
+    io_lib:format("~s is deprecated", [SMFA]).

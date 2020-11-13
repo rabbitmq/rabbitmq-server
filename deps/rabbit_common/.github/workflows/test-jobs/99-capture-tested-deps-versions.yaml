@@ -1,0 +1,30 @@
+  # vim:sw=2:et:
+  capture-tested-deps-versions:
+    needs:
+      - dialyzer
+      - eunit
+      - ct-$(CT_SUITES)
+    runs-on: ubuntu-18.04
+    steps:
+      - if: github.ref == 'refs/heads/$(base_rmq_ref)'
+        uses: actions/download-artifact@v2
+        with:
+          name: $(PROJECT)-rabbitmq-deps.mk
+      - name: FORMAT GIT REF
+        if: github.ref == 'refs/heads/$(base_rmq_ref)'
+        # https://github.community/t5/GitHub-Actions/How-can-I-set-an-expression-as-an-environment-variable-at/m-p/41804/highlight/true#M4751
+        id: ref
+        run: |
+          branch_or_tag_name=${GITHUB_REF#refs/*/}
+          echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
+      - name: UPLOAD TO S3
+        if: github.ref == 'refs/heads/$(base_rmq_ref)'
+        # https://github.com/marketplace/actions/s3-file-upload
+        uses: zdurham/s3-upload-github-action@master
+        env:
+         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+         AWS_REGION: ${{ secrets.AWS_REGION }}
+         FILE: $(PROJECT)-rabbitmq-deps.mk
+         S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+         S3_KEY: $(RABBITMQ_COMPONENT_REPO_NAME)/${{ steps.ref.outputs.branch_or_tag_name }}/${{ github.run_id }}/otp-$(ERLANG_VERSION)/$(PROJECT)-rabbitmq-deps.mk
