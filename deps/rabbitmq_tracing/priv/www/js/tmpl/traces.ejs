@@ -1,0 +1,174 @@
+<h1>Traces: <b><%= node.name %></b></h1>
+<p>
+  Node:
+  <select id="traces-node">
+  <% for (var i = 0; i < nodes.length; i++) { %>
+     <option name="#/traces/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == node.name) { %>selected="selected"<% } %>><%= nodes[i].name %></option>
+  <% } %>
+  </select>
+</p>
+
+<div class="section">
+  <h2>All traces</h2>
+  <div class="hider updatable">
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          <h3>Currently running traces</h3>
+          <% if (traces.length > 0) { %>
+          <table class="list">
+            <thead>
+              <tr>
+                <% if (vhosts_interesting) { %>
+                  <th>Virtual host</th>
+                <% } %>
+                <th>Name</th>
+                <th>Pattern</th>
+                <th>Format</th>
+                <th>Payload limit</th>
+                <th>Rate</th>
+                <th>Queued</th>
+                <th>Tracer connection username</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <%
+                 for (var i = 0; i < traces.length; i++) {
+                     var trace = traces[i];
+              %>
+              <tr<%= alt_rows(i)%>>
+                <% if (vhosts_interesting) { %>
+                  <td><%= fmt_string(trace.vhost) %></td>
+                <% } %>
+                <td><%= fmt_string(trace.name) %></td>
+                <td><%= fmt_string(trace.pattern) %></td>
+                <td><%= fmt_string(trace.format) %></td>
+                <td class="c"><%= fmt_string(trace.max_payload_bytes, 'Unlimited') %></td>
+                <% if (trace.queue) { %>
+                <td class="r">
+                  <%= fmt_detail_rate(trace.queue.message_stats, 'deliver_no_ack') %>
+                </td>
+                <td class="r">
+                  <%= trace.queue.messages %>
+                  <sub><%= link_trace_queue(trace) %></sub>
+                </td>
+                <% } else { %>
+                <td colspan="2">
+                  <div class="status-red"><acronym title="The trace failed to start - check the server logs for details.">FAILED</acronym></div>
+                </td>
+                <% } %>
+                <td><%= fmt_string(trace.tracer_connection_username) %></td>
+                <td>
+                  <form action="#/traces/node/<%= node.name %>" method="delete">
+                    <input type="hidden" name="vhost" value="<%= fmt_string(trace.vhost) %>"/>
+                    <input type="hidden" name="name" value="<%= fmt_string(trace.name) %>"/>
+                    <input type="submit" value="Stop"/>
+                  </form>
+                </td>
+              </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <% } else { %>
+          <p>... no traces running ...</p>
+          <% } %>
+        </td>
+        <td>
+          <h3>Trace log files</h3>
+          <% if (files.length > 0) { %>
+            <table class="list">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Size</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+              <%
+                for (var i = 0; i < files.length; i++) {
+                  var file = files[i];
+              %>
+                <tr<%= alt_rows(i)%>>
+                  <td><%= link_trace(node.name, file.name) %></td>
+                  <td class="r"><%= fmt_bytes(file.size) %></td>
+                  <td>
+                    <form action="#/trace-files/node/<%= node.name %>" method="delete" class="inline-form">
+                      <input type="hidden" name="name" value="<%= fmt_string(file.name) %>"/>
+                      <input type="submit" value="Delete" />
+                    </form>
+                  </td>
+                </tr>
+              <% } %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <p>... no files ...</p>
+          <% } %>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Add a new trace</h2>
+  <div class="hider">
+    <form action="#/traces/node/<%= node.name %>" method="put">
+      <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Format:</label></th>
+          <td>
+            <select name="format">
+              <option value="text">Text</option>
+              <option value="json">JSON</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Tracer connection username:</label></th>
+          <td><input type="text" name="tracer_connection_username"/></td>
+          <td><label>Tracer connection password:</label></td>
+          <td>
+            <div id="password-div">
+              <input type="password" name="tracer_connection_password"/>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Max payload bytes: <span class="help" id="tracing-max-payload"></span></label></th>
+          <td>
+            <input type="text" name="max_payload_bytes" value=""/>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Pattern:</label></th>
+          <td>
+            <input type="text" name="pattern" value="#"/>
+            <sub>Examples: #, publish.#, deliver.# #.amq.direct, #.myqueue</sub>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add trace"/>
+    </form>
+  </div>
+</div>
