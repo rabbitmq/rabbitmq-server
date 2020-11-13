@@ -157,6 +157,24 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
+ESCRIPT_NAME := rabbit_cli
+ESCRIPT_FILE := scripts/rmq
+
+ebin/$(PROJECT).app:: $(ESCRIPT_FILE)
+
+$(ESCRIPT_FILE): ebin/rabbit_cli.beam
+	$(gen_verbose) printf "%s\n" \
+		"#!$(ESCRIPT_SHEBANG)" \
+		"%% $(ESCRIPT_COMMENT)" \
+		"%%! $(ESCRIPT_EMU_ARGS)" > $(ESCRIPT_FILE)
+	$(verbose) cat $< >> $(ESCRIPT_FILE)
+	$(verbose) chmod a+x $(ESCRIPT_FILE)
+
+clean:: clean-cli
+
+clean-cli:
+	$(gen_verbose) rm -f $(ESCRIPT_FILE)
+
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats
 endif
