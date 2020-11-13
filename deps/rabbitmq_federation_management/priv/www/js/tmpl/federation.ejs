@@ -1,0 +1,101 @@
+<h1>Federation Status</h1>
+<div class="section">
+  <h2>Running Links</h2>
+  <div class="hider updatable">
+<% if (links.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Upstream</th>
+    <th>URI</th>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Exchange / Queue</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+    <th>State</th>
+    <th>Inbound message rate</th>
+    <th>Last changed</th>
+    <th>ID</th>
+    <th>Operations</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < links.length; i++) {
+    var link = links[i];
+%>
+   <tr<%= alt_rows(i)%>>
+    <td>
+      <%= fmt_string(link.upstream) %>
+      <% if (link.type == 'exchange' &&
+             link.exchange != link.upstream_exchange) { %>
+        <sub><%= fmt_string(link.upstream_exchange) %></sub>
+      <% } else if (link.type == 'queue' &&
+                    link.queue != link.upstream_queue) { %>
+        <sub><%= fmt_string(link.upstream_queue) %></sub>
+      <% } %>
+    </td>
+    <td><%= fmt_string(fmt_uri_with_credentials(link.uri)) %></td>
+<% if (vhosts_interesting) { %>
+    <td><%= fmt_string(link.vhost) %></td>
+<% } %>
+    <td>
+      <% if (link.type == 'exchange') { %>
+        <%= link_exchange(link.vhost, link.exchange) %>
+      <% } else { %>
+        <%= link_queue(link.vhost, link.queue) %>
+      <% } %>
+    <sub><%= fmt_string(link.type) %></sub>
+    </td>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_node(link.node) %></td>
+<% } %>
+<% if (link.error) { %>
+    <td>
+      <%= fmt_state('red', link.status) %>
+    </td>
+    <td></td>
+    <td><%= link.timestamp %></td>
+  </tr>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <td colspan="7">
+<% } else { %>
+    <td colspan="6">
+<% } %>
+      Error detail:
+      <pre><%= fmt_escape_html(link.error) %></pre>
+    </td>
+  </tr>
+<% } else { %>
+    <td>
+      <%= fmt_state(link.status == 'starting' ? 'yellow' : 'green', link.status) %>
+    </td>
+    <td class="r">
+      <% if (link.local_channel) { %>
+        <%= fmt_detail_rate(link.local_channel.message_stats, 'confirm') %>
+      <% } %>
+    </td>
+    <td><%= link.timestamp %></td>
+    <td><%= link.id %></td>
+    <td>
+        <form action="#/federation-restart-link" method="delete" class="confirm">
+        <input type="hidden" name="id" value="<%= link.id %>"/>
+        <input type="hidden" name="node" value="<%= fmt_node(link.node) %>"/>
+        <input type="hidden" name="vhost" value="<%= fmt_string(link.vhost) %>"/>
+        <input type="submit" value="Restart"/>
+        </form>
+    </td>
+  </tr>
+<% } %>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no links ...</p>
+<% } %>
+</div>
+</div>
