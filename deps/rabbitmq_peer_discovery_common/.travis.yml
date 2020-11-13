@@ -1,0 +1,61 @@
+# vim:sw=2:et:
+
+os: linux
+dist: xenial
+language: elixir
+notifications:
+  email:
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
+addons:
+  apt:
+    packages:
+      - awscli
+cache:
+  apt: true
+env:
+  global:
+    - secure: GSpypPCRiJGa9bSlSseoQtnrSWqER9LP6L42204omhPVIXXXg0Yksdfjh5iDropylZBO86A1XBQcWPgb7kFZFNDZfKe6qVefuoTMKITAUW7qxihhFWJTqL0Y3Hbsadtc5OQ69Uu/nKL2V820pQ93ksyJApBRVoWLb66uxzkyvbY2bjEL2qpnnKjh232IAgI+wiHSo95lrg+zx/GMNafdU4IsGMJ7IgLK2frKynYM7Qg2iVkQw7+//rnZXhtIGY5LtMtlF2sgGkFmcAg8H/cIhI2cCuam3FLnDZp1eWoYBs12Y7Bsthik2culpHaV21mzankyO3KedBNKUwNhDVz02wzBmbakxBUTxLHi91x2t5GLrB8qk5deBmSaMuqq1XgO2qVWi1/oJ9FKiaRgJ2q9T7ZhgPmwj9WsAhrMuCTWbECD+Z/xEJL13OGTfpD9gcQ/emZWLmbinf1WGRWFMnin1QedLtzyXChItXdnbVdyBENm0XaHEj5i2SPpin4xw3P9f7GS/nh9UP2qaTp18Vtwj/Ub4MyXtWz/rR0E8YjDf7llGKl0yiG/0IqR3dyJ0KKq2MU9qbosSYHZOoygFtKLKfKpCNW6QXTfTbylsaw45mnQwwhor1+9VgpyysDET8B1XJAkgjMkbS+cKvLwcxJxy6UyqZA27P2pIuZOWfqCCPo=
+    - secure: DFzxIJaJJVWc4h5baROCRS6+graLmXjPVXGflx/eTWXhWHMvcSPnRCNEbIGhwbmX1OE+J9SogOjAi6Ga/9l0x5K/n5pQqsazc8gbmXXLcExmskzS/k0lfHKD0rCblTv64XOiYIGkQzGzZfOL8MeDROmqOdQNrIv7JT9Jxsdg9ycivfdb86hLWonyyUQTJbDTKzfq97JDKFFiuA4g3xN0UMrX+/R3qx9ajoKrPmf5UTrFSfSWvCPB02Edj5of9gnIYeCusy/DgBhSNygMQ50A0RqrBRhXjwJQNvJKANYGyk7FzSDBGH0nPZYjOVH61LNjyz/cVqdUddkUOGEOGTcxObJwUV7WfxH75AHCsrtD4OZZT95Z7kxLT4MGhDTqQWGI3HHNQxhuo3shfzvU2g8mXlGyilly2Gfygsau+de9CAmUUbtzTJ8nXdxz54DB8rrhGDA45yjt2trgKEQwPP+9gcOm/4rpJb/AOb5eHttoyroKmXL7CqhAd2y1+U0pR4oyX3f4IJyQG794vPv83K+yaUTc8mzRjP3hVJnt9ugJXVhQw4vsOnOeQ7eYuhNBNLTbk3eVEK10FF9C8JcUVz/Ij/viTHjT+RcQXdukBE+p0cDCyz3wRbF5X69ABl3i5u0TxjkCz5E3CmZ4YfLSPv2dDweqSwFvBjATe6wD04PB74Y=
+
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=v3.7.x
+
+elixir:
+  - '1.9'
+otp_release:
+  - '21.3'
+  - '22.2'
+
+install:
+  # This project being an Erlang one (we just set language to Elixir
+  # to ensure it is installed), we don't want Travis to run mix(1)
+  # automatically as it will break.
+  skip
+
+script:
+  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+  # the appropriate branch for dependencies.
+  - make check-rabbitmq-components.mk
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make xref
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make tests
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi

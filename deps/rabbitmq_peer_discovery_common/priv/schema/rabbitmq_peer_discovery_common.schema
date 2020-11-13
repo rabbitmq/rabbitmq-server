@@ -1,0 +1,68 @@
+%% interval
+
+{mapping, "cluster_formation.node_cleanup.interval", "rabbit.cluster_formation.node_cleanup.cleanup_interval", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.node_cleanup.cleanup_interval",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.node_cleanup.interval", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% only log warnings?
+
+{mapping, "cluster_formation.node_cleanup.only_log_warning", "rabbit.cluster_formation.node_cleanup.cleanup_only_log_warning", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.node_cleanup.cleanup_only_log_warning",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.node_cleanup.only_log_warning", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% HTTP proxy host
+
+{mapping, "cluster_formation.proxy.http_proxy", "rabbit.cluster_formation.proxy.http_proxy", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.proxy.http_proxy",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.proxy.http_proxy", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% HTTPS proxy host
+
+{mapping, "cluster_formation.proxy.https_proxy", "rabbit.cluster_formation.proxy.https_proxy", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.proxy.https_proxy",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.proxy.https_proxy", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Proxy exclusion list
+
+{mapping, "cluster_formation.proxy.proxy_exclusions.$name", "rabbit.cluster_formation.proxy.proxy_exclusions",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.proxy.proxy_exclusions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.proxy.proxy_exclusions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
