@@ -1,0 +1,226 @@
+[{listener,
+  "web_stomp.tcp.listener = 127.0.0.1:12345",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, [{ip,"127.0.0.1"},{port,12345}]}]}],
+  [rabbitmq_web_stomp]},
+ {tcp_listener_none,
+  "web_stomp.tcp.listener = none",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, []}]}],
+  [rabbitmq_web_stomp]},
+ {tcp_config,
+  "web_stomp.tcp.ip = 127.0.0.4
+   web_stomp.tcp.port = 11123",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, [{ip,"127.0.0.4"},{port,11123}]}]}],
+  [rabbitmq_web_stomp]},
+ {tcp_config_defaut,
+  "web_stomp.tcp.backlog = 2048",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, [{backlog, 2048}]}]}],
+  [rabbitmq_web_stomp]},
+ {port,
+  "web_stomp.port = 12345",
+  [{rabbitmq_web_stomp,[{port,12345}]}],
+  [rabbitmq_web_stomp]},
+
+  {num_acceptors_tcp,
+    "web_stomp.num_acceptors.tcp = 20",
+    [{rabbitmq_web_stomp,
+      [{num_tcp_acceptors, 20}]}],
+    [rabbitmq_web_stomp]},
+
+  {num_acceptors_tls,
+   "web_stomp.num_acceptors.ssl = 20",
+   [{rabbitmq_web_stomp,
+     [{num_ssl_acceptors, 20}]}],
+   [rabbitmq_web_stomp]},
+
+  {max_connections,
+   "web_stomp.max_connections = 5000",
+  [{rabbitmq_web_stomp,
+    [{max_connections, 5000}]}],
+  [rabbitmq_web_stomp]},
+
+ {ssl_listener,
+  "web_stomp.ssl.listener = 127.0.0.4:15672",
+  [{rabbitmq_web_stomp,
+    [{ssl_config, [{ip,"127.0.0.4"},{port,15672}]}]}],
+  [rabbitmq_web_stomp]},
+ {ssl_listener_none,
+  "web_stomp.ssl.listener = none",
+  [],
+  [rabbitmq_web_stomp]},
+
+ {ssl_with_listener,
+  "web_stomp.ssl.listener   = 127.0.0.2:15671
+   web_stomp.ssl.backlog    = 1024
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.password   = changeme",
+  [{rabbitmq_web_stomp,
+       [{ssl_config,
+            [{ip,"127.0.0.2"},
+             {port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"}]}]}],
+  [rabbitmq_web_stomp]},
+
+ {ssl,
+  "web_stomp.ssl.port       = 15671
+   web_stomp.ssl.backlog    = 1024
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.password   = changeme
+
+   web_stomp.ssl.versions.tls1_2 = tlsv1.2
+   web_stomp.ssl.versions.tls1_1 = tlsv1.1",
+  [{rabbitmq_web_stomp,
+       [{ssl_config,
+            [{port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"},
+
+             {versions,['tlsv1.2','tlsv1.1']}
+            ]}]}],
+  [rabbitmq_web_stomp]},
+
+ {ssl_ciphers,
+  "web_stomp.ssl.port       = 15671
+   web_stomp.ssl.backlog    = 1024
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.password   = changeme
+
+   web_stomp.ssl.honor_cipher_order   = true
+   web_stomp.ssl.honor_ecc_order      = true
+   web_stomp.ssl.client_renegotiation = false
+   web_stomp.ssl.secure_renegotiate   = true
+
+   web_stomp.ssl.versions.1 = tlsv1.2
+   web_stomp.ssl.versions.2 = tlsv1.1
+   web_stomp.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+   web_stomp.ssl.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+   web_stomp.ssl.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+   web_stomp.ssl.ciphers.4 = ECDHE-RSA-AES256-SHA384
+   web_stomp.ssl.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+   web_stomp.ssl.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+   web_stomp.ssl.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+   web_stomp.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
+   web_stomp.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
+  [{rabbitmq_web_stomp,
+       [{ssl_config,
+            [{port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"},
+
+             {honor_cipher_order,   true},
+             {honor_ecc_order,      true},
+             {client_renegotiation, false},
+             {secure_renegotiate,   true},
+
+             {versions,['tlsv1.2','tlsv1.1']},
+             {ciphers, [
+               "ECDHE-ECDSA-AES256-GCM-SHA384",
+               "ECDHE-RSA-AES256-GCM-SHA384",
+               "ECDHE-ECDSA-AES256-SHA384",
+               "ECDHE-RSA-AES256-SHA384",
+               "ECDH-ECDSA-AES256-GCM-SHA384",
+               "ECDH-RSA-AES256-GCM-SHA384",
+               "ECDH-ECDSA-AES256-SHA384",
+               "ECDH-RSA-AES256-SHA384",
+               "DHE-RSA-AES256-GCM-SHA384"
+             ]}
+            ]}]}],
+  [rabbitmq_web_stomp]},
+
+ {websocket_endpoint,
+  "web_stomp.ws_path = /rmq/ws",
+  [{rabbitmq_web_stomp,
+    [{ws_path, "/rmq/ws"}]}],
+  [rabbitmq_web_stomp]},
+
+ {ws_frame,
+  "web_stomp.ws_frame = binary",
+  [{rabbitmq_web_stomp,[{ws_frame,binary}]}],
+  [rabbitmq_web_stomp]},
+
+ {use_http_auth,
+  "web_stomp.use_http_auth = true",
+  [{rabbitmq_web_stomp,[{use_http_auth, true}]}],
+  [rabbitmq_web_stomp]},
+
+ %%
+ %% Cowboy options
+ %%
+
+ {cowboy_max_keepalive,
+  "web_stomp.cowboy_opts.max_keepalive = 10",
+  [{rabbitmq_web_stomp,[{cowboy_opts,[{max_keepalive,10}]}]}],
+  [rabbitmq_web_stomp]},
+
+ {cowboy_timeout,
+  "web_stomp.cowboy_opts.timeout = 10000",
+  [{rabbitmq_web_stomp,[{cowboy_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_stomp]},
+
+ {cowboy_idle_timeout,
+  "web_stomp.cowboy_opts.idle_timeout = 10000",
+  [{rabbitmq_web_stomp,[{cowboy_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_stomp]},
+
+ %%
+ %% Cowboy WebSocket options
+ %%
+
+{ws_opts_compress_true,
+  "web_stomp.ws_opts.compress = true",
+  [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{compress, true}]}]}],
+  [rabbitmq_web_stomp]},
+
+{ws_opts_compress_false,
+  "web_stomp.ws_opts.compress = false",
+  [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{compress, false}]}]}],
+  [rabbitmq_web_stomp]},
+
+{ws_opts_max_frame_size,
+  "web_stomp.ws_opts.max_frame_size = 8000",
+  [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{max_frame_size, 8000}]}]}],
+  [rabbitmq_web_stomp]},
+
+{ws_idle_timeout,
+  "web_stomp.ws_opts.idle_timeout = 10000",
+  [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_stomp]},
+
+ %%
+ %% Proxy protocol
+ %%
+
+{ws_proxy_protocol_explicitly_disabled,
+  "web_stomp.proxy_protocol = false",
+  [{rabbitmq_web_stomp,[
+                        {proxy_protocol, false}
+                       ]}],
+  [rabbitmq_web_stomp]},
+
+{ws_proxy_protocol_enabled,
+  "web_stomp.proxy_protocol = true",
+  [{rabbitmq_web_stomp,[
+                        {proxy_protocol, true}
+                       ]}],
+  [rabbitmq_web_stomp]}
+
+].
