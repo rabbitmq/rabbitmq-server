@@ -1,0 +1,28 @@
+.sw?
+.*.sw?
+*.beam
+*.plt
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/escript/
+/escript.lock
+/logs/
+/plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
+/xrefr
+elvis
+
+amqp10_client.d
+/*.coverdata
+
+# Generated source files.
+/include/rabbit_amqp1_0_framing.hrl
+/src/rabbit_amqp1_0_framing0.erl
+
+# Downloaded ActiveMQ.
+/test/system_SUITE_data/apache-activemq-*
