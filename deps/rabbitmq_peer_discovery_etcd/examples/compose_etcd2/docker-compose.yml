@@ -1,0 +1,52 @@
+version: "2"
+services:
+  etcd0:
+    image: quay.io/coreos/etcd:v2.1.1
+    networks:
+      - back
+    ports:
+     - "4001:4001"
+     - 2380
+     - 2379
+    command:
+      - --name=etcd0
+      - --initial-cluster-token=etcd-cluster-1
+      - --initial-cluster=etcd0=http://etcd0:2380
+      - --initial-cluster-state=new
+      - --initial-advertise-peer-urls=http://etcd0:2380
+      - --listen-client-urls=http://0.0.0.0:2379,http://0.0.0.0:4001
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://etcd0:2379  
+    networks:
+      - back
+  rabbit:
+    environment:
+      - TCP_PORTS=15672, 5672
+      - RABBITMQ_ERLANG_COOKIE="mycookie"  
+    networks:
+      - back
+    image:  rabbitmq:3.7
+    expose:
+      - 15672
+      - 5672
+      - 5671
+      - 15671
+    tty: true
+    volumes:
+      - ./conf/:/etc/rabbitmq/
+    command:  sh -c "sleep 10; rabbitmq-server;" 
+  lb:
+    image: dockercloud/haproxy
+    environment:
+      - MODE=tcp
+    links:
+      - rabbit
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 15672:15672
+      - 5672:5672
+    networks:
+      - back
+networks:
+  back:

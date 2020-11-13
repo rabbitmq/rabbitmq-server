@@ -1,0 +1,91 @@
+[
+    %% etcd hostname
+    {etcd_host, "cluster_formation.etcd.host = etcd.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_host, "etcd.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% etcd port
+    {etcd_port, "cluster_formation.etcd.port = 7979", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_port, 7979}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% URI scheme
+    {etcd_scheme, "cluster_formation.etcd.scheme = https", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_scheme, "https"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% key prefix
+    {etcd_key_prefix, "cluster_formation.etcd.key_prefix = staging", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_prefix, "staging"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% cluster name
+    {etcd_cluster_name, "cluster_formation.etcd.cluster_name = staging", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {cluster_name, "staging"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% node TTL
+    {etcd_node_ttl, "cluster_formation.etcd.node_ttl = 60", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_node_ttl, 60}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% lock acquisition timeout
+    {etcd_lock_wait_time, "cluster_formation.etcd.lock_timeout = 400", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {lock_wait_time, 400}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+
+    %% alias for consistency with etcd
+    {etcd_lock_wait_time, "cluster_formation.etcd.lock_wait_time = 400", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {lock_wait_time, 400}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    }
+].
