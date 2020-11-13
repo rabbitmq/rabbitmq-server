@@ -886,13 +886,3 @@ find_leader([Server | Servers]) ->
 
 qref({Ref, _}) -> Ref;
 qref(Ref) -> Ref.
-
-get_credit_mode(#{args := Args}) ->
-    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
-        {_Key, Value} ->
-            Value;
-        _ ->
-            simple_prefetch
-    end;
-get_credit_mode(_) ->
-    simple_prefetch.
