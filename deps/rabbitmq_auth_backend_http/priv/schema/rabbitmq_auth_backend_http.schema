@@ -1,0 +1,21 @@
+
+%% ==========================================================================
+%% ----------------------------------------------------------------------------
+%% RabbitMQ HTTP Authorization
+%%
+%% ----------------------------------------------------------------------------
+
+{mapping, "auth_http.http_method", "rabbitmq_auth_backend_http.http_method",
+    [{datatype, {enum, [get,post]}}]}.
+
+{mapping, "auth_http.user_path", "rabbitmq_auth_backend_http.user_path",
+    [{datatype, string}, {validators, ["uri"]}]}.
+
+{mapping, "auth_http.vhost_path", "rabbitmq_auth_backend_http.vhost_path",
+    [{datatype, string}, {validators, ["uri"]}]}.
+
+{mapping, "auth_http.resource_path", "rabbitmq_auth_backend_http.resource_path",
+    [{datatype, string}, {validators, ["uri"]}]}.
+
+{mapping, "auth_http.topic_path", "rabbitmq_auth_backend_http.topic_path",
+    [{datatype, string}, {validators, ["uri"]}]}.
