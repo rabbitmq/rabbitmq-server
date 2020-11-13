@@ -197,7 +197,7 @@ find_recoverable_queues() ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
-    rabbit_types:channel_exit().
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
 
@@ -215,7 +215,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
               node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
-    rabbit_types:channel_exit().
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
@@ -235,11 +235,10 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                   rabbit_policy:set(Q0)),
             rabbit_queue_type:declare(Q, Node);
         false ->
-            rabbit_misc:protocol_error(
-              internal_error,
-              "Cannot declare a queue '~s' of type '~s' on node '~s': "
-              "the corresponding feature flag is disabled",
-              [rabbit_misc:rs(QueueName), Type, Node])
+            {protocol_error, internal_error,
+             "Cannot declare a queue '~s' of type '~s' on node '~s': "
+             "the corresponding feature flag is disabled",
+              [rabbit_misc:rs(QueueName), Type, Node]}
     end.
 
 get_queue_type(Args) ->
@@ -1407,15 +1406,19 @@ delete_immediately_by_resource(Resources) ->
 
 -spec delete
         (amqqueue:amqqueue(), 'false', 'false', rabbit_types:username()) ->
-            qlen();
+            qlen() |
+            {protocol_error, Type :: atom(), Reason :: string(), Args :: term()};
         (amqqueue:amqqueue(), 'true' , 'false', rabbit_types:username()) ->
-            qlen() | rabbit_types:error('in_use');
+            qlen() | rabbit_types:error('in_use') |
+            {protocol_error, Type :: atom(), Reason :: string(), Args :: term()};
         (amqqueue:amqqueue(), 'false', 'true', rabbit_types:username()) ->
-            qlen() | rabbit_types:error('not_empty');
+            qlen() | rabbit_types:error('not_empty') |
+            {protocol_error, Type :: atom(), Reason :: string(), Args :: term()};
         (amqqueue:amqqueue(), 'true' , 'true', rabbit_types:username()) ->
             qlen() |
             rabbit_types:error('in_use') |
-            rabbit_types:error('not_empty').
+            rabbit_types:error('not_empty') |
+            {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
 
@@ -1504,7 +1507,7 @@ credit(Q, CTag, Credit, Drain, QStates) ->
                 rabbit_queue_type:state()) ->
           {'ok', non_neg_integer(), qmsg(), rabbit_queue_type:state()} |
           {'empty', rabbit_queue_type:state()} |
-          rabbit_types:channel_exit().
+          {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
     rabbit_queue_type:dequeue(Q, NoAck, LimiterPid, CTag, QStates0).
 
@@ -1514,7 +1517,8 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
                     rabbit_framing:amqp_table(), any(), rabbit_types:username(),
                     rabbit_queue_type:state()) ->
     {ok, rabbit_queue_type:state(), rabbit_queue_type:actions()} |
-    {error, term()}.
+    {error, term()} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 basic_consume(Q, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser, Contexts) ->

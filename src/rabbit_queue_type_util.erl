@@ -20,7 +20,8 @@
          qname_to_internal_name/1,
          check_auto_delete/1,
          check_exclusive/1,
-         check_non_durable/1]).
+         check_non_durable/1,
+         run_checks/2]).
 
 -include("rabbit.hrl").
 -include("amqqueue.hrl").
@@ -43,10 +44,8 @@ qname_to_internal_name(#resource{virtual_host = VHost, name = Name}) ->
 
 check_auto_delete(Q) when ?amqqueue_is_auto_delete(Q) ->
     Name = amqqueue:get_name(Q),
-    rabbit_misc:protocol_error(
-      precondition_failed,
-      "invalid property 'auto-delete' for ~s",
-      [rabbit_misc:rs(Name)]);
+    {protocol_error, precondition_failed, "invalid property 'auto-delete' for ~s",
+     [rabbit_misc:rs(Name)]};
 check_auto_delete(_) ->
     ok.
 
@@ -54,16 +53,22 @@ check_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     ok;
 check_exclusive(Q) when ?is_amqqueue(Q) ->
     Name = amqqueue:get_name(Q),
-    rabbit_misc:protocol_error(
-      precondition_failed,
-      "invalid property 'exclusive-owner' for ~s",
-      [rabbit_misc:rs(Name)]).
+    {protocol_error, precondition_failed, "invalid property 'exclusive-owner' for ~s",
+     [rabbit_misc:rs(Name)]}.
 
 check_non_durable(Q) when ?amqqueue_is_durable(Q) ->
     ok;
 check_non_durable(Q) when not ?amqqueue_is_durable(Q) ->
     Name = amqqueue:get_name(Q),
-    rabbit_misc:protocol_error(
-      precondition_failed,
-      "invalid property 'non-durable' for ~s",
-      [rabbit_misc:rs(Name)]).
+    {protocol_error, precondition_failed, "invalid property 'non-durable' for ~s",
+     [rabbit_misc:rs(Name)]}.
+
+run_checks([], _) ->
+    ok;
+run_checks([C | Checks], Q) ->
+    case C(Q) of
+        ok ->
+            run_checks(Checks, Q);
+        Err ->
+            Err
+    end.

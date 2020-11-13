@@ -70,9 +70,8 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
               rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
               {init, new}, infinity);
         {error, Error} ->
-            rabbit_misc:protocol_error(internal_error,
-                            "Cannot declare a queue '~s' on node '~s': ~255p",
-                            [rabbit_misc:rs(QName), Node1, Error])
+            {protocol_error, internal_error, "Cannot declare a queue '~s' on node '~s': ~255p",
+             [rabbit_misc:rs(QName), Node1, Error]}
     end.
 
 delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->

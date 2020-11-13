@@ -763,7 +763,9 @@ handle_cast({queue_event, QRef, Evt},
                                      State1#ch{unconfirmed = UC1}),
             erase_queue_stats(QRef),
             noreply_coalesce(
-              State2#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)})
+              State2#ch{queue_states = rabbit_queue_type:remove(QRef, QueueStates0)});
+        {protocol_error, Type, Reason, ReasonArgs} ->
+            rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.
 
 handle_info({ra_event, {Name, _} = From, Evt}, State) ->
@@ -1339,7 +1341,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
            QueueName, ConnPid,
            %% Use the delivery tag as consumer tag for quorum queues
            fun (Q) ->
-                   rabbit_amqqueue:basic_get(
+                   rabbit_queue_type:dequeue(
                      Q, NoAck, rabbit_limiter:pid(Limiter),
                      DeliveryTag, QueueStates0)
            end) of
@@ -1362,7 +1364,9 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
             %% TODO add queue type to error message
             rabbit_misc:protocol_error(internal_error,
                                        "Cannot get a message from queue '~s': ~p",
-                                       [rabbit_misc:rs(QueueName), Reason])
+                                       [rabbit_misc:rs(QueueName), Reason]);
+        {protocol_error, Type, Reason, ReasonArgs} ->
+            rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end;
 
 handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
@@ -1491,7 +1495,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
             case rabbit_misc:with_exit_handler(
                    fun () -> {error, not_found} end,
                    fun () ->
-                           rabbit_amqqueue:basic_cancel(
+                           rabbit_queue_type:cancel(
                              Q, ConsumerTag, ok_msg(NoWait, OkMsg),
                              Username, QueueStates0)
                    end) of
@@ -1718,7 +1722,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                              queue_states = QStates0}) ->
     case maps:find(CTag, Consumers) of
         {ok, {Q, _CParams}} ->
-            {ok, QStates, Actions} = rabbit_amqqueue:credit(Q, CTag, Credit, Drain, QStates0),
+            {ok, QStates, Actions} = rabbit_queue_type:credit(Q, CTag, Credit, Drain, QStates0),
             {noreply, handle_queue_actions(Actions, State#ch{queue_states = QStates})};
         error -> precondition_failed(
                    "unknown consumer tag '~s'", [CTag])
@@ -1770,7 +1774,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
         {{error, exclusive_consume_unavailable} = E, _Q} ->
             E;
         {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
-            E
+            E;
+        {{protocol_error, Type, Reason, ReasonArgs}, _Q} ->
+            rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.
 
 maybe_stat(false, Q) -> rabbit_amqqueue:stat(Q);
@@ -1921,8 +1927,12 @@ internal_reject(Requeue, Acked, Limiter,
                            false -> discard;
                            true -> requeue
                        end,
-                  {ok, Acc, Actions} = rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, Acc0),
-                  {Acc, Actions0 ++ Actions}
+                  case rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, Acc0) of
+                      {ok, Acc, Actions} ->
+                          {Acc, Actions0 ++ Actions};
+                      {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                          rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                  end
           end, Acked, {QueueStates0, []}),
     ok = notify_limiter(Limiter, Acked),
     {State#ch{queue_states = QueueStates}, Actions}.
@@ -1995,10 +2005,14 @@ ack(Acked, State = #ch{queue_states = QueueStates0}) ->
     {QueueStates, Actions} =
         foreach_per_queue(
           fun ({QRef, CTag}, MsgIds, {Acc0, ActionsAcc0}) ->
-                  {ok, Acc, ActionsAcc} = rabbit_queue_type:settle(QRef, complete, CTag,
-                                                                   MsgIds, Acc0),
-                  incr_queue_stats(QRef, MsgIds, State),
-                  {Acc, ActionsAcc0 ++ ActionsAcc}
+                  case rabbit_queue_type:settle(QRef, complete, CTag,
+                                                MsgIds, Acc0) of
+                      {ok, Acc, ActionsAcc} ->
+                          incr_queue_stats(QRef, MsgIds, State),
+                          {Acc, ActionsAcc0 ++ ActionsAcc};
+                      {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                          rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                  end
           end, Acked, {QueueStates0, []}),
     ok = notify_limiter(State#ch.limiter, Acked),
     {State#ch{queue_states = QueueStates}, Actions}.
@@ -2465,7 +2479,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
-                    {ok, QueueName, 0, 0}
+                    {ok, QueueName, 0, 0};
+                {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
             end;
         {error, {absent, Q, Reason}} ->
             rabbit_amqqueue:absent(Q, Reason)
@@ -2497,7 +2513,7 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
            QueueName,
            fun (Q) ->
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
+                   rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
            end,
            fun (not_found) ->
                    {ok, 0};
@@ -2515,7 +2531,9 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
         {error, not_empty} ->
             precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, Count} ->
-            {ok, Count}
+            {ok, Count};
+        {protocol_error, Type, Reason, ReasonArgs} ->
+            rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end;
 handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
                                  if_unused = IfUnused},

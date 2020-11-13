@@ -124,22 +124,33 @@ update(Q, State) when ?amqqueue_is_quorum(Q) ->
 -spec handle_event({amqqueue:ra_server_id(), any()},
                    rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
-    eol.
+    eol |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 handle_event({From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
 -spec declare(amqqueue:amqqueue(), node()) ->
-    {new | existing, amqqueue:amqqueue()} | rabbit_types:channel_exit().
+    {new | existing, amqqueue:amqqueue()} | 
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
+    case rabbit_queue_type_util:run_checks(
+           [fun rabbit_queue_type_util:check_auto_delete/1,
+            fun rabbit_queue_type_util:check_exclusive/1,
+            fun rabbit_queue_type_util:check_non_durable/1],
+           Q) of
+        ok ->
+            start_cluster(Q);
+        Err ->
+            Err
+    end.
+
+start_cluster(Q) ->
     QName = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-    rabbit_queue_type_util:check_auto_delete(Q),
-    rabbit_queue_type_util:check_exclusive(Q),
-    rabbit_queue_type_util:check_non_durable(Q),
     QuorumSize = get_default_quorum_initial_group_size(Arguments),
     RaName = qname_to_internal_name(QName),
     Id = {RaName, node()},
@@ -169,10 +180,9 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
                     {new, NewQ};
                 {error, Error} ->
                     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-                    rabbit_misc:protocol_error(
-                      internal_error,
-                      "Cannot declare a queue '~s' on node '~s': ~255p",
-                      [rabbit_misc:rs(QName), node(), Error])
+                    {protocol_error, internal_error,
+                     "Cannot declare a queue '~s' on node '~s': ~255p",
+                     [rabbit_misc:rs(QName), node(), Error]}
             end;
         {existing, _} = Ex ->
             Ex
@@ -529,17 +539,16 @@ stop(VHost) ->
 -spec delete(amqqueue:amqqueue(),
              boolean(), boolean(),
              rabbit_types:username()) ->
-    {ok, QLen :: non_neg_integer()}.
+    {ok, QLen :: non_neg_integer()} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    rabbit_misc:protocol_error(
-      not_implemented,
-      "cannot delete ~s. queue.delete operations with if-unused flag set are not supported by quorum queues",
-      [rabbit_misc:rs(amqqueue:get_name(Q))]);
+    {protocol_error, not_implemented,
+     "cannot delete ~s. queue.delete operations with if-unused flag set are not supported by quorum queues",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]};
 delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    rabbit_misc:protocol_error(
-      not_implemented,
-      "cannot delete ~s. queue.delete operations with if-empty flag set are not supported by quorum queues",
-      [rabbit_misc:rs(amqqueue:get_name(Q))]);
+    {protocol_error, not_implemented,
+     "cannot delete ~s. queue.delete operations with if-empty flag set are not supported by quorum queues",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]};
 delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
@@ -1481,7 +1490,7 @@ update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
 overflow(undefined, Def, _QName) -> Def;
 overflow(<<"reject-publish">>, _Def, _QName) -> reject_publish;
 overflow(<<"drop-head">>, _Def, _QName) -> drop_head;
-overflow(<<"reject-publish-dlx">> = V, _Def, QName) ->
-    rabbit_misc:protocol_error(precondition_failed,
-                               "invalid overflow value '~s' for ~s",
-                               [V, rabbit_misc:rs(QName)]).
+overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
+    rabbit_log:warning("Invalid overflow strategy ~p for quorum queue: ~p",
+                       [V, rabbit_misc:rs(QName)]),
+    Def.

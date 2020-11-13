@@ -80,22 +80,30 @@ is_enabled() ->
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing', amqqueue:amqqueue()} |
-    rabbit_types:channel_exit().
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
+    case rabbit_queue_type_util:run_checks(
+           [fun rabbit_queue_type_util:check_auto_delete/1,
+            fun rabbit_queue_type_util:check_exclusive/1,
+            fun rabbit_queue_type_util:check_non_durable/1],
+           Q0) of
+        ok ->
+            start_cluster(Q0, Node);
+        Err ->
+            Err
+    end.
+
+start_cluster(Q0, Node) ->
     Arguments = amqqueue:get_arguments(Q0),
     QName = amqqueue:get_name(Q0),
-    rabbit_queue_type_util:check_auto_delete(Q0),
-    rabbit_queue_type_util:check_exclusive(Q0),
-    rabbit_queue_type_util:check_non_durable(Q0),
     Opts = amqqueue:get_options(Q0),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     Conf0 = make_stream_conf(Node, Q0),
     case rabbit_stream_coordinator:start_cluster(
            amqqueue:set_type_state(Q0, Conf0)) of
         {ok, {error, already_started}, _} ->
-            rabbit_misc:protocol_error(precondition_failed,
-                                       "safe queue name already in use '~s'",
-                                       [Node]);
+            {protocol_error, precondition_failed, "safe queue name already in use '~s'",
+             [Node]};
         {ok, {created, Q}, _} ->
             rabbit_event:notify(queue_created,
                                 [{name, QName},
@@ -107,18 +115,15 @@ declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
             {new, Q};
         {ok, {error, Error}, _} ->
             _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-            rabbit_misc:protocol_error(
-              internal_error,
-              "Cannot declare a queue '~s' on node '~s': ~255p",
-              [rabbit_misc:rs(QName), node(), Error]);
+            {protocol_error, internal_error, "Cannot declare a queue '~s' on node '~s': ~255p",
+             [rabbit_misc:rs(QName), node(), Error]};
         {ok, {existing, Q}, _} ->
             {existing, Q};
         {error, coordinator_unavailable} ->
             _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-            rabbit_misc:protocol_error(
-              internal_error,
+            {protocol_error, internal_error,
               "Cannot declare a queue '~s' on node '~s': coordinator unavailable",
-              [rabbit_misc:rs(QName), node()])
+             [rabbit_misc:rs(QName), node()]}
     end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -146,52 +151,54 @@ stat(_) ->
 
 consume(Q, #{prefetch_count := 0}, _)
   when ?amqqueue_is_stream(Q) ->
-    rabbit_misc:protocol_error(precondition_failed,
-                               "consumer prefetch count is not set for '~s'",
-                               [rabbit_misc:rs(amqqueue:get_name(Q))]);
+    {protocol_error, precondition_failed, "consumer prefetch count is not set for '~s'",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, #{no_ack := true}, _)
   when ?amqqueue_is_stream(Q) ->
-    rabbit_misc:protocol_error(
-      not_implemented,
-      "automatic acknowledgement not supported by stream queues ~s",
-      [rabbit_misc:rs(amqqueue:get_name(Q))]);
+    {protocol_error, not_implemented,
+     "automatic acknowledgement not supported by stream queues ~s",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
     {error, global_qos_not_supported_for_queue_type};
 consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
     %% Messages should include the offset as a custom header.
-    check_queue_exists_in_local_node(Q),
-    #{no_ack := NoAck,
-      channel_pid := ChPid,
-      prefetch_count := ConsumerPrefetchCount,
-      consumer_tag := ConsumerTag,
-      exclusive_consume := ExclusiveConsume,
-      args := Args,
-      ok_msg := OkMsg} = Spec,
-    QName = amqqueue:get_name(Q),
-    Offset = case rabbit_misc:table_lookup(Args, <<"x-stream-offset">>) of
-                 undefined ->
-                     next;
-                 {_, <<"first">>} ->
-                     first;
-                 {_, <<"last">>} ->
-                     last;
-                 {_, <<"next">>} ->
-                     next;
-                 {_, V} ->
-                     V
-             end,
-    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                         not NoAck, QName,
-                                         ConsumerPrefetchCount, false,
-                                         up, Args),
-    %% FIXME: reply needs to be sent before the stream begins sending
-    %% really it should be sent by the stream queue process like classic queues
-    %% do
-    maybe_send_reply(ChPid, OkMsg),
-    QState = begin_stream(QState0, Q, ConsumerTag, Offset,
-                          ConsumerPrefetchCount),
-    {ok, QState, []}.
+    case check_queue_exists_in_local_node(Q) of
+        ok ->
+            #{no_ack := NoAck,
+              channel_pid := ChPid,
+              prefetch_count := ConsumerPrefetchCount,
+              consumer_tag := ConsumerTag,
+              exclusive_consume := ExclusiveConsume,
+              args := Args,
+              ok_msg := OkMsg} = Spec,
+            QName = amqqueue:get_name(Q),
+            Offset = case rabbit_misc:table_lookup(Args, <<"x-stream-offset">>) of
+                         undefined ->
+                             next;
+                         {_, <<"first">>} ->
+                             first;
+                         {_, <<"last">>} ->
+                             last;
+                         {_, <<"next">>} ->
+                             next;
+                         {_, V} ->
+                             V
+                     end,
+            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                                 not NoAck, QName,
+                                                 ConsumerPrefetchCount, false,
+                                                 up, Args),
+            %% FIXME: reply needs to be sent before the stream begins sending
+            %% really it should be sent by the stream queue process like classic queues
+            %% do
+            maybe_send_reply(ChPid, OkMsg),
+            QState = begin_stream(QState0, Q, ConsumerTag, Offset,
+                                  ConsumerPrefetchCount),
+            {ok, QState, []};
+        Err ->
+            Err
+    end.
 
 get_local_pid(#{leader_pid := Pid}) when node(Pid) == node() ->
     Pid;
@@ -298,10 +305,8 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                         slow = Slow}.
 -spec dequeue(_, _, _, client()) -> no_return().
 dequeue(_, _, _, #stream_client{name = Name}) ->
-    rabbit_misc:protocol_error(
-      not_implemented,
-      "basic.get not supported by stream queues ~s",
-      [rabbit_misc:rs(Name)]).
+    {protocol_error, not_implemented, "basic.get not supported by stream queues ~s",
+     [rabbit_misc:rs(Name)]}.
 
 handle_event({osiris_written, From, Corrs}, State = #stream_client{correlation = Correlation0,
                                                    soft_limit = SftLmt,
@@ -364,10 +369,9 @@ settle(complete, CTag, MsgIds, #stream_client{readers = Readers0,
                       end,
     {State#stream_client{readers = Readers}, [{deliver, CTag, true, Msgs}]};
 settle(_, _, _, #stream_client{name = Name}) ->
-    rabbit_misc:protocol_error(
-      not_implemented,
-      "basic.nack and basic.reject not supported by stream queues ~s",
-      [rabbit_misc:rs(Name)]).
+    {protocol_error, not_implemented,
+     "basic.nack and basic.reject not supported by stream queues ~s",
+     [rabbit_misc:rs(Name)]}.
 
 info(Q, all_items) ->
     info(Q, ?INFO_KEYS);
@@ -624,9 +628,9 @@ check_queue_exists_in_local_node(Q) ->
         true ->
             ok;
         false ->
-            rabbit_misc:protocol_error(precondition_failed,
-                                       "queue '~s' does not a have a replica on the local node",
-                                       [rabbit_misc:rs(amqqueue:get_name(Q))])
+            {protocol_error, precondition_failed,
+             "queue '~s' does not a have a replica on the local node",
+             [rabbit_misc:rs(amqqueue:get_name(Q))]}
     end.
 
 maybe_send_reply(_ChPid, undefined) -> ok;
