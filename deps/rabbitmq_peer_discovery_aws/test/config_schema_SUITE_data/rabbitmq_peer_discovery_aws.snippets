@@ -1,0 +1,95 @@
+[
+    %% discovery mechanism
+    {aws_ec2_discovery_mechanism_as_module,
+            "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_aws
+             cluster_formation.aws.region = us-west-1", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_aws},
+                    {peer_discovery_aws, [
+                        {aws_ec2_region, "us-west-1"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_ec2_discovery_mechanism_as_alias,
+            "cluster_formation.peer_discovery_backend = aws
+             cluster_formation.aws.region = us-west-1", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_aws},
+                    {peer_discovery_aws, [
+                        {aws_ec2_region, "us-west-1"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    
+    %% region
+    {aws_ec2_region, "cluster_formation.aws.region = us-west-1", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_ec2_region, "us-west-1"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_use_private_ip, "cluster_formation.aws.use_private_ip = true", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_use_private_ip, true}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_access_key_id, "cluster_formation.aws.access_key_id = AKIAIOSFODNN7EXAMPLE", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_access_key, "AKIAIOSFODNN7EXAMPLE"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_secret_key, "cluster_formation.aws.secret_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_secret_key, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_use_autoscaling_group, "cluster_formation.aws.use_autoscaling_group = true", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_autoscaling, true}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_ec2_tags,
+        "cluster_formation.aws.instance_tags.tag1 = value1
+         cluster_formation.aws.instance_tags.tag2 = value2
+         cluster_formation.aws.instance_tags.tag3 = value3",
+        [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_ec2_tags, [{"tag1", "value1"}, {"tag2", "value2"}, {"tag3", "value3"}]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    }
+].
