@@ -1,0 +1,67 @@
+<div class="section-hidden">
+  <h2>Publish message</h2>
+  <div class="hider">
+    <form action="#/exchanges/publish" method="post">
+<% if (mode == 'queue') { %>
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="amq.default"/>
+<% } else { %>
+      <input type="hidden" name="vhost" value="<%= fmt_string(exchange.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
+<% } %>
+      <input type="hidden" name="properties" value=""/>
+      <table class="form">
+<% if (mode == 'queue') { %>
+        <tr>
+          <td colspan="2"><input type="hidden" name="routing_key" value="<%= fmt_string(queue.name) %>"/> Message will be published to the default exchange with routing key <strong><%= fmt_string(queue.name) %></strong>, routing it to this queue.</td>
+        </tr>
+<% } else { %>
+        <tr>
+          <th><label>Routing key:</label></th>
+          <td><input type="text" name="routing_key" value=""/></td>
+        </tr>
+<% } %>
+        <% if (mode == 'queue' && is_classic(queue)) { %>
+        <tr>
+          <th><label>Delivery mode:</label></th>
+          <td>
+            <select name="delivery_mode">
+              <option value="1">1 - Non-persistent</option>
+              <option value="2">2 - Persistent</option>
+            </select>
+          </td>
+        </tr>
+        <% } else { %>
+          <input type="hidden" name="delivery_mode" value="2">
+        <% } %>
+        <tr>
+          <th>
+            <label>
+              Headers:
+              <span class="help" id="message-publish-headers"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield" id="headers"></div>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Properties:
+              <span class="help" id="message-publish-properties"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield string-only" id="props"></div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Payload:</label></th>
+          <td><textarea name="payload"></textarea></td>
+        </tr>
+      </table>
+      <input type="submit" value="Publish message" />
+    </form>
+  </div>
+</div>

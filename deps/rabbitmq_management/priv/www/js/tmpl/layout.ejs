@@ -1,0 +1,58 @@
+<div id="header">
+  <ul id="topnav">
+    <li id="interval">
+      <label for="update-every" id="status"></label>
+      <select id="update-every">
+        <% if(disable_stats) { %>
+         <option value="">Do not refresh</option>
+         <option value="5000">Refresh every 5 seconds</option>
+        <% } else { %>
+         <option value="5000">Refresh every 5 seconds</option>
+        <% } %>      
+        <option value="10000">Refresh every 10 seconds</option>
+        <option value="30000">Refresh every 30 seconds</option>
+        <% if(!disable_stats) { %>
+         <option value="">Do not refresh</option>
+        <% } %>      
+      </select>
+    </li>
+    <li id="vhost">
+      <label for="show-vhost">Virtual host </label>
+      <select id="show-vhost">
+        <option value="">All</option>
+      </select>
+    </li>
+    <li id="logout">
+    <% if (enable_uaa) { %>
+      <input type="submit" id="loginWindow" onclick="uaa_logout_window()" value="Log out"/>
+    <% } else { %>
+      <form action="#/logout" method="put">
+        <input type="submit" value="Log out"/>
+      </form>
+    <% } %>
+    </li>
+  </ul>
+  <div id="logo">
+    <a href="#/"><img src="img/rabbitmqlogo.svg" alt="RabbitMQ logo" width="204" height="37"/></a>
+    <span id="versions"></span>
+  </div>
+  <div id="menu">
+    <ul id="tabs">
+    </ul>
+  </div>
+</div>
+<div id="rhs"></div>
+<div id="main"></div>
+<div id="footer">
+  <ul>
+    <li><a href="api/" target="_blank">HTTP API</a></li>
+    <li><a href="https://www.rabbitmq.com/admin-guide.html" target="_blank">Server Docs</a></li>
+    <li><a href="https://www.rabbitmq.com/getstarted.html" target="_blank">Tutorials</a></li>
+    <li><a href="https://groups.google.com/forum/#!forum/rabbitmq-users" target="_blank">Community Support</a></li>
+    <li><a href="https://rabbitmq-slack.herokuapp.com/" target="_blank">Community Slack</a></li>
+    <li><a href="https://www.rabbitmq.com/services.html" target="_blank">Commercial Support</a></li>
+    <li><a href="https://www.rabbitmq.com/plugins.html" target="_blank">Plugins</a></li>
+    <li><a href="https://www.rabbitmq.com/github.html" target="_blank">GitHub</a></li>
+    <li><a href="https://www.rabbitmq.com/changelog.html" target="_blank">Changelog</a></li>
+  </ul>
+</div>
