@@ -1,0 +1,31 @@
+%% ----------------------------------------------------------------------------
+%% RabbitMQ AMQP 1.0 Support
+%%
+%% See https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
+%% for details
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_amqp1_0,[
+%% Connections that are not authenticated with SASL will connect as this
+%% account. See the README for more information.
+%%
+%% Please note that setting this will allow clients to connect without
+%% authenticating!
+%%
+%% {default_user, "guest"},
+{mapping, "amqp1_0.default_user", "rabbitmq_amqp1_0.default_user", 
+    [{datatype, [{enum, [none]}, string]}]}.
+%% Enable protocol strict mode. See the README for more information.
+%%
+%% {protocol_strict_mode, false}
+%   ]},
+{mapping, "amqp1_0.protocol_strict_mode", "rabbitmq_amqp1_0.protocol_strict_mode", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "amqp1_0.default_vhost", "rabbitmq_amqp1_0.default_vhost", 
+    [{datatype, string}]}.
+
+{translation , "rabbitmq_amqp1_0.default_vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
+end}.
