@@ -1,0 +1,360 @@
+<h1>Dynamic Shovels</h1>
+<div class="section">
+  <h2>Shovels</h2>
+  <div class="hider updatable">
+<% if (shovels.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Name</th>
+    <th colspan="4">Source</th>
+    <th colspan="4">Destination</th>
+    <th>Reconnect Delay</th>
+    <th>Ack mode</th>
+    <th>Auto-delete</th>
+  </tr>
+  <tr>
+    <th colspan="2"></th>
+    <th>Protocol</th>
+    <th>Uri</th>
+    <th>Endpoint</th>
+    <th>Prefetch</th>
+    <th>Protocol</th>
+    <th>Uri</th>
+    <th>Endpoint</th>
+    <th>Add headers</th>
+    <th colspan="3"></th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < shovels.length; i++) {
+    var shovel = shovels[i];
+%>
+   <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+     <td><%= fmt_string(shovel.vhost) %></td>
+<% } %>
+     <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
+     <td><%= fmt_string(shovel.value['src-protocol']) %></td>
+     <td><%= fmt_shortened_uri(fmt_uri_with_credentials(shovel.value['src-uri'])) %></td>
+     <td><%= fmt_shovel_endpoint('src-', shovel.value) %></td>
+     <td><%= shovel.value['src-prefetch-count'] %></td>
+     <td><%= fmt_string(shovel.value['dest-protocol']) %></td>
+     <td><%= fmt_shortened_uri(fmt_uri_with_credentials(shovel.value['dest-uri'])) %></td>
+     <td><%= fmt_shovel_endpoint('dest-', shovel.value) %></td>
+     <td><%= fmt_boolean(fallback_value(shovel, 'dest-add-forward-headers', 'add-forward-headers')) %></td>
+     <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
+     <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>
+     <td><%= fmt_string(fallback_value(shovel, 'src-delete-after', 'delete-after')) %></td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no shovels ...</p>
+<% } %>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add a new shovel</h2>
+  <div class="hider">
+    <form action="#/shovel-parameters" method="put">
+      <input type="hidden" name="component" value="shovel"/>
+      <table class="form dynamic-shovels">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th>Source:</th>
+          <td>
+            <select name="src-protocol-selector" class="controls-appearance">
+              <option value="amqp091-src">AMQP 0.9.1</option>
+              <option value="amqp10-src">AMQP 1.0</option>
+            </select>
+            <div id="amqp10-src-div" style="display: none;">
+              <table class="subform">
+                <tr>
+                  <td>
+                    <label class="wide">
+                      URI:
+                      <span class="help" id="shovel-uri"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <input type="text" name="amqp10-src-uri" value="amqp://localhost:5672"/>
+                    <span class="mand">*</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <label class="wide">
+                      Address:
+                      <span class="help" id="shovel-amqp10-address"></span>
+                    </label>
+                  </th>
+                  <td><input type="text" name="amqp10-src-address"/></td>
+                </tr>
+                <tr>
+                  <td>
+                    <label class="wide">
+                      Prefetch count:
+                      <span class="help" id="shovel-prefetch"></span>
+                    </label>
+                  </td>
+                  <td><input type="text" name="amqp10-src-prefetch-count"/></td>
+                </tr>
+                <tr>
+                  <td>
+                    <label>
+                      Auto-delete
+                      <span class="help" id="shovel-amqp10-auto-delete"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <select name="amqp10-src-delete-after-selector" class="controls-appearance">
+                      <option value="never">Never</option>
+                      <option value="number">After num messages</option>
+                    </select>
+                  </td>
+                  <td>
+                    <div id="number-div" style="display: none;">
+                      <input type="text" name="amqp10-src-delete-after"/>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </div>
+            <div id="amqp091-src-div">
+              <table class="subform">
+                <tr>
+                  <td>
+                    <label>
+                      URI:
+                      <span class="help" id="shovel-uri"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <select name="queue-or-exchange" class="controls-appearance">
+                      <option value="src-queue">Queue:</option>
+                      <option value="src-exchange">Exchange:</option>
+                    </select>
+                    <span class="help" id="shovel-queue-exchange"></span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <input type="text" name="src-uri" value="amqp://"/>
+                    <span class="mand">*</span>
+                  </td>
+                  <td>
+                    <div id="src-queue-div">
+                      <input type="text" name="amqp091-src-queue"/>
+                    </div>
+                    <div id="src-exchange-div" style="display: none;">
+                      <input type="text" name="amqp091-src-exchange"/>
+                      Routing key: <input type="text" name="src-exchange-key"/>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <label>
+                      Prefetch count:
+                      <span class="help" id="shovel-prefetch"></span>
+                    </label>
+                  </td>
+                  <td><input type="text" name="amqp091-src-prefetch-count"/></td>
+                </tr>
+                <tr>
+                  <td>
+                    <label>
+                      Auto-delete
+                      <span class="help" id="shovel-amqp091-auto-delete"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <select name="amqp091-src-delete-after">
+                      <option value="never">Never</option>
+                      <option value="queue-length">After initial length transferred</option>
+                    </select>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th>Destination:</th>
+          <td>
+            <select name="dest-protocol-selector" class="controls-appearance">
+              <option value="amqp091-dest">AMQP 0.9.1</option>
+              <option value="amqp10-dest">AMQP 1.0</option>
+            </select>
+            <div id="amqp10-dest-div" style="display: none;">
+              <table class="subform">
+                <tr>
+                  <td>
+                    <label>
+                    URI:
+                    <span class="help" id="shovel-uri"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <input type="text" name="dest-uri" value="amqp://localhost:5672"/>
+                    <span class="mand">*</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <label>
+                      Address:
+                      <span class="help" id="shovel-amqp10-address"></span>
+                    </label>
+                  </td>
+                  <td><input type="text" name="amqp10-dest-address"/></td>
+                </tr>
+                <tr>
+                  <td>
+                    <label>
+                      Add forwarding headers:
+                      <span class="help" id="shovel-forward-headers"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <select name="amqp10-dest-add-forward-headers">
+                      <option value="false">No</option>
+                      <option value="true">Yes</option>
+                    </select>
+                  </td>
+                </tr>
+              </table>
+            </div>
+            <div id="amqp091-dest-div">
+              <table class="subform">
+                <tr>
+                  <td>
+                    <label>
+                      URI
+                      <span class="help" id="shovel-uri"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <select name="queue-or-exchange" class="narrow controls-appearance">
+                      <option value="dest-queue">Queue:</option>
+                      <option value="dest-exchange">Exchange:</option>
+                    </select>
+                    <span class="help" id="shovel-queue-exchange"></span>
+                  </td>
+                </tr>
+                <tr>
+                  <td><input type="text" name="amqp091-dest-uri" value="amqp://"/><span class="mand">*</span></td>
+                  <td>
+                    <div id="dest-queue-div">
+                      <input type="text" name="amqp091-dest-queue"/>
+                    </div>
+                    <div id="dest-exchange-div" style="display: none;">
+                      <input type="text" name="amqp091-dest-exchange"/>
+                      Routing key: <input type="text" name="dest-exchange-key"/>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <label>
+                      Add forwarding headers:
+                      <span class="help" id="shovel-forward-headers"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <select name="amqp091-dest-add-forward-headers">
+                      <option value="false">No</option>
+                      <option value="true">Yes</option>
+                    </select>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Reconnect delay:
+              <span class="help" id="shovel-reconnect"></span>
+            </label>
+          </th>
+          <td><input type="text" name="reconnect-delay"/> s</td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              Acknowledgement mode:
+              <span class="help" id="shovel-ack-mode"></span>
+            </label>
+          </th>
+          <td>
+            <select name="ack-mode">
+              <option value="on-confirm">On confirm</option>
+              <option value="on-publish">On publish</option>
+              <option value="no-ack">No ack</option>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add shovel"/>
+    </form>
+  </div>
+</div>
+<div class="section-hidden">
+  <h2>URI examples</h2>
+  <div class="hider">
+    <ul>
+      <li>
+        <code>amqp://</code><br/>
+        connect to local server as default user
+      </li><br />
+      <li>
+        <code>amqp://user@/my-vhost</code><br/>
+        connect to local server with alternate user and virtual host
+        (passwords are not required for local connections)
+      </li><br />
+      <li>
+        <code>amqp://server-name</code><br/>
+        connect to server-name, without SSL and default credentials
+      </li><br />
+      <li>
+        <code>amqp://user:password@server-name/my-vhost</code><br/>
+        connect to server-name, with credentials and overridden
+        virtual host
+      </li><br />
+      <li>
+        <code>amqps://user:password@server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer</code><br/>
+        connect to server-name, with credentials and SSL
+      </li><br />
+      <li>
+        <code>amqps://server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer&fail_if_no_peer_cert=true&auth_mechanism=external</code><br/>
+        connect to server-name, with SSL and EXTERNAL authentication
+      </li>
+    </ul>
+  </div>
+</div>
