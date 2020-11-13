@@ -1,0 +1,17 @@
+.sw?
+.*.sw?
+*.beam
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/escript/
+/escript.lock
+/logs/
+/plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
+
+rabbitmq_web_dispatch.d
