@@ -1,0 +1,317 @@
+%% host
+
+{mapping, "cluster_formation.consul.host", "rabbit.cluster_formation.peer_discovery_consul.consul_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.host", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% port
+
+{mapping, "cluster_formation.consul.port", "rabbit.cluster_formation.peer_discovery_consul.consul_port", [
+    {datatype, integer}, {validators, ["port"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_port",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.port", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% scheme
+
+{mapping, "cluster_formation.consul.scheme", "rabbit.cluster_formation.peer_discovery_consul.consul_scheme", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_scheme",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.scheme", Conf, "http") of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% ACL token
+
+{mapping, "cluster_formation.consul.acl_token", "rabbit.cluster_formation.peer_discovery_consul.consul_acl_token", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_acl_token",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.acl_token", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% cluster name
+
+{mapping, "cluster_formation.consul.cluster_name", "rabbit.cluster_formation.peer_discovery_consul.cluster_name", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.cluster_name",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.cluster_name", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% service name
+
+{mapping, "cluster_formation.consul.svc", "rabbit.cluster_formation.peer_discovery_consul.consul_svc", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% service address
+
+{mapping, "cluster_formation.consul.svc_addr", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_addr", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% compute service address automatically?
+
+{mapping, "cluster_formation.consul.svc_addr_auto", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_auto", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_auto",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_addr_auto", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% service address NIC
+
+{mapping, "cluster_formation.consul.svc_addr_nic", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nic", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nic",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_addr_nic", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% use (Erlang) node name when compuing service address?
+
+{mapping, "cluster_formation.consul.svc_addr_use_nodename", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nodename", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nodename",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_addr_use_nodename", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% (optionally) append a suffix to node names retrieved from Consul
+
+{mapping, "cluster_formation.consul.domain_suffix", "rabbit.cluster_formation.peer_discovery_consul.consul_domain", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_domain",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.domain_suffix", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% include nodes with warnings?
+
+{mapping, "cluster_formation.consul.include_nodes_with_warnings", "rabbit.cluster_formation.peer_discovery_consul.include_nodes_with_warnings", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_include_nodes_with_warnings",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.include_nodes_with_warnings", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% service (RabbitMQ node) port
+
+{mapping, "cluster_formation.consul.svc_port", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_port", [
+    {datatype, integer}, {validators, ["port"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_port",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_port", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+
+%% service check TTL
+
+{mapping, "cluster_formation.consul.svc_ttl", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_ttl", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_ttl",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_ttl", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% should a node in warning state be deregister by Consul after a period of time?
+
+{mapping, "cluster_formation.consul.deregister_after", "rabbit.cluster_formation.peer_discovery_consul.consul_deregister_after", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_deregister_after",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.deregister_after", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% use long node names?
+
+{mapping, "cluster_formation.consul.use_longname", "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.use_longname", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% service tags
+
+{mapping, "cluster_formation.consul.svc_tags", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_tags", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "cluster_formation.consul.svc_tags.$name", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_tags", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_tags",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_tags", Conf, undefined) of
+        none -> [];
+        _ ->
+            Pairs = cuttlefish_variable:filter_by_prefix("cluster_formation.consul.svc_tags", Conf),
+            [V || {_, V} <- Pairs]
+    end
+end}.
+
+%% service metadata
+
+{mapping, "cluster_formation.consul.svc_meta", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_meta", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "cluster_formation.consul.svc_meta.$name", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_meta", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_meta",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_meta", Conf, undefined) of
+        none -> [];
+        _    ->
+          Pairs = cuttlefish_variable:filter_by_prefix("cluster_formation.consul.svc_meta", Conf),
+          [{list_to_binary(lists:last(Segments)), list_to_binary(V)} || {Segments, V} <- Pairs]
+    end
+end}.
+
+%% lock key prefix
+
+{mapping, "cluster_formation.consul.lock_prefix", "rabbit.cluster_formation.peer_discovery_consul.consul_lock_prefix", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_lock_prefix",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.lock_prefix", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% lock acquisition timeout
+
+{mapping, "cluster_formation.consul.lock_wait_time", "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "cluster_formation.consul.lock_timeout", "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+%% an alias for lock acquisition timeout to be consistent with the etcd backend
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.lock_timeout", Conf, undefined) of
+        undefined ->
+            case cuttlefish:conf_get("cluster_formation.consul.lock_wait_time", Conf, undefined) of
+                    undefined -> cuttlefish:unset();
+                    Value     -> Value
+                end;
+        Value -> Value
+    end
+end}.
