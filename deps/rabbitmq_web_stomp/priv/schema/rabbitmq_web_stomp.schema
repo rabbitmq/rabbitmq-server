@@ -1,0 +1,181 @@
+{mapping, "web_stomp.port", "rabbitmq_web_stomp.port",
+    [{datatype, integer}]}.
+
+{mapping, "web_stomp.ws_frame", "rabbitmq_web_stomp.ws_frame",
+    [{datatype, {enum, [binary, text]}}]}.
+
+{mapping, "web_stomp.num_acceptors.tcp", "rabbitmq_web_stomp.num_tcp_acceptors",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.num_acceptors.ssl", "rabbitmq_web_stomp.num_ssl_acceptors",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.max_connections", "rabbitmq_web_stomp.max_connections", [
+    {datatype, [{enum, [infinity]}, integer]}
+]}.
+
+{mapping, "web_stomp.tcp.port", "rabbitmq_web_stomp.tcp_config.port",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.tcp.backlog", "rabbitmq_web_stomp.tcp_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.tcp.ip", "rabbitmq_web_stomp.tcp_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_stomp.tcp.listener", "rabbitmq_web_stomp.tcp_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
+
+{mapping, "web_stomp.ws_path", "rabbitmq_web_stomp.ws_path",
+    [{datatype, string}]}.
+
+{translation,
+    "rabbitmq_web_stomp.tcp_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_stomp.tcp.listener", Conf, undefined),
+        case Setting of
+            none      -> [];
+            undefined -> [{port, 15674}];
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}]
+        end
+    end
+}.
+
+{mapping, "web_stomp.ssl.listener", "rabbitmq_web_stomp.ssl_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
+
+{mapping, "web_stomp.ssl.port", "rabbitmq_web_stomp.ssl_config.port",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.ssl.backlog", "rabbitmq_web_stomp.ssl_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.ssl.ip", "rabbitmq_web_stomp.ssl_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_stomp.ssl.certfile", "rabbitmq_web_stomp.ssl_config.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_stomp.ssl.keyfile", "rabbitmq_web_stomp.ssl_config.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_stomp.ssl.cacertfile", "rabbitmq_web_stomp.ssl_config.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_stomp.ssl.password", "rabbitmq_web_stomp.ssl_config.password",
+    [{datatype, string}]}.
+
+{translation,
+    "rabbitmq_web_stomp.ssl_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_stomp.ssl.listener", Conf, undefined),
+        case Setting of
+            none      -> cuttlefish:unset();
+            undefined -> [];
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                %% we redo some of Cuttlefish's work here to
+                %% populate rabbitmq_web_stomp.ssl_config here
+                TLSConf   = cuttlefish_variable:filter_by_prefix("web_stomp.ssl", Conf),
+                %% preserve all web_stomp.ssl.* keys in rabbitmq_web_stomp.ssl_config
+                TLSConfM0 = maps:fold(fun(Path, V, Acc) ->
+                                              maps:put(list_to_atom(lists:last(Path)), V, Acc)
+                                      end, #{}, maps:from_list(TLSConf)),
+                TLSConfM  = maps:remove(listener, TLSConfM0),
+                ListenerM = maps:from_list([{ip, Ip}, {port, Port}]),
+                lists:keysort(1, maps:to_list(maps:merge(TLSConfM, ListenerM)));
+
+            _         -> Setting
+        end
+    end
+}.
+
+{mapping, "web_stomp.ssl.honor_cipher_order", "rabbitmq_web_stomp.ssl_config.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.honor_ecc_order", "rabbitmq_web_stomp.ssl_config.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.reuse_sessions", "rabbitmq_web_stomp.ssl_config.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.secure_renegotiate", "rabbitmq_web_stomp.ssl_config.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.client_renegotiation", "rabbitmq_web_stomp.ssl_config.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.crl_check", "rabbitmq_web_stomp.ssl_config.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "web_stomp.ssl.depth", "rabbitmq_web_stomp.ssl_config.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "web_stomp.ssl.versions.$version", "rabbitmq_web_stomp.ssl_config.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_web_stomp.ssl_config.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_stomp.ssl.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "web_stomp.ssl.ciphers.$cipher", "rabbitmq_web_stomp.ssl_config.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_web_stomp.ssl_config.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_stomp.ssl.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.
+
+
+%%
+%% Cowboy options
+%%
+
+{mapping, "web_stomp.cowboy_opts.max_empty_lines", "rabbitmq_web_stomp.cowboy_opts.max_empty_lines",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.cowboy_opts.max_header_name_length", "rabbitmq_web_stomp.cowboy_opts.max_header_name_length",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.cowboy_opts.max_header_value_length", "rabbitmq_web_stomp.cowboy_opts.max_header_value_length",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.cowboy_opts.max_headers", "rabbitmq_web_stomp.cowboy_opts.max_headers",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.cowboy_opts.max_keepalive", "rabbitmq_web_stomp.cowboy_opts.max_keepalive",
+    [{datatype, integer}]}.
+{mapping, "web_stomp.cowboy_opts.max_request_line_length", "rabbitmq_web_stomp.cowboy_opts.max_request_line_length",
+    [{datatype, integer}]}.
+
+%% backwards compatibility
+{mapping, "web_stomp.cowboy_opts.timeout", "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+%% recent Cowboy versions have several timeout settings
+{mapping, "web_stomp.cowboy_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+    [{datatype, integer}]
+}.
+
+{translation,
+    "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+    fun(Conf) ->
+        case cuttlefish:conf_get("web_stomp.cowboy_opts.timeout", Conf, undefined) of
+            Value when is_integer(Value) ->
+                Value;
+            undefined ->
+                case cuttlefish:conf_get("web_stomp.cowboy_opts.idle_timeout", Conf, undefined) of
+                    undefined -> cuttlefish:unset();
+                    Value     -> Value
+                end
+        end
+    end
+}.
+
+{mapping, "web_stomp.ws_opts.compress", "rabbitmq_web_stomp.cowboy_ws_opts.compress",
+    [{datatype, {enum, [true, false]}}]
+}.
+{mapping, "web_stomp.ws_opts.max_frame_size", "rabbitmq_web_stomp.cowboy_ws_opts.max_frame_size",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+{mapping, "web_stomp.ws_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_ws_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+
+
+%% Whether or not to enable Proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "web_stomp.proxy_protocol", "rabbitmq_web_stomp.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
