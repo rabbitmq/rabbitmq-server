@@ -1,0 +1,126 @@
+%% Kubernetes host
+
+{mapping, "cluster_formation.k8s.host", "rabbit.cluster_formation.peer_discovery_k8s.k8s_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.host", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Kubernetes port
+
+{mapping, "cluster_formation.k8s.port", "rabbit.cluster_formation.peer_discovery_k8s.k8s_port", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_port",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.port", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Kubernetes URI scheme
+
+{mapping, "cluster_formation.k8s.scheme", "rabbit.cluster_formation.peer_discovery_k8s.k8s_scheme", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_scheme",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.scheme", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% (ACL) Token path
+
+{mapping, "cluster_formation.k8s.token_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_token_path", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_token_path",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.token_path", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Certificate path
+
+{mapping, "cluster_formation.k8s.cert_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_cert_path", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_cert_path",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.cert_path", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Namespace path
+
+{mapping, "cluster_formation.k8s.namespace_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_namespace_path", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_namespace_path",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.namespace_path", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Service name
+
+{mapping, "cluster_formation.k8s.service_name", "rabbit.cluster_formation.peer_discovery_k8s.k8s_service_name", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_service_name",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.service_name", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Address type
+
+{mapping, "cluster_formation.k8s.address_type", "rabbit.cluster_formation.peer_discovery_k8s.k8s_address_type", [
+    {datatype, {enum, [hostname, ip]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_address_type",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.address_type", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Hostname suffix
+
+{mapping, "cluster_formation.k8s.hostname_suffix", "rabbit.cluster_formation.peer_discovery_k8s.k8s_hostname_suffix", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_hostname_suffix",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.hostname_suffix", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
