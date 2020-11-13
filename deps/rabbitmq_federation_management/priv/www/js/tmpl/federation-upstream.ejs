@@ -1,0 +1,95 @@
+<h1>Federation Upstream: <b><%= fmt_string(upstream.name) %></b><%= fmt_maybe_vhost(upstream.vhost) %></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+    <table class="facts">
+       <tr>
+          <th>
+          <h3>General parameters</h3>
+         </th>
+      <tr>
+        <th>URI</th>
+        <td><%= fmt_string(fmt_uri_with_credentials(upstream.value.uri)) %></td>
+      </tr>
+      <tr>
+        <th>Prefetch Count</th>
+        <td><%= fmt_string(upstream.value['prefetch-count']) %></td>
+      </tr>
+      <tr>
+        <th>Reconnect Delay</th>
+        <td><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
+      </tr>
+      <tr>
+        <th>Ack Mode</th>
+        <td><%= fmt_string(upstream.value['ack-mode']) %></td>
+      </tr>
+      <tr>
+        <th>Trust User-ID</th>
+        <td><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
+      </tr>
+
+       <tr>
+          <th>
+          <h3>Federated exchange parameters</h3>
+         </th>
+        </tr>
+      <tr>
+        <th>Exchange</th>
+        <td><%= fmt_string(upstream.value['exchange']) %></td>
+      </tr>
+
+
+      <tr>
+        <th>Max Hops</th>
+        <td><%= fmt_string(upstream.value['max-hops']) %></td>
+      </tr>
+
+      <tr>
+        <th>Expires</th>
+        <td><%= fmt_time(upstream.value.expires, 'ms') %></td>
+      </tr>
+
+      <tr>
+        <th>Message TTL</th>
+        <td><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
+      </tr>
+
+      <tr>
+        <th>HA Policy</th>
+        <td><%= fmt_string(upstream.value['ha-policy']) %></td>
+      </tr>
+
+       <tr>
+          <th>
+          <h3>Federated queue parameters</h3>
+         </th>
+        </tr>
+
+      <tr>
+        <th>Queue</th>
+        <td><%= fmt_string(upstream.value['queue']) %></td>
+      </tr>
+
+      <tr>
+        <th>Consumer tag</th>
+        <td><%= fmt_string(upstream.value['consumer-tag']) %></td>
+      </tr>
+
+
+
+    </table>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete this upstream</h2>
+  <div class="hider">
+    <form action="#/fed-parameters" method="delete" class="confirm">
+      <input type="hidden" name="component" value="federation-upstream"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(upstream.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(upstream.name) %>"/>
+      <input type="submit" value="Delete this upstream"/>
+    </form>
+  </div>
+</div>
