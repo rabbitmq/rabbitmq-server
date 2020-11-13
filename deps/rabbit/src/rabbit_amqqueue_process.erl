@@ -90,7 +90,10 @@
             %% running | flow | idle
             status,
             %% true | false
-            single_active_consumer_on
+            single_active_consumer_on,
+            %% delivery limit for expiring poison messages
+            delivery_limit,
+            delivery_limit_ttl_timer_ref
            }).
 
 %%----------------------------------------------------------------------------
@@ -160,7 +163,8 @@ init_state(Q) ->
                status                    = running,
                args_policy_version       = 0,
                overflow                  = 'drop-head',
-               single_active_consumer_on = SingleActiveConsumerOn},
+               single_active_consumer_on = SingleActiveConsumerOn,
+               delivery_limit            = infinity},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 init_it(Recover, From, State = #q{q = Q})
@@ -366,7 +370,8 @@ terminate_shutdown(Fun, #q{status = Status} = State) ->
                     [fun stop_sync_timer/1,
                      fun stop_rate_timer/1,
                      fun stop_expiry_timer/1,
-                     fun stop_ttl_timer/1]),
+                     fun stop_ttl_timer/1,
+                     fun stop_delivery_limit_ttl/1]),
     case BQS of
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
@@ -422,7 +427,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
          {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
+         {<<"delivery-limit">>,          fun res_arg/2, fun init_delivery_limit/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(rabbit_queue_type_util:args_policy_lookup(Name, Resolve, Q), StateN)
@@ -479,6 +485,11 @@ init_queue_mode(Mode, State = #q {backing_queue = BQ,
                                   backing_queue_state = BQS}) ->
     BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
     State#q{backing_queue_state = BQS1}.
+
+init_delivery_limit(undefined, State) ->
+    stop_delivery_limit_ttl(State#q{delivery_limit = infinity});
+init_delivery_limit(DeliveryLimit, State) ->
+    State#q{delivery_limit = DeliveryLimit}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
@@ -539,7 +550,7 @@ ensure_expiry_timer(State = #q{expires             = Expires,
 stop_expiry_timer(State) -> rabbit_misc:stop_timer(State, #q.expiry_timer_ref).
 
 ensure_ttl_timer(undefined, State) ->
-    State;
+    ensure_delivery_limit_ttl_timer(State);
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                                     args_policy_version = Version}) ->
     After = (case Expiry - os:system_time(micro_seconds) of
@@ -555,6 +566,21 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
     ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined});
 ensure_ttl_timer(_Expiry, State) ->
     State.
+
+ensure_delivery_limit_ttl_timer(State = #q{delivery_limit = infinity}) -> State;
+ensure_delivery_limit_ttl_timer(
+  State = #q{delivery_limit_ttl_timer_ref = undefined,
+             args_policy_version = Version}) ->
+    After = ?CLASSIC_QUEUE_DELIVERY_LIMIT_TTL,
+    DL_TRef = rabbit_misc:send_after(After, self(), {drop_expired, Version}),
+    State#q{delivery_limit_ttl_timer_ref = DL_TRef};
+ensure_delivery_limit_ttl_timer(
+  State = #q{delivery_limit_ttl_timer_ref = DL_TRef}) ->
+    rabbit_misc:cancel_timer(DL_TRef),
+    ensure_delivery_limit_ttl_timer(State#q{delivery_limit_ttl_timer_ref = undefined}).
+
+stop_delivery_limit_ttl(State) ->
+    rabbit_misc:stop_timer(State, #q.delivery_limit_ttl_timer_ref).
 
 stop_ttl_timer(State) -> rabbit_misc:stop_timer(State, #q.ttl_timer_ref).
 
@@ -1845,5 +1871,3 @@ update_ha_mode(State) ->
 
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).
-
-

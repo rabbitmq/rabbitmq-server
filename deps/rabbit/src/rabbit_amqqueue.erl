@@ -35,7 +35,7 @@
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
--export([has_synchronised_mirrors_online/1]).
+-export([has_synchronised_mirrors_online/1, transform/3, emit_transform/5]).
 -export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
 -export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
          list_local_mirrored_classic_queues/0, list_local_mirrored_classic_names/0,
@@ -770,6 +770,7 @@ declare_args() ->
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-exchange">>,    fun check_dlxname_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
+     {<<"x-delivery-limit">>,          fun check_delivery_limit_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-in-memory-length">>,    fun check_non_neg_int_arg/2},
@@ -802,6 +803,19 @@ check_non_neg_int_arg({Type, Val}, Args) ->
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
         Error            -> Error
+    end.
+
+check_delivery_limit_arg({Type, Val}, Args) ->
+    case get_queue_type(Args) of
+        rabbit_classic_queue ->
+            case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+                true ->
+                    check_non_neg_int_arg({Type, Val}, Args);
+                false ->
+                    {error, {feature_flag_not_enabled, classic_delivery_limits}}
+            end;
+        _Other ->
+            check_non_neg_int_arg({Type, Val}, Args)
     end.
 
 check_expires_arg({Type, Val}, Args) ->
