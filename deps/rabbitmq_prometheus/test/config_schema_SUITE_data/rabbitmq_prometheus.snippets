@@ -1,0 +1,280 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+[
+  %%
+  %% Path
+  %%
+
+  {endpoint_path,
+   "prometheus.path = /metriczzz",
+   [{rabbitmq_prometheus,[
+                          {path, "/metriczzz"}
+                         ]}],
+   [rabbitmq_prometheus]},
+
+   %%
+   %% TCP listener
+   %%
+
+   {tcp_listener_port_only,
+    "prometheus.tcp.port = 15692",
+    [{rabbitmq_prometheus,[
+                           {tcp_config,[
+                                        {port,15692}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tcp_listener_interface_port,
+    "prometheus.tcp.ip   = 192.168.1.2
+     prometheus.tcp.port = 15692",
+    [{rabbitmq_prometheus,[
+                           {tcp_config,[
+                                        {ip, "192.168.1.2"},
+                                        {port,15692}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tcp_listener_server_opts_compress,
+    "prometheus.tcp.compress = true",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{compress, true}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tcp_listener_server_opts_compress_and_idle_timeout,
+    "prometheus.tcp.compress     = true
+     prometheus.tcp.idle_timeout = 123",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{compress,     true},
+                                                       {idle_timeout, 123}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tcp_listener_server_opts_compress_and_multiple_timeouts,
+    "prometheus.tcp.compress     = true
+     prometheus.tcp.idle_timeout = 123
+     prometheus.tcp.inactivity_timeout = 456
+     prometheus.tcp.request_timeout = 789",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{compress,           true},
+                                                       {idle_timeout,       123},
+                                                       {inactivity_timeout, 456},
+                                                       {request_timeout,    789}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tcp_listener_server_opts_multiple_timeouts_only,
+    "prometheus.tcp.idle_timeout = 123
+     prometheus.tcp.inactivity_timeout = 456
+     prometheus.tcp.request_timeout = 789",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{idle_timeout,       123},
+                                                       {inactivity_timeout, 456},
+                                                       {request_timeout,    789}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tcp_listener_server_opts_shutdown_timeout,
+    "prometheus.tcp.shutdown_timeout = 7000",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tcp_listener_server_opts_max_keepalive,
+    "prometheus.tcp.max_keepalive = 120",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+
+   %%
+   %% TLS listener
+   %%
+
+   {tls_listener_port_only,
+    "prometheus.ssl.port = 15691",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {port,15691}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tls_listener_interface_port,
+    "prometheus.ssl.ip   = 192.168.1.2
+     prometheus.ssl.port = 15691",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {ip, "192.168.1.2"},
+                                        {port,15691}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tls_listener,
+    "prometheus.ssl.ip   = 192.168.1.2
+     prometheus.ssl.port = 15691
+     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
+     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+     prometheus.ssl.verify   = verify_none
+     prometheus.ssl.fail_if_no_peer_cert = false",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {ip, "192.168.1.2"},
+                                        {port,15691},
+                                        {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                        {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                        {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                        {verify, verify_none},
+                                        {fail_if_no_peer_cert, false}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tls_listener_cipher_suites,
+    "prometheus.ssl.ip   = 192.168.1.2
+     prometheus.ssl.port = 15691
+     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
+     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+
+     prometheus.ssl.honor_cipher_order   = true
+     prometheus.ssl.honor_ecc_order      = true
+     prometheus.ssl.client_renegotiation = false
+     prometheus.ssl.secure_renegotiate   = true
+
+     prometheus.ssl.verify   = verify_peer
+     prometheus.ssl.fail_if_no_peer_cert = false
+
+     prometheus.ssl.versions.1 = tlsv1.2
+     prometheus.ssl.versions.2 = tlsv1.1
+
+     prometheus.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+     prometheus.ssl.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+     prometheus.ssl.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+     prometheus.ssl.ciphers.4 = ECDHE-RSA-AES256-SHA384
+     prometheus.ssl.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+     prometheus.ssl.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+     prometheus.ssl.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+     prometheus.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
+     prometheus.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {ip, "192.168.1.2"},
+                                        {port,15691},
+                                        {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                        {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                        {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+
+                                        {verify, verify_peer},
+                                        {fail_if_no_peer_cert, false},
+
+                                        {honor_cipher_order,   true},
+                                        {honor_ecc_order,      true},
+                                        {client_renegotiation, false},
+                                        {secure_renegotiate,   true},
+
+                                        {versions,['tlsv1.2','tlsv1.1']},
+                                        {ciphers, [
+                                          "ECDHE-ECDSA-AES256-GCM-SHA384",
+                                          "ECDHE-RSA-AES256-GCM-SHA384",
+                                          "ECDHE-ECDSA-AES256-SHA384",
+                                          "ECDHE-RSA-AES256-SHA384",
+                                          "ECDH-ECDSA-AES256-GCM-SHA384",
+                                          "ECDH-RSA-AES256-GCM-SHA384",
+                                          "ECDH-ECDSA-AES256-SHA384",
+                                          "ECDH-RSA-AES256-SHA384",
+                                          "DHE-RSA-AES256-GCM-SHA384"
+                                          ]}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tls_listener_server_opts_compress,
+    "prometheus.ssl.compress = true",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{cowboy_opts, [{compress, true}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_server_opts_compress_and_idle_timeout,
+    "prometheus.ssl.compress     = true
+     prometheus.ssl.idle_timeout = 123",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{cowboy_opts, [{compress,     true},
+                                                         {idle_timeout, 123}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_server_opts_compress_and_multiple_timeouts,
+    "prometheus.ssl.compress     = true
+     prometheus.ssl.idle_timeout = 123
+     prometheus.ssl.inactivity_timeout = 456
+     prometheus.ssl.request_timeout = 789",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{cowboy_opts, [{compress,           true},
+                                                         {idle_timeout,       123},
+                                                         {inactivity_timeout, 456},
+                                                         {request_timeout,    789}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_server_opts_multiple_timeouts_only,
+    "prometheus.ssl.idle_timeout = 123
+     prometheus.ssl.inactivity_timeout = 456
+     prometheus.ssl.request_timeout = 789",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{cowboy_opts, [{idle_timeout,       123},
+                                                         {inactivity_timeout, 456},
+                                                         {request_timeout,    789}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_server_opts_shutdown_timeout,
+    "prometheus.ssl.shutdown_timeout = 7000",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_server_opts_max_keepalive,
+    "prometheus.ssl.max_keepalive = 120",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   }
+].

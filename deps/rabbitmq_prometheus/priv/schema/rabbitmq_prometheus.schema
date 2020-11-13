@@ -1,0 +1,127 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Prometheus Plugin
+%%
+%% See https://rabbitmq.com/prometheus.html for details
+%% ----------------------------------------------------------------------------
+
+%% Option to return metrics per-object, unaggregated
+{mapping, "prometheus.return_per_object_metrics", "rabbitmq_prometheus.return_per_object_metrics",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Endpoint path
+{mapping, "prometheus.path", "rabbitmq_prometheus.path",
+    [{datatype, string}]}.
+
+%% HTTP (TCP) listener options ========================================================
+
+%% HTTP listener consistent with the management plugin, Web STOMP and Web MQTT.
+%%
+%% {tcp_config, [{port,     15692},
+%%               {ip,       "127.0.0.1"}]}
+
+{mapping, "prometheus.tcp.port", "rabbitmq_prometheus.tcp_config.port",
+    [{datatype, integer}]}.
+{mapping, "prometheus.tcp.ip", "rabbitmq_prometheus.tcp_config.ip",
+    [{datatype, string},
+     {validators, ["is_ip"]}]}.
+
+{mapping, "prometheus.tcp.compress", "rabbitmq_prometheus.tcp_config.cowboy_opts.compress",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping, "prometheus.tcp.idle_timeout", "rabbitmq_prometheus.tcp_config.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.tcp.inactivity_timeout", "rabbitmq_prometheus.tcp_config.cowboy_opts.inactivity_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.tcp.request_timeout", "rabbitmq_prometheus.tcp_config.cowboy_opts.request_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.tcp.shutdown_timeout", "rabbitmq_prometheus.tcp_config.cowboy_opts.shutdown_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.tcp.max_keepalive", "rabbitmq_prometheus.tcp_config.cowboy_opts.max_keepalive",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+
+%% HTTPS (TLS) listener options ========================================================
+
+%% HTTPS listener consistent with the management plugin, Web STOMP and Web MQTT.
+%%
+%% {ssl_config, [{port,       15691},
+%%               {ip,         "127.0.0.1"},
+%%               {cacertfile, "/path/to/cacert.pem"},
+%%               {certfile,   "/path/to/cert.pem"},
+%%               {keyfile,    "/path/to/key.pem"}]}
+
+{mapping, "prometheus.ssl.port", "rabbitmq_prometheus.ssl_config.port",
+    [{datatype, integer}]}.
+{mapping, "prometheus.ssl.backlog", "rabbitmq_prometheus.ssl_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "prometheus.ssl.ip", "rabbitmq_prometheus.ssl_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "prometheus.ssl.certfile", "rabbitmq_prometheus.ssl_config.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "prometheus.ssl.keyfile", "rabbitmq_prometheus.ssl_config.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "prometheus.ssl.cacertfile", "rabbitmq_prometheus.ssl_config.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "prometheus.ssl.password", "rabbitmq_prometheus.ssl_config.password",
+    [{datatype, string}]}.
+
+{mapping, "prometheus.ssl.verify", "rabbitmq_prometheus.ssl_config.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "prometheus.ssl.fail_if_no_peer_cert", "rabbitmq_prometheus.ssl_config.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "prometheus.ssl.honor_cipher_order", "rabbitmq_prometheus.ssl_config.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "prometheus.ssl.honor_ecc_order", "rabbitmq_prometheus.ssl_config.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "prometheus.ssl.reuse_sessions", "rabbitmq_prometheus.ssl_config.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "prometheus.ssl.secure_renegotiate", "rabbitmq_prometheus.ssl_config.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "prometheus.ssl.client_renegotiation", "rabbitmq_prometheus.ssl_config.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "prometheus.ssl.depth", "rabbitmq_prometheus.ssl_config.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "prometheus.ssl.versions.$version", "rabbitmq_prometheus.ssl_config.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_prometheus.ssl_config.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("prometheus.ssl.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "prometheus.ssl.ciphers.$cipher", "rabbitmq_prometheus.ssl_config.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_prometheus.ssl_config.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("prometheus.ssl.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.
+
+{mapping, "prometheus.ssl.compress", "rabbitmq_prometheus.ssl_config.cowboy_opts.compress",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping, "prometheus.ssl.idle_timeout", "rabbitmq_prometheus.ssl_config.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.ssl.inactivity_timeout", "rabbitmq_prometheus.ssl_config.cowboy_opts.inactivity_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.ssl.request_timeout", "rabbitmq_prometheus.ssl_config.cowboy_opts.request_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.ssl.shutdown_timeout", "rabbitmq_prometheus.ssl_config.cowboy_opts.shutdown_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "prometheus.ssl.max_keepalive", "rabbitmq_prometheus.ssl_config.cowboy_opts.max_keepalive",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
