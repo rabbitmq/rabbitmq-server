@@ -1,0 +1,45 @@
+<html>
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+    <title>rabbitmqadmin</title>
+    <style>
+      body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+      h1 { font-size: 2em; }
+      code { background: #ffa; }
+    </style>
+  </head>
+  <body>
+    <h1>rabbitmqadmin</h1>
+
+    <p>
+      <code>rabbitmqadmin</code> is an HTTP API-based management tool. It uses the same API as RabbitMQ management UI
+      and provides access to the subset of the functionality in the UI from the command line.
+      It is not meant to be a replacement for <a href="https://www.rabbitmq.com/man/rabbitmqctl.1.man.html">rabbitmqctl</a>
+      as there are operations that HTTP API intentionally does not expose.
+    </p>
+
+    <p>
+      To use it, <a href="rabbitmqadmin">download it</a> from this node (right click,
+      Save As), make sure it is executable, and drop it in your <code>PATH</code>. Note that
+      many browsers will rename the
+      file <code>rabbitmqadmin.txt</code>. <code>rabbitmqadmin</code> requires Python
+      2.6 or later (both 2.x and 3.x series are supported).
+      To use <code>rabbitmqadmin</code> with HTTPS, Python 2.7.9 is the minimum supported version.
+    </p>
+
+    <p>
+      See <a href="https://www.rabbitmq.com/management-cli.html">the
+      rabbitmqadmin page on the website</a> for more information on
+      its use, or invoke <code>rabbitmqadmin --help</code> for usage
+      instructions.
+    </p>
+
+    <p>
+      Windows users will need to ensure Python is on
+      their <code>PATH</code>, and invoke rabbitmqadmin as <code>python.exe
+      rabbitmqadmin</code>.
+    </p>
+  </body>
+</html>

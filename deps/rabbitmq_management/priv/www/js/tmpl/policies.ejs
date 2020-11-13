@@ -1,0 +1,266 @@
+<h1>Policies</h1>
+<div class="section">
+  <h2>User policies</h2>
+  <div class="hider">
+<%= filter_ui(policies) %>
+  <div class="updatable">
+<% if (policies.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Name</th>
+    <th>Pattern</th>
+    <th>Apply to</th>
+    <th>Definition</th>
+    <th>Priority</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < policies.length; i++) {
+    var policy = policies[i];
+%>
+   <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+     <td><%= fmt_string(policy.vhost) %></td>
+<% } %>
+<% if (is_user_policymaker) { %>
+     <td><%= link_policy(policy.vhost, policy.name) %></td>
+<% } else { %>
+     <td><%= fmt_string(policy.name) %></td>
+<% } %>
+     <td><%= fmt_string(policy.pattern) %></td>
+     <td><%= fmt_string(policy['apply-to']) %></td>
+     <td><%= fmt_table_short(policy.definition) %></td>
+     <td><%= fmt_string(policy.priority) %></td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no policies ...</p>
+<% } %>
+  </div>
+  </div>
+</div>
+
+<% if (is_user_policymaker && vhosts.length > 0) { %>
+
+<div class="section-hidden">
+  <h2>Add / update a policy</h2>
+  <div class="hider">
+    <form action="#/policies" method="put">
+      <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Pattern:</label></th>
+          <td><input type="text" name="pattern"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Apply to:</label></th>
+          <td>
+            <select name="apply-to">
+              <option value="all">Exchanges and queues</option>
+              <option value="exchanges">Exchanges</option>
+              <option value="queues">Queues</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Priority:</label></th>
+          <td><input type="text" name="priority"/></td>
+        </tr>
+        <tr>
+          <th><label>Definition:</label></th>
+          <td>
+            <div class="multifield" id="definition"></div>
+            <table class="argument-links">
+              <tr>
+                <td>HA</td>
+                <td>
+                  <span class="argument-link" field="definition" key="ha-mode" type="string">HA mode</span> <span class="help" id="policy-ha-mode"></span> |
+                  <span class="argument-link" field="definition" key="ha-params" type="number">HA params</span> <span class="help" id="policy-ha-params"></span> |
+                  <span class="argument-link" field="definition" key="ha-sync-mode" type="string">HA sync mode</span> <span class="help" id="policy-ha-sync-mode"></span> |
+                  <span class="argument-link" field="definition" key="ha-promote-on-shutdown" type="string" value="">HA mirror promotion on shutdown</span> <span class="help" id="policy-ha-promote-on-shutdown"></span>
+                  <span class="argument-link" field="definition" key="ha-promote-on-failure" type="string" value="">HA mirror promotion on failure</span> <span class="help" id="policy-ha-promote-on-failure"></span>
+                </td>
+              </tr>
+              <tr>
+                <td>Federation</td>
+                <td>
+                  <span class="argument-link" field="definition" key="federation-upstream-set" type="string">Federation upstream set</span> <span class="help" id="policy-federation-upstream-set"></span> |
+                  <span class="argument-link" field="definition" key="federation-upstream" type="string">Federation upstream</span> <span class="help" id="policy-federation-upstream"></span>
+                </td>
+              </tr>
+              <tr>
+                <td>Queues</td>
+                <td>
+                  <span class="argument-link" field="definition" key="message-ttl" type="number">Message TTL</span> |
+                  <span class="argument-link" field="definition" key="expires" type="number">Auto expire</span> |
+                  <span class="argument-link" field="definition" key="max-length" type="number">Max length</span> |
+                  <span class="argument-link" field="definition" key="max-length-bytes" type="number">Max length bytes</span> |
+                  <span class="argument-link" field="definition" key="overflow" type="string">Overflow behaviour</span><br/>
+                  <span class="argument-link" field="definition" key="dead-letter-exchange" type="string">Dead letter exchange</span> |
+                  <span class="argument-link" field="definition" key="dead-letter-routing-key" type="string">Dead letter routing key</span><br />
+                  <span class="argument-link" field="definition" key="queue-mode" type="string" value="lazy">Lazy mode</span> |
+                  <span class="argument-link" field="definition" key="queue-master-locator" type="string">Master Locator</span>
+                </td>
+              </tr>
+              <tr>
+                <td>Exchanges</td>
+                <td>
+                  <span class="argument-link" field="definition" key="alternate-exchange" type="string">Alternate exchange</span>
+                  <span class="help" id="exchange-alternate"></span>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td class="t"><span class="mand">*</span></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add / update policy"/>
+    </form>
+  </div>
+</div>
+<% } %>
+
+
+<div class="section">
+  <h2>Operator policies</h2>
+  <div class="hider">
+<%= filter_ui(operator_policies) %>
+  <div class="updatable">
+<% if (operator_policies.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>Name</th>
+    <th>Pattern</th>
+    <th>Apply to</th>
+    <th>Definition</th>
+    <th>Priority</th>
+    <th class="administrator-only">Clear</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < operator_policies.length; i++) {
+    var policy = operator_policies[i];
+%>
+   <tr<%= alt_rows(i)%>>
+<% if (vhosts_interesting) { %>
+     <td><%= fmt_string(policy.vhost) %></td>
+<% } %>
+     <td><%= fmt_string(policy.name) %></td>
+     <td><%= fmt_string(policy.pattern) %></td>
+     <td><%= fmt_string(policy['apply-to']) %></td>
+     <td><%= fmt_table_short(policy.definition) %></td>
+     <td><%= fmt_string(policy.priority) %></td>
+     <td class="administrator-only">
+        <form action="#/operator_policies" method="delete" class="confirm">
+            <input type="hidden" name="name" value="<%= fmt_string(policy.name) %>"/>
+            <input type="hidden" name="vhost" value="<%= fmt_string(policy.vhost) %>"/>
+            <input type="submit" value="Clear"/>
+        </form>
+      </td>
+   </tr>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no policies ...</p>
+<% } %>
+  </div>
+  </div>
+</div>
+
+<% if (user_administrator && vhosts.length > 0) { %>
+
+<div class="section-hidden">
+  <h2>Add / update an operator policy</h2>
+  <div class="hider">
+    <form action="#/operator_policies" method="put">
+      <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Pattern:</label></th>
+          <td><input type="text" name="pattern"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Apply to:</label></th>
+          <td>
+            <select name="apply-to">
+              <option value="queues">Queues</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Priority:</label></th>
+          <td><input type="text" name="priority"/></td>
+        </tr>
+        <tr>
+          <th><label>Definition:</label></th>
+          <td>
+            <div class="multifield" id="definitionop"></div>
+            <table class="argument-links">
+              <tr>
+                <td>Queues</td>
+                <td>
+                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span> |
+                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span> |
+                  <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
+                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
+                  <span class="argument-link" field="definitionop" key="overflow" type="string">Overflow behaviour</span><br/>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td class="t"><span class="mand">*</span></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add / update operator policy"/>
+    </form>
+  </div>
+</div>
+<% } %>
+

@@ -1,0 +1,137 @@
+<h1>Virtual Hosts</h1>
+
+<div class="section">
+  <h2>All virtual hosts</h2>
+  <div class="hider">
+<%= filter_ui(vhosts) %>
+  <div class="updatable">
+<% if (vhosts.length > 0) { %>
+<table class="list">
+  <thead>
+  <tr>
+    <%= group_heading('vhosts', 'Overview', [true, true, true]) %>
+    <%= group_heading('vhosts', 'Messages', []) %>
+    <%= group_heading('vhosts', 'Network', []) %>
+<% if (rates_mode != 'none') { %>
+    <%= group_heading('vhosts', 'Message rates', []) %>
+<% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="vhosts">+/-</span></th>
+  </tr>
+    <tr>
+      <th><%= fmt_sort('Name', 'name') %></th>
+      <th>Users <span class="help" id="internal-users-only"></span></th>
+      <th>State</th>
+<% if (show_column('vhosts',           'cluster-state')) { %>
+      <th>Cluster state</th>
+<% } %>
+<% if (show_column('vhosts',           'msgs-ready')) { %>
+      <th><%= fmt_sort('Ready',        'messages_ready') %></th>
+<% } %>
+<% if (show_column('vhosts',           'msgs-unacked')) { %>
+      <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
+<% } %>
+<% if (show_column('vhosts',           'msgs-total')) { %>
+      <th><%= fmt_sort('Total',        'messages') %></th>
+<% } %>
+<% if (show_column('vhosts',           'from_client')) { %>
+      <th><%= fmt_sort('From client',  'recv_oct_details.rate') %></th>
+<% } %>
+<% if (show_column('vhosts',           'to_client')) { %>
+      <th><%= fmt_sort('To client',    'send_oct_details.rate') %></th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+  <% if (show_column('vhosts',         'rate-publish')) { %>
+      <th><%= fmt_sort('publish',     'message_stats.publish_details.rate') %></th>
+  <% } %>
+  <% if (show_column('vhosts',         'rate-deliver')) { %>
+      <th><%= fmt_sort('deliver / get','message_stats.deliver_get_details.rate') %></th>
+  <% } %>
+<% } %>
+    </tr>
+  </thead>
+  <tbody>
+    <%
+       for (var i = 0; i < vhosts.length; i++) {
+         var vhost = vhosts[i];
+    %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= link_vhost(vhost.name) %></td>
+         <td class="c"><%= fmt_permissions(vhost, permissions, 'vhost', 'user',
+                           '<p class="warning">No users</p>') %></td>
+         <td><%= fmt_vhost_state(vhost) %></td>
+<% if (show_column('vhosts', 'cluster-state')) { %>
+         <td>
+             <table>
+             <tbody>
+            <%
+            for (var node in vhost.cluster_state) {
+                var state = vhost.cluster_state[node];
+            %>
+            <tr>
+            <td><%= node %></td>
+            <td>
+            <%= state %>
+            <% if (state == "stopped"){ %>
+                <form action="#/restart_vhost" method="post" class="confirm">
+                    <input type="hidden" name="node" value="<%= node %>"/>
+                    <input type="hidden" name="vhost" value="<%= vhost.name %>"/>
+                    <input type="submit" value="Restart"/>
+                </form>
+            <% } %>
+            </td>
+            </tr>
+            <%
+            }
+            %>
+             </tbody>
+             </table>
+         </td>
+<% } %>
+<% if (show_column('vhosts', 'msgs-ready')) { %>
+   <td class="r"><%= fmt_num_thousands(vhost.messages_ready) %></td>
+<% } %>
+<% if (show_column('vhosts', 'msgs-unacked')) { %>
+   <td class="r"><%= fmt_num_thousands(vhost.messages_unacknowledged) %></td>
+<% } %>
+<% if (show_column('vhosts', 'msgs-total')) { %>
+   <td class="r"><%= fmt_num_thousands(vhost.messages) %></td>
+<% } %>
+<% if (show_column('vhosts', 'from_client')) { %>
+    <td><%= fmt_detail_rate_bytes(vhost, 'recv_oct') %></td>
+<% } %>
+<% if (show_column('vhosts', 'to_client')) { %>
+    <td><%= fmt_detail_rate_bytes(vhost, 'send_oct') %></td>
+<% } %>
+<% if (rates_mode != 'none') { %>
+  <% if (show_column('vhosts', 'rate-publish')) { %>
+    <td class="r"><%= fmt_detail_rate(vhost.message_stats, 'publish') %></td>
+  <% } %>
+  <% if (show_column('vhosts', 'rate-deliver')) { %>
+    <td class="r"><%= fmt_detail_rate(vhost.message_stats, 'deliver_get') %></td>
+  <% } %>
+<% } %>
+       </tr>
+    <% } %>
+  </tbody>
+</table>
+<% } else { %>
+  <p>... no vhosts ...</p>
+<% } %>
+  </div>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add a new virtual host</h2>
+  <div class="hider">
+    <form action="#/vhosts" method="put">
+      <table class="form">
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+      </table>
+      <input type="submit" value="Add virtual host"/>
+    </form>
+  </div>
+</div>

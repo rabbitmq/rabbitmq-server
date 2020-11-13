@@ -1,0 +1,398 @@
+<h1>Node <b><%= node.name %></b></h1>
+<div class="updatable">
+
+<% if (!node.running) { %>
+<p class="warning">Node not running</p>
+<% } else if (node.os_pid == undefined) { %>
+<p class="warning">Node statistics not available</p>
+<% } else { %>
+
+<div class="section">
+<h2>Overview</h2>
+<div class="hider">
+  <div class="box">
+  <table class="facts facts-l">
+    <tr>
+      <th>Uptime</th>
+      <td><%= fmt_uptime(node.uptime) %></td>
+    </tr>
+<% if (rabbit_versions_interesting) { %>
+    <tr>
+      <th>RabbitMQ Version</th>
+      <td><%= fmt_rabbit_version(node.applications) %></td>
+    </tr>
+<% } %>
+    <tr>
+      <th>Type</th>
+      <td>
+       <% if (node.type == 'disc') { %>
+         <abbr title="Broker definitions are held on disc.">Disc</abbr>
+       <% } else { %>
+         <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
+       <% } %>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        <a href="https://www.rabbitmq.com/configure.html" target="_blank">Config file</a>
+      </th>
+      <td>
+  <%
+     for (var i = 0; i < node.config_files.length; i++) {
+       var config = fmt_escape_html(node.config_files[i]);
+  %>
+        <code><%= config %></code>
+  <% } %>
+      </td>
+    </tr>
+    <tr>
+      <th>Database directory</th>
+      <td>
+        <code><%= node.db_dir %></code>
+      </td>
+    </tr>
+    <tr>
+      <th>
+<% if (node.log_files.length == 1) { %>
+        Log file
+<% } else { %>
+        Log files
+<% } %>
+      </th>
+      <td>
+      <pre style="margin-top: 0px; margin-bottom: 0px;"><%
+   for (var i = 0; i < node.log_files.length; i++) {
+     var config = fmt_escape_html(node.log_files[i]);
+%><%= config %>
+<% } %></pre>
+      </td>
+    </tr>
+  </table>
+  </div>
+</div>
+</div>
+
+<div class="section">
+<h2>Process statistics</h2>
+<div class="hider">
+  <%= node_stats_prefs() %>
+  <table class="facts">
+    <tr>
+      <th>
+        File descriptors <span class="help" id="file-descriptors"></span>
+      </th>
+      <td>
+<% if (node.fd_used != 'install_handle_from_sysinternals') { %>
+        <%= node_stat_count('fd_used', 'fd_total', node, FD_THRESHOLDS) %>
+<% } else { %>
+        <p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub><%= node.fd_total %> available</sub></p>
+
+<% } %>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Socket descriptors <span class="help" id="socket-descriptors"></span>
+      </th>
+      <td>
+        <%= node_stat_count('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Erlang processes
+      </th>
+     <td>
+        <%= node_stat_count('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
+     </td>
+    </tr>
+    <tr>
+      <th>
+        Memory <span class="help" id="memory-calculation-strategy"></span>
+      </th>
+      <td>
+<% if (node.mem_limit != 'memory_monitoring_disabled') { %>
+   <%= node_stat('mem_used', 'Used', 'mem_limit', 'high watermark', node,
+                 fmt_bytes, fmt_bytes_axis,
+                 node.mem_alarm ? 'red' : 'green',
+                 node.mem_alarm ? 'memory-alarm' : null) %>
+<% } else { %>
+   <%= fmt_bytes(node.mem_used) %>
+<% } %>
+      </td>
+    </tr>
+    <tr>
+      <th>
+        Disk space
+      </th>
+      <td>
+<% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
+   <%= node_stat('disk_free', 'Free', 'disk_free_limit', 'low watermark', node,
+                 fmt_bytes, fmt_bytes_axis,
+                 node.disk_free_alarm ? 'red' : 'green',
+                 node.disk_free_alarm ? 'disk_free-alarm' : null,
+                 true) %>
+<% } else { %>
+         (not available)
+<% } %>
+      </td>
+    </tr>
+  </table>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Persistence statistics</h2>
+<div class="hider">
+  <%= rates_chart_or_text('mnesia-stats-count', node,
+      [['RAM only', 'mnesia_ram_tx_count'],
+       ['Disk', 'mnesia_disk_tx_count']],
+      fmt_rate, fmt_rate_axis, true, 'Mnesia transactions', 'mnesia-transactions') %>
+
+  <%= rates_chart_or_text('persister-msg-stats-count', node,
+      [['QI Journal', 'queue_index_journal_write_count'],
+       ['Store Read', 'msg_store_read_count'],
+       ['Store Write', 'msg_store_write_count']],
+      fmt_rate, fmt_rate_axis, true, 'Persistence operations (messages)', 'persister-operations-msg') %>
+
+  <%= rates_chart_or_text('persister-bulk-stats-count', node,
+      [['QI Read', 'queue_index_read_count'],
+       ['QI Write', 'queue_index_write_count']],
+      fmt_rate, fmt_rate_axis, true, 'Persistence operations (bulk)', 'persister-operations-bulk') %>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>I/O statistics</h2>
+<div class="hider">
+  <%= rates_chart_or_text('persister-io-stats-count', node,
+      [['Read', 'io_read_count'],
+       ['Write', 'io_write_count'],
+       ['Seek', 'io_seek_count'],
+       ['Sync', 'io_sync_count'],
+       ['File handle reopen', 'io_reopen_count'],
+       ['File handle open attempt', 'io_file_handle_open_attempt_count']],
+      fmt_rate, fmt_rate_axis, true, 'I/O operations', 'io-operations') %>
+
+  <%= rates_chart_or_text('persister-io-stats-bytes', node,
+      [['Read', 'io_read_bytes'],
+       ['Write', 'io_write_bytes']],
+      fmt_rate_bytes, fmt_rate_bytes_axis, true, 'I/O data rates') %>
+
+  <%= rates_chart_or_text('persister-io-stats-time', node,
+      [['Read', 'io_read_avg_time'],
+       ['Write', 'io_write_avg_time'],
+       ['Seek', 'io_seek_avg_time'],
+       ['Sync', 'io_sync_avg_time'],
+       ['File handle open attempt', 'io_file_handle_open_attempt_avg_time']],
+      fmt_ms, fmt_ms, false, 'I/O average time per operation') %>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Churn statistics</h2>
+<div class="hider">
+  <%= rates_chart_or_text('connection-churn', node,
+      [['Created', 'connection_created'],
+       ['Closed', 'connection_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Connection operations', 'connection-operations') %>
+
+  <%= rates_chart_or_text('channel-churn', node,
+      [['Created', 'channel_created'],
+       ['Closed', 'channel_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Channel operations', 'channel-operations') %>
+
+  <%= rates_chart_or_text('queue-churn', node,
+      [['Declared', 'queue_declared'],
+       ['Created', 'queue_created'],
+       ['Deleted', 'queue_deleted']],
+      fmt_rate, fmt_rate_axis, true, 'Queue operations', 'queue-operations') %>
+
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Cluster links</h2>
+<div class="hider">
+<% if (node.cluster_links.length > 0) { %>
+<table class="list">
+  <tr>
+    <th>Remote node</th>
+    <th>Local address</th>
+    <th>Local port</th>
+    <th>Remote address</th>
+    <th>Remote port</th>
+    <th class="plain">
+      <%= chart_h3('cluster-link-data-rates', 'Data rates') %>
+    </th>
+  </tr>
+  <%
+   for (var i = 0; i < node.cluster_links.length; i++) {
+     var link = node.cluster_links[i];
+  %>
+   <tr<%= alt_rows(i)%>>
+     <td><%= link_node(link.name) %></td>
+     <td><%= fmt_string(link.sock_addr) %></td>
+     <td><%= fmt_string(link.sock_port) %></td>
+     <td><%= fmt_string(link.peer_addr) %></td>
+     <td><%= fmt_string(link.peer_port) %></td>
+     <td class="plain">
+       <%= rates_chart_or_text_no_heading(
+           'cluster-link-data-rates', 'cluster-link-data-rates' + link.name,
+           link.stats,
+           [['Recv', 'recv_bytes'],
+            ['Send', 'send_bytes']],
+           fmt_rate_bytes, fmt_rate_bytes_axis, true) %>
+     </td>
+   </tr>
+<% } %>
+</table>
+<% } else { %>
+  <p>... no cluster links ...</p>
+<% } %>
+</div>
+</div>
+
+<% } %>
+
+</div>
+
+<!--
+  The next two need to be non-updatable or we will wipe the memory details
+  as soon as we have drawn it.
+ -->
+
+<% if (node.running && node.os_pid != undefined) { %>
+
+<div class="section">
+<h2>Memory details</h2>
+<div class="hider">
+  <div id="memory-details"></div>
+  <button class="update-manual memory-button" for="memory-details" query="memory">Update</button>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Binary references</h2>
+<div class="hider">
+  <p>
+    <b>Warning:</b> Calculating binary memory use can be expensive if
+    there are many small binaries in the system.
+  </p>
+  <div id="binary-details"></div>
+  <button class="update-manual memory-button" for="binary-details" query="binary">Update</button>
+</div>
+</div>
+
+<% } %>
+
+<div class="updatable">
+<% if (node.running && node.os_pid != undefined) { %>
+
+<div class="section-hidden">
+<h2>Advanced</h2>
+<div class="hider">
+  <div class="box">
+  <h3>VM</h3>
+  <table class="facts">
+    <tr>
+      <th>OS pid</th>
+      <td><%= node.os_pid %></td>
+    </tr>
+    <tr>
+      <th>Rates mode</th>
+      <td><%= node.rates_mode %></td>
+    </tr>
+    <tr>
+      <th>Net ticktime</th>
+      <td><%= node.net_ticktime %>s</td>
+    </tr>
+  </table>
+
+  <table class="facts">
+    <tr>
+      <th>Run queue</th>
+      <td><%= node.run_queue %></td>
+    </tr>
+    <tr>
+      <th>Processors</th>
+      <td><%= node.processors %></td>
+    </tr>
+  </table>
+  </div>
+
+  <%= rates_chart_or_text('advanced-gc-stats-count', node,
+      [['GC', 'gc_num']],
+      fmt_rate, fmt_rate_axis, true, 'GC operations', 'gc-operations') %>
+
+  <%= rates_chart_or_text('advanced-gc-bytes-stats-count', node,
+      [['GC bytes reclaimed', 'gc_bytes_reclaimed']],
+      fmt_rate, fmt_rate_axis, true, 'GC bytes reclaimed', 'gc-bytes') %>
+
+  <%= rates_chart_or_text('advanced-context-switches-stats-count', node,
+      [['Context switches', 'context_switches']],
+      fmt_rate, fmt_rate_axis, true, 'Context switch operations', 'context-switches-operations') %>
+
+<div class="box">
+  <h3>Management GC queue length</h3>
+  <table class="facts">
+    <% for(var k in node.metrics_gc_queue_length) { 
+         if(node.metrics_gc_queue_length.hasOwnProperty(k)) { %>
+    <tr>
+      <th><%= k %></th>
+      <td><%= node.metrics_gc_queue_length[k] %></td>
+    </tr>
+    <% } } %>
+  </table>
+</div>
+
+<h3>Plugins <span class="help" id="plugins"></span></h3>
+<table class="list">
+  <tr>
+    <th>Name</th>
+    <th>Version</th>
+    <th>Description</th>
+  </tr>
+  <%
+     var plugins = get_plugins_list(node);
+     for (var j = 0; j < plugins.length; j++) {
+       var application = plugins[j];
+  %>
+         <tr<%= alt_rows(j)%>>
+           <td><%= application.name %></td>
+           <td><%= application.version %></td>
+           <td><%= application.description %></td>
+         </tr>
+  <% } %>
+</table>
+
+<h3>All applications</h3>
+<table class="list">
+    <tr>
+      <th>Name</th>
+      <th>Version</th>
+      <th>Description</th>
+    </tr>
+    <%
+      for (var j = 0; j < node.applications.length; j++) {
+        var application = node.applications[j];
+    %>
+       <tr<%= alt_rows(j)%>>
+         <td><%= application.name %></td>
+         <td><%= application.version %></td>
+         <td><%= application.description %></td>
+       </tr>
+    <% } %>
+</table>
+
+<h3>Exchange types</h3>
+<%= format('registry', {'list': node.exchange_types, 'node': node, 'show_enabled': false} ) %>
+<h3>Authentication mechanisms</h3>
+<%= format('registry', {'list': node.auth_mechanisms, 'node': node, 'show_enabled': true} ) %>
+
+</div>
+</div>
+
+<% } %>
+
+</div>

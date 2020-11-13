@@ -1,0 +1,7 @@
+<h1>Channels</h1>
+<div class="section">
+ <%= paginate_ui(channels, 'channels') %>
+</div> 
+<div class="updatable">
+  <%= format('channels-list', {'channels': channels.items, 'mode': 'standalone'}) %>
+</div>

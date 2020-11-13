@@ -1,0 +1,370 @@
+<h1>Queue <b><%= fmt_string(highlight_extra_whitespace(queue.name)) %></b><%= fmt_maybe_vhost(queue.vhost) %></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider updatable">
+    <%= queue_lengths('lengths-q', queue) %>
+<% if (rates_mode != 'none') { %>
+    <%= message_rates('msg-rates-q', queue.message_stats) %>
+<% } %>
+
+    <h3>Details</h3>
+    <table class="facts facts-l">
+      <tr>
+        <th>Features</th>
+        <td><%= fmt_features(queue) %></td>
+      </tr>
+      <tr>
+        <th>Policy</th>
+        <td><%= link_policy(queue.vhost, queue.policy) %></td>
+      </tr>
+      <tr>
+        <th>Operator policy</th>
+        <td><%= fmt_string(queue.operator_policy, '') %></td>
+      </tr>
+      <% if (queue.owner_pid_details != undefined) { %>
+        <tr>
+          <th>Exclusive owner</th>
+          <td><%= link_conn(queue.owner_pid_details.name) %></td>
+        </tr>
+      <% } %>
+      <tr>
+        <th>Effective policy definition</th>
+        <td><%= fmt_table_short(queue.effective_policy_definition) %></td>
+      </tr>
+<% if (nodes_interesting) { %>
+      <tr>
+        <th>Node</th>
+        <td><%= fmt_node(queue.node) %></td>
+      </tr>
+  <% if (!queue.exclusive) { %>
+      <tr>
+        <th>Mirrors</th>
+        <td>
+          <%
+             var has_unsynced_node = false;
+             for (var i in queue.slave_nodes) {
+               var node = queue.slave_nodes[i];
+          %>
+            <%
+               if (jQuery.inArray(node, queue.synchronised_slave_nodes) == -1) {
+                 has_unsynced_node = true;
+            %>
+             <%= fmt_node(node) %> <b>(unsynchronised)</b>
+            <% } else { %>
+             <%= fmt_node(node) %>
+            <% } %>
+            <br/>
+          <% } %>
+          <% if (queue.state == 'syncing') { %>
+          <table>
+            <tr>
+              <td>
+                <%= fmt_sync_state(queue) %>
+              </td>
+              <td>
+                <form action="#/queues/actions" method="post">
+                  <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+                  <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+                  <input type="hidden" name="action" value="cancel_sync"/>
+                  <input type="submit" value="Cancel" id="action-button" />
+                </form>
+              </td>
+            </tr>
+          </table>
+          <% } else if (has_unsynced_node) { %>
+          <form action="#/queues/actions" method="post">
+            <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+            <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+            <input type="hidden" name="action" value="sync"/>
+            <input type="submit" value="Synchronise" id="action-button" />
+          </form>
+          <% } %>
+        </td>
+      </tr>
+  <% } %>
+<% } %>
+    </table>
+
+    <table class="facts facts-l">
+      <tr>
+        <th>State</th>
+        <td><%= fmt_object_state(queue) %></td>
+      </tr>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <tr>
+        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
+        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
+      </tr>
+    </table>
+
+    <table class="facts">
+      <tr>
+        <td></td>
+        <th class="horizontal">Total</th>
+        <th class="horizontal">Ready</th>
+        <th class="horizontal">Unacked</th>
+        <th class="horizontal">In memory</th>
+        <th class="horizontal">Persistent</th>
+        <th class="horizontal">Transient, Paged Out</th>
+      </tr>
+      <tr>
+        <th>
+          Messages
+          <span class="help" id="queue-messages"></span>
+        </th>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_unacknowledged) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ram) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_persistent) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_paged_out) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Message body bytes
+          <span class="help" id="queue-message-body-bytes"></span>
+        </th>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ready) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ram) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_persistent) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_paged_out) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Process memory
+          <span class="help" id="queue-process-memory"></span>
+        </th>
+        <td class="r"><%= fmt_bytes(queue.memory) %></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<% if (rates_mode == 'detailed') { %>
+<div class="section-hidden">
+<h2>Message rates breakdown</h2>
+<div class="hider updatable">
+<table class="two-col-layout">
+  <tr>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'queue',
+                  'object': queue.incoming,
+                  'label':  'Incoming'}) %>
+
+    </td>
+    <td>
+      <%= format('msg-detail-deliveries',
+                 {'mode':   'queue',
+                  'object': queue.deliveries}) %>
+    </td>
+  </tr>
+</table>
+</div>
+</div>
+<% } %>
+
+<div class="section-hidden">
+  <h2>Consumers</h2>
+  <div class="hider updatable">
+<%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Bindings</h2>
+  <div class="hider">
+    <div class="bindings-wrapper">
+      <%= format('bindings', {'mode': 'queue', 'bindings': bindings}) %>
+      <p class="arrow">&dArr;</p>
+      <p><span class="queue">This queue</span></p>
+
+      <%= format('add-binding', {'mode': 'queue', 'parent': queue}) %>
+    </div>
+  </div>
+</div>
+
+<%= format('publish', {'mode': 'queue', 'queue': queue}) %>
+
+<div class="section-hidden">
+  <h2>Get messages</h2>
+  <div class="hider">
+    <p>
+      Warning: getting messages from a queue is a destructive action.
+      <span class="help" id="message-get-requeue"></span>
+    </p>
+    <form action="#/queues/get" method="post">
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+      <input type="hidden" name="truncate" value="50000"/>
+      <table class="form">
+        <tr>
+          <th><label>Ack Mode:</label></th>
+          <td>
+            <select name="ackmode">
+                <option value="ack_requeue_true" selected>Nack message requeue true</option>
+                <option value="ack_requeue_false">Ack message requeue false</option>
+                <option value="reject_requeue_true">Reject requeue true</option>
+                <option value="reject_requeue_false">Reject requeue false</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Encoding:</label></th>
+          <td>
+            <select name="encoding">
+              <option value="auto">Auto string / base64</option>
+              <option value="base64">base64</option>
+            </select>
+            <span class="help" id="string-base64"></span>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Messages:</label></th>
+          <td><input type="text" name="count" value="1"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Get Message(s)" />
+    </form>
+    <div id="msg-wrapper"></div>
+  </div>
+</div>
+
+<% if (is_user_policymaker) { %>
+<div class="section-hidden">
+  <h2>Move messages</h2>
+  <div class="hider">
+  <% if (NAVIGATION['Admin'][0]['Shovel Management'] == undefined) { %>
+    <p>To move messages, the shovel plugin must be enabled, try:</p>
+    <pre>$ rabbitmq-plugins enable rabbitmq_shovel rabbitmq_shovel_management</pre>
+  <% } else { %>
+    <p>
+      The shovel plugin can be used to move messages from this queue
+      to another one. The form below will create a temporary shovel to
+      move messages to another queue on the same virtual host, with
+      default settings.
+    </p>
+    <p>
+      For more options <a href="#/dynamic-shovels">see the shovel
+      interface</a>.
+    </p>
+    <form action="#/shovel-parameters-move-messages" method="put">
+      <input type="hidden" name="component" value="shovel"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="Move from <%= fmt_string(queue.name) %>"/>
+      <input type="hidden" name="src-uri" value="amqp:///<%= esc(queue.vhost) %>"/>
+      <input type="hidden" name="src-queue" value="<%= fmt_string(queue.name) %>"/>
+      <input type="hidden" name="src-protocol" value="amqp091"/>
+      <input type="hidden" name="src-prefetch-count" value="1000"/>
+      <input type="hidden" name="src-delete-after" value="queue-length"/>
+      <input type="hidden" name="dest-protocol" value="amqp091"/>
+      <input type="hidden" name="dest-uri" value="amqp:///<%= esc(queue.vhost) %>"/>
+      <input type="hidden" name="dest-add-forward-headers" value="false"/>
+      <input type="hidden" name="ack-mode" value="on-confirm"/>
+      <input type="hidden" name="redirect" value="#/queues"/>
+
+      <table class="form">
+        <tr>
+          <th>Destination queue:</th>
+          <td><input type="text" name="dest-queue"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Move messages"/>
+    </form>
+  <% } %>
+  </div>
+</div>
+<% } %>
+
+<div class="section-hidden">
+  <h2>Delete</h2>
+  <div class="hider">
+    <form action="#/queues" method="delete" class="confirm-queue inline-form">
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+      <input type="hidden" name="mode" value="delete"/>
+      <input type="submit" value="Delete Queue" />
+    </form>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Purge</h2>
+  <div class="hider">
+    <form action="#/queues" method="delete" class="confirm-purge-queue inline-form">
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
+      <input type="hidden" name="mode" value="purge"/>
+      <input type="submit" value="Purge Messages" />
+    </form>
+  </div>
+</div>
+
+<% if(queue.reductions || queue.garbage_collection) { %>
+<div class="section-hidden">
+<h2>Runtime Metrics (Advanced)</h2>
+ <div class="hider updatable">
+ <%= data_reductions('reductions-rates-queue', queue) %>
+ <table class="facts">
+    <% if (queue.garbage_collection.min_bin_vheap_size) { %>
+        <tr>
+        <th>Minimum binary virtual heap size in words (min_bin_vheap_size)</th>
+        <td><%= queue.garbage_collection.min_bin_vheap_size %></td>
+        </tr>
+    <% } %>
+
+    <% if (queue.garbage_collection.min_heap_size) { %>
+        <tr>
+        <th>Minimum heap size in words (min_heap_size)</th>
+        <td><%= queue.garbage_collection.min_heap_size %></td>
+        </tr>
+    <% } %>
+
+    <% if (queue.garbage_collection.fullsweep_after) { %>
+        <tr>
+        <th>Maximum generational collections before fullsweep (fullsweep_after)</th>
+        <td><%= queue.garbage_collection.fullsweep_after %></td>
+        </tr>
+    <% } %>
+
+    <% if (queue.garbage_collection.minor_gcs) { %>
+        <tr>
+        <th>Number of minor GCs (minor_gcs)</th>
+        <td><%= queue.garbage_collection.minor_gcs %></td>
+        </tr>
+    <% } %>
+ </table>
+ </div>
+</div>
+
+<% } %>

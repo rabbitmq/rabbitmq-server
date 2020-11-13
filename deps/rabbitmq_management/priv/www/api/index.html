@@ -1,0 +1,1916 @@
+<html>
+  <head>
+    <title>RabbitMQ Management HTTP API</title>
+    <style>
+      body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+      td, th { font: 12px Verdana,sans-serif; color: #444; }
+      h1 { font-size: 2em; }
+      h2 { font-size: 1.5em; }
+      td.path { font-family: monospace; }
+      th { font-size 1em; font-weight: bold; }
+      table { border-collapse: collapse; }
+      table th, table td { vertical-align: top; border: 1px solid #bbb; padding: 5px; }
+      code { background: #ffa; }
+      pre { background: black; color: #0f0; padding: 10px; word-wrap: break-word;}
+      table pre { background: #ffa; color: black; }
+    </style>
+  </head>
+  <body>
+    <h1>RabbitMQ Management HTTP API</h1>
+
+    <h2>Introduction</h2>
+
+    <p>Apart from this help page, all URIs will serve only resources
+    of type <code>application/json</code>, and will require HTTP basic
+    authentication (using the standard RabbitMQ user database). The
+    default user is guest/guest.</p>
+
+    <p>Many URIs require the name of a virtual host as part of the
+    path, since names only uniquely identify objects within a virtual
+    host. As the default virtual host is called "<code>/</code>", this
+    will need to be encoded as "<code>%2F</code>".</p>
+
+    <p>PUTing a resource creates it. The JSON object you upload must
+    have certain mandatory keys (documented below) and may have
+    optional keys. Other keys are ignored. Missing mandatory keys
+    constitute an error.</p>
+
+    <p>Since bindings do not have names or IDs in AMQP we synthesise
+    one based on all its properties. Since predicting this name is
+    hard in the general case, you can also create bindings by POSTing
+    to a factory URI. See the example below.</p>
+
+    <p>Many URIs return lists. Such URIs can have the query string
+    parameters <code>sort</code> and <code>sort_reverse</code>
+    added. <code>sort</code> allows you to select a primary field to
+    sort by, and <code>sort_reverse</code> will reverse the sort order
+    if set to <code>true</code>. The <code>sort</code> parameter can
+    contain subfields separated by dots. This allows you to sort by a
+    nested component of the listed items; it does not allow you to
+    sort by more than one field. See the example below.</p>
+
+    <p>You can also restrict what information is returned per item
+    with the <code>columns</code> parameter. This is a comma-separated
+    list of subfields separated by dots. See the example below.</p>
+
+    <p>Most of the GET queries return many fields per
+    object. The second part of this guide covers those.</p>
+
+    <h2>Examples</h2>
+
+    <p>A few quick examples for Windows and Unix, using the command line
+    tool <code>curl</code>:</p>
+
+    <ul>
+      <li>
+        Get a list of vhosts:
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest http://localhost:15672/api/vhosts
+
+# Unix
+$ curl -i -u guest:guest http://localhost:15672/api/vhosts
+
+HTTP/1.1 200 OK
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:00:02 GMT
+Content-Type: application/json
+Content-Length: 30
+
+[{"name":"/","tracing":false}]
+</pre>
+      </li>
+      <li>
+        Get a list of channels, fast publishers first, restricting the info
+        items we get back:
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest "http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate"
+
+# Unix
+$ curl -i -u guest:guest 'http://localhost:15672/api/channels?sort=message_stats.publish_details.rate&amp;sort_reverse=true&amp;columns=name,message_stats.publish_details.rate,message_stats.deliver_get_details.rate'
+
+HTTP/1.1 200 OK
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:01:17 GMT
+Content-Type: application/json
+Content-Length: 219
+Cache-Control: no-cache
+
+[{"message_stats":{"publish_details":{"rate" <i>... (remainder elided)</i></pre>
+      </li>
+      <li>
+        Create a new vhost:
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
+      -XPUT http://localhost:15672/api/vhosts/foo
+
+# Unix
+$ curl -i -u guest:guest -H "content-type:application/json" \
+   -XPUT http://localhost:15672/api/vhosts/foo
+
+HTTP/1.1 204 No Content
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:03:00 GMT
+Content-Type: application/json
+Content-Length: 0</pre>
+        <p>Note: you must specify <code>application/json</code> as the
+        mime type.</p>
+        <p>Note: the name of the object is not needed in the JSON
+          object uploaded, since it is in the URI. As a virtual host
+          has no properties apart from its name, this means you do not
+          need to specify a body at all!</p>
+      </li>
+      <li>
+        Create a new exchange in the default virtual host:
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
+       -XPUT -d"{""type"":""direct"",""durable"":true}" ^
+       http://localhost:15672/api/exchanges/%2F/my-new-exchange
+
+# Unix
+$ curl -i -u guest:guest -H "content-type:application/json" \
+    -XPUT -d'{"type":"direct","durable":true}' \
+    http://localhost:15672/api/exchanges/%2F/my-new-exchange
+
+HTTP/1.1 204 No Content
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:04:00 GMT
+Content-Type: application/json
+Content-Length: 0</pre>
+        <p>Note: we never return a body in response to a PUT or
+        DELETE, unless it fails.</p>
+      </li>
+      <li>
+        And delete it again:
+<pre>:: Windows
+C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
+       -XDELETE http://localhost:15672/api/exchanges/%2F/my-new-exchange
+
+# Unix
+$ curl -i -u guest:guest -H "content-type:application/json" \
+    -XDELETE http://localhost:15672/api/exchanges/%2F/my-new-exchange
+
+HTTP/1.1 204 No Content
+Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
+Date: Mon, 16 Sep 2013 12:05:30 GMT
+Content-Type: application/json
+Content-Length: 0</pre>
+      </li>
+    </ul>
+
+    <h2>Reference</h2>
+
+    <table>
+      <tr>
+        <th>GET</th>
+        <th>PUT</th>
+        <th>DELETE</th>
+        <th>POST</th>
+        <th>Path</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/overview</td>
+        <td>Various random bits of information that describe the whole
+        system.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/cluster-name</td>
+        <td>Name identifying this RabbitMQ cluster.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/nodes</td>
+        <td>A list of nodes in the RabbitMQ cluster.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/nodes/<i>name</i></td>
+        <td>
+          An individual node in the RabbitMQ cluster. Add
+          "?memory=true" to get memory statistics, and "?binary=true"
+          to get a breakdown of binary memory use (may be expensive if
+          there are many small binaries in the system).
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/extensions</td>
+        <td>A list of extensions to the management plugin.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/definitions<br/>
+                         /api/all-configuration <em>(deprecated)</em>
+        </td>
+        <td>
+          The server definitions - exchanges, queues, bindings, users,
+          virtual hosts, permissions, topic permissions, and parameters. Everything apart from
+          messages. POST to upload an existing set of definitions. Note
+          that:
+          <ul>
+            <li>
+              The definitions are merged. Anything already existing on
+              the server but not in the uploaded definitions is
+              untouched.
+            </li>
+            <li>
+              Conflicting definitions on immutable objects (exchanges,
+              queues and bindings) will cause an error.
+            </li>
+            <li>
+              Conflicting definitions on mutable objects will cause
+              the object in the server to be overwritten with the
+              object from the definitions.
+            </li>
+            <li>
+              In the event of an error you will be left with a
+              part-applied set of definitions.
+            </li>
+          </ul>
+          For convenience you may upload a file from a browser to this
+          URI (i.e. you can use <code>multipart/form-data</code> as
+          well as <code>application/json</code>) in which case the
+          definitions should be uploaded as a form field named
+          "file".
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/definitions/<i>vhost</i><br/>
+        </td>
+        <td>
+          The server definitions for a given virtual host -
+          exchanges, queues, bindings and policies.
+          POST to upload an existing set of definitions. Note that:
+          <ul>
+            <li>
+              The definitions are merged. Anything already existing on
+              the server but not in the uploaded definitions is
+              untouched.
+            </li>
+            <li>
+              Conflicting definitions on immutable objects (exchanges,
+              queues and bindings) will cause an error.
+            </li>
+            <li>
+              Conflicting definitions on mutable objects will cause
+              the object in the server to be overwritten with the
+              object from the definitions.
+            </li>
+            <li>
+              In the event of an error you will be left with a
+              part-applied set of definitions.
+            </li>
+          </ul>
+          For convenience you may upload a file from a browser to this
+          URI (i.e. you can use <code>multipart/form-data</code> as
+          well as <code>application/json</code>) in which case the
+          definitions should be uploaded as a form field named
+          "file".
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/connections</td>
+        <td>A list of all open connections.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhosts/<i>vhost</i>/connections</td>
+        <td>A list of all open connections in a specific vhost.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/connections/<i>name</i></td>
+        <td>
+          An individual connection. DELETEing it will close the
+          connection. Optionally set the "X-Reason" header when
+          DELETEing to provide a reason.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/connections/<i>name</i>/channels</td>
+        <td>
+          List of all channels for a given connection.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/channels</td>
+        <td>A list of all open channels.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhosts/<i>vhost</i>/channels</td>
+        <td>A list of all open channels in a specific vhost.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/channels/<i>channel</i></td>
+        <td>Details about an individual channel.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/consumers</td>
+        <td>A list of all consumers.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/consumers/<i>vhost</i></td>
+        <td>A list of all consumers in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/exchanges</td>
+        <td>A list of all exchanges.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/exchanges/<i>vhost</i></td>
+        <td>A list of all exchanges in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i></td>
+        <td>
+          An individual exchange. To PUT an exchange, you will need a body looking something like this:
+          <pre>{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":{}}</pre>
+          The <code>type</code> key is mandatory; other keys are optional.
+          <p>
+            When DELETEing an exchange you can add the query string
+            parameter <code>if-unused=true</code>. This prevents the
+            delete from succeeding if the exchange is bound to a queue
+            or as a source to another exchange.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i>/bindings/source</td>
+        <td>A list of all bindings in which a given exchange is the source.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i>/bindings/destination</td>
+        <td>A list of all bindings in which a given exchange is the destination.</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i>/publish</td>
+        <td>
+          Publish a message to a given exchange. You will need a body
+          looking something like:
+          <pre>{"properties":{},"routing_key":"my key","payload":"my body","payload_encoding":"string"}</pre>
+          All keys are mandatory. The <code>payload_encoding</code>
+          key should be either "string" (in which case the payload
+          will be taken to be the UTF-8 encoding of the payload field)
+          or "base64" (in which case the payload field is taken to be
+          base64 encoded).<br/>
+          If the message is published successfully, the response will
+          look like:
+          <pre>{"routed": true}</pre>
+          <code>routed</code> will be true if the message was sent to
+          at least one queue.
+          <p>
+            Please note that the HTTP API is not ideal for high
+            performance publishing; the need to create a new TCP
+            connection for each message published can limit message
+            throughput compared to AMQP or other protocols using
+            long-lived connections.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/queues</td>
+        <td>A list of all queues.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/queues/<i>vhost</i></td>
+        <td>A list of all queues in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i></td>
+        <td>
+          An individual queue. To PUT a queue, you will need a body looking something like this:
+          <pre>{"auto_delete":false,"durable":true,"arguments":{},"node":"rabbit@smacmullen"}</pre>
+          All keys are optional.
+          <p>
+            When DELETEing a queue you can add the query string
+            parameters <code>if-empty=true</code> and /
+            or <code>if-unused=true</code>. These prevent the delete
+            from succeeding if the queue contains messages, or has
+            consumers, respectively.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/bindings</td>
+        <td>A list of all bindings on a given queue.</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/contents</td>
+        <td>Contents of a queue. DELETE to purge. Note you can't GET this.</td>
+      </tr>
+
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/actions</td>
+        <td>
+          Actions that can be taken on a queue. POST a body like:
+          <pre>{"action":"sync"}</pre> Currently the actions which are
+          supported are <code>sync</code> and <code>cancel_sync</code>.
+        </td>
+      </tr>
+
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/get</td>
+        <td>
+          Get messages from a queue. (This is not an HTTP GET as it
+          will alter the state of the queue.) You should post a body looking like:
+          <pre>{"count":5,"ackmode":"ack_requeue_true","encoding":"auto","truncate":50000}</pre>
+          <ul>
+            <li><code>count</code> controls the maximum number of
+            messages to get. You may get fewer messages than this if
+            the queue cannot immediately provide them.</li>
+            <li><code>ackmode</code> determines whether the messages will be
+            removed from the queue. If ackmode is ack_requeue_true or reject_requeue_true they will be requeued -
+            if ackmode is ack_requeue_false or reject_requeue_false they will be removed.
+            <li><code>encoding</code> must be either "auto" (in which case the
+            payload will be returned as a string if it is valid UTF-8, and
+            base64 encoded otherwise), or "base64" (in which case the payload
+            will always be base64 encoded).</li>
+            <li>If <code>truncate</code> is present it will truncate the
+            message payload if it is larger than the size given (in bytes).</li>
+          </ul>
+          <p><code>truncate</code> is optional; all other keys are mandatory.</p>
+          <p>
+            Please note that the get path in the HTTP API is intended
+            for diagnostics etc - it does not implement reliable
+            delivery and so should be treated as a sysadmin's tool
+            rather than a general API for messaging.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/bindings</td>
+        <td>A list of all bindings.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/bindings/<i>vhost</i></td>
+        <td>A list of all bindings in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/bindings/<i>vhost</i>/e/<i>exchange</i>/q/<i>queue</i></td>
+        <td>
+          <p>
+            A list of all bindings between an exchange and a
+            queue. Remember, an exchange and a queue can be bound
+            together many times!
+            </p>
+          <p>
+            To create a new binding, POST to this
+            URI. Request body should be a JSON object optionally containing
+            two fields, <code>routing_key</code> (a string) and <code>arguments</code> (a map of optional arguments):
+            <pre>{"routing_key":"my_routing_key", "arguments":{"x-arg": "value"}}</pre>
+            All keys are optional.
+            The response will contain a <code>Location</code> header
+            telling you the URI of your new binding.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/bindings/<i>vhost</i>/e/<i>exchange</i>/q/<i>queue</i>/<i>props</i></td>
+        <td>An individual binding between an exchange and a queue.
+        The <i>props</i> part of the URI is a "name" for the binding
+        composed of its routing key and a hash of its
+        arguments. <i>props</i> is the field named "properties_key"
+        from a bindings listing response.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/bindings/<i>vhost</i>/e/<i>source</i>/e/<i>destination</i></td>
+        <td>
+          <p>
+          A list of all bindings between two exchanges, similar to
+          the list of all bindings between an exchange and a queue,
+          above.
+          </p>
+          <p>
+          <p>
+            To create a new binding, POST to this
+            URI. Request body should be a JSON object optionally containing
+            two fields, <code>routing_key</code> (a string) and <code>arguments</code> (a map of optional arguments):
+            <pre>{"routing_key":"my_routing_key", "arguments":{"x-arg": "value"}}</pre>
+            All keys are optional.
+            The response will contain a <code>Location</code> header
+            telling you the URI of your new binding.
+          </p>
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/bindings/<i>vhost</i>/e/<i>source</i>/e/<i>destination</i>/<i>props</i></td>
+        <td>
+          An individual binding between two exchanges. Similar to
+          the individual binding between an exchange and a queue,
+          above.
+        </tD>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhosts</td>
+        <td>A list of all vhosts.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/vhosts/<i>name</i></td>
+        <td>An individual virtual host. As a virtual host usually only
+        has a name, you do not need an HTTP body when PUTing one of
+        these. To enable / disable tracing, provide a body looking like:
+          <pre>{"tracing":true}</pre></td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhosts/<i>name</i>/permissions</td>
+        <td>A list of all permissions for a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhosts/<i>name</i>/topic-permissions</td>
+        <td>A list of all topic permissions for a given virtual host.</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/vhosts/<i>name</i>/start/<i>node</i></td>
+        <td>Starts virtual host <i>name</i> on node <i>node</i>.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/users/</td>
+        <td>A list of all users.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/users/without-permissions</td>
+        <td>A list of users that do not have access to any virtual host.</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>X</td>
+        <td class="path">/api/users/bulk-delete</td>
+        <td>Bulk deletes a list of users. Request body must contain the list:
+        <pre>{"users" : ["user1", "user2", "user3"]}</pre></td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/users/<i>name</i></td>
+        <td>An individual user. To PUT a user, you will need a body looking something like this:
+<pre>{"password":"secret","tags":"administrator"}</pre>
+or:
+<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":"administrator"}</pre>
+        The <code>tags</code> key is mandatory. Either
+        <code>password</code> or <code>password_hash</code>
+        can be set. If neither are set the user will not be able to log in with a password,
+        but other mechanisms like client certificates may be used.
+        Setting <code>password_hash</code> to <code>""</code> will ensure the
+        user cannot use a password to log in. <code>tags</code> is a
+        comma-separated list of tags for the user. Currently recognised tags
+        are <code>administrator</code>, <code>monitoring</code> and <code>management</code>.
+        <code>password_hash</code> must be generated using the algorithm described
+        <a href="https://rabbitmq.com/passwords.html#computing-password-hash">here</a>.
+        You may also specify the hash function being used by adding the <code>hashing_algorithm</code>
+        key to the body. Currently recognised algorithms are <code>rabbit_password_hashing_sha256</code>,
+        <code>rabbit_password_hashing_sha512</code>, and <code>rabbit_password_hashing_md5</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/users/<i>user</i>/permissions</td>
+        <td>A list of all permissions for a given user.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/users/<i>user</i>/topic-permissions</td>
+        <td>A list of all topic permissions for a given user.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/whoami</td>
+        <td>Details of the currently authenticated user.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/permissions</td>
+        <td>A list of all permissions for all users.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/permissions/<i>vhost</i>/<i>user</i></td>
+        <td>An individual permission of a user and virtual host. To PUT a permission, you will need a body looking something like this:
+<pre>{"configure":".*","write":".*","read":".*"}</pre>
+        All keys are mandatory.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/topic-permissions</td>
+        <td>A list of all topic permissions for all users.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/topic-permissions/<i>vhost</i>/<i>user</i></td>
+        <td>Topic permissions for a user and virtual host. To PUT a topic permission, you will need a body looking something like this:
+          <pre>{"exchange":"amq.topic","write":"^a","read":".*"}</pre>
+          All keys are mandatory.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/parameters</td>
+        <td>A list of all vhost-scoped parameters.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/parameters/<i>component</i></td>
+        <td>A list of all vhost-scoped parameters for a given component.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/parameters/<i>component</i>/<i>vhost</i></td>
+        <td>A list of all vhost-scoped parameters for a given component and virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/parameters/<i>component</i>/<i>vhost</i>/<i>name</i></td>
+        <td>An individual vhost-scoped parameter. To PUT a parameter, you will need a body looking something like this:
+<pre>{"vhost": "/","component":"federation","name":"local_username","value":"guest"}</pre>
+</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/global-parameters</td>
+        <td>A list of all global parameters.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/global-parameters/<i>name</i></td>
+        <td>An individual global parameter. To PUT a parameter, you will need a body looking something like this:
+<pre>{"name":"user_vhost_mapping","value":{"guest":"/","rabbit":"warren"}}</pre>
+        </td>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/policies</td>
+        <td>A list of all policies.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/policies/<i>vhost</i></td>
+        <td>A list of all policies in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/policies/<i>vhost</i>/<i>name</i></td>
+        <td>
+          An individual policy. To PUT a policy, you will need a body looking something like this:
+<pre>{"pattern":"^amq.", "definition": {"federation-upstream-set":"all"}, "priority":0, "apply-to": "all"}</pre>
+          <code>pattern</code> and <code>definition</code> are mandatory, <code>priority</code> and <code>apply-to</code> are optional.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/operator-policies</td>
+        <td>A list of all operator policy overrides.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/operator-policies/<i>vhost</i></td>
+        <td>A list of all operator policy overrides in a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/operator-policies/<i>vhost</i>/<i>name</i></td>
+        <td>
+          An individual operator policy. To PUT a policy, you will need a body looking something like this:
+<pre>{"pattern":"^amq.", "definition": {"expires":100}, "priority":0, "apply-to": "queues"}</pre>
+          <code>pattern</code> and <code>definition</code> are mandatory, <code>priority</code> and <code>apply-to</code> are optional.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/aliveness-test/<i>vhost</i></td>
+        <td>
+          Declares a test queue, then publishes and consumes a
+          message. Intended for use by monitoring tools. If everything
+          is working correctly, will return HTTP status 200 with
+          body: <pre>{"status":"ok"}</pre> Note: the test queue will
+          not be deleted (to to prevent queue churn if this is
+          repeatedly pinged).
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/healthchecks/node</td>
+        <td>
+          Runs basic healthchecks in the current node. Checks that the rabbit
+          application is running, channels and queues can be listed successfully, and
+          that no alarms are in effect. If everything is working correctly, will
+          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
+          something fails, will return HTTP status 200 with the body of
+          <pre>{"status":"failed","reason":"string"}</pre>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/healthchecks/node/<i>node</i></td>
+        <td>
+          Runs basic healthchecks in the given node. Checks that the rabbit
+          application is running, list_channels and list_queues return, and
+          that no alarms are raised. If everything is working correctly, will
+          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
+          something fails, will return HTTP status 200 with the body of
+          <pre>{"status":"failed","reason":"string"}</pre>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhost-limits</td>
+        <td>
+            Lists per-vhost limits for all vhosts.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/vhost-limits/<i>vhost</i></td>
+        <td>
+            Lists per-vhost limits for specific vhost.
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/vhost-limits/<i>vhost</i>/<i>name</i></td>
+        <td>
+          Set or delete per-vhost limit for <code>vhost</code>. The <code>name</code> URL path element
+          refers to the name of the limit (<code>max-connections</code>, <code>max-queues</code>).
+          Limits are set using a JSON document in the body: <pre>{"value": 100}</pre>. Example
+          request:</br>
+          <pre>curl -4u 'guest:guest' -H 'content-type:application/json' -X PUT localhost:15672/api/vhost-limits/my-vhost/max-connections -d '{"value": 50}'</pre>
+        </td>
+      </tr>
+    </table>
+
+
+    <h2>HTTP API Stats</h2>
+    <p>
+      Most of the GET requests you can issue to the HTTP API return
+      JSON objects with a large number of keys. While a few of these
+      keys represent things you set yourself in a PUT request or AMQP
+      command (e.g. queue durability or arguments), most of them
+      represent statistics to do with the object in question. This
+      page attempts to document them.
+    </p>
+
+    <p>
+      It should be read in conjunction with the manual page
+      for <code>rabbitmqctl</code> (see your installation if on Unix / Linux,
+      or <a href="https://www.rabbitmq.com/rabbitmqctl.8.html">the
+      RabbitMQ website</a> for the latest version). Any field which can
+      be returned by a command of the form <code>rabbitmqctl
+      list_<i>something</i></code> will also be returned in the
+      equivalent part of the HTTP API, so all those keys are not
+      documented here. However, the HTTP API also adds a lot of extra
+      fields which are not available in <code>rabbitmqctl</code>.
+    </p>
+
+    <h2>_details objects</h2>
+    <p>
+      Many fields represent a count of some kind: queue length,
+      messages acknowledged, bytes received and so on. Such absolute
+      counts returned by the HTTP API will often have a
+      corresponding <code>_details</code> object which offers
+      information on how this count has changed. So for example, from
+      a queue:
+    </p>
+<pre>    "messages": 123619,
+    "messages_details": {
+      "avg": 41206.333333333336,
+      "avg_rate": 1030.1583333333333,
+      "rate": 24723.8,
+      "samples": [
+        {
+          "sample": 123619,
+          "timestamp": 1400680560000
+        },
+        {
+          "sample": 0,
+          "timestamp": 1400680500000
+        },
+        {
+          "sample": 0,
+          "timestamp": 1400680440000
+        }
+      ]
+    }</pre>
+
+    <p>
+      Here we have a <code>messages</code> count (the total messages
+      in the queue), with some additional data:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>avg</code></td>
+        <td>
+          The average value for the requested time period (see below).
+        </td>
+      </tr>
+      <tr>
+        <td><code>avg_rate</code></td>
+        <td>
+          The average rate for the requested time period.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rate</code></td>
+        <td>
+          How much the count has changed per second in the most recent
+          sampling interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>samples</code></td>
+        <td>
+          Snapshots showing how the value has changed over the
+          requested time period.
+        </td>
+      </tr>
+    </table>
+
+    <p>
+      <code>avg</code>, <code>avg_rate</code> and <code>samples</code>
+      will only appear if you request a specific time period by
+      appending query parameters to the URL. To do this you need to
+      set an age and an increment for the samples you want. The end of
+      the range returned will always correspond to the present.
+    </p>
+
+    <p>
+      Different types of data take different query parameters to
+      return samples, as in the following table. You can specify more
+      than one set of parameters if the resource you are requesting
+      can generate more than one type of sample (for example, queues
+      can return message rates and queue lengths).
+    </p>
+
+    <table>
+      <tr>
+        <td>Messages sent and received</td>
+        <td><code>msg_rates_age</code> / <code>msg_rates_incr</code></td>
+      </tr>
+      <tr>
+        <td>Bytes sent and received</td>
+        <td><code>data_rates_age</code> / <code>data_rates_incr</code>
+        </td>
+      </tr>
+      <tr>
+        <td>Queue lengths</td>
+        <td><code>lengths_age</code> / <code>lengths_incr</code></td>
+      </tr>
+      <tr>
+        <td>Node statistics (e.g. file descriptors, disk space free)</td>
+        <td><code>node_stats_age</code> / <code>node_stats_incr</code></td>
+      </tr>
+    </table>
+
+    <p>
+      For example,
+      appending <code>?lengths_age=3600&lengths_incr=60</code> will
+      return the last hour's data on queue lengths, with a sample for
+      every minute.
+    </p>
+
+    <h2>message_stats objects</h2>
+    <p>
+      Many objects (including queues, exchanges and channels) will
+      return counts of messages passing through them. These are
+      included in a <code>message_stats</code> object (which in turn
+      will contain <code>_details</code> objects for each count, as
+      described above).
+    </p>
+    <p>
+      These can contain:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>publish</code></td>
+        <td>
+          Count of messages published.
+        </td>
+      </tr>
+      <tr>
+        <td><code>publish_in</code></td>
+        <td>
+          Count of messages published "in" to an exchange, i.e. not
+          taking account of routing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>publish_out</code></td>
+        <td>
+          Count of messages published "out" of an exchange,
+          i.e. taking account of routing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>confirm</code></td>
+        <td>
+          Count of messages confirmed.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliver</code></td>
+        <td>
+          Count of messages delivered in acknowledgement mode to consumers.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliver_no_ack</code></td>
+        <td>
+          Count of messages delivered in no-acknowledgement mode to consumers.
+        </td>
+      </tr>
+      <tr>
+        <td><code>get</code></td>
+        <td>
+          Count of messages delivered in acknowledgement mode in
+          response to basic.get.
+        </td>
+      </tr>
+      <tr>
+        <td><code>get_no_ack</code></td>
+        <td>
+          Count of messages delivered in no-acknowledgement mode in
+          response to basic.get.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliver_get</code></td>
+        <td>
+          Sum of all four of the above.
+        </td>
+      </tr>
+      <tr>
+        <td><code>redeliver</code></td>
+        <td>
+          Count of subset of messages in <code>deliver_get</code>
+          which had the redelivered flag set.
+        </td>
+      </tr>
+      <tr>
+        <td><code>return_unroutable</code></td>
+        <td>
+          Count of messages returned to publisher as unroutable.
+        </td>
+      </tr>
+    </table>
+
+    <p>
+      Only fields for which some activity has taken place will appear.
+    </p>
+
+    <h2>Detailed message stats objects</h2>
+    <p>
+      In addition, queues, exchanges and channels can return a
+      breakdown of message stats for each of their neighbours
+      (i.e. adjacent objects in the chain: channel -> exchange ->
+      queue -> channel). This will only happen if
+      the <code>rates_mode</code> configuration item has been switched
+      to <code>detailed</code> from its default of <code>basic</code>.
+    </p>
+    <p>
+      As this possibly constitutes a large quantity of data, it is also
+      only returned when querying a single channel, queue or exchange
+      rather than a list. Note also that the default sample retention
+      policy means that these detailed message stats do not retain
+      historical data for more than a few seconds.
+    </p>
+    <p>
+      The detailed message stats objects have different names
+      depending on where they are (documented below). Each set of
+      detailed stats consists of a list of objects with two fields,
+      one identifying the partner object and one <code>stats</code>
+      which is a message_stats object as described above.
+    </p>
+    <p>
+      For example, from a queue:
+    </p>
+    <pre>  "incoming": [
+    {
+      "stats": {
+        "publish": 352593,
+        "publish_details": {
+          "rate": 100.2
+        }
+      },
+      "exchange": {
+        "name": "my-exchange",
+        "vhost": "/"
+      }
+    }
+    {
+      "stats": {
+        "publish": 543784,
+        "publish_details": {
+          "rate": 54.6
+        }
+      },
+      "exchange": {
+        "name": "amq.topic",
+        "vhost": "/"
+      }
+    }
+  ],</pre>
+
+    <p>
+      This queue is currently receiving messages from two exchanges:
+      100.2 msg/s from "my-exchange" and 54.6 msg/s from "amq.topic".
+    </p>
+
+    <h2>/api/overview</h2>
+
+    <p>
+      This has the following fields:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>cluster_name</code></td>
+        <td>
+          The name of the entire cluster, as set with <code>rabbitmqctl
+          set_cluster_name</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>contexts</code></td>
+        <td>
+          A list of web application contexts in the cluster.
+        </td>
+      </tr>
+      <tr>
+        <td><code>erlang_full_version</code></td>
+        <td>
+          A string with extended detail about the Erlang VM and how it
+          was compiled, for the node connected to.
+        </td>
+      </tr>
+      <tr>
+        <td><code>erlang_version</code></td>
+        <td>
+          A string with the Erlang version of the node connected
+          to. As clusters should all run the same version this can be
+          taken as representing the cluster.
+        </td>
+      </tr>
+      <tr>
+        <td><code>exchange_types</code></td>
+        <td>
+          A list of all exchange types available.
+        </td>
+      </tr>
+      <tr>
+        <td><code>listeners</code></td>
+        <td>
+          All (non-HTTP) network listeners for all nodes in the
+          cluster. (See <code>contexts</code>
+          in <code>/api/nodes</code> for HTTP).
+        </td>
+      </tr>
+      <tr>
+        <td><code>management_version</code></td>
+        <td>
+          Version of the management plugin in use.
+        </td>
+      </tr>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          A message_stats object for everything the user can see - for
+          all vhosts regardless of permissions in the case
+          of <code>monitoring</code> and <code>administrator</code>
+          users, and for all vhosts the user has access to for other
+          users.
+        </td>
+      </tr>
+      <tr>
+        <td><code>node</code></td>
+        <td>
+          The name of the cluster node this management plugin instance
+          is running on.
+        </td>
+      </tr>
+      <tr>
+        <td><code>object_totals</code></td>
+        <td>
+          An object containing global counts of all connections,
+          channels, exchanges, queues and consumers, subject to the
+          same visibility rules as for <code>message_stats</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_totals</code></td>
+        <td>
+          An object containing sums of
+          the <code>messages</code>, <code>messages_ready</code>
+          and <code>messages_unacknowledged</code> fields for all
+          queues, again subject to the same visibility rules as
+          for <code>message_stats</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rabbitmq_version</code></td>
+        <td>
+          Version of RabbitMQ on the node which processed this request.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rates_mode</code></td>
+        <td>
+          'none', 'basic' or 'detailed'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>statistics_db_event_queue</code></td>
+        <td>
+          Number of outstanding statistics events yet to be processed
+          by the database.
+        </td>
+      </tr>
+      <tr>
+        <td><code>statistics_db_node</code></td>
+        <td>
+          Name of the cluster node hosting the management statistics database.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/nodes</h2>
+
+    <p>
+      This has the following fields:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>applications</code></td>
+        <td>
+          List of all Erlang applications running on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>auth_mechanisms</code></td>
+        <td>
+          List of all SASL authentication mechanisms installed on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>cluster_links</code></td>
+        <td>
+          A list of the other nodes in the cluster. For each node,
+          there are details of the TCP connection used to connect to
+          it and statistics on data that has been transferred.
+        </td>
+      </tr>
+      <tr>
+        <td><code>config_files</code></td>
+        <td>
+          List of config files read by the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>contexts</code></td>
+        <td>
+          List of all HTTP listeners on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>db_dir</code></td>
+        <td>
+          Location of the persistent storage used by the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>disk_free</code></td>
+        <td>
+          Disk free space in bytes.
+        </td>
+      </tr>
+      <tr>
+        <td><code>disk_free_alarm</code></td>
+        <td>
+          Whether the disk alarm has gone off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>disk_free_limit</code></td>
+        <td>
+          Point at which the disk alarm will go off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>enabled_plugins</code></td>
+        <td>
+          List of plugins which are both explicitly enabled and running.
+        </td>
+      </tr>
+      <tr>
+        <td><code>exchange_types</code></td>
+        <td>
+          Exchange types available on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>fd_total</code></td>
+        <td>
+          File descriptors available.
+        </td>
+      </tr>
+      <tr>
+        <td><code>fd_used</code></td>
+        <td>
+          Used file descriptors.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk read operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_bytes</code></td>
+        <td>
+          Total number of bytes read from disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_count</code></td>
+        <td>
+          Total number of read operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_reopen_count</code></td>
+        <td>
+          Total number of times the persister has needed to recycle
+          file handles between queues. In an ideal world this number
+          will be zero; if the number is large, performance might be
+          improved by increasing the number of file handles available
+          to RabbitMQ.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_seek_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each seek operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>io_seek_count</code></td>
+        <td>
+          Total number of seek operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_sync_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each fsync() operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>io_sync_count</code></td>
+        <td>
+          Total number of fsync() operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk write operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_bytes</code></td>
+        <td>
+          Total number of bytes written to disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_count</code></td>
+        <td>
+          Total number of write operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>log_files</code></td>
+        <td>
+          List of log files used by the node. If the node also sends
+          messages to stdout, "<code>&lt;stdout&gt;</code>" is also
+          reported in the list.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mem_used</code></td>
+        <td>
+          Memory used in bytes.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mem_alarm</code></td>
+        <td>
+          Whether the memory alarm has gone off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mem_limit</code></td>
+        <td>
+          Point at which the memory alarm will go off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mnesia_disk_tx_count</code></td>
+        <td>
+          Number of Mnesia transactions which have been performed that
+          required writes to disk. (e.g. creating a durable
+          queue). Only transactions which originated on this node are
+          included.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mnesia_ram_tx_count</code></td>
+        <td>
+          Number of Mnesia transactions which have been performed that
+          did not require writes to disk. (e.g. creating a transient
+          queue). Only transactions which originated on this node are
+          included.
+        </td>
+      </tr>
+      <tr>
+        <td><code>msg_store_read_count</code></td>
+        <td>
+          Number of messages which have been read from the message store.
+        </td>
+      </tr>
+      <tr>
+        <td><code>msg_store_write_count</code></td>
+        <td>
+          Number of messages which have been written to the message store.
+        </td>
+      </tr>
+      <tr>
+        <td><code>name</code></td>
+        <td>
+          Node name.
+        </td>
+      </tr>
+      <tr>
+        <td><code>net_ticktime</code></td>
+        <td>
+          Current kernel net_ticktime setting for the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>os_pid</code></td>
+        <td>
+          Process identifier for the Operating System under which this
+          node is running.
+        </td>
+      </tr>
+      <tr>
+        <td><code>partitions</code></td>
+        <td>
+          List of network partitions this node is seeing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>proc_total</code></td>
+        <td>
+          Maximum number of Erlang processes.
+        </td>
+      </tr>
+      <tr>
+        <td><code>proc_used</code></td>
+        <td>
+          Number of Erlang processes in use.
+        </td>
+      </tr>
+      <tr>
+        <td><code>processors</code></td>
+        <td>
+          Number of cores detected and usable by Erlang.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_journal_write_count</code></td>
+        <td>
+          Number of records written to the queue index journal. Each
+          record represents a message being published to a queue,
+          being delivered from a queue, and being acknowledged in a
+          queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_read_count</code></td>
+        <td>
+          Number of records read from the queue index.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_write_count</code></td>
+        <td>
+          Number of records written to the queue index.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rates_mode</code></td>
+        <td>
+          'none', 'basic' or 'detailed'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>run_queue</code></td>
+        <td>
+          Average number of Erlang processes waiting to run.
+        </td>
+      </tr>
+      <tr>
+        <td><code>running</code></td>
+        <td>
+          Boolean for whether this node is up. Obviously if this is
+          false, most other stats will be missing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>sasl_log_file</code></td>
+        <td>
+          Location of <a href="https://www.erlang.org/doc/man/sasl_app.html">sasl</a> log file.
+        </td>
+      </tr>
+      <tr>
+        <td><code>sockets_total</code></td>
+        <td>
+          File descriptors available for use as sockets.
+        </td>
+      </tr>
+      <tr>
+        <td><code>sockets_used</code></td>
+        <td>
+          File descriptors used as sockets.
+        </td>
+      </tr>
+      <tr>
+        <td><code>type</code></td>
+        <td>
+          'disc' or 'ram'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>uptime</code></td>
+        <td>
+          Time since the Erlang VM started, in milliseconds.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/nodes/(name)</h2>
+
+    <p>
+      All of the above, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>memory</code></td>
+        <td>
+          Detailed memory use statistics. Only appears
+          if <code>?memory=true</code> is appended to the URL.
+        </td>
+      </tr>
+      <tr>
+        <td><code>binary</code></td>
+        <td>
+          Detailed breakdown of the owners of binary memory. Only
+          appears if <code>?binary=true</code> is appended to the
+          URL. Note that this can be an expensive query if there are
+          many small binaries in the system.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/connections</h2>
+    <h2>/api/connections/(name)</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl
+      list_connections</code>. No additional fields,
+      although <code>pid</code> is replaced by <code>node</code>.
+    </p>
+
+    <p>
+      Note also that while non-AMQP connections will appear in this
+      list (unlike <code>rabbitmqctl list_connections</code>), they
+      will omit many of the connection-level statistics.
+    </p>
+
+    <h2>/api/connections/(name)/channels</h2>
+    <h2>/api/channels</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl list_channels</code>,
+      with <code>pid</code> replaced by <code>node</code>, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>connection_details</code></td>
+        <td>
+          Some basic details about the owning connection.
+        </td>
+      </tr>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          See the section on message_stats above.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/channels/(name)</h2>
+
+    <p>
+      All the above, plus
+    </p>
+
+    <table>
+      <tr>
+        <td><code>publishes</code></td>
+        <td>
+          Detailed message stats (see section above) for publishes to
+          exchanges.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliveries</code></td>
+        <td>
+          Detailed message stats for deliveries from queues.
+        </td>
+      </tr>
+      <tr>
+        <td><code>consumer_details</code></td>
+        <td>
+          List of consumers on this channel, with some details on each.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/exchanges</h2>
+    <h2>/api/exchanges/(vhost)</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl list_exchanges</code>, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          See the section on message_stats above.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/exchanges/(vhost)/(name)</h2>
+
+    <p>
+      All the above, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>incoming</code></td>
+        <td>
+          Detailed message stats (see section above) for publishes
+          from channels into this exchange.
+        </td>
+      </tr>
+      <tr>
+        <td><code>outgoing</code></td>
+        <td>
+          Detailed message stats for publishes from this exchange into
+          queues.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/queues</h2>
+    <h2>/api/queues/(vhost)</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl list_queues</code>, with
+      all references to <code>pid</code>s replaced by <code>node</code>s
+      plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          See the section on message_stats above.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/queues/(vhost)/(name)</h2>
+
+    <p>
+      All the above, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>incoming</code></td>
+        <td>
+          Detailed message stats (see section above) for
+          publishes from exchanges into this queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliveries</code></td>
+        <td>
+          Detailed message stats for deliveries from this queue into
+          channels.
+        </td>
+      </tr>
+      <tr>
+        <td><code>consumer_details</code></td>
+        <td>
+          List of consumers on this channel, with some details on each.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/vhosts/</h2>
+    <h2>/api/vhosts/(name)</h2>
+
+    <p>
+      All the fields from <code>rabbitmqctl list_vhosts</code>
+      (i.e. <code>name</code> and <code>tracing</code>) plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          Global message_stats for this vhost. Note that activity for
+          other users in this vhost <b>is</b> shown, even for users
+          without the <code>monitoring</code> tag.
+        </td>
+      </tr>
+      <tr>
+        <td><code>messages</code> <code>messages_ready</code> <code>messages_acknowledged</code></td>
+        <td>
+          Sum of these fields for all queues in the vhost.
+        </td>
+      </tr>
+      <tr>
+        <td><code>recv_oct</code> <code>send_oct</code></td>
+        <td>
+          Sum of these fields for all connections to the vhost.
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

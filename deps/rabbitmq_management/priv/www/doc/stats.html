@@ -1,0 +1,956 @@
+<html>
+  <head>
+    <title>RabbitMQ Management HTTP Stats</title>
+    <style>
+      body { font: 12px Verdana,sans-serif; color: #444; padding: 8px 35px; }
+      td, th { font: 12px Verdana,sans-serif; color: #444; }
+      h1 { font-size: 2em; }
+      h2 { font-size: 1.5em; }
+      td.path { font-family: monospace; }
+      th { font-size 1em; font-weight: bold; }
+      table { border-collapse: collapse; }
+      table th, table td { vertical-align: top; border: 1px solid #bbb; padding: 5px; }
+      code { background: #ffa; }
+      pre { background: black; color: #0f0; padding: 10px; word-wrap: break-word;}
+      table pre { background: #ffa; color: black; }
+    </style>
+  </head>
+  <body>
+    <h1>RabbitMQ Management HTTP Stats</h1>
+    <h2>Introduction</h2>
+    <p>
+      Most of the GET requests you can issue to the HTTP API return
+      JSON objects with a large number of keys. While a few of these
+      keys represent things you set yourself in a PUT request or AMQP
+      command (e.g. queue durability or arguments), most of them
+      represent statistics to do with the object in question. This
+      page attempts to document them.
+    </p>
+
+    <p>
+      It should be read in conjunction with the manual page
+      for <code>rabbitmqctl</code> (see your installation if on Unix / Linux,
+      or <a href="https://www.rabbitmq.com/rabbitmqctl.8.html">the
+      RabbitMQ website</a> for the latest version). Any field which can
+      be returned by a command of the form <code>rabbitmqctl
+      list_<i>something</i></code> will also be returned in the
+      equivalent part of the HTTP API, so all those keys are not
+      documented here. However, the HTTP API also adds a lot of extra
+      fields which are not available in <code>rabbitmqctl</code>.
+    </p>
+
+    <h2>_details objects</h2>
+    <p>
+      Many fields represent a count of some kind: queue length,
+      messages acknowledged, bytes received and so on. Such absolute
+      counts returned by the HTTP API will often have a
+      corresponding <code>_details</code> object which offers
+      information on how this count has changed. So for example, from
+      a queue:
+    </p>
+<pre>    "messages": 123619,
+    "messages_details": {
+      "avg": 41206.333333333336,
+      "avg_rate": 1030.1583333333333,
+      "rate": 24723.8,
+      "samples": [
+        {
+          "sample": 123619,
+          "timestamp": 1400680560000
+        },
+        {
+          "sample": 0,
+          "timestamp": 1400680500000
+        },
+        {
+          "sample": 0,
+          "timestamp": 1400680440000
+        }
+      ]
+    }</pre>
+
+    <p>
+      Here we have a <code>messages</code> count (the total messages
+      in the queue), with some additional data:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>avg</code></td>
+        <td>
+          The average value for the requested time period (see below).
+        </td>
+      </tr>
+      <tr>
+        <td><code>avg_rate</code></td>
+        <td>
+          The average rate for the requested time period.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rate</code></td>
+        <td>
+          How much the count has changed per second in the most recent
+          sampling interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>samples</code></td>
+        <td>
+          Snapshots showing how the value has changed over the
+          requested time period.
+        </td>
+      </tr>
+    </table>
+
+    <p>
+      <code>avg</code>, <code>avg_rate</code> and <code>samples</code>
+      will only appear if you request a specific time period by
+      appending query parameters to the URL. To do this you need to
+      set an age and an increment for the samples you want. The end of
+      the range returned will always correspond to the present.
+    </p>
+
+    <p>
+      Different types of data take different query parameters to
+      return samples, as in the following table. You can specify more
+      than one set of parameters if the resource you are requesting
+      can generate more than one type of sample (for example, queues
+      can return message rates and queue lengths).
+    </p>
+
+    <table>
+      <tr>
+        <td>Messages sent and received</td>
+        <td><code>msg_rates_age</code> / <code>msg_rates_incr</code></td>
+      </tr>
+      <tr>
+        <td>Bytes sent and received</td>
+        <td><code>data_rates_age</code> / <code>data_rates_incr</code>
+        </td>
+      </tr>
+      <tr>
+        <td>Queue lengths</td>
+        <td><code>lengths_age</code> / <code>lengths_incr</code></td>
+      </tr>
+      <tr>
+        <td>Node statistics (e.g. file descriptors, disk space free)</td>
+        <td><code>node_stats_age</code> / <code>node_stats_incr</code></td>
+      </tr>
+    </table>
+
+    <p>
+      For example,
+      appending <code>?lengths_age=3600&lengths_incr=60</code> will
+      return the last hour's data on queue lengths, with a sample for
+      every minute.
+    </p>
+
+    <h2>message_stats objects</h2>
+    <p>
+      Many objects (including queues, exchanges and channels) will
+      return counts of messages passing through them. These are
+      included in a <code>message_stats</code> object (which in turn
+      will contain <code>_details</code> objects for each count, as
+      described above).
+    </p>
+    <p>
+      These can contain:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>publish</code></td>
+        <td>
+          Count of messages published.
+        </td>
+      </tr>
+      <tr>
+        <td><code>publish_in</code></td>
+        <td>
+          Count of messages published "in" to an exchange, i.e. not
+          taking account of routing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>publish_out</code></td>
+        <td>
+          Count of messages published "out" of an exchange,
+          i.e. taking account of routing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>confirm</code></td>
+        <td>
+          Count of messages confirmed.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliver</code></td>
+        <td>
+          Count of messages delivered in acknowledgement mode to consumers.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliver_no_ack</code></td>
+        <td>
+          Count of messages delivered in no-acknowledgement mode to consumers.
+        </td>
+      </tr>
+      <tr>
+        <td><code>get</code></td>
+        <td>
+          Count of messages delivered in acknowledgement mode in
+          response to basic.get.
+        </td>
+      </tr>
+      <tr>
+        <td><code>get_no_ack</code></td>
+        <td>
+          Count of messages delivered in no-acknowledgement mode in
+          response to basic.get.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliver_get</code></td>
+        <td>
+          Sum of all four of the above.
+        </td>
+      </tr>
+      <tr>
+        <td><code>redeliver</code></td>
+        <td>
+          Count of subset of messages in <code>deliver_get</code>
+          which had the redelivered flag set.
+        </td>
+      </tr>
+      <tr>
+        <td><code>return_unroutable</code></td>
+        <td>
+          Count of messages returned to publisher as unroutable.
+        </td>
+      </tr>
+    </table>
+
+    <p>
+      Only fields for which some activity has taken place will appear.
+    </p>
+
+    <h2>Detailed message stats objects</h2>
+    <p>
+      In addition, queues, exchanges and channels can return a
+      breakdown of message stats for each of their neighbours
+      (i.e. adjacent objects in the chain: channel -> exchange ->
+      queue -> channel). This will only happen if
+      the <code>rates_mode</code> configuration item has been switched
+      to <code>detailed</code> from its default of <code>basic</code>.
+    </p>
+    <p>
+      As this possibly constitutes a large quantity of data, it is also
+      only returned when querying a single channel, queue or exchange
+      rather than a list. Note also that the default sample retention
+      policy means that these detailed message stats do not retain
+      historical data for more than a few seconds.
+    </p>
+    <p>
+      The detailed message stats objects have different names
+      depending on where they are (documented below). Each set of
+      detailed stats consists of a list of objects with two fields,
+      one identifying the partner object and one <code>stats</code>
+      which is a message_stats object as described above.
+    </p>
+    <p>
+      For example, from a queue:
+    </p>
+    <pre>  "incoming": [
+    {
+      "stats": {
+        "publish": 352593,
+        "publish_details": {
+          "rate": 100.2
+        }
+      },
+      "exchange": {
+        "name": "my-exchange",
+        "vhost": "/"
+      }
+    }
+    {
+      "stats": {
+        "publish": 543784,
+        "publish_details": {
+          "rate": 54.6
+        }
+      },
+      "exchange": {
+        "name": "amq.topic",
+        "vhost": "/"
+      }
+    }
+  ],</pre>
+
+    <p>
+      This queue is currently receiving messages from two exchanges:
+      100.2 msg/s from "my-exchange" and 54.6 msg/s from "amq.topic".
+    </p>
+
+    <h2>/api/overview</h2>
+
+    <p>
+      This has the following fields:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>cluster_name</code></td>
+        <td>
+          The name of the entire cluster, as set with <code>rabbitmqctl
+          set_cluster_name</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>contexts</code></td>
+        <td>
+          A list of web application contexts in the cluster.
+        </td>
+      </tr>
+      <tr>
+        <td><code>erlang_full_version</code></td>
+        <td>
+          A string with extended detail about the Erlang VM and how it
+          was compiled, for the node connected to.
+        </td>
+      </tr>
+      <tr>
+        <td><code>erlang_version</code></td>
+        <td>
+          A string with the Erlang version of the node connected
+          to. As clusters should all run the same version this can be
+          taken as representing the cluster.
+        </td>
+      </tr>
+      <tr>
+        <td><code>exchange_types</code></td>
+        <td>
+          A list of all exchange types available.
+        </td>
+      </tr>
+      <tr>
+        <td><code>listeners</code></td>
+        <td>
+          All (non-HTTP) network listeners for all nodes in the
+          cluster. (See <code>contexts</code>
+          in <code>/api/nodes</code> for HTTP).
+        </td>
+      </tr>
+      <tr>
+        <td><code>management_version</code></td>
+        <td>
+          Version of the management plugin in use.
+        </td>
+      </tr>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          A message_stats object for everything the user can see - for
+          all vhosts regardless of permissions in the case
+          of <code>monitoring</code> and <code>administrator</code>
+          users, and for all vhosts the user has access to for other
+          users.
+        </td>
+      </tr>
+      <tr>
+        <td><code>node</code></td>
+        <td>
+          The name of the cluster node this management plugin instance
+          is running on.
+        </td>
+      </tr>
+      <tr>
+        <td><code>object_totals</code></td>
+        <td>
+          An object containing global counts of all connections,
+          channels, exchanges, queues and consumers, subject to the
+          same visibility rules as for <code>message_stats</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_totals</code></td>
+        <td>
+          An object containing sums of
+          the <code>messages</code>, <code>messages_ready</code>
+          and <code>messages_unacknowledged</code> fields for all
+          queues, again subject to the same visibility rules as
+          for <code>message_stats</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rabbitmq_version</code></td>
+        <td>
+          Version of RabbitMQ on the node which processed this request.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rates_mode</code></td>
+        <td>
+          'none', 'basic' or 'detailed'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>statistics_db_event_queue</code></td>
+        <td>
+          Number of outstanding statistics events yet to be processed
+          by the database.
+        </td>
+      </tr>
+      <tr>
+        <td><code>statistics_db_node</code></td>
+        <td>
+          Name of the cluster node hosting the management statistics database.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/nodes</h2>
+
+    <p>
+      This has the following fields:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>applications</code></td>
+        <td>
+          List of all Erlang applications running on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>auth_mechanisms</code></td>
+        <td>
+          List of all SASL authentication mechanisms installed on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>cluster_links</code></td>
+        <td>
+          A list of the other nodes in the cluster. For each node,
+          there are details of the TCP connection used to connect to
+          it and statistics on data that has been transferred.
+        </td>
+      </tr>
+      <tr>
+        <td><code>config_files</code></td>
+        <td>
+          List of config files read by the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>contexts</code></td>
+        <td>
+          List of all HTTP listeners on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>db_dir</code></td>
+        <td>
+          Location of the persistent storage used by the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>disk_free</code></td>
+        <td>
+          Disk free space in bytes.
+        </td>
+      </tr>
+      <tr>
+        <td><code>disk_free_alarm</code></td>
+        <td>
+          Whether the disk alarm has gone off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>disk_free_limit</code></td>
+        <td>
+          Point at which the disk alarm will go off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>enabled_plugins</code></td>
+        <td>
+          List of plugins which are both explicitly enabled and running.
+        </td>
+      </tr>
+      <tr>
+        <td><code>exchange_types</code></td>
+        <td>
+          Exchange types available on the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>fd_total</code></td>
+        <td>
+          File descriptors available.
+        </td>
+      </tr>
+      <tr>
+        <td><code>fd_used</code></td>
+        <td>
+          Used file descriptors.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk read operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_bytes</code></td>
+        <td>
+          Total number of bytes read from disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_read_count</code></td>
+        <td>
+          Total number of read operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_reopen_count</code></td>
+        <td>
+          Total number of times the persister has needed to recycle
+          file handles between queues. In an ideal world this number
+          will be zero; if the number is large, performance might be
+          improved by increasing the number of file handles available
+          to RabbitMQ.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_seek_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each seek operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>io_seek_count</code></td>
+        <td>
+          Total number of seek operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_sync_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each fsync() operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      </tr>
+      <tr>
+        <td><code>io_sync_count</code></td>
+        <td>
+          Total number of fsync() operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_avg_time</code></td>
+        <td>
+          Average wall time (milliseconds) for each disk write operation in
+          the last statistics interval.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_bytes</code></td>
+        <td>
+          Total number of bytes written to disk by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>io_write_count</code></td>
+        <td>
+          Total number of write operations by the persister.
+        </td>
+      </tr>
+      <tr>
+        <td><code>log_files</code></td>
+        <td>
+          List of log files used by the node. If the node also sends
+          messages to stdout, "<code>&lt;stdout&gt;</code>" is also
+          reported in the list.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mem_used</code></td>
+        <td>
+          Memory used in bytes.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mem_alarm</code></td>
+        <td>
+          Whether the memory alarm has gone off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mem_limit</code></td>
+        <td>
+          Point at which the memory alarm will go off.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mnesia_disk_tx_count</code></td>
+        <td>
+          Number of Mnesia transactions which have been performed that
+          required writes to disk. (e.g. creating a durable
+          queue). Only transactions which originated on this node are
+          included.
+        </td>
+      </tr>
+      <tr>
+        <td><code>mnesia_ram_tx_count</code></td>
+        <td>
+          Number of Mnesia transactions which have been performed that
+          did not require writes to disk. (e.g. creating a transient
+          queue). Only transactions which originated on this node are
+          included.
+        </td>
+      </tr>
+      <tr>
+        <td><code>msg_store_read_count</code></td>
+        <td>
+          Number of messages which have been read from the message store.
+        </td>
+      </tr>
+      <tr>
+        <td><code>msg_store_write_count</code></td>
+        <td>
+          Number of messages which have been written to the message store.
+        </td>
+      </tr>
+      <tr>
+        <td><code>name</code></td>
+        <td>
+          Node name.
+        </td>
+      </tr>
+      <tr>
+        <td><code>net_ticktime</code></td>
+        <td>
+          Current kernel net_ticktime setting for the node.
+        </td>
+      </tr>
+      <tr>
+        <td><code>os_pid</code></td>
+        <td>
+          Process identifier for the Operating System under which this
+          node is running.
+        </td>
+      </tr>
+      <tr>
+        <td><code>partitions</code></td>
+        <td>
+          List of network partitions this node is seeing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>proc_total</code></td>
+        <td>
+          Maximum number of Erlang processes.
+        </td>
+      </tr>
+      <tr>
+        <td><code>proc_used</code></td>
+        <td>
+          Number of Erlang processes in use.
+        </td>
+      </tr>
+      <tr>
+        <td><code>processors</code></td>
+        <td>
+          Number of cores detected and usable by Erlang.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_journal_write_count</code></td>
+        <td>
+          Number of records written to the queue index journal. Each
+          record represents a message being published to a queue,
+          being delivered from a queue, and being acknowledged in a
+          queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_read_count</code></td>
+        <td>
+          Number of records read from the queue index.
+        </td>
+      </tr>
+      <tr>
+        <td><code>queue_index_write_count</code></td>
+        <td>
+          Number of records written to the queue index.
+        </td>
+      </tr>
+      <tr>
+        <td><code>rates_mode</code></td>
+        <td>
+          'none', 'basic' or 'detailed'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>run_queue</code></td>
+        <td>
+          Average number of Erlang processes waiting to run.
+        </td>
+      </tr>
+      <tr>
+        <td><code>running</code></td>
+        <td>
+          Boolean for whether this node is up. Obviously if this is
+          false, most other stats will be missing.
+        </td>
+      </tr>
+      <tr>
+        <td><code>sasl_log_file</code></td>
+        <td>
+          Location of <a href="https://www.erlang.org/doc/man/sasl_app.html">sasl</a> log file.
+        </td>
+      </tr>
+      <tr>
+        <td><code>sockets_total</code></td>
+        <td>
+          File descriptors available for use as sockets.
+        </td>
+      </tr>
+      <tr>
+        <td><code>sockets_used</code></td>
+        <td>
+          File descriptors used as sockets.
+        </td>
+      </tr>
+      <tr>
+        <td><code>type</code></td>
+        <td>
+          'disc' or 'ram'.
+        </td>
+      </tr>
+      <tr>
+        <td><code>uptime</code></td>
+        <td>
+          Time since the Erlang VM started, in milliseconds.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/nodes/(name)</h2>
+
+    <p>
+      All of the above, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>memory</code></td>
+        <td>
+          Detailed memory use statistics. Only appears
+          if <code>?memory=true</code> is appended to the URL.
+        </td>
+      </tr>
+      <tr>
+        <td><code>binary</code></td>
+        <td>
+          Detailed breakdown of the owners of binary memory. Only
+          appears if <code>?binary=true</code> is appended to the
+          URL. Note that this can be an expensive query if there are
+          many small binaries in the system.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/connections</h2>
+    <h2>/api/connections/(name)</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl
+      list_connections</code>. No additional fields,
+      although <code>pid</code> is replaced by <code>node</code>.
+    </p>
+
+    <p>
+      Note also that while non-AMQP connections will appear in this
+      list (unlike <code>rabbitmqctl list_connections</code>), they
+      will omit many of the connection-level statistics.
+    </p>
+
+    <h2>/api/connections/(name)/channels</h2>
+    <h2>/api/channels</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl list_channels</code>,
+      with <code>pid</code> replaced by <code>node</code>, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>connection_details</code></td>
+        <td>
+          Some basic details about the owning connection.
+        </td>
+      </tr>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          See the section on message_stats above.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/channels/(name)</h2>
+
+    <p>
+      All the above, plus
+    </p>
+
+    <table>
+      <tr>
+        <td><code>publishes</code></td>
+        <td>
+          Detailed message stats (see section above) for publishes to
+          exchanges.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliveries</code></td>
+        <td>
+          Detailed message stats for deliveries from queues.
+        </td>
+      </tr>
+      <tr>
+        <td><code>consumer_details</code></td>
+        <td>
+          List of consumers on this channel, with some details on each.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/exchanges</h2>
+    <h2>/api/exchanges/(vhost)</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl list_exchanges</code>, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          See the section on message_stats above.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/exchanges/(vhost)/(name)</h2>
+
+    <p>
+      All the above, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>incoming</code></td>
+        <td>
+          Detailed message stats (see section above) for publishes
+          from channels into this exchange.
+        </td>
+      </tr>
+      <tr>
+        <td><code>outgoing</code></td>
+        <td>
+          Detailed message stats for publishes from this exchange into
+          queues.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/queues</h2>
+    <h2>/api/queues/(vhost)</h2>
+
+    <p>
+      See documentation for <code>rabbitmqctl list_queues</code>, with
+      all references to <code>pid</code>s replaced by <code>node</code>s
+      plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          See the section on message_stats above.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/queues/(vhost)/(name)</h2>
+
+    <p>
+      All the above, plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>incoming</code></td>
+        <td>
+          Detailed message stats (see section above) for
+          publishes from exchanges into this queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>deliveries</code></td>
+        <td>
+          Detailed message stats for deliveries from this queue into
+          channels.
+        </td>
+      </tr>
+      <tr>
+        <td><code>consumer_details</code></td>
+        <td>
+          List of consumers on this channel, with some details on each.
+        </td>
+      </tr>
+    </table>
+
+    <h2>/api/vhosts/</h2>
+    <h2>/api/vhosts/(name)</h2>
+
+    <p>
+      All the fields from <code>rabbitmqctl list_vhosts</code>
+      (i.e. <code>name</code> and <code>tracing</code>) plus:
+    </p>
+
+    <table>
+      <tr>
+        <td><code>message_stats</code></td>
+        <td>
+          Global message_stats for this vhost. Note that activity for
+          other users in this vhost <b>is</b> shown, even for users
+          without the <code>monitoring</code> tag.
+        </td>
+      </tr>
+      <tr>
+        <td><code>messages</code> <code>messages_ready</code> <code>messages_acknowledged</code></td>
+        <td>
+          Sum of these fields for all queues in the vhost.
+        </td>
+      </tr>
+      <tr>
+        <td><code>recv_oct</code> <code>send_oct</code></td>
+        <td>
+          Sum of these fields for all connections to the vhost.
+        </td>
+      </tr>
+    </table>
+   </body>
+</html>

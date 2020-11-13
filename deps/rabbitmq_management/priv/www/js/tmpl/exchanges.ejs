@@ -1,0 +1,165 @@
+<h1>Exchanges</h1>
+<div class="section">
+   <%= paginate_ui(exchanges, 'exchanges') %>
+</div> 
+<div class="updatable">
+<% if (exchanges.items.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (vhosts_interesting) { %>
+   <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
+   <th><%= fmt_sort('Name',         'name') %></th>
+<% if (show_column('exchanges', 'type')) { %>
+   <th><%= fmt_sort('Type',         'type') %></th>
+<% } %>
+<% if (show_column('exchanges', 'features')) { %>
+   <th>Features</th>
+<% } %>
+<% if (show_column('exchanges', 'features_no_policy')) { %>
+   <th>Features</th>
+<% } %>
+<% if (show_column('exchanges', 'policy')) { %>
+    <th><%= fmt_sort('Policy','policy') %></th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('exchanges', 'rate-in')) { %>
+   <th><%= fmt_sort('Message rate in',   'message_stats.publish_in_details.rate') %></th>
+<% } %>
+<% if (show_column('exchanges', 'rate-out')) { %>
+   <th><%= fmt_sort('Message rate out',  'message_stats.publish_out_details.rate') %></th>
+<% } %>
+<% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="exchanges">+/-</span></th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+  for (var i = 0; i < exchanges.items.length; i++) {
+    var exchange = exchanges.items[i];
+%>
+  <tr<%= alt_rows(i, exchange.arguments)%>>
+<% if (vhosts_interesting) { %>
+   <td><%= fmt_string(exchange.vhost) %></td>
+<% } %>
+   <td><%= link_exchange(exchange.vhost, exchange.name, exchange.arguments) %></td>
+   <td class="c"><%= fmt_exchange_type(exchange.type) %></td>
+<% if (show_column('exchanges', 'features')) { %>
+   <td class="c">
+     <%= fmt_features_short(exchange) %>
+     <%= fmt_policy_short(exchange) %>
+   </td>
+<% } %>
+<% if (show_column('exchanges', 'features_no_policy')) { %>
+   <td class="c">
+     <%= fmt_features_short(exchange) %>
+   </td>
+<% } %>
+<% if (show_column('exchanges', 'policy')) { %>
+   <td class="c">
+     <%= link_policy(exchange.vhost, exchange.policy) %>
+   </td>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('exchanges', 'rate-in')) { %>
+   <td class="r"><%= fmt_detail_rate(exchange.message_stats, 'publish_in') %></td>
+<% } %>
+<% if (show_column('exchanges', 'rate-out')) { %>
+   <td class="r"><%= fmt_detail_rate(exchange.message_stats, 'publish_out') %></td>
+<% } %>
+<% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no exchanges ...</p>
+<% } %>
+  </div>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add a new exchange</h2>
+  <div class="hider">
+    <form action="#/exchanges" method="put">
+      <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Type:</label></th>
+          <td>
+            <select name="type">
+              <% for (var i = 0; i < exchange_types.length; i++) {
+                   var type = exchange_types[i];
+                   if (type.internal_purpose == undefined) { %>
+              <option value="<%= fmt_string(type.name) %>"><%= fmt_string(type.name) %></option>
+              <%   }
+                 } %>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Durability:</label></th>
+          <td>
+            <select name="durable">
+              <option value="true">Durable</option>
+              <option value="false">Transient</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Auto delete: <span class="help" id="exchange-auto-delete"></span></label></th>
+          <td>
+            <select name="auto_delete">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Internal: <span class="help" id="exchange-internal"></span></label></th>
+          <td>
+            <select name="internal">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Arguments:</label></th>
+          <td>
+            <div class="multifield" id="arguments"></div>
+            <table class="argument-links">
+              <tr>
+                <td>Add</td>
+                <td>
+                  <span class="argument-link" field="arguments" key="alternate-exchange" type="string">Alternate exchange</span>
+                  <span class="help" id="exchange-alternate"></span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add exchange"/>
+    </form>
+  </div>
+</div>

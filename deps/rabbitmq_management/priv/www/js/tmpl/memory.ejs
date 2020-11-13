@@ -1,0 +1,86 @@
+<%
+  if (memory == "not_available") {
+%>
+<p class="warning">
+  Memory statistics not available.
+</p>
+<% } else { %>
+<%
+  var sections = {'queue_procs'         : ['queue',  'Queues (masters)'],
+                  'queue_slave_procs'   : ['queue',  'Queues (mirrors)'],
+                  'binary'              : ['binary', 'Binaries'],
+                  'connection_readers'  : ['conn',   'Connection readers'],
+                  'connection_writers'  : ['conn',   'Connection writers'],
+                  'connection_channels' : ['conn',   'Connection channels'],
+                  'connection_other'    : ['conn',   'Connections (other)'],
+                  'mnesia'              : ['table',  'Mnesia'],
+                  'msg_index'           : ['table',  'Message store index'],
+                  'mgmt_db'             : ['table',  'Management database'],
+                  'other_ets'           : ['table',  'Other ETS tables'],
+                  'plugins'             : ['proc',   'Plugins'],
+                  'other_proc'          : ['proc',   'Other process memory'],
+                  'code'                : ['system', 'Code'],
+                  'atom'                : ['system', 'Atoms'],
+                  'other_system'        : ['system', 'Other system'],
+                  'allocated_unused'    : ['unused', 'Allocated unused'],
+                  'reserved_unallocated': ['unused', 'Unallocated reserved by the OS']};
+%>
+<%= format('memory-bar', {sections: sections, memory: memory, total_out: []}) %>
+<span class="clear">&nbsp;</span>
+<div class="box">
+<%
+var key = [[{name: 'Queues', colour: 'queue',
+             keys: [['queue_procs',         'queues'],
+                    ['queue_slave_procs',   'mirrors']]},
+            {name: 'Binaries', colour: 'binary',
+             keys: [['binary',              '']]}],
+
+           [{name: 'Connections', colour: 'conn',
+             keys: [['connection_readers',  'readers'],
+                    ['connection_writers',  'writers'],
+                    ['connection_channels', 'channels'],
+                    ['connection_other',    'other']]}],
+
+           [{name: 'Tables', colour: 'table',
+             keys: [['mnesia',              'internal database tables'],
+                    ['msg_index',           'message store index'],
+                    ['mgmt_db',             'management database'],
+                    ['other_ets',           'other']]}],
+
+           [{name: 'Processes', colour: 'proc',
+             keys: [['plugins',             'plugins'],
+                    ['other_proc',          'other']]},
+            {name: 'System', colour: 'system',
+             keys: [['code',                'code'],
+                    ['atom',                'atoms'],
+                    ['other_system',        'other']
+                    ]}],
+
+            [{name: 'Preallocated memory', colour: 'unused',
+              keys: [['allocated_unused',     'preallocated by runtime, unused'],
+                     ['reserved_unallocated', 'unallocated, reserved by the OS']]}]];
+%>
+<%= format('memory-table', {key: key, memory: memory}) %>
+</div>
+
+<div class="memory-info">
+  Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
+  Memory calculation strategy: <b><%= memory.strategy %></b>. <span class="help" id="memory-calculation-strategy-breakdown"></span><br/><br/>
+  Amount of memory used vs. allocated during last update: <span class="help" id="memory-use"></span><br/>
+  <table class="facts">
+      <tr>
+        <th>Runtime Used</th>
+        <td><%= fmt_bytes(memory.total.erlang) %></td>
+      </tr>
+      <tr>
+        <th>Runtime Allocated</th>
+        <td><%= fmt_bytes(memory.total.allocated) %></td>
+      </tr>
+      <tr>
+        <th>Resident Set Size (RSS) reported by the OS</th>
+        <td><%= fmt_bytes(memory.total.rss) %></td>
+      </tr>
+    </table>
+</div>
+
+<% } %>

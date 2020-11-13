@@ -1,0 +1,193 @@
+<h1>Connection <%= fmt_string(connection.name) %> <%= fmt_maybe_vhost(connection.vhost) %></h1>
+
+<div class="section">
+<h2>Overview</h2>
+<div class="hider updatable">
+  <%= data_rates('data-rates-conn', connection, 'Data rates') %>
+
+<h3>Details</h3>
+<table class="facts facts-l">
+<% if (nodes_interesting) { %>
+<tr>
+  <th>Node</th>
+  <td><%= fmt_node(connection.node) %></td>
+</tr>
+<% } %>
+
+<% if (connection.client_properties.connection_name) { %>
+<tr>
+  <th>Client-provided name</th>
+  <td><%= fmt_string(connection.client_properties.connection_name) %></td>
+</tr>
+<% } %>
+
+<tr>
+ <th>Username</th>
+ <td><%= fmt_string(connection.user) %></td>
+</tr>
+<tr>
+ <th>Protocol</th>
+ <td><%= connection.protocol %></td>
+</tr>
+<tr>
+  <th>Connected at</th>
+  <td><%= fmt_timestamp(connection.connected_at) %></td>
+</tr>
+
+<% if (connection.ssl) { %>
+<tr>
+ <th>SSL</th>
+ <td><%= fmt_boolean(connection.ssl) %></td>
+</tr>
+<% } %>
+
+<% if (connection.auth_mechanism) { %>
+<tr>
+ <th>Authentication</th>
+ <td><%= connection.auth_mechanism %></td>
+</tr>
+<% } %>
+</table>
+
+<% if (connection.state) { %>
+<table class="facts">
+<tr>
+ <th>State</th>
+ <td><%= fmt_object_state(connection) %></td>
+</tr>
+<tr>
+ <th>Heartbeat</th>
+ <td><%= fmt_time(connection.timeout, 's') %></td>
+</tr>
+<tr>
+ <th>Frame max</th>
+ <td><%= connection.frame_max %> bytes</td>
+</tr>
+<tr>
+ <th>Channel limit</th>
+ <td><%= connection.channel_max %> channels</td>
+</tr>
+</table>
+
+<% } %>
+
+</div>
+</div>
+
+<div class="section">
+  <h2>Channels</h2>
+  <div class="hider updatable">
+    <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
+  </div>
+</div>
+
+<% if (connection.ssl) { %>
+<div class="section">
+<h2>SSL</h2>
+<div class="hider">
+
+<table class="facts">
+  <tr>
+    <th>Protocol Version</th>
+    <td><%= connection.ssl_protocol %></td>
+  </tr>
+  <tr>
+    <th>Key Exchange Algorithm</th>
+    <td><%= connection.ssl_key_exchange %></td>
+  </tr>
+  <tr>
+    <th>Cipher Algorithm</th>
+    <td><%= connection.ssl_cipher %></td>
+  </tr>
+  <tr>
+    <th>Hash Algorithm</th>
+    <td><%= connection.ssl_hash %></td>
+  </tr>
+</table>
+
+<% if (connection.peer_cert_issuer != '') { %>
+<table class="facts">
+  <tr>
+    <th>Peer Certificate Issuer</th>
+    <td><%= connection.peer_cert_issuer %></td>
+  </tr>
+  <tr>
+    <th>Peer Certificate Subject</th>
+    <td><%= connection.peer_cert_subject %></td>
+  </tr>
+  <tr>
+    <th>Peer Certificate Validity</th>
+    <td><%= connection.peer_cert_validity %></td>
+  </tr>
+</table>
+<% } %>
+</div>
+</div>
+<% } %>
+
+<% if (properties_size(connection.client_properties) > 0) { %>
+<div class="section-hidden">
+<h2>Client properties</h2>
+<div class="hider">
+<%= fmt_table_long(connection.client_properties) %>
+</div>
+</div>
+<% } %>
+
+<% if(connection.reductions || connection.garbage_collection) { %>
+<div class="section-hidden">
+<h2>Runtime Metrics (Advanced)</h2>
+ <div class="hider updatable">
+ <%= data_reductions('reductions-rates-conn', connection) %>
+ <table class="facts">
+    <% if (connection.garbage_collection.min_bin_vheap_size) { %>
+        <tr>
+        <th>Minimum binary virtual heap size in words (min_bin_vheap_size)</th>
+        <td><%= connection.garbage_collection.min_bin_vheap_size %></td>
+        </tr>
+    <% } %>
+
+    <% if (connection.garbage_collection.min_heap_size) { %>
+        <tr>
+        <th>Minimum heap size in words (min_heap_size)</th>
+        <td><%= connection.garbage_collection.min_heap_size %></td>
+        </tr>
+    <% } %>
+
+    <% if (connection.garbage_collection.fullsweep_after) { %>
+        <tr>
+        <th>Maximum generational collections before fullsweep (fullsweep_after)</th>
+        <td><%= connection.garbage_collection.fullsweep_after %></td>
+        </tr>
+    <% } %>
+
+    <% if (connection.garbage_collection.minor_gcs) { %>
+        <tr>
+        <th>Number of minor GCs (minor_gcs)</th>
+        <td><%= connection.garbage_collection.minor_gcs %></td>
+        </tr>
+    <% } %>
+ </table>
+ </div>
+</div>
+
+<% } %>
+
+
+<div class="section-hidden">
+  <h2>Close this connection</h2>
+  <div class="hider">
+    <form action="#/connections" method="delete" class="confirm">
+      <input type="hidden" name="name" value="<%= fmt_string(connection.name) %>"/>
+      <table class="form">
+        <tr>
+          <th><label>Reason:</label></th>
+          <td>
+            <input type="text" name="reason" value="Closed via management plugin" class="wide"/>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Force Close"/>
+    </form>
+  </div>
+</div>

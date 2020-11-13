@@ -1,0 +1,271 @@
+
+<h1>Queues</h1>
+<div class="section">
+  <%= paginate_ui(queues, 'queues') %>
+</div>
+<div class="updatable">
+<% if (queues.items.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <%= group_heading('queues', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <%= group_heading('queues', 'Messages', []) %>
+    <%= group_heading('queues', 'Message bytes', []) %>
+<% if (rates_mode != 'none') { %>
+    <%= group_heading('queues', 'Message rates', []) %>
+<% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="queues">+/-</span></th>
+  </tr>
+  <tr>
+<% if (vhosts_interesting) { %>
+    <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
+    <th><%= fmt_sort('Name',         'name') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',         'node') %></th>
+<% } %>
+<% if (show_column('queues', 'features')) { %>
+    <th>Features</th>
+<% } %>
+<% if (show_column('queues', 'features_no_policy')) { %>
+    <th>Features</th>
+<% } %>
+<% if (show_column('queues', 'policy')) { %>
+    <th><%= fmt_sort('Policy','policy') %></th>
+<% } %>
+<% if (show_column('queues', 'consumers')) { %>
+    <th><%= fmt_sort('Consumers',    'consumers') %></th>
+<% } %>
+<% if (show_column('queues', 'consumer_utilisation')) { %>
+    <th><%= fmt_sort('Consumer utilisation', 'consumer_utilisation') %></th>
+<% } %>
+<% if (show_column('queues', 'state')) { %>
+    <th><%= fmt_sort('State',        'state') %></th>
+<% } %>
+<% if (show_column('queues', 'msgs-ready')) { %>
+    <th><%= fmt_sort('Ready',        'messages_ready') %></th>
+<% } %>
+<% if (show_column('queues', 'msgs-unacked')) { %>
+    <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
+<% } %>
+<% if (show_column('queues', 'msgs-ram')) { %>
+    <th><%= fmt_sort('In Memory',    'messages_ram') %></th>
+<% } %>
+<% if (show_column('queues', 'msgs-persistent')) { %>
+    <th><%= fmt_sort('Persistent',   'messages_persistent') %></th>
+<% } %>
+<% if (show_column('queues', 'msgs-total')) { %>
+    <th><%= fmt_sort('Total',        'messages') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ready')) { %>
+    <th><%= fmt_sort('Ready',        'message_bytes_ready') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-unacked')) { %>
+    <th><%= fmt_sort('Unacked',      'message_bytes_unacknowledged') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ram')) { %>
+    <th><%= fmt_sort('In Memory',    'message_bytes_ram') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-persistent')) { %>
+    <th><%= fmt_sort('Persistent',   'message_bytes_persistent') %></th>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-total')) { %>
+    <th><%= fmt_sort('Total',        'message_bytes') %></th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+  <% if (show_column('queues', 'rate-incoming')) { %>
+    <th><%= fmt_sort('incoming', 'message_stats.publish_details.rate') %></th>
+  <% } %>
+  <% if (show_column('queues', 'rate-deliver')) { %>
+    <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %></th>
+  <% } %>
+  <% if (show_column('queues', 'rate-redeliver')) { %>
+    <th><%= fmt_sort('redelivered', 'message_stats.redeliver_details.rate') %></th>
+  <% } %>
+  <% if (show_column('queues', 'rate-ack')) { %>
+    <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
+  <% } %>
+<% } %>
+  </tr>
+ </thead>
+ <tbody>
+<%
+  for (var i = 0; i < queues.items.length; i++) {
+    var queue = queues.items[i];
+%>
+  <tr<%= alt_rows(i, queue.arguments) %>>
+<% if (vhosts_interesting) { %>
+   <td><%= fmt_string(queue.vhost) %></td>
+<% } %>
+   <td><%= link_queue(queue.vhost, queue.name, queue.arguments) %></td>
+<% if (nodes_interesting) { %>
+   <td>
+     <%= fmt_node(queue.node) %>
+     <%= fmt_mirrors(queue) %>
+     <% if (queue.state == 'syncing') { %>
+       <%= fmt_sync_state(queue) %>
+     <% } %>
+   </td>
+<% } %>
+<% if (show_column('queues', 'features')) { %>
+   <td class="c">
+     <%= fmt_features_short(queue) %>
+     <%= fmt_policy_short(queue) %>
+     <%= fmt_op_policy_short(queue) %>
+   </td>
+<% } %>
+<% if (show_column('queues', 'features_no_policy')) { %>
+   <td class="c"><%= fmt_features_short(queue) %></td>
+<% } %>
+<% if (show_column('queues', 'policy')) { %>
+   <td class="c"><%= link_policy(queue.vhost, queue.policy) %>
+                 <%= fmt_string(queue.operator_policy) %></td>
+<% } %>
+<% if (show_column('queues', 'consumers')) { %>
+   <td class="c"><%= fmt_string(queue.consumers) %></td>
+<% } %>
+<% if (show_column('queues', 'consumer_utilisation')) { %>
+   <td class="c"><%= fmt_percent(queue.consumer_utilisation) %></td>
+<% } %>
+<% if (show_column('queues', 'state')) { %>
+   <td class="c"><%= fmt_object_state(queue) %></td>
+<% } %>
+<% if (show_column('queues', 'msgs-ready')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_ready) %></td>
+<% } %>
+<% if (show_column('queues', 'msgs-unacked')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_unacknowledged) %></td>
+<% } %>
+<% if (show_column('queues', 'msgs-ram')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_ram) %></td>
+<% } %>
+<% if (show_column('queues', 'msgs-persistent')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_persistent) %></td>
+<% } %>
+<% if (show_column('queues', 'msgs-total')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ready')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_ready) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-unacked')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_unacknowledged) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-ram')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_ram) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-persistent')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes_persistent) %></td>
+<% } %>
+<% if (show_column('queues', 'msg-bytes-total')) { %>
+   <td class="r"><%= fmt_bytes(queue.message_bytes) %></td>
+<% } %>
+<% if (rates_mode != 'none') { %>
+  <% if (show_column('queues', 'rate-incoming')) { %>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'publish') %></td>
+  <% } %>
+  <% if (show_column('queues', 'rate-deliver')) { %>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'deliver_get') %></td>
+  <% } %>
+  <% if (show_column('queues', 'rate-redeliver')) { %>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'redeliver') %></td>
+  <% } %>
+  <% if (show_column('queues', 'rate-ack')) { %>
+    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'ack') %></td>
+  <% } %>
+<% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no queues ...</p>
+<% } %>
+  </div>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add a new queue</h2>
+  <div class="hider">
+    <form action="#/queues" method="put">
+      <table class="form">
+<% if (vhosts_interesting) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th><label>Durability:</label></th>
+          <td>
+            <select name="durable">
+              <option value="true">Durable</option>
+              <option value="false">Transient</option>
+            </select>
+          </td>
+        </tr>
+<%
+  if (nodes_interesting) {
+   var nodes = JSON.parse(sync_get('/nodes'));
+%>
+        <tr>
+          <th><label>Node:</label></th>
+          <td>
+            <select name="node">
+              <% for (var i = 0; i < nodes.length; i++) { %>
+              <option value="<%= fmt_string(nodes[i].name) %>"><%= fmt_node(nodes[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } %>
+        <tr>
+          <th><label>Auto delete: <span class="help" id="queue-auto-delete"></span></label></th>
+          <td>
+            <select name="auto_delete">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Arguments:</label></th>
+          <td>
+            <div class="multifield" id="arguments"></div>
+            <table class="argument-links">
+              <tr>
+                <td>Add</td>
+                <td>
+                  <span class="argument-link" field="arguments" key="x-message-ttl" type="number">Message TTL</span> <span class="help" id="queue-message-ttl"></span> |
+                  <span class="argument-link" field="arguments" key="x-expires" type="number">Auto expire</span> <span class="help" id="queue-expires"></span> |
+                  <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
+                  <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span> |
+                  <span class="argument-link" field="arguments" key="x-overflow" type="string">Overflow behaviour</span> <span class="help" id="queue-overflow"></span><br/>
+                  <span class="argument-link" field="arguments" key="x-dead-letter-exchange" type="string">Dead letter exchange</span> <span class="help" id="queue-dead-letter-exchange"></span> |
+                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span> |
+                  <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span><br/>
+                  <span class="argument-link" field="arguments" key="x-queue-mode" type="string" value="lazy">Lazy mode</span> <span class="help" id="queue-lazy"></span>
+                  <span class="argument-link" field="arguments" key="x-queue-master-locator" type="string" value="">Master locator</span> <span class="help" id="queue-master-locator"></span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add queue"/>
+    </form>
+  </div>
+</div>

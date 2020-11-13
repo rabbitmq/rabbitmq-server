@@ -1,0 +1,194 @@
+<% if (channels.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (mode == 'standalone') { %>
+    <%= group_heading('channels', 'Overview', [true, vhosts_interesting, nodes_interesting]) %>
+<% } else { %>
+    <%= group_heading('channels', 'Overview', [true]) %>
+<% } %>
+    <%= group_heading('channels', 'Details', []) %>
+    <%= group_heading('channels', 'Transactions', []) %>
+<% if (rates_mode != 'none') { %>
+    <%= group_heading('channels', 'Message rates', []) %>
+<% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="channels">+/-</span></th>
+  </tr>
+  <tr>
+<% if (mode == 'standalone') { %>
+    <th><%= fmt_sort('Channel',         'name') %></th>
+<% if (nodes_interesting) { %>
+    <th><%= fmt_sort('Node',            'node') %></th>
+<% } %>
+<% if (vhosts_interesting) { %>
+    <th><%= fmt_sort('Virtual host',    'vhost') %></th>
+<% } %>
+<% if (show_column('channels', 'user')) { %>
+    <th><%= fmt_sort('User name',       'user') %></th>
+<% } %>
+<% if (show_column('channels', 'mode')) { %>
+    <th>Mode <span class="help" id="channel-mode"></span></th>
+<% } %>
+<% if (show_column('channels', 'state')) { %>
+    <th><%= fmt_sort('State',           'state') %></th>
+<% } %>
+<% if (show_column('channels', 'msgs-unconfirmed')) { %>
+    <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
+<% } %>
+<% if (show_column('channels', 'prefetch')) { %>
+    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
+<% } %>
+<% if (show_column('channels', 'msgs-unacked')) { %>
+    <th><%= fmt_sort('Unacked',         'messages_unacknowledged') %></th>
+<% } %>
+<% if (show_column('channels', 'msgs-uncommitted')) { %>
+    <th><%= fmt_sort('Uncommitted msgs', 'messages_uncommitted') %></th>
+<% } %>
+<% if (show_column('channels', 'acks-uncommitted')) { %>
+    <th><%= fmt_sort('Uncommitted acks', 'acks_uncommitted') %></th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('channels', 'rate-publish')) { %>
+    <th><%= fmt_sort('publish', 'message_stats.publish_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-confirm')) { %>
+    <th><%= fmt_sort('confirm', 'message_stats.confirm_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-return')) { %>
+    <th><%= fmt_sort('return (mandatory)', 'message_stats.return_unroutable_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-deliver')) { %>
+    <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-redeliver')) { %>
+    <th><%= fmt_sort('redelivered', 'message_stats.redeliver_details.rate') %></th>
+<% } %>
+<% if (show_column('channels', 'rate-ack')) { %>
+    <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
+<% } %>
+<% } %>
+<% } else { %>
+<!-- TODO make sortable after bug 23401 -->
+    <th>Channel</th>
+<% if (show_column('channels', 'user')) { %>
+    <th>User name</th>
+<% } %>
+<% if (show_column('channels', 'mode')) { %>
+    <th>Mode <span class="help" id="channel-mode"></span></th>
+<% } %>
+<% if (show_column('channels', 'state')) { %>
+    <th>State</th>
+<% } %>
+<% if (show_column('channels', 'msgs-unconfirmed')) { %>
+    <th>Unconfirmed</th>
+<% } %>
+<% if (show_column('channels', 'prefetch')) { %>
+    <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
+<% } %>
+<% if (show_column('channels', 'msgs-unacked')) { %>
+    <th>Unacked</th>
+<% } %>
+<% if (show_column('channels', 'msgs-uncommitted')) { %>
+    <th>Uncommitted msgs</th>
+<% } %>
+<% if (show_column('channels', 'acks-uncommitted')) { %>
+    <th>Uncommitted acks</th>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('channels', 'rate-publish')) { %>
+    <th>publish</th>
+<% } %>
+<% if (show_column('channels', 'rate-confirm')) { %>
+    <th>confirm</th>
+<% } %>
+<% if (show_column('channels', 'rate-return')) { %>
+    <th>return (mandatory)</th>
+<% } %>
+<% if (show_column('channels', 'rate-deliver')) { %>
+    <th>deliver / get</th>
+<% } %>
+<% if (show_column('channels', 'rate-redeliver')) { %>
+    <th>redelivered</th>
+<% } %>
+<% if (show_column('channels', 'rate-ack')) { %>
+    <th>ack</th>
+<% } %>
+<% } %>
+<% } %>
+  </tr>
+ </thead>
+ <tbody>
+<%
+  for (var i = 0; i < channels.length; i++) {
+    var channel = channels[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td>
+      <%= link_channel(channel.name) %>
+    </td>
+<% if (mode == 'standalone' && nodes_interesting) { %>
+    <td><%= fmt_node(channel.node) %></td>
+<% } %>
+<% if (mode == 'standalone' && vhosts_interesting) { %>
+    <td class="c"><%= fmt_string(channel.vhost) %></td>
+<% } %>
+<% if (show_column('channels', 'user')) { %>
+    <td class="c"><%= fmt_string(channel.user) %></td>
+<% } %>
+<% if (show_column('channels', 'mode')) { %>
+    <td class="c">
+      <%= fmt_channel_mode(channel) %>
+    </td>
+<% } %>
+<% if (show_column('channels', 'state')) { %>
+    <td class="c"><%= fmt_object_state(channel) %></td>
+<% } %>
+<% if (show_column('channels', 'msgs-unconfirmed')) { %>
+    <td class="c"><%= channel.messages_unconfirmed %></td>
+<% } %>
+<% if (show_column('channels', 'prefetch')) { %>
+    <td class="c">
+      <% if (channel.prefetch_count != 0) { %>
+        <%= channel.prefetch_count %><br/>
+      <% } %>
+      <% if (channel.global_prefetch_count != 0) { %>
+        <%= channel.global_prefetch_count %> (global)
+      <% } %>
+    </td>
+<% } %>
+<% if (show_column('channels', 'msgs-unacked')) { %>
+    <td class="c"><%= channel.messages_unacknowledged %></td>
+<% } %>
+<% if (show_column('channels', 'msgs-uncommitted')) { %>
+    <td class="c"><%= channel.messages_uncommitted %></td>
+<% } %>
+<% if (show_column('channels', 'acks-uncommitted')) { %>
+    <td class="c"><%= channel.acks_uncommitted %></td>
+<% } %>
+<% if (rates_mode != 'none') { %>
+<% if (show_column('channels', 'rate-publish')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'publish') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-confirm')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'confirm') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-return')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'return_unroutable') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-deliver')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'deliver_get') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-redeliver')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'redeliver') %></td>
+<% } %>
+<% if (show_column('channels', 'rate-ack')) { %>
+    <td class="r"><%= fmt_detail_rate(channel.message_stats, 'ack') %></td>
+<% } %>
+<% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no channels ...</p>
+<% } %>

@@ -1,0 +1,39 @@
+<% if (consumers.length > 0) { %>
+    <table class="list">
+      <thead>
+        <tr>
+<% if (mode == 'queue') { %>
+          <th>Channel</th>
+          <th>Consumer tag</th>
+<% } else { %>
+          <th>Consumer tag</th>
+          <th>Queue</th>
+<% } %>
+          <th>Ack required</th>
+          <th>Exclusive</th>
+          <th>Prefetch count</th>
+          <th>Arguments</th>
+        </tr>
+      </thead>
+<%
+  for (var i = 0; i < consumers.length; i++) {
+    var consumer = consumers[i];
+%>
+      <tr<%= alt_rows(i) %>>
+<% if (mode == 'queue') { %>
+        <td><%= link_channel(consumer.channel_details.name) %></td>
+        <td><%= fmt_string(consumer.consumer_tag) %></td>
+<% } else { %>
+        <td><%= fmt_string(consumer.consumer_tag) %></td>
+        <td><%= link_queue(consumer.queue.vhost, consumer.queue.name) %></td>
+<% } %>
+        <td class="c"><%= fmt_boolean(consumer.ack_required) %></td>
+        <td class="c"><%= fmt_boolean(consumer.exclusive) %></td>
+        <td class="c"><%= consumer.prefetch_count %></td>
+        <td class="c"><%= fmt_table_short(consumer.arguments) %></td>
+      </tr>
+<% } %>
+    </table>
+<% } else { %>
+  <p>... no consumers ...</p>
+<% } %>

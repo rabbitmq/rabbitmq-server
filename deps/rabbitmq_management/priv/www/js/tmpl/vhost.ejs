@@ -1,0 +1,60 @@
+<h1>Virtual Host: <b><%= fmt_string(vhost.name) %></b></h1>
+
+<% if (permissions.length == 0) { %>
+<p class="warning">
+  No users have permission to access this virtual host.<br/>
+  Use "Set Permission" below to grant users permission to access this virtual host.
+</p>
+<% } %>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider updatable">
+    <%= queue_lengths('lengths-vhost', vhost) %>
+<% if (rates_mode != 'none') { %>
+    <%= message_rates('msg-rates-vhost', vhost.message_stats) %>
+<% } %>
+    <%= data_rates('data-rates-vhost', vhost, 'Data rates') %>
+    <h3>Details</h3>
+    <table class="facts">
+      <tr>
+        <th>Tracing enabled:</th>
+        <td><%= fmt_boolean(vhost.tracing) %></td>
+      <tr>
+        <th>State:</th>
+        <td>
+        <table class="mini">
+        <% for (var node in vhost.cluster_state) { %>
+            <tr>
+            <th><%= fmt_escape_html(node) %> :</th>
+            <td><%= vhost.cluster_state[node] %>
+            <% if (vhost.cluster_state[node] == "stopped"){ %>
+                <form action="#/restart_vhost" method="post">
+                    <input type="hidden" name="node" value="<%= node %>"/>
+                    <input type="hidden" name="vhost" value="<%= vhost.name %>"/>
+                    <input type="submit" value="Restart"/>
+                </form>
+            <% } %>
+            </td>
+            </tr>
+        <% } %>
+        </table>
+        </td>
+      </tr>
+    </table>
+</div>
+</div>
+
+<%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
+
+<%= format('topic-permissions', {'mode': 'vhost', 'topic_permissions': topic_permissions, 'users':users, 'parent': vhost, 'exchanges': exchanges}) %>
+
+<div class="section-hidden">
+<h2>Delete this vhost</h2>
+<div class="hider">
+<form action="#/vhosts" method="delete" class="confirm">
+<input type="hidden" name="name" value="<%= fmt_string(vhost.name) %>"/>
+<input type="submit" value="Delete this virtual host"/>
+</form>
+</div>
+</div>

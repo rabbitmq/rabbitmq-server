@@ -1,0 +1,380 @@
+<h1>Overview</h1>
+<% if (user_monitor) { %>
+<%= format('partition', {'nodes': nodes}) %>
+<% } %>
+
+<div class="updatable">
+<% if (overview.statistics_db_event_queue > 1000) { %>
+<p class="warning">
+  The management statistics database currently has a queue
+  of <b><%= overview.statistics_db_event_queue %></b> events to
+  process. If this number keeps increasing, so will the memory used by
+  the management plugin.
+
+  <% if (overview.rates_mode != 'none') { %>
+  You may find it useful to set the <code>rates_mode</code> config item
+  to <code>none</code>.
+  <% } %>
+</p>
+<% } %>
+<% for (i = 0; i < vhosts.length; i++)
+{
+    for (var vhost_status_node in vhosts[i].cluster_state) {
+        if (vhosts[i].cluster_state[vhost_status_node] != 'running') {
+%>
+<p class="warning">
+  Virtual host <b><%= vhosts[i].name %></b> experienced an error on node <b><%= vhost_status_node %></b> and may be inaccessible
+</p>
+<% }}} %>
+</div>
+
+<div class="section">
+<h2>Totals</h2>
+<div class="hider updatable">
+<%= queue_lengths('lengths-over', overview.queue_totals) %>
+<% if (rates_mode != 'none') { %>
+  <%= message_rates('msg-rates-over', overview.message_stats) %>
+<% } %>
+
+<% if (overview.object_totals) { %>
+  <h3>Global counts <span class="help" id="resource-counts"></span></h3>
+
+  <ul id="global-counts">
+    <li>
+      <a href="#/connections" class="button">Connections: <strong><%= overview.object_totals.connections %></strong></a>
+    </li>
+    <li>
+      <a href="#/channels" class="button">Channels: <strong><%= overview.object_totals.channels %></strong></a>
+    </li>
+    <li>
+      <a href="#/exchanges" class="button">Exchanges: <strong><%= overview.object_totals.exchanges %></strong></a>
+    </li>
+    <li>
+      <a href="#/queues" class="button">Queues: <strong><%= overview.object_totals.queues %></strong></a>
+    </li>
+<% if (overview.object_totals['consumers'] != undefined) { %>
+    <li>
+      <a href="#" class="button disabled">Consumers: <strong><%= overview.object_totals.consumers %></strong></a>
+    </li>
+<% } %>
+  </ul>
+<% } %>
+
+</div>
+</div>
+
+<% if (user_monitor) { %>
+<div class="section">
+<h2>Nodes</h2>
+
+<div class="hider updatable">
+
+<table class="list">
+  <tr>
+    <th>Name</th>
+  <% if (show_column('overview', 'file_descriptors')) { %>
+    <th>File descriptors <span class="help" id="file-descriptors"></span></th>
+  <% } %>
+  <% if (show_column('overview', 'socket_descriptors')) { %>
+    <th>Socket descriptors <span class="help" id="socket-descriptors"></span></th>
+  <% } %>
+  <% if (show_column('overview', 'erlang_processes')) { %>
+    <th>Erlang processes</th>
+  <% } %>
+  <% if (show_column('overview', 'memory')) { %>
+    <th>Memory <span class="help" id="memory-calculation-strategy"></span></th>
+  <% } %>
+  <% if (show_column('overview', 'disk_space')) { %>
+    <th>Disk space</th>
+  <% } %>
+  <% if (show_column('overview', 'uptime')) { %>
+    <th>Uptime</th>
+  <% } %>
+  <% if (show_column('overview', 'info')) { %>
+    <th>Info</th>
+  <% } %>
+  <% if (user_administrator && show_column('overview', 'reset_stats')) { %>
+    <th>Reset stats</th>
+  <% } %>
+    <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
+  </tr>
+<%
+   for (var i = 0; i < nodes.length; i++) {
+     var node = nodes[i];
+     var colspan = group_count('overview', 'Statistics', []) +
+                   group_count('overview', 'General', []);
+%>
+   <tr<%= alt_rows(i)%>>
+     <td>
+       <a href="#/nodes/<%= esc(node.name) %>" class="button"><%= fmt_node(node.name) %></a>
+       <% if (rabbit_versions_interesting) { %>
+         <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
+       <% } %>
+     </td>
+<% if (!node.running) { %>
+     <td colspan="<%= colspan %>">
+       <div class="status-red">
+         Node not running
+       </div>
+     </td>
+<% } else if (node.os_pid == undefined) { %>
+     <td colspan="<%= colspan %>">
+       <div class="status-yellow">
+         <abbr title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
+           Node statistics not available</abbr>
+       </div>
+     </td>
+<% } else { %>
+  <% if (show_column('overview', 'file_descriptors')) { %>
+     <td>
+    <% if (node.fd_used != 'install_handle_from_sysinternals') { %>
+        <%= node_stat_count_bar('fd_used', 'fd_total', node, FD_THRESHOLDS) %>
+    <% } else { %>
+        <p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub><%= node.fd_total %> available</sub></p>
+
+    <% } %>
+     </td>
+  <% } %>
+  <% if (show_column('overview', 'socket_descriptors')) { %>
+     <td>
+        <%= node_stat_count_bar('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
+     </td>
+  <% } %>
+  <% if (show_column('overview', 'erlang_processes')) { %>
+     <td>
+
+        <%= node_stat_count_bar('proc_used', 'proc_total', node, PROCESS_THRESHOLDS) %>
+     </td>
+  <% } %>
+  <% if (show_column('overview', 'memory')) { %>
+     <td>
+
+    <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
+        <%= node_stat_bar('mem_used', 'mem_limit', 'high watermark', node, fmt_bytes_axis,
+                          node.mem_alarm ? 'red' : 'green',
+                          node.mem_alarm ? 'memory-alarm' : null) %>
+    <% } else { %>
+       <%= fmt_bytes(node.mem_used) %>
+    <% } %>
+     </td>
+  <% } %>
+  <% if (show_column('overview', 'disk_space')) { %>
+     <td>
+
+    <% if (node.disk_free_limit != 'disk_free_monitoring_disabled') { %>
+        <%= node_stat_bar('disk_free', 'disk_free_limit', 'low watermark', node, fmt_bytes_axis,
+                          node.disk_free_alarm ? 'red' : 'green',
+                          node.disk_free_alarm ? 'disk_free-alarm' : null, true) %>
+    <% } else { %>
+         (not available)
+    <% } %>
+     </td>
+  <% } %>
+  <% if (show_column('overview', 'uptime')) { %>
+     <td><span><%= fmt_uptime(node.uptime) %></span></td>
+  <% } %>
+  <% if (show_column('overview', 'info')) { %>
+     <td>
+         <abbr title="Message rates"><%= fmt_string(node.rates_mode) %></abbr>
+       <% if (node.type == 'disc') { %>
+         <abbr title="Broker definitions are held on disc.">disc</abbr>
+       <% } else { %>
+         <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
+       <% } %>
+       <%= fmt_plugins_small(node) %>
+        <abbr title="Memory calculation strategy"><%= fmt_string(node.mem_calculation_strategy) %></abbr>
+     </td>
+  <% } %>
+  <% if(user_administrator && show_column('overview', 'reset_stats')) { %>
+    <td>
+      <form action="#/reset_node" method="delete" class="confirm inline-form">
+        <input type="hidden" name="node" value="<%= node.name %>"/>
+        <input type="submit" value="This node"/>
+      </form>
+      <form action="#/reset" method="delete" class="confirm inline-form-right">
+          <input type="submit" value="All nodes"/>
+      </form>
+  <% } %>
+<% } %>
+   </tr>
+<% } %>
+</table>
+
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Churn statistics</h2>
+<div class="hider updatable">
+  <%= rates_chart_or_text('connection-churn', overview.churn_rates,
+      [['Created', 'connection_created'],
+       ['Closed', 'connection_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Connection operations', 'connection-operations') %>
+
+  <%= rates_chart_or_text('channel-churn', overview.churn_rates,
+      [['Created', 'channel_created'],
+       ['Closed', 'channel_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Channel operations', 'channel-operations') %>
+
+  <%= rates_chart_or_text('queue-churn', overview.churn_rates,
+      [['Declared', 'queue_declared'],
+       ['Created', 'queue_created'],
+       ['Deleted', 'queue_deleted']],
+      fmt_rate, fmt_rate_axis, true, 'Queue operations', 'queue-operations') %>
+
+</div>
+</div>
+
+
+<div class="section-hidden">
+<h2>Ports and contexts</h2>
+<div class="hider updatable">
+<h3>Listening ports</h3>
+<table class="list">
+  <tr>
+    <th>Protocol</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+    <th>Bound to</th>
+    <th>Port</th>
+  </tr>
+  <%
+      for (var i = 0; i < overview.listeners.length; i++) {
+          var listener = overview.listeners[i];
+  %>
+  <tr<%= alt_rows(i)%>>
+    <td><%= listener.protocol %></td>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_node(listener.node) %></td>
+<% } %>
+    <td><%= listener.ip_address %></td>
+    <td><%= listener.port %></td>
+  </tr>
+  <% } %>
+</table>
+<h3>Web contexts</h3>
+<table class="list">
+  <tr>
+    <th>Context</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+    <th>Bound to</th>
+    <th>Port</th>
+    <th>SSL</th>
+    <th>Path</th>
+  </tr>
+  <%
+    for (var i = 0; i < overview.contexts.length; i++) {
+        var context = overview.contexts[i];
+  %>
+    <tr<%= alt_rows(i)%>>
+      <td><%= context.description %></td>
+<% if (nodes_interesting) { %>
+      <td><%= fmt_node(context.node) %></td>
+<% } %>
+      <td><%= (context.ip != undefined) ? context.ip : "0.0.0.0" %></td>
+      <td><%= context.port %></td>
+      <td class="c"><%= fmt_boolean(context.ssl || false) %></td>
+      <td><%= context.path %></td>
+    </tr>
+  <% } %>
+</table>
+</div>
+</div>
+
+<div class="section-hidden administrator-only">
+<h2>Export definitions</h2>
+<div class="hider">
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          <p>
+            <label for="download-filename">Filename for download:</label><br/>
+            <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
+          </p>
+        </td>
+        <td>
+          <p>
+            <button id="download-definitions">Download broker definitions</button>
+            <span class="help" id="export-definitions"></span>
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>
+            <% if (vhosts_interesting) { %>
+          <label>Virtual host:</label>
+            <select name="vhost-download">
+              <option value="all">All</option>
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select> <span class="help" id="export-definitions-vhost"></span>
+<% } else { %>
+            <input type="hidden" name="vhost" value="all"/>
+<% } %>
+        </td>
+      </tr>
+    </table>
+</div>
+</div>
+
+<div class="section-hidden administrator-only">
+<h2>Import definitions</h2>
+<div class="hider">
+  <form  method="post" enctype="multipart/form-data">
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          <p>
+            <label>Definitions file:</label><br/>
+            <input type="file" name="file"/>
+          </p>
+        </td>
+        <td>
+          <p>
+            <input type="submit" value="Upload broker definitions" onclick="submit_import($(this).closest('form')[0]); return false"/>
+            <span class="help" id="import-definitions"></span>
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>
+         <% if (vhosts_interesting) { %>
+          <label>Virtual host:</label>
+            <select name="vhost-upload">
+              <option value="all">All</option>
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select> <span class="help" id="import-definitions-vhost"></span>
+
+<% } else { %>
+            <input type="hidden" name="vhost" value="all"/>
+<% } %>
+        </td>
+      </tr>
+    </table>
+  </form>
+</div>
+</div>
+
+<% if (overview.rates_mode == 'none') { %>
+<div class="section-hidden">
+<h2>Message rates disabled</h2>
+<div class="hider">
+<p>
+  Message rates are currently disabled.
+</p>
+<p>
+  To re-enable message rates, edit your configuration file and
+  set <code>rates_mode</code> to <code>basic</code>
+  or <code>detailed</code> in the <code>rabbitmq_management</code>
+  application
+</p>
+</div>
+</div>
+<% } %>
+<% } %>

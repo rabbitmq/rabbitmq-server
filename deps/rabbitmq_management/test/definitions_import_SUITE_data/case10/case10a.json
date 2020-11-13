@@ -1,0 +1,68 @@
+{
+    "rabbit_version": "3.7.13",
+    "users": [
+        {
+            "name": "bunny_reader",
+            "password_hash": "ExmGdjBTmQEPxcW2z+dsOuPvjFbTBiYQgMByzfpE/IIXplYG",
+            "hashing_algorithm": "rabbit_password_hashing_sha256",
+            "tags": ""
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "langohr_testbed"
+        },
+        {
+            "name": "bunny_testbed"
+        },
+        {
+            "name": "/"
+        }
+    ],
+    "permissions": [
+        {
+            "user": "bunny_reader",
+            "vhost": "bunny_testbed",
+            "configure": "^---$",
+            "write": "^---$",
+            "read": ".*"
+        }
+    ],
+    "topic_permissions": [],
+    "parameters": [
+        {
+            "value": {
+                "expires": 3600000,
+                "uri": "amqp://localhost:5673"
+            },
+            "vhost": "/",
+            "component": "federation-upstream",
+            "name": "up-hare"
+        }
+    ],
+    "global_parameters": [
+        {
+            "name": "cluster_name",
+            "value": "rabbit@localhost"
+        }
+    ],
+    "policies": [],
+    "queues": [
+        {
+            "name": "bunny.basic_consume0.1364356981103202",
+            "vhost": "bunny_testbed",
+            "durable": false,
+            "auto_delete": true,
+            "arguments": {}
+        },
+        {
+            "name": "bunny.basic_consume0.1364356981103202",
+            "vhost": "bunny_testbed",
+            "durable": true,
+            "auto_delete": true,
+            "arguments": {}
+        }
+    ],
+    "exchanges": [],
+    "bindings": []
+}
