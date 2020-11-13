@@ -1,0 +1,136 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+[
+  {k8s_discovery_mechanism_as_module,
+      "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+       cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+  
+  {k8s_discovery_mechanism_as_alias1,
+      "cluster_formation.peer_discovery_backend = k8s
+       cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+  
+  {k8s_discovery_mechanism_as_alias2,
+      "cluster_formation.peer_discovery_backend = kubernetes
+       cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+  
+  {k8s_host, "cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_k8s, [
+                      {k8s_host, "k8s.eng.megacorp.local"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_port,
+   "cluster_formation.k8s.port = 9700",
+   [{rabbit, [{cluster_formation, [
+                                   {peer_discovery_k8s, [
+                                                            {k8s_port, 9700}
+                                                           ]}
+                                  ]}]}],
+   [rabbitmq_peer_discovery_k8s]}
+
+, {k8s_host_and_port,
+   "cluster_formation.k8s.host = k8s.eng.megacorp.local
+   cluster_formation.k8s.port = 443",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_k8s, [
+                                                           {k8s_host, "k8s.eng.megacorp.local"},
+                                                           {k8s_port, 443}
+                                                          ]}
+                                 ]}]}],
+   [rabbitmq_peer_discovery_k8s]}
+
+
+, {k8s_scheme,
+   "cluster_formation.k8s.scheme = https",
+   [{rabbit, [{cluster_formation, [
+                                   {peer_discovery_k8s, [
+                                                            {k8s_scheme, "https"}
+                                                           ]}
+                                  ]}]}],
+   [rabbitmq_peer_discovery_k8s]}
+
+
+, {k8s_service_name, "cluster_formation.k8s.service_name = kubernetes-service", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_service_name, "kubernetes-service"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_token_path, "cluster_formation.k8s.token_path = /a/b/c", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_token_path, "/a/b/c"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_token_path, "cluster_formation.k8s.cert_path = /a/b/c", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_cert_path, "/a/b/c"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_token_path, "cluster_formation.k8s.namespace_path = /a/b/c", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_namespace_path, "/a/b/c"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+].
