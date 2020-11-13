@@ -296,7 +296,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(rabbitmq_channel_messages_published_total * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
+          "expr": "sum(rabbitmq_channels * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) - sum(rabbitmq_channel_consumers * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
