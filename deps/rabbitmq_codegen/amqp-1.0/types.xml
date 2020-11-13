@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+
+<!--
+Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
+Suisse, Deutsche Boerse, Envoy Technologies Inc., Goldman Sachs, HCL
+Technologies Ltd, IIT Software GmbH, iMatix Corporation, INETCO Systems Limited,
+Informatica Corporation, JPMorgan Chase & Co., Kaazing Corporation, N.A,
+Microsoft Corporation, my-Channels, Novell, Progress Software, Red Hat Inc.,
+Software AG, Solace Systems Inc., StormMQ Ltd., Tervela Inc., TWIST Process
+Innovations Ltd, GoPivotal, Inc., and WS02 Inc. 2006-2011. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<amqp name="types" xmlns="https://www.amqp.org/schema/amqp.xsd">
+  <section name="encodings">
+    <type name="null" class="primitive">
+      <encoding code="0x40" category="fixed" width="0"/>
+    </type>
+    <type name="boolean" class="primitive">
+      <encoding code="0x56" category="fixed" width="1"/>
+      <encoding name="true" code="0x41" category="fixed" width="0"/>
+      <encoding name="false" code="0x42" category="fixed" width="0"/>
+    </type>
+    <type name="ubyte" class="primitive">
+      <encoding code="0x50" category="fixed" width="1"/>
+    </type>
+    <type name="ushort" class="primitive">
+      <encoding code="0x60" category="fixed" width="2"/>
+    </type>
+    <type name="uint" class="primitive">
+      <encoding code="0x70" category="fixed" width="4"/>
+      <encoding name="smalluint" code="0x52" category="fixed" width="1"/>
+      <encoding name="uint0" code="0x43" category="fixed" width="0"/>
+    </type>
+    <type name="ulong" class="primitive">
+      <encoding code="0x80" category="fixed" width="8"/>
+      <encoding name="smallulong" code="0x53" category="fixed" width="1"/>
+      <encoding name="ulong0" code="0x44" category="fixed" width="0"/>
+    </type>
+    <type name="byte" class="primitive">
+      <encoding code="0x51" category="fixed" width="1"/>
+    </type>
+    <type name="short" class="primitive">
+      <encoding code="0x61" category="fixed" width="2"/>
+    </type>
+    <type name="int" class="primitive">
+      <encoding code="0x71" category="fixed" width="4"/>
+      <encoding name="smallint" code="0x54" category="fixed" width="1"/>
+    </type>
+    <type name="long" class="primitive">
+      <encoding code="0x81" category="fixed" width="8"/>
+      <encoding name="smalllong" code="0x55" category="fixed" width="1"/>
+    </type>
+    <type name="float" class="primitive">
+      <encoding name="ieee-754" code="0x72" category="fixed" width="4"/>
+    </type>
+    <type name="double" class="primitive">
+      <encoding name="ieee-754" code="0x82" category="fixed" width="8"/>
+    </type>
+    <type name="decimal32" class="primitive">
+      <encoding name="ieee-754" code="0x74" category="fixed" width="4"/>
+    </type>
+    <type name="decimal64" class="primitive">
+      <encoding name="ieee-754" code="0x84" category="fixed" width="8"/>
+    </type>
+    <type name="decimal128" class="primitive">
+      <encoding name="ieee-754" code="0x94" category="fixed" width="16"/>
+    </type>
+    <type name="char" class="primitive">
+      <encoding name="utf32" code="0x73" category="fixed" width="4"/>
+    </type>
+    <type name="timestamp" class="primitive">
+      <encoding name="ms64" code="0x83" category="fixed" width="8"/>
+    </type>
+    <type name="uuid" class="primitive">
+      <encoding code="0x98" category="fixed" width="16"/>
+    </type>
+    <type name="binary" class="primitive">
+      <encoding name="vbin8" code="0xa0" category="variable" width="1"/>
+      <encoding name="vbin32" code="0xb0" category="variable" width="4"/>
+    </type>
+    <type name="string" class="primitive">
+      <encoding name="str8-utf8" code="0xa1" category="variable" width="1"/>
+      <encoding name="str32-utf8" code="0xb1" category="variable" width="4"/>
+    </type>
+    <type name="symbol" class="primitive">
+      <encoding name="sym8" code="0xa3" category="variable" width="1"/>
+      <encoding name="sym32" code="0xb3" category="variable" width="4"/>
+    </type>
+    <type name="list" class="primitive">
+      <encoding name="list0" code="0x45" category="fixed" width="0"/>
+      <encoding name="list8" code="0xc0" category="compound" width="1"/>
+      <encoding name="list32" code="0xd0" category="compound" width="4"/>
+    </type>
+    <type name="map" class="primitive">
+      <encoding name="map8" code="0xc1" category="compound" width="1"/>
+      <encoding name="map32" code="0xd1" category="compound" width="4"/>
+    </type>
+    <type name="array" class="primitive">
+      <encoding name="array8" code="0xe0" category="array" width="1"/>
+      <encoding name="array32" code="0xf0" category="array" width="4"/>
+    </type>
+  </section>
+</amqp>
