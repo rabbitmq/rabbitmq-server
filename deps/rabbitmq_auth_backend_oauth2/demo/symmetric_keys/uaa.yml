@@ -1,0 +1,4 @@
+jwt:
+  token:
+    signing-key: rabbit_signing_key
+    verification-key: rabbit_signing_key
