@@ -1,0 +1,10 @@
+--- ../rabbit_common/.travis.yml	2019-09-13 13:48:46.258483000 +0200
++++ .travis.yml	2020-03-03 13:53:33.515196000 +0100
+@@ -13,6 +13,7 @@
+   apt:
+     packages:
+       - awscli
++      - maven
+ cache:
+   apt: true
+ env:
