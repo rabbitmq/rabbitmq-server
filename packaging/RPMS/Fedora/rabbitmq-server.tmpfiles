@@ -1,0 +1,1 @@
+D /var/run/rabbitmq 0755 rabbitmq rabbitmq -

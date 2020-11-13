@@ -1,0 +1,21 @@
+*~
+.sw?
+.*.sw?
+/.erlang.mk/
+/deps/
+/escript/
+/escript.lock
+/plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
+.envrc
+
+PACKAGES/
+
+# Source distribution.
+rabbitmq-server-*/
+rabbitmq-server-*.tar.gz
+rabbitmq-server-*.tar.bz2
+rabbitmq-server-*.tar.xz
+rabbitmq-server-*.zip

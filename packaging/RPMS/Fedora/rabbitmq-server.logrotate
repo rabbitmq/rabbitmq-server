@@ -1,0 +1,7 @@
+/var/log/rabbitmq/*.log {
+        weekly
+        missingok
+        rotate 20
+        compress
+        notifempty
+}
