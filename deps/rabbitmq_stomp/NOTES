@@ -1,0 +1,71 @@
+Comments from Sean Treadway, 2 June 2008, on the rabbitmq-discuss list:
+
+ - On naming, extensibility, and headers:
+
+   "STOMP looked like it was MQ agnostic and extensible while keeping
+    the core headers well defined (ack=client, message_id, etc...),
+    but my application was not MQ agnostic.  Plus I saw some of the
+    ActiveMQ headers weren't available or necessary in RabbitMQ.
+
+   "Keeping the AMQP naming is the best way to piggy back on the AMQP
+    documentation.  For those that need simple, transient queues, the
+    existing STOMP documentation would be sufficient."
+
+   ...
+
+   "I only have experience with RabbitMQ, so I'm fine with exposing
+    AMQP rather than try to come to some agreement over the extension
+    names of standard STOMP headers."
+
+ - On queue deletion over STOMP:
+
+   "Here, I would stick with the verbs defined in STOMP and extend the
+    verbs with headers.  One possibility is to use UNSUBSCRIBE
+    messages to change the queue properties before sending the
+    'basic.cancel' method.  Another possibility is to change queue
+    properties on a SUBSCRIBE message. Neither seem nice to me.  Third
+    option is to do nothing, and delete the queues outside of the
+    STOMP protocol"
+
+Comments from Darien Kindlund, 11 February 2009, on the rabbitmq-discuss list:
+
+ - On testing of connection establishment:
+
+   "[O]nce I switched each perl process over to re-using their
+    existing STOMP connection, things worked much, much better.  As
+    such, I'm continuing development.  In your unit testing, you may
+    want to include rapid connect/disconnect behavior or otherwise
+    explicitly warn developers to avoid this scenario."
+
+Comments from Novak Joe, 11 September 2008, on the rabbitmq-discuss list:
+
+ - On broadcast send:
+
+   "That said, I think it would also be useful to add to the STOMP
+    wiki page an additional note on broadcast SEND.  In particular I
+    found that in order to send a message to a broadcast exchange it
+    needs look something like:
+
+    ---------------------------------
+    SEND
+    destination:x.mytopic
+    exchange:amq.topic
+
+    my message
+    \x00
+    --------------------------------
+
+   "However my initial newb intuition was that it should look more like:
+
+    ---------------------------------
+    SEND
+    destination:
+    exchange:amq.topic
+    routing_key:x.mytopic
+
+    my message
+    \x00
+    --------------------------------
+
+   "The ruby examples cleared this up but not before I experienced a
+    bit of confusion on the subject."
