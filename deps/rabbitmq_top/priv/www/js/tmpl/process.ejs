@@ -1,0 +1,58 @@
+<h1>Process: <b><%= fmt_string(process.pid) %></b></h1>
+
+<div class="updatable">
+  <table class="facts">
+    <tr>
+      <th>Description</th>
+      <td><%= fmt_process_name(process) %></td>
+    </tr>
+    <tr>
+      <th>Type</th>
+      <td><%= fmt_remove_rabbit_prefix(process.name.type) %></td>
+    </tr>
+    <tr>
+      <th>Memory</th>
+      <td><%= fmt_bytes(process.memory) %></td>
+    </tr>
+    <tr>
+      <th>Reductions / sec</th>
+      <td><%= fmt_reduction_delta(process.reduction_delta) %></td>
+    </tr>
+    <tr>
+      <th>Total reductions</th>
+      <td><%= process.reductions %></td>
+    </tr>
+    <tr>
+      <th>Erlang mailbox</th>
+      <td><%= process.message_queue_len %></td>
+    </tr>
+    <tr>
+      <th>gen_server2 buffer <span class="help" id="gen-server2-buffer"></span></th>
+      <td><pre><%= process.buffer_len %></pre></td>
+    </tr>
+    <tr>
+      <th>Status</th>
+      <td><%= process.status %></td>
+    </tr>
+    <tr>
+      <th>Trap exit</th>
+      <td><%= fmt_boolean(process.trap_exit) %></td>
+    </tr>
+    <tr>
+      <th>Links</th>
+      <td><%= fmt_pids(process.links) %></td>
+    </tr>
+    <tr>
+      <th>Monitors</th>
+      <td><%= fmt_pids(process.monitors) %></td>
+    </tr>
+    <tr>
+      <th>Monitored by</th>
+      <td><%= fmt_pids(process.monitored_by) %></td>
+    </tr>
+    <tr>
+      <th>Current stacktrace</th>
+      <td><pre><%= fmt_string(process.current_stacktrace) %></pre></td>
+    </tr>
+  </table>
+</div>
