@@ -1,0 +1,183 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+{mapping, "web_mqtt.num_acceptors.tcp", "rabbitmq_web_mqtt.num_tcp_acceptors",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.num_acceptors.ssl", "rabbitmq_web_mqtt.num_ssl_acceptors",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.max_connections", "rabbitmq_web_mqtt.max_connections", [
+    {datatype, [{enum, [infinity]}, integer]}
+]}.
+
+{mapping, "web_mqtt.tcp.backlog", "rabbitmq_web_mqtt.tcp_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.tcp.listener", "rabbitmq_web_mqtt.tcp_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
+{mapping, "web_mqtt.tcp.ip", "rabbitmq_web_mqtt.tcp_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
+    [{datatype, integer}]}.
+
+{mapping, "web_mqtt.ws_path", "rabbitmq_web_mqtt.ws_path",
+    [{datatype, string}]}.
+
+{translation,
+    "rabbitmq_web_mqtt.tcp_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_mqtt.tcp.listener", Conf, undefined),
+        case Setting of
+            none      -> [];
+            undefined -> [{port, 15675}];
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}]
+        end
+    end
+}.
+
+{mapping, "web_mqtt.ssl.listener", "rabbitmq_web_mqtt.ssl_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
+
+{mapping, "web_mqtt.ssl.backlog", "rabbitmq_web_mqtt.ssl_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.ssl.ip", "rabbitmq_web_mqtt.ssl_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_mqtt.ssl.port", "rabbitmq_web_mqtt.ssl_config.port",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.ssl.certfile", "rabbitmq_web_mqtt.ssl_config.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_mqtt.ssl.keyfile", "rabbitmq_web_mqtt.ssl_config.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_mqtt.ssl.cacertfile", "rabbitmq_web_mqtt.ssl_config.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_mqtt.ssl.password", "rabbitmq_web_mqtt.ssl_config.password",
+    [{datatype, string}]}.
+
+{translation,
+    "rabbitmq_web_mqtt.ssl_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_mqtt.ssl.listener", Conf, undefined),
+        case Setting of
+            none      -> cuttlefish:unset();
+            undefined -> [];
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                %% we redo some of Cuttlefish's work here to
+                %% populate rabbitmq_web_mqtt.ssl_config here
+                TLSConf   = cuttlefish_variable:filter_by_prefix("web_mqtt.ssl", Conf),
+                %% preserve all web_mqtt.ssl.* keys in rabbitmq_web_mqtt.ssl_config
+                TLSConfM0 = maps:fold(fun(Path, V, Acc) ->
+                                              maps:put(list_to_atom(lists:last(Path)), V, Acc)
+                                      end, #{}, maps:from_list(TLSConf)),
+                TLSConfM  = maps:remove(listener, TLSConfM0),
+                ListenerM = maps:from_list([{ip, Ip}, {port, Port}]),
+                lists:keysort(1, maps:to_list(maps:merge(TLSConfM, ListenerM)));
+
+            _         -> Setting
+        end
+    end
+}.
+
+{mapping, "web_mqtt.ssl.honor_cipher_order", "rabbitmq_web_mqtt.ssl_config.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_mqtt.ssl.honor_ecc_order", "rabbitmq_web_mqtt.ssl_config.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_mqtt.ssl.reuse_sessions", "rabbitmq_web_mqtt.ssl_config.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_mqtt.ssl.secure_renegotiate", "rabbitmq_web_mqtt.ssl_config.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_mqtt.ssl.client_renegotiation", "rabbitmq_web_mqtt.ssl_config.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_mqtt.ssl.crl_check", "rabbitmq_web_mqtt.ssl_config.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "web_mqtt.ssl.depth", "rabbitmq_web_mqtt.ssl_config.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "web_mqtt.ssl.versions.$version", "rabbitmq_web_mqtt.ssl_config.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_web_mqtt.ssl_config.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_mqtt.ssl.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "web_mqtt.ssl.ciphers.$cipher", "rabbitmq_web_mqtt.ssl_config.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_web_mqtt.ssl_config.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_mqtt.ssl.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.
+
+
+%%
+%% Cowboy options
+%%
+
+{mapping, "web_mqtt.cowboy_opts.max_empty_lines", "rabbitmq_web_mqtt.cowboy_opts.max_empty_lines",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_header_name_length", "rabbitmq_web_mqtt.cowboy_opts.max_header_name_length",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_header_value_length", "rabbitmq_web_mqtt.cowboy_opts.max_header_value_length",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_headers", "rabbitmq_web_mqtt.cowboy_opts.max_headers",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_keepalive", "rabbitmq_web_mqtt.cowboy_opts.max_keepalive",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_request_line_length", "rabbitmq_web_mqtt.cowboy_opts.max_request_line_length",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.timeout", "rabbitmq_web_mqtt.cowboy_opts.idle_timeout",
+    [{datatype, integer}]}.
+
+%% backwards compatibility
+{mapping, "web_mqtt.cowboy_opts.timeout", "rabbitmq_web_mqtt.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+%% recent Cowboy versions have several timeout settings
+{mapping, "web_mqtt.cowboy_opts.idle_timeout", "rabbitmq_web_mqtt.cowboy_opts.idle_timeout",
+    [{datatype, integer}]
+}.
+
+{translation,
+    "rabbitmq_web_mqtt.cowboy_opts.idle_timeout",
+    fun(Conf) ->
+        case cuttlefish:conf_get("web_mqtt.cowboy_opts.timeout", Conf, undefined) of
+            Value when is_integer(Value) ->
+                Value;
+            undefined ->
+                case cuttlefish:conf_get("web_mqtt.cowboy_opts.idle_timeout", Conf, undefined) of
+                    undefined -> cuttlefish:unset();
+                    Value     -> Value
+                end
+        end
+    end
+}.
+
+{mapping, "web_mqtt.ws_opts.compress", "rabbitmq_web_mqtt.cowboy_ws_opts.compress",
+    [{datatype, {enum, [true, false]}}]
+}.
+{mapping, "web_mqtt.ws_opts.max_frame_size", "rabbitmq_web_mqtt.cowboy_ws_opts.max_frame_size",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+{mapping, "web_mqtt.ws_opts.idle_timeout", "rabbitmq_web_mqtt.cowboy_ws_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+
+%% Whether or not to enable proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "web_mqtt.proxy_protocol", "rabbitmq_web_mqtt.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
