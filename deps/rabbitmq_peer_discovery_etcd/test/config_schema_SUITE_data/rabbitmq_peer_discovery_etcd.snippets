@@ -1,0 +1,130 @@
+[
+    %% discovery mechanism
+    {etcd_discovery_mechanism_as_module,
+        "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_etcd
+         cluster_formation.etcd.host = etcd.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_etcd},
+                    {peer_discovery_etcd, [
+                        {etcd_host, "etcd.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    
+    {etcd_discovery_mechanism_shortcut,
+        "cluster_formation.peer_discovery_backend = etcd
+         cluster_formation.etcd.host = etcd.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_backend, rabbit_peer_discovery_etcd},
+                    {peer_discovery_etcd, [
+                        {etcd_host, "etcd.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    
+    %% etcd hostname
+    {etcd_host, "cluster_formation.etcd.host = etcd.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_host, "etcd.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% etcd port
+    {etcd_port, "cluster_formation.etcd.port = 7979", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_port, 7979}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% credentials
+    {etcd_username, "cluster_formation.etcd.username = rabbitmq", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_username, "rabbitmq"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    {etcd_password, "cluster_formation.etcd.password = rabbitmq", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_password, "rabbitmq"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% key prefix
+    {etcd_key_prefix, "cluster_formation.etcd.key_prefix = staging", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_prefix, "staging"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% cluster name
+    {etcd_cluster_name, "cluster_formation.etcd.cluster_name = staging", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {cluster_name, "staging"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% node key TTL
+    {etcd_node_ttl, "cluster_formation.etcd.node_ttl = 60", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_node_ttl, 60}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    %% lock acquisition timeout
+    {etcd_lock_wait_time, "cluster_formation.etcd.lock_timeout = 400", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {lock_wait_time, 400}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+
+    %% alias for consistency with etcd
+    {etcd_lock_wait_time, "cluster_formation.etcd.lock_wait_time = 400", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {lock_wait_time, 400}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    }
+].
