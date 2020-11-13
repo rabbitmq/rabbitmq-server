@@ -1,0 +1,97 @@
+[{listener_port,
+  "stomp.listeners.tcp.1 = 12345",
+  [{rabbitmq_stomp,[{tcp_listeners,[12345]}]}],
+  [rabbitmq_stomp]},
+ {listeners_ip,
+  "stomp.listeners.tcp.1 = 127.0.0.1:61613
+   stomp.listeners.tcp.2 = ::1:61613",
+  [{rabbitmq_stomp,[{tcp_listeners,[{"127.0.0.1",61613},{"::1",61613}]}]}],
+  [rabbitmq_stomp]},
+
+ {listener_tcp_options,
+  "stomp.listeners.tcp.1 = 127.0.0.1:61613
+   stomp.listeners.tcp.2 = ::1:61613
+
+   stomp.tcp_listen_options.backlog = 2048
+   stomp.tcp_listen_options.recbuf = 8192
+   stomp.tcp_listen_options.sndbuf = 8192
+
+   stomp.tcp_listen_options.keepalive = true
+   stomp.tcp_listen_options.nodelay   = true
+
+   stomp.tcp_listen_options.exit_on_close = true
+
+   stomp.tcp_listen_options.send_timeout = 120
+",
+  [{rabbitmq_stomp,[
+                    {tcp_listeners,[
+                                    {"127.0.0.1",61613},
+                                    {"::1",61613}
+                                   ]}
+                    , {tcp_listen_options, [
+                                            {backlog, 2048},
+                                            {exit_on_close, true},
+
+                                            {recbuf, 8192},
+                                            {sndbuf, 8192},
+
+                                            {send_timeout, 120},
+
+                                            {keepalive, true},
+                                            {nodelay,   true}
+                                           ]}
+                   ]}],
+  [rabbitmq_stomp]},
+
+ {ssl,
+  "ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.verify     =  verify_peer
+   ssl_options.fail_if_no_peer_cert = true
+
+   stomp.listeners.tcp.1 = 61613
+   stomp.listeners.ssl.1 = 61614",
+  [{rabbit,
+       [{ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,true}]}]},
+   {rabbitmq_stomp,[{tcp_listeners,[61613]},{ssl_listeners,[61614]}]}],
+  [rabbitmq_stomp]},
+ {defaults,
+  "stomp.default_user = guest
+   stomp.default_pass = guest
+   stomp.proxy_protocol = false
+   stomp.hide_server_info = false",
+  [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,"guest"}]},
+                    {proxy_protocol,false},{hide_server_info,false}]}],
+  [rabbitmq_stomp]},
+ {ssl_cert_login,
+  "stomp.ssl_cert_login = true",
+  [{rabbitmq_stomp,[{ssl_cert_login,true}]}],
+  [rabbitmq_stomp]},
+ {proxy_protocol,
+  "stomp.default_user = guest
+   stomp.default_pass = guest
+   stomp.implicit_connect = true
+   stomp.proxy_protocol = true",
+  [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,"guest"}]},
+                    {implicit_connect,true},
+                    {proxy_protocol,true}]}],
+  [rabbitmq_stomp]},
+ {default_vhost,
+  "stomp.default_vhost = /",
+  [{rabbitmq_stomp,[{default_vhost,<<"/">>}]}],
+  [rabbitmq_stomp]},
+ {default_topic_exchange,
+  "stomp.default_topic_exchange = my.fancy.topic",
+  [{rabbitmq_stomp,[{default_topic_exchange,<<"my.fancy.topic">>}]}],
+  [rabbitmq_stomp]},
+ {hide_server_info,
+  "stomp.hide_server_info = true",
+  [{rabbitmq_stomp,[{hide_server_info,true}]}],
+  [rabbitmq_stomp]}
+].

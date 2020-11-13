@@ -1,0 +1,230 @@
+%% ==========================================================================
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Stomp Adapter
+%%
+%% See http://www.rabbitmq.com/stomp.html for details
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_stomp,
+%   [%% Network Configuration - the format is generally the same as for the broker
+
+%% Listen only on localhost (ipv4 & ipv6) on a specific port.
+%% {tcp_listeners, [{"127.0.0.1", 61613},
+%%                  {"::1",       61613}]},
+
+{mapping, "stomp.listeners.tcp", "rabbitmq_stomp.tcp_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "stomp.listeners.tcp.$name", "rabbitmq_stomp.tcp_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stomp.tcp_listeners",
+fun(Conf) ->
+    case cuttlefish:conf_get("stomp.listeners.tcp", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("stomp.listeners.tcp", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+{mapping, "stomp.tcp_listen_options", "rabbitmq_stomp.tcp_listen_options", [
+    {datatype, {enum, [none]}}]}.
+
+{translation, "rabbitmq_stomp.tcp_listen_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("stomp.tcp_listen_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid stomp.tcp_listen_options")
+    end
+end}.
+
+{mapping, "stomp.tcp_listen_options.backlog", "rabbitmq_stomp.tcp_listen_options.backlog", [
+    {datatype, integer}
+]}.
+
+{mapping, "stomp.tcp_listen_options.nodelay", "rabbitmq_stomp.tcp_listen_options.nodelay", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "stomp.tcp_listen_options.buffer", "rabbitmq_stomp.tcp_listen_options.buffer",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.delay_send", "rabbitmq_stomp.tcp_listen_options.delay_send",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.dontroute", "rabbitmq_stomp.tcp_listen_options.dontroute",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.exit_on_close", "rabbitmq_stomp.tcp_listen_options.exit_on_close",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.fd", "rabbitmq_stomp.tcp_listen_options.fd",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.high_msgq_watermark", "rabbitmq_stomp.tcp_listen_options.high_msgq_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.high_watermark", "rabbitmq_stomp.tcp_listen_options.high_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.keepalive", "rabbitmq_stomp.tcp_listen_options.keepalive",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.low_msgq_watermark", "rabbitmq_stomp.tcp_listen_options.low_msgq_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.low_watermark", "rabbitmq_stomp.tcp_listen_options.low_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.port", "rabbitmq_stomp.tcp_listen_options.port",
+    [{datatype, integer}, {validators, ["port"]}]}.
+
+{mapping, "stomp.tcp_listen_options.priority", "rabbitmq_stomp.tcp_listen_options.priority",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.recbuf", "rabbitmq_stomp.tcp_listen_options.recbuf",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.send_timeout", "rabbitmq_stomp.tcp_listen_options.send_timeout",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.send_timeout_close", "rabbitmq_stomp.tcp_listen_options.send_timeout_close",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.sndbuf", "rabbitmq_stomp.tcp_listen_options.sndbuf",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.tos", "rabbitmq_stomp.tcp_listen_options.tos",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.linger.on", "rabbitmq_stomp.tcp_listen_options.linger",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.linger.timeout", "rabbitmq_stomp.tcp_listen_options.linger",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbitmq_stomp.tcp_listen_options.linger",
+fun(Conf) ->
+    LingerOn = cuttlefish:conf_get("stomp.tcp_listen_options.linger.on", Conf, false),
+    LingerTimeout = cuttlefish:conf_get("stomp.tcp_listen_options.linger.timeout", Conf, 0),
+    {LingerOn, LingerTimeout}
+end}.
+
+
+%%
+%% TLS
+%%
+
+{mapping, "stomp.listeners.ssl", "rabbitmq_stomp.ssl_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "stomp.listeners.ssl.$name", "rabbitmq_stomp.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stomp.ssl_listeners",
+fun(Conf) ->
+    case cuttlefish:conf_get("stomp.listeners.ssl", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("stomp.listeners.ssl", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% Number of Erlang processes that will accept connections for the TCP
+%% and SSL listeners.
+%%
+%% {num_tcp_acceptors, 10},
+%% {num_ssl_acceptors, 10},
+
+{mapping, "stomp.num_acceptors.ssl", "rabbitmq_stomp.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+{mapping, "stomp.num_acceptors.tcp", "rabbitmq_stomp.num_tcp_acceptors", [
+    {datatype, integer}
+]}.
+
+%% Additional TLS options
+
+%% Extract a name from the client's certificate when using TLS.
+%%
+%% Defaults to true.
+
+{mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Set a default user name and password. This is used as the default login
+%% whenever a CONNECT frame omits the login and passcode headers.
+%%
+%% Please note that setting this will allow clients to connect without
+%% authenticating!
+%%
+%% {default_user, [{login,    "guest"},
+%%                 {passcode, "guest"}]},
+
+{mapping, "stomp.default_vhost", "rabbitmq_stomp.default_vhost", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_stomp.default_vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("stomp.default_vhost", Conf, "/"))
+end}.
+
+{mapping, "stomp.default_user", "rabbitmq_stomp.default_user.login", [
+    {datatype, string}
+]}.
+
+{mapping, "stomp.default_pass", "rabbitmq_stomp.default_user.passcode", [
+    {datatype, string}
+]}.
+
+{mapping, "stomp.default_topic_exchange", "rabbitmq_stomp.default_topic_exchange", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_stomp.default_topic_exchange",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("stomp.default_topic_exchange", Conf, "amq.topic"))
+end}.
+
+%% If a default user is configured, or if x.509
+%% certificate-based client authentication is used, use this setting to allow clients to
+%% omit the CONNECT frame entirely. If set to true, the client is
+%% automatically connected as the default user or user supplied in the
+%% x.509/TLS certificate whenever the first frame sent on a session is not a
+%% CONNECT frame.
+%%
+%% Defaults to true.
+
+{mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Whether or not to enable proxy protocol support.
+%%
+%% Defaults to false.
+
+{mapping, "stomp.proxy_protocol", "rabbitmq_stomp.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Whether or not to hide server info
+%%
+%% Defaults to false.
+
+{mapping, "stomp.hide_server_info", "rabbitmq_stomp.hide_server_info",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Whether or not to always requeue the message on nack
+%% If not set then coordinated by the usage of the frame "requeue" header
+%% Useful when you are not fully controlling the STOMP consumer implementation
+%%
+%% Defaults to true.
+
+{mapping, "stomp.default_nack_requeue", "rabbitmq_stomp.default_nack_requeue",
+    [{datatype, {enum, [true, false]}}]}.
