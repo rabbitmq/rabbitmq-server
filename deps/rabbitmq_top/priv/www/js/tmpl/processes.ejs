@@ -1,0 +1,54 @@
+<h1>Top Processes: <b><%= top.node %></b></h1>
+
+<p>
+  Node:
+  <select id="top-node">
+  <% for (var i = 0; i < nodes.length; i++) { %>
+     <option name="#/top/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == top.node) { %>selected="selected"<% } %>><%= nodes[i].name %></option>
+  <% } %>
+  </select>
+
+  Rows:
+  <select id="row-count">
+  <%
+    var row_counts = [20, 50, 100, 150];
+    for (var i = 0; i < row_counts.length; i++) {
+  %>
+    <option name="<%= row_counts[i] %>"
+        <% if (row_counts[i] == top.row_count) { %>selected="selected"<% } %>>
+    <%= row_counts[i] %></option>
+  <% } %>
+  </select>
+</p>
+
+<table class="list updatable">
+ <thead>
+  <tr>
+    <th><%= fmt_sort_desc_by_default('Process', 'pid') %></th>
+    <th>Description</th>
+    <th>Type</th>
+    <th><%= fmt_sort_desc_by_default('Memory', 'memory') %></th>
+    <th><%= fmt_sort_desc_by_default('Reductions / sec', 'reduction_delta') %></th>
+    <th><%= fmt_sort_desc_by_default('Erlang mailbox', 'message_queue_len') %></th>
+    <th><%= fmt_sort_desc_by_default('gen_server2 buffer', 'buffer_len') %><span class="help" id="gen-server2-buffer"></span></th>
+    <th>Status</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < top.processes.length; i++) {
+    var process = top.processes[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td><%= link_pid(process.pid) %></td>
+    <td><%= fmt_process_name(process) %></td>
+    <td><%= fmt_remove_rabbit_prefix(process.name.type) %></td>
+    <td><%= fmt_bytes(process.memory * 1.0) %></td>
+    <td><%= fmt_reduction_delta(process.reduction_delta) %></td>
+    <td><%= process.message_queue_len %></td>
+    <td><%= process.buffer_len %></td>
+    <td><%= process.status %></td>
+  </tr>
+<% } %>
+ </tbody>
+</table>
