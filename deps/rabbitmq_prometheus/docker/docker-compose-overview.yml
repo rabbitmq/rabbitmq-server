@@ -1,0 +1,182 @@
+# https://docs.docker.com/compose/compose-file/
+version: "3.6"
+
+# https://docs.docker.com/compose/compose-file/#networks
+networks:
+  rabbitmq-prometheus:
+
+# https://docs.docker.com/compose/compose-file/#volumes
+volumes:
+  rabbitmq-prometheus_prometheus:
+  rabbitmq-prometheus_grafana:
+
+services:
+  rmq0: &rabbitmq
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
+    image: pivotalrabbitmq/rabbitmq-prometheus:3.8.3-alpha.93-2020.02.12
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+      - "15693:15692"
+    # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
+    # https://en.wikipedia.org/wiki/Tcpkill
+    # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
+    cap_add:
+      - ALL
+    hostname: rmq0
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-overview
+    volumes:
+      - ./rabbitmq-overview.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-overview-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+    # we want to simulate hitting thresholds
+    ulimits:
+      nofile:
+        soft: "2000"
+        hard: "2000"
+  rmq1:
+    << : *rabbitmq
+    hostname: rmq1
+    ports:
+      - "5674:5672"
+      - "15674:15672"
+      - "15694:15692"
+  rmq2:
+    << : *rabbitmq
+    hostname: rmq2
+    ports:
+      - "5675:5672"
+      - "15675:15672"
+      - "15695:15692"
+
+  basic-get:
+    # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
+      QUEUE: basic-get
+      ROUTING_KEY: basic-get
+      VARIABLE_RATE: "1:1,0:30"
+      POLLING: "true"
+      POLLING_INTERVAL: 5000
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: &startup_timeout 60
+      METRICS_PROMETHEUS: "true"
+  basic-get-auto:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
+      QUEUE: basic-get
+      ROUTING_KEY: basic-get
+      PRODUCERS: 0
+      POLLING: "true"
+      POLLING_INTERVAL: 5000
+      AUTOACK: "true"
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  greedy-consumer:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq0:5672/%2f"
+      QUEUE: greedy-consumer
+      ROUTING_KEY: greedy-consumer
+      VARIABLE_RATE: "100:20,0:20"
+      CONSUMER_RATE: 50
+      QOS: 2000
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  publisher-confirms:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
+      QUEUE: publisher-confirms
+      ROUTING_KEY: publisher-confirms
+      AUTOACK: "true"
+      VARIABLE_RATE: "12:30,25:30,50:30,100:30"
+      CONFIRM: 1
+      CONFIRM_TIMEOUT: 1
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  slow-consumer-persistent:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq1:5672/%2f"
+      QUEUE: ha3-slow-consumer-persistent
+      ROUTING_KEY: slow-consumer-persistent
+      QUEUE_ARGS: x-max-length=10000
+      FLAG: persistent
+      AUTO_DELETE: "false"
+      SIZE: 51200
+      VARIABLE_RATE: "100:20,0:20"
+      CONSUMER_RATE: 50
+      QOS: 50
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  nack:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    entrypoint: []
+    command: /bin/bash -c "while true; do bin/runjava com.rabbitmq.perf.PerfTest; sleep 10; done"
+    environment:
+      TIME: 60
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
+      VARIABLE_RATE: "1:10,0:20"
+      QUEUE: nack
+      QUEUE_ARGS: x-max-length=100
+      ROUTING_KEY: nack
+      AUTOACK: "false"
+      NACK: "true"
+      QOS: 5
+      CONSUMER_LATENCY: 3000000
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  unroutable-return:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
+      VARIABLE_RATE: "2:30,4:30,10:30"
+      VARIABLE_SIZE: "100:30,200:30"
+      CONSUMERS: 0
+      FLAG: mandatory
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  unroutable-drop:
+    image: *perf-test-image
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URI: "amqp://guest:guest@rmq2:5672/%2f"
+      VARIABLE_RATE: "5:30,10:30,20:30"
+      VARIABLE_SIZE: "100:30,200:30"
+      CONSUMERS: 0
+      SERVERS_STARTUP_TIMEOUT: *startup_timeout
+      METRICS_PROMETHEUS: "true"
+  # many-queues:
+  #   image: *perf-test-image
+  #   networks:
+  #     - "rabbitmq-prometheus"
+  #   environment:
+  #     URI: "amqp://guest:guest@rmq1:5672/%2f"
+  #     QUEUE_PATTERN: "mq%d"
+  #     QUEUE_PATTERN_FROM: 1
+  #     QUEUE_PATTERN_TO: 1000
+  #     RATE: 1
+  #     SERVERS_STARTUP_TIMEOUT: *startup_timeout
+  #     METRICS_PROMETHEUS: "true"
