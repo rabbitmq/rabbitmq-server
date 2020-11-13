@@ -1,0 +1,4 @@
+21c21
+< ROOTDIR="%FINAL_ROOTDIR%"
+---
+> ROOTDIR="$(cd $(dirname "$0") && pwd)/../.."

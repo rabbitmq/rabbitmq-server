@@ -1,0 +1,126 @@
+#!/bin/sh
+##  The contents of this file are subject to the Mozilla Public License
+##  Version 1.1 (the "License"); you may not use this file except in
+##  compliance with the License. You may obtain a copy of the License
+##  at http://www.mozilla.org/MPL/
+##
+##  Software distributed under the License is distributed on an "AS IS"
+##  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+##  the License for the specific language governing rights and
+##  limitations under the License.
+##
+##  The Original Code is RabbitMQ.
+##
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+##
+
+SCRIPT="$(basename "$0")"
+RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
+
+main() {
+  ensure_we_are_in_a_readable_dir
+  if current_user_is_rabbitmq && calling_rabbitmq_server
+  then
+    exec_rabbitmq_server "$@"
+  elif current_user_is_rabbitmq && ! calling_rabbitmq_plugins
+  then
+    exec_script_as_rabbitmq "$@"
+  elif current_user_is_root && calling_rabbitmq_plugins
+  then
+    run_script_as_rabbitmq "$@"
+    maybe_fixup_erlang_cookie
+  elif current_user_is_root
+  then
+    exec_script_as_root "$@"
+  else
+    run_script_help_and_fail
+  fi
+}
+
+maybe_fixup_erlang_cookie() {
+    # rabbitmq/rabbitmq-server-release#85
+    _rabbitmq_home="$(cd ~rabbitmq && pwd)"
+    _erlang_cookie="$_rabbitmq_home/.erlang.cookie"
+    if [ -f "$_erlang_cookie" ]
+    then
+        chown @RABBITMQ_USER@:@RABBITMQ_GROUP@ "$_erlang_cookie"
+        chmod 400 "$_erlang_cookie"
+    fi
+}
+
+ensure_we_are_in_a_readable_dir() {
+  # shellcheck disable=SC2164
+  cd ~rabbitmq || cd /
+}
+
+current_user_is_rabbitmq() {
+  [ "$(id -un)" = "rabbitmq" ]
+}
+
+current_user_is_root() {
+  [ "$(id -u)" = 0 ]
+}
+
+calling_rabbitmq_server() {
+  [ "$SCRIPT" = "rabbitmq-server" ]
+}
+
+calling_rabbitmq_plugins() {
+  [ "$SCRIPT" = "rabbitmq-plugins" ]
+}
+
+exec_rabbitmq_server() {
+  RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+  # RABBITMQ_SCRIPTS_DIR is used in rabbitmq-env
+  # shellcheck disable=SC2034
+  RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
+  # shellcheck source=/dev/null
+  . "$RABBITMQ_ENV"
+
+  exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
+}
+
+run_script_as_rabbitmq() {
+  HOME="$(cd ~rabbitmq && pwd)" "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+}
+
+exec_script_as_rabbitmq() {
+  HOME="$(cd ~rabbitmq && pwd)" exec "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+}
+
+exec_script_as_root() {
+  if [ -x /sbin/runuser ]
+  then
+    # TODO:
+    # At some point all of the RabbitMQ supported distributions will be using
+    # the util-linux version of /sbin/runuser, as it has been removed from GNU
+    # coreutils as of 2012. At that point the first clause of the following
+    # if statement can become the only statement used and the if/then
+    # removed
+    if /sbin/runuser --version | grep -qF util-linux
+    then
+        exec /sbin/runuser -u rabbitmq -- "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+    else
+        exec /sbin/runuser -s /bin/sh -- rabbitmq "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+    fi
+  elif [ -x /bin/su ]
+  then
+    exec /bin/su -s /bin/sh rabbitmq -- "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+  else
+    echo "Please ensure /bin/su or /sbin/runuser exists and can be executed by $USER." 1>&2
+    exit 1
+  fi
+}
+
+run_script_help_and_fail() {
+  "/usr/lib/rabbitmq/bin/$SCRIPT" help
+
+  echo "
+Only root or rabbitmq can run $SCRIPT
+"
+  exit 1
+}
+
+main "$@"
