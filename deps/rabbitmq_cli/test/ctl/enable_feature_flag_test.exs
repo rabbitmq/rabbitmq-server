@@ -57,6 +57,12 @@ defmodule EnableFeatureFlagCommandTest do
     assert list_feature_flags(:enabled) |> Map.has_key?(context[:feature_flag])
   end
 
+  test "run: enabling all feature flags succeeds", context do
+    enable_feature_flag context[:feature_flag]
+    assert @command.run(["all"], context[:opts]) == :ok
+    assert list_feature_flags(:enabled) |> Map.has_key?(context[:feature_flag])
+  end
+
   test "banner", context do
     assert @command.banner([context[:feature_flag]], context[:opts])
       =~ ~r/Enabling feature flag \"#{context[:feature_flag]}\" \.\.\./

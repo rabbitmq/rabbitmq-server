@@ -17,6 +17,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
+  def run(["all"], %{node: node_name}) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable_all, []) do
+      # Server does not support feature flags, consider none are available.
+      # See rabbitmq/rabbitmq-cli#344 for context. MK.
+      {:badrpc, {:EXIT, {:undef, _}}} -> {:error, :unsupported}
+      {:badrpc, _} = err    -> err
+      other                 -> other
+    end
+  end
+
   def run([feature_flag], %{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable, [String.to_atom(feature_flag)]) do
       # Server does not support feature flags, consider none are available.
@@ -32,11 +42,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "enable_feature_flag <feature_flag>"
+  def usage, do: "enable_feature_flag < all | feature_flag >"
 
   def help_section(), do: :feature_flags
 
   def description(), do: "Enables a feature flag on target node"
+
+  def banner(["all"], _), do: "Enabling all feature flags ..."
 
   def banner([feature_flag], _), do: "Enabling feature flag \"#{feature_flag}\" ..."
 end
