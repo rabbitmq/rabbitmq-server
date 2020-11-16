@@ -340,7 +340,8 @@ clean-unpacked-source-dist:
 .PHONY: packages package-deb \
 	package-rpm package-rpm-fedora package-rpm-suse \
 	package-windows \
-	package-generic-unix
+	package-generic-unix \
+	docker-image
 
 # This variable is exported so sub-make instances know where to find the
 # archive.
@@ -350,27 +351,10 @@ packages package-deb package-rpm \
 package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
 package-rpm-rhel8 package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
 package-windows \
-package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
+package-generic-unix \
+docker-image: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
-
-$(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz:
-	$(verbose) $(MAKE) package-generic-unix
-
-# Docker is different because we need to build & publish
-OTP_VERSION := 22.3
-OTP_SHA256 := 886e6dbe1e4823c7e8d9c9c1ba8315075a1a9f7717f5a1eaf3b98345ca6c798e
-docker-image: $(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz
-	$(verbose) (cd PACKAGES && tar xJvf rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz) \
-	&& docker build --pull \
-	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
-	  --build-arg OTP_VERSION=$(OTP_VERSION) \
-	  --build-arg OTP_SHA256=$(OTP_SHA256) \
-	  --build-arg RABBITMQ_VERSION=$(PROJECT_VERSION) \
-	  --build-arg RABBITMQ_BUILD=PACKAGES/rabbitmq_server-$(PROJECT_VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq:$(PROJECT_VERSION) \
-	  . \
-	&& docker push pivotalrabbitmq/rabbitmq:$(PROJECT_VERSION)
 
 # --------------------------------------------------------------------
 # Installation.
