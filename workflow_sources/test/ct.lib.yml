@@ -77,6 +77,7 @@ steps:
     with:
       name: (@= dep.name @)-ct-(@= suite @)-logs
       path: "ct-(@= suite @)-logs/*-ct-logs-*.tar.xz"
+  #@ if data.values.erlang_version == data.values.erlang_versions[0]:
   #@ for version in data.values.secondary_umbrella_gitrefs:
   #@   logs_dir = 'ct-{}-logs-{}'.format(suite, version)
   - name: #@ "RUN ct-{} [mixed {}]".format(suite, version)
@@ -100,6 +101,7 @@ steps:
     with:
       name: (@= dep.name @)-ct-(@= suite @)-logs-mixed-(@= version @)
       path: "(@= logs_dir @)/*-ct-logs-*.tar.xz"
+  #@ end
   #@ end
   #@ end
 #@ end
