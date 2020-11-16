@@ -120,6 +120,15 @@ functions in Mix to start a new distributed node and connect it to the RabbitMQ
 server. It complains because we don't actually use the context dictionary, but
 it's fine otherwise.
 
+### Running Modified CLIs
+
+To execute the modified CLIs (to test against an actual broker), follow these steps:
+
+```
+make -C ../.. dist # make dist in the main rabbitmq-server repository folder
+../../sbin/rabbitmqctl # run CLIs from the main repository's sbin folder
+```
+
 ## Code of Conduct
 
 See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
