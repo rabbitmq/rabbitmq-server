@@ -116,10 +116,12 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
-	       --exclude '.travis.yml'			\
+	       --exclude '.travis.yml*'			\
 	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude '_build/'			\
+	       --exclude '__pycache__/'			\
+	       --exclude 'ci/'				\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
 	       --exclude 'doc/'				\
@@ -132,6 +134,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'hexer*'			\
 	       --exclude 'logs/'			\
 	       --exclude 'packaging'			\
+	       --exclude 'PKG_*.md'			\
 	       --exclude '/plugins/'			\
 	       --include 'cli/plugins'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
@@ -149,9 +152,11 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '/rabbitmq_cli/escript/'	\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
 	       --exclude '/rabbitmq_mqtt/test/test_client/'\
+	       --exclude '/rabbitmq_trust_store/examples/'\
 	       --exclude '/ranch/doc/'			\
 	       --exclude '/ranch/examples/'		\
 	       --exclude '/sockjs/examples/'		\
+	       --exclude '/workflow_sources/'		\
 	       --delete					\
 	       --delete-excluded
 
@@ -219,6 +224,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	done
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
+	$(verbose) rm -rf $@/deps/licensing
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
 		sed -E -i.bak \
 		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
