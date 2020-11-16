@@ -313,6 +313,7 @@ module Test =
               * from the common_test suite. *)
              "/amq/queue/transient_q", "/amq/queue/transient_q", "", true
              "/amq/queue/durable_q",   "/amq/queue/durable_q",   "", true
+             "/amq/queue/stream_q",   "/amq/queue/stream_q",   "", true
              "/amq/queue/autodel_q",   "/amq/queue/autodel_q",   "", true] do
 
             let rnd = Random()
