@@ -746,7 +746,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
               DLX,
               fun (X) ->
                       QName = qname(State),
-                      rabbit_dead_letter:publish(Message, maxlen, X, RK, QName)
+                      rabbit_dead_letter:publish(prep_dlx(Message), maxlen, X, RK, QName)
               end,
               fun () -> ok end),
             %% Drop publish and nack to publisher
@@ -1054,6 +1054,25 @@ drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
                              message_properties:get_expiry(MessageProps)
                      end, State1).
 
+prep_dlx(Msg = #basic_message{content = Content = #content{properties = Props}}) ->
+    %% Add delivery attempts header here, to be moved to x-death header in DLX.
+    %% Reset x-delivery-count in the context of classic queues only. Hence being
+    %% done here (since 'rabbit_dead_letter' is also used by other queue types).
+    Props1 = add_delivery_attempts_header(Props),
+    rabbit_basic:reset_delivery_count(
+        Msg#basic_message{content = Content#content{properties = Props1}}).
+
+add_delivery_attempts_header(Props = #'P_basic'{headers = undefined}) -> Props;
+add_delivery_attempts_header(Props = #'P_basic'{headers = Headers}) ->
+    DAHeader =
+        case rabbit_misc:table_lookup(Headers, <<"x-delivery-count">>) of
+            undefined ->
+                [];
+            {_Type, DeliveryCount} ->
+                [{<<"x-delivery-attempts">>, long, DeliveryCount}]
+        end,
+    Props#'P_basic'{headers = Headers ++ DAHeader}.
+
 with_dlx(undefined, _With,  Without) -> Without();
 with_dlx(DLX,        With,  Without) -> case rabbit_exchange:lookup(DLX) of
                                             {ok, X}            -> With(X);
@@ -1089,7 +1108,7 @@ dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
     QName = qname(State),
     {Res, Acks1, BQS1} =
         Fun(fun (Msg, AckTag, Acks) ->
-                    rabbit_dead_letter:publish(Msg, Reason, X, RK, QName),
+                    rabbit_dead_letter:publish(prep_dlx(Msg), Reason, X, RK, QName),
                     [AckTag | Acks]
             end, [], BQS),
     {_Guids, BQS2} = BQ:ack(Acks1, BQS1),
