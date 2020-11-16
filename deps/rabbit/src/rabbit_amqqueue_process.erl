@@ -880,9 +880,15 @@ requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
 
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
-    {Result, BQS1} = BQ:fetch(AckRequired, BQS),
-    State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
-    {Result, maybe_send_drained(Result =:= empty, State1)}.
+    {Result1, BQS2} =
+        case BQ:fetch_delivery(AckRequired, BQS) of
+            {{Msg, IsDelivered, AckTag}, BQS1} ->
+                {{Msg, IsDelivered, AckTag}, BQS1};
+            {Result, BQS1} ->
+                {Result, BQS1}
+        end,
+    State1 = drop_expired_msgs(State#q{backing_queue_state = BQS2}),
+    {Result1, maybe_send_drained(Result1 =:= empty, State1)}.
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
