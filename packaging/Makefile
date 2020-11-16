@@ -39,7 +39,8 @@ all: packages
 	package-rpm-rhel6 package-rpm-rhel7 package-rpm-rhel8 \
 	package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
 	package-windows \
-	package-generic-unix
+	package-generic-unix \
+	docker-image
 
 PACKAGES_DIR ?= ../PACKAGES
 SOURCE_DIST_FILE ?= $(wildcard $(PACKAGES_DIR)/rabbitmq-server-*.tar.xz)
@@ -108,9 +109,12 @@ package-windows: $(SOURCE_DIST_FILE)
 package-generic-unix: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C generic-unix $(VARS) all $(DO_CLEAN)
 
+docker-image: package-generic-unix
+	$(gen_verbose) $(MAKE) -C docker-image $(VARS) all $(DO_CLEAN)
+
 .PHONY: clean
 
 clean:
-	for subdir in debs/Debian RPMS/Fedora windows windows-exe generic-unix; do \
+	for subdir in debs/Debian RPMS/Fedora windows windows-exe generic-unix docker-image; do \
 		$(MAKE) -C "$$subdir" clean; \
 	done
