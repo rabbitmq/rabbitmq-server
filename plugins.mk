@@ -19,11 +19,11 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_management \
 	   rabbitmq_management_agent \
 	   rabbitmq_mqtt \
-	   rabbitmq_peer_discovery_common \
 	   rabbitmq_peer_discovery_aws \
-	   rabbitmq_peer_discovery_k8s \
+	   rabbitmq_peer_discovery_common \
 	   rabbitmq_peer_discovery_consul \
 	   rabbitmq_peer_discovery_etcd \
+	   rabbitmq_peer_discovery_k8s \
 	   rabbitmq_prometheus \
 	   rabbitmq_random_exchange \
 	   rabbitmq_recent_history_exchange \
