@@ -17,7 +17,7 @@
          maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
 -export([add_header/4,
          peek_fmt_message/1]).
--export([inc_delivery_count/2, inc_delivery_count/3]).
+-export([inc_delivery_count/2, inc_delivery_count/3, reset_delivery_count/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -389,3 +389,21 @@ inc_delivery_count(Message = #basic_message{content = Content}, Props, Delta) ->
             {Message, Props}
     end;
 inc_delivery_count(Message, Props, _Delta) -> {Message, Props}.
+
+-spec reset_delivery_count(rabbit_types:basic_message()) -> rabbit_types:basic_message().
+
+reset_delivery_count(Message = #basic_message{content = Content}) ->
+    case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+        true ->
+            case extract_headers(Content) of
+                undefined ->
+                    Message;
+                Headers ->
+                    #content{properties = Props} = Content,
+                    Headers1 = rabbit_misc:table_delete(Headers, <<"x-delivery-count">>),
+                    Message#basic_message{content = Content#content{
+                        properties = Props#'P_basic'{headers = Headers1}}}
+            end;
+        false ->
+            Message
+    end.
