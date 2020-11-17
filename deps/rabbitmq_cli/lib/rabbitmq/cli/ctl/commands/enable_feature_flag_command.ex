@@ -42,11 +42,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "enable_feature_flag < all | feature_flag >"
+  def usage, do: "enable_feature_flag <all | feature_flag>"
+
+  def usage_additional() do
+  [
+    ["<feature_flag>", "name of the feature flag to enable, or \"all\" to enable all supported flags"]
+  ]
+end
 
   def help_section(), do: :feature_flags
 
-  def description(), do: "Enables a feature flag on target node"
+  def description(), do: "Enables a feature flag or all supported feature flags on the target node"
 
   def banner(["all"], _), do: "Enabling all feature flags ..."
 
