@@ -95,8 +95,8 @@ validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long, ClusterSiz
     error;
 validate_stream_queue_arguments([{<<"x-queue-leader-locator">>, longstr, Locator} | T]) ->
     case lists:member(Locator, [<<"client-local">>,
-                                <<"random">>,
-                                <<"least-leaders">>]) of
+        <<"random">>,
+        <<"least-leaders">>]) of
         true  ->
             validate_stream_queue_arguments(T);
         false ->
@@ -210,7 +210,25 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
-                          {ok, maps:with([leader_node, replica_nodes], amqqueue:get_type_state(Q))};
+                          QState = amqqueue:get_type_state(Q),
+                          ProcessAliveFun = fun(Pid) ->
+                              rpc:call(node(Pid), erlang, is_process_alive, [Pid], 10000)
+                                            end,
+                          LeaderNode = case ProcessAliveFun(maps:get(leader_pid, QState)) of
+                                           true ->
+                                               maps:get(leader_node, QState);
+                                           _ ->
+                                               undefined
+                                       end,
+                          ReplicaNodes = lists:foldl(fun(Pid, Acc) ->
+                              case ProcessAliveFun(Pid) of
+                                  true ->
+                                      Acc ++ [node(Pid)];
+                                  _ ->
+                                      Acc
+                              end
+                                                     end, [], maps:get(replica_pids, QState)),
+                          {ok, #{leader_node => LeaderNode, replica_nodes => ReplicaNodes}};
                       _ ->
                           {error, stream_not_found}
                   end;
