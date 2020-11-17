@@ -321,7 +321,19 @@ build_param(?HEADER_AUTO_DELETE, Val) ->
     {auto_delete, string_to_boolean(Val)};
 
 build_param(?HEADER_EXCLUSIVE, Val) ->
-    {exclusive, string_to_boolean(Val)}.
+    {exclusive, string_to_boolean(Val)};
+
+build_param(?HEADER_DECLARE_EXCHANGE, Val) ->
+    {declare_exchange, string_to_boolean(Val)};
+
+build_param(?HEADER_EXCHANGE_TYPE, Val) ->
+    {exchange_type, list_to_binary(string:strip(Val))};
+
+build_param(?HEADER_EXCHANGE_DURABLE, Val) ->
+    {exchange_durable, string_to_boolean(Val)};
+
+build_param(?HEADER_EXCHANGE_AUTO_DELETE, Val) ->
+    {exchange_auto_delete, string_to_boolean(Val)}.
 
 default_params({queue, _}) ->
     [{durable, true}];
