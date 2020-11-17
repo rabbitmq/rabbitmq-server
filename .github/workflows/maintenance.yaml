@@ -1,5 +1,7 @@
 name: Maintenance
-on: push
+on:
+  schedule:
+  - cron: '0 2 * * *'
 jobs:
   cleanup-images:
     name: cleanup-images
