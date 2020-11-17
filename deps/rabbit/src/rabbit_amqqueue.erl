@@ -1269,16 +1269,25 @@ collect_info_all(VHostPath, Items) ->
     rabbit_control_misc:await_emitters_termination(Pids),
     wait_for_queues(Ref, length(Pids), []).
 
+wait_for_queues(_Ref, 0, Acc) -> Acc;
 wait_for_queues(Ref, N, Acc) ->
+    wait_for_queues(Ref, N, Acc, fun() -> ok end, 1000).
+
+wait_for_queues(Ref, N, Acc, TimeoutFun, Timeout) when is_integer(Timeout) ->
     receive
         {Ref, finished} when N == 1 ->
             Acc;
         {Ref, finished} ->
             wait_for_queues(Ref, N - 1, Acc);
         {Ref, Items, continue} ->
-            wait_for_queues(Ref, N, [Items | Acc])
+            wait_for_queues(Ref, N, [Items | Acc]);
+        {Ref, Result, finished} when N == 1 ->
+            [Result | Acc];
+        {Ref, Result, finished} ->
+            wait_for_queues(Ref, N - 1, [Result | Acc])
     after
-        1000 ->
+        Timeout ->
+            TimeoutFun(),
             Acc
     end.
 
@@ -1764,6 +1773,81 @@ on_node_up(Node) ->
                    [maybe_clear_recoverable_node(Node, Q) || Q <- Qs],
                    ok
            end).
+
+-spec transform(rabbit_types:transform(), function(),
+                amqqueue:amqqueue() | [amqqueue:amqqueue()]) ->
+                    rabbit_types:ok_or_error(any()).
+
+transform(_TF, _Fun, _Qs = []) -> ok;
+transform(TF = #transform{options = Opts}, Fun, Qs = [_|_]) ->
+    Ref = make_ref(),
+    Opts1 = maps:put(transform_ref, Ref, Opts),
+    Opts2 = maps:put(transform_client, TClient = self(), Opts1),
+    TF1 = TF#transform{options = maps:put(transform_ref, Ref, Opts2)},
+    Pids = [spawn_link(rabbit_amqqueue, emit_transform, [TF1, Fun, Q, Ref, TClient])
+                || Q <- Qs],
+    case wait_for_transform_pids(Ref, Pids, ok) of
+        ok ->
+            AllSPids = lists:flatten([amqqueue:get_slave_pids(Q) || Q <- Qs]),
+            case wait_for_transform_pids(Ref, AllSPids, mirror_transform_complete,
+                     mirrored_queue_transform_not_complete) of
+                ok ->
+                    ok;
+                Errors ->
+                    Errors
+            end;
+        Errors ->
+            Errors
+    end;
+
+transform(TF = #transform{options = Opts}, Fun, Q) when ?amqqueue_is_classic(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    QName = rabbit_misc:rs(amqqueue:get_name(Q)),
+    SPids = amqqueue:get_slave_pids(Q),
+    %% We can't fully rely on remote queue master known mirror pids. Set and use
+    %% expected mirrors from onset, e.g. in case of mnesia deviations on queue
+    Opts1 = Opts#{expected_mirrors => SPids},
+    %% Check if queue transformation is permitted and if known SPids are
+    %% reacheable e.g. interval before net_ticktime has elapsed
+    case rabbit_transform:is_permitted([QPid | SPids]) of
+       true ->
+           try
+                delegate:invoke(QPid, {gen_server2, call,
+                    [{transform, TF#transform{options = Opts1}, Fun},
+                      infinity]})
+           catch
+               _:Reason ->
+                   rabbit_transform:log_error(QName, TF, Reason),
+                   {error, Reason}
+           end;
+       false ->
+           rabbit_transform:log_error(QName, TF, transform_not_permitted),
+           {error, transform_not_permitted}
+    end;
+transform(_TF, _Fun, _Q) ->
+    ok.
+
+-spec emit_transform(rabbit_types:transform(), function(), amqqueue:amqqueue(),
+    reference(), pid()) -> rabbit_types:ok_or_error(any()).
+
+emit_transform(TF, Fun, Q, Ref, ReplyPid) ->
+    rabbit_control_misc:emit(
+        ReplyPid, Ref, fun() -> rabbit_amqqueue:transform(TF, Fun, Q) end).
+
+wait_for_transform_pids(Ref, Pids, Expected) ->
+    wait_for_transform_pids(Ref, Pids, Expected, transform_timeout).
+
+wait_for_transform_pids(Ref, Pids, Expected, Error) ->
+    wait_for_transform_pids(Ref, Pids, Expected, Error, rabbit_transform:get_timeout()).
+
+wait_for_transform_pids(_Ref, [], _Expected, _Error, _Timeout) -> ok;
+wait_for_transform_pids(Ref, Pids, Expected, Error, Timeout) ->
+    Results = lists:usort(wait_for_queues(Ref, length(Pids), [],
+                             fun() -> throw({error, Error}) end, Timeout)),
+    case lists:delete(Expected, Results) of
+        []     -> ok;
+        Errors -> Errors
+    end.
 
 maybe_clear_recoverable_node(Node, Q) ->
     SPids = amqqueue:get_sync_slave_pids(Q),
