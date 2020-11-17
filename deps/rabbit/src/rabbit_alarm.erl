@@ -20,7 +20,7 @@
 
 -behaviour(gen_event).
 
--export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
+-export([start_link/0, start/0, stop/0, register/2, set_alarm/1, lookup_alarms/0,
          clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
          format_as_map/1, format_as_maps/1, is_local/1]).
 
@@ -30,6 +30,8 @@
 -export([remote_conserve_resources/3]). %% Internal use only
 
 -define(SERVER, ?MODULE).
+
+-define(TAB,    ?SERVER).
 
 -define(FILE_DESCRIPTOR_RESOURCE, <<"file descriptors">>).
 -define(MEMORY_RESOURCE, <<"memory">>).
@@ -157,6 +159,12 @@ on_node_up(Node)   -> gen_event:notify(?SERVER, {node_up,   Node}).
 -spec on_node_down(node()) -> 'ok'.
 on_node_down(Node) -> gen_event:notify(?SERVER, {node_down, Node}).
 
+%% Optimized concurrent, fast, alarm lookups without blocking the server process
+-spec lookup_alarms() -> [{alarm(), []}].
+
+lookup_alarms() ->
+    lists:flatten([Alarms || {_, Alarms} <- ets:tab2list(?TAB)]).
+
 remote_conserve_resources(Pid, Source, {true, _, _}) ->
     gen_event:notify({?SERVER, node(Pid)},
                      {set_alarm, {{resource_limit, Source, node()}, []}});
@@ -168,6 +176,7 @@ remote_conserve_resources(Pid, Source, {false, _, _}) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    ?TAB = ets:new(?TAB, [protected, named_table, {read_concurrency, true}]),
     {ok, #alarms{alertees      = dict:new(),
                  alarmed_nodes = dict:new(),
                  alarms        = []}}.
@@ -198,6 +207,7 @@ handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     case lists:member(Alarm, Alarms) of
         true  -> {ok, State};
         false -> UpdatedAlarms = lists:usort([Alarm|Alarms]),
+                 set_alarm_table(rabbit_alarms, UpdatedAlarms),
                  handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
     end;
 
@@ -212,9 +222,10 @@ handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
     end;
 handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     case lists:keymember(Alarm, 1, Alarms) of
-        true  -> handle_clear_alarm(
-                   Alarm, State#alarms{alarms = lists:keydelete(
-                                                  Alarm, 1, Alarms)});
+        true  ->
+            UpdatedAlarms = lists:keydelete(Alarm, 1, Alarms),
+            set_alarm_table(rabbit_alarms, UpdatedAlarms),
+            handle_clear_alarm(Alarm, State#alarms{alarms = UpdatedAlarms});
         false -> {ok, State}
 
     end;
@@ -251,6 +262,7 @@ handle_info(_Info, State) ->
     {ok, State}.
 
 terminate(_Arg, _State) ->
+    ets:delete(?TAB),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -280,6 +292,7 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
             State = #alarms{alarmed_nodes = AN,
                             alertees      = Alertees}) ->
     AN1 = UpdateFun(Node, Source, AN),
+    set_alarm_table(resource_limits, AN1),
     %% Is alarm for Source still set on any node?
     StillHasAlerts = lists:any(fun ({_Node, NodeAlerts}) -> lists:member(Source, NodeAlerts) end, dict:to_list(AN1)),
     case StillHasAlerts of
@@ -363,3 +376,10 @@ compute_alarms(#alarms{alarms = Alarms,
                    alarmed_nodes = AN}) ->
     Alarms ++ [ {{resource_limit, Source, Node}, []}
                 || {Node, Sources} <- dict:to_list(AN), Source <- Sources ].
+
+set_alarm_table(rabbit_alarms, Alarms) when is_list(Alarms) ->
+    ets:insert(?TAB, {rabbit_alarms, Alarms});
+set_alarm_table(resource_limits, AN) ->
+    ets:insert(?TAB, {resource_limits,
+        [{{resource_limit, Source, Node}, []}
+          || {Node, Sources} <- dict:to_list(AN), Source <- Sources]}).
