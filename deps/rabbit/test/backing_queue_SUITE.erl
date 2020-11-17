@@ -659,7 +659,7 @@ bq_queue_index_props1(_Config) ->
     with_empty_test_queue(
       fun(Qi0, _QName) ->
               MsgId = rabbit_guid:gen(),
-              Props = #message_properties{expiry=12345, size = 10},
+              Props = message_properties:new(12345, false, 10, 0),
               Qi1 = rabbit_queue_index:publish(
                       MsgId, 1, Props, true, infinity, Qi0),
               {[{MsgId, 1, Props, _, _}], Qi2} =
@@ -947,13 +947,17 @@ variable_queue_dropfetchwhile2(VQ0, _QName) ->
     %% add messages with sequential expiry
     VQ1 = variable_queue_publish(
             false, 1, Count,
-            fun (N, Props) -> Props#message_properties{expiry = N} end,
+            fun (N, Props) -> message_properties:set_expiry(Props, N) end,
             fun erlang:term_to_binary/1, VQ0),
 
+    ExpectedProps = message_properties:new(6, false, Count, 0),
+
     %% fetch the first 5 messages
-    {#message_properties{expiry = 6}, {Msgs, AckTags}, VQ2} =
+    {ExpectedProps, {Msgs, AckTags}, VQ2} =
         rabbit_variable_queue:fetchwhile(
-          fun (#message_properties{expiry = Expiry}) -> Expiry =< 5 end,
+          fun (Props) ->
+              message_properties:get_expiry(Props) =< 5
+          end,
           fun (Msg, AckTag, {MsgAcc, AckAcc}) ->
                   {[Msg | MsgAcc], [AckTag | AckAcc]}
           end, {[], []}, VQ1),
@@ -963,9 +967,11 @@ variable_queue_dropfetchwhile2(VQ0, _QName) ->
     {_MsgIds, VQ3} = rabbit_variable_queue:requeue(AckTags, VQ2),
 
     %% drop the first 5 messages
-    {#message_properties{expiry = 6}, VQ4} =
+    {ExpectedProps, VQ4} =
         rabbit_variable_queue:dropwhile(
-          fun (#message_properties {expiry = Expiry}) -> Expiry =< 5 end, VQ3),
+          fun (Props) ->
+              message_properties:get_expiry(Props) =< 5
+          end, VQ3),
 
     %% fetch 5
     VQ5 = lists:foldl(fun (N, VQN) ->
@@ -1256,7 +1262,7 @@ make_publish(IsPersistent, PayloadFun, PropFun, N) ->
                                             false -> 1
                                         end},
        PayloadFun(N)),
-     PropFun(N, #message_properties{size = 10}),
+     PropFun(N, message_properties:new({size, 10})),
      false}.
 
 make_publish_delivered(IsPersistent, PayloadFun, PropFun, N) ->
@@ -1267,7 +1273,7 @@ make_publish_delivered(IsPersistent, PayloadFun, PropFun, N) ->
                                             false -> 1
                                         end},
        PayloadFun(N)),
-     PropFun(N, #message_properties{size = 10})}.
+     PropFun(N, message_properties:new({size, 10}))}.
 
 queue_name(Config, Name) ->
     Name1 = iolist_to_binary(rabbit_ct_helpers:config_to_testcase_name(Config, Name)),
@@ -1331,7 +1337,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = rabbit_queue_index:publish(
-                          MsgId, SeqId, #message_properties{size = 10},
+                          MsgId, SeqId, message_properties:new({size, 10}),
                           Persistent, infinity, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
@@ -1458,7 +1464,7 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                                                          false -> 1
                                                      end},
                     PayloadFun(N)),
-                  PropFun(N, #message_properties{size = 10}),
+                  PropFun(N, message_properties:new({size, 10})),
                   false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
 

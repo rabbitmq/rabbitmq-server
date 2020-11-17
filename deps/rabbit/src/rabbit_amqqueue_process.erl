@@ -1008,9 +1008,10 @@ subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
 message_properties(Message = #basic_message{content = Content},
                    Confirm, #q{ttl = TTL}) ->
     #content{payload_fragments_rev = PFR} = Content,
-    #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
-                        needs_confirming = Confirm == eventually,
-                        size             = iolist_size(PFR)}.
+    message_properties:new(calculate_msg_expiry(Message, TTL),
+                           Confirm == eventually,
+                           iolist_size(PFR),
+                           0).
 
 calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = Props} =

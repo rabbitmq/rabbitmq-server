@@ -1577,7 +1577,8 @@ stats0({DeltaReady, DeltaUnacked, ReadyMsgPaged},
                   persistent_bytes  = PersistentBytes + DeltaPersistent  * S,
                   delta_transient_bytes = DeltaBytes  + DeltaPaged * one_if(not MsgStatus#msg_status.is_persistent) * S}.
 
-msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
+msg_size(#msg_status{msg_props = MsgProps}) ->
+    message_properties:get_size(MsgProps).
 
 msg_in_ram(#msg_status{msg = Msg}) -> Msg =/= undefined.
 
@@ -1838,8 +1839,7 @@ process_delivers_and_acks_fun(_) ->
 %%----------------------------------------------------------------------------
 
 publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-         IsDelivered, _ChPid, _Flow, PersistFun,
+         MsgProps, IsDelivered, _ChPid, _Flow, PersistFun,
          State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
                             mode                = default,
                             qi_embed_msgs_below = IndexMaxSize,
@@ -1848,6 +1848,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             durable             = IsDurable,
                             unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
@@ -1861,7 +1862,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                           in_counter  = InCount1,
                           unconfirmed = UC1 });
 publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-             MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+             MsgProps,
              IsDelivered, _ChPid, _Flow, PersistFun,
              State = #vqstate { mode                = lazy,
                                 qi_embed_msgs_below = IndexMaxSize,
@@ -1871,6 +1872,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                 unconfirmed         = UC,
                                 delta               = Delta}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     Delta1 = expand_delta(SeqId, Delta, IsPersistent),
@@ -1887,9 +1889,7 @@ batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
 
 publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                           id = MsgId },
-                   MsgProps = #message_properties {
-                                 needs_confirming = NeedsConfirming },
-                   _ChPid, _Flow, PersistFun,
+                   MsgProps, _ChPid, _Flow, PersistFun,
                    State = #vqstate { mode                = default,
                                       qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
@@ -1898,6 +1898,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       durable             = IsDurable,
                                       unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
@@ -1910,9 +1911,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
     {SeqId, State3};
 publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                           id = MsgId },
-                   MsgProps = #message_properties {
-                                 needs_confirming = NeedsConfirming },
-                   _ChPid, _Flow, PersistFun,
+                   MsgProps, _ChPid, _Flow, PersistFun,
                    State = #vqstate { mode                = lazy,
                                       qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
@@ -1921,6 +1920,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       durable             = IsDurable,
                                       unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
@@ -2036,8 +2036,7 @@ maybe_prepare_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
 determine_persist_to(#basic_message{
                         content = #content{properties     = Props,
                                            properties_bin = PropsBin}},
-                     #message_properties{size = BodySize},
-                     IndexMaxSize) ->
+                     MsgProps, IndexMaxSize) ->
     %% The >= is so that you can set the env to 0 and never persist
     %% to the index.
     %%
@@ -2051,6 +2050,7 @@ determine_persist_to(#basic_message{
     %% case) we can just check their size. If we don't (message came
     %% via the direct client), we make a guess based on the number of
     %% headers.
+    BodySize = message_properties:get_size(MsgProps),
     case BodySize >= IndexMaxSize of
         true  -> msg_store;
         false -> Est = case is_binary(PropsBin) of
@@ -2320,7 +2320,7 @@ msg_from_pending_ack(SeqId, State) ->
             {none, State};
         {#msg_status { msg_props = MsgProps } = MsgStatus, State1} ->
             {MsgStatus #msg_status {
-               msg_props = MsgProps #message_properties { needs_confirming = false } },
+               msg_props = message_properties:set_needs_confirming(MsgProps, false)},
              State1}
     end.
 

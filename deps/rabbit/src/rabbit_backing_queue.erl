@@ -24,9 +24,9 @@
 -type flow() :: 'flow' | 'noflow'.
 -type msg_ids() :: [rabbit_types:msg_id()].
 -type publish() :: {rabbit_types:basic_message(),
-                    rabbit_types:message_properties(), boolean()}.
+                    message_properties:message_properties(), boolean()}.
 -type delivered_publish() :: {rabbit_types:basic_message(),
-                              rabbit_types:message_properties()}.
+                              message_properties:message_properties()}.
 -type fetch_result(Ack) ::
         ('empty' | {rabbit_types:basic_message(), boolean(), Ack}).
 -type drop_result(Ack) ::
@@ -39,7 +39,7 @@
 -type duration() :: ('undefined' | 'infinity' | number()).
 
 -type msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A).
--type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
+-type msg_pred() :: fun ((message_properties:message_properties()) -> boolean()).
 
 -type queue_mode() :: atom().
 
@@ -95,7 +95,7 @@
 
 %% Publish a message.
 -callback publish(rabbit_types:basic_message(),
-                  rabbit_types:message_properties(), boolean(), pid(), flow(),
+                  message_properties:message_properties(), boolean(), pid(), flow(),
                   state()) -> state().
 
 %% Like publish/6 but for batches of publishes.
@@ -105,7 +105,7 @@
 %% out to a client. The queue will be empty for these calls
 %% (i.e. saves the round trip through the backing queue).
 -callback publish_delivered(rabbit_types:basic_message(),
-                            rabbit_types:message_properties(), pid(), flow(),
+                            message_properties:message_properties(), pid(), flow(),
                             state())
                            -> {ack(), state()}.
 
@@ -153,7 +153,7 @@
 %% 'undefined' if the whole backing queue was traversed w/o the
 %% predicate ever returning false.
 -callback dropwhile(msg_pred(), state())
-                   -> {rabbit_types:message_properties() | undefined, state()}.
+                   -> {message_properties:message_properties() | undefined, state()}.
 
 %% Like dropwhile, except messages are fetched in "require
 %% acknowledgement" mode and are passed, together with their ack tag,
@@ -161,7 +161,7 @@
 %% accumulator. The result of fetchwhile is as for dropwhile plus the
 %% accumulator.
 -callback fetchwhile(msg_pred(), msg_fun(A), A, state())
-                     -> {rabbit_types:message_properties() | undefined,
+                     -> {message_properties:message_properties() | undefined,
                          A, state()}.
 
 %% Produce the next message.
@@ -191,7 +191,7 @@
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
 -callback fold(fun((rabbit_types:basic_message(),
-                    rabbit_types:message_properties(),
+                    message_properties:message_properties(),
                     boolean(), A) -> {('stop' | 'cont'), A}),
                A, state()) -> {A, state()}.
 
