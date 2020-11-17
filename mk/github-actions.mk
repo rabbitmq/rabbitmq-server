@@ -37,6 +37,7 @@ VENDORED_COMPONENTS = rabbit_common \
 	rabbitmq_shovel \
 	rabbitmq_shovel_management \
 	rabbitmq_stomp \
+	rabbitmq_stream \
 	rabbitmq_top \
 	rabbitmq_tracing \
 	rabbitmq_trust_store \
