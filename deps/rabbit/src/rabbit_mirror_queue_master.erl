@@ -15,7 +15,7 @@
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
          msg_rates/1, info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         zip_msgs_and_acks/4, handle_info/2]).
+         transform/5, zip_msgs_and_acks/4, handle_info/2]).
 
 -export([start/2, stop/1, delete_crashed/1]).
 
@@ -495,6 +495,13 @@ set_queue_mode(Mode, State = #state { gm                  = GM,
     ok = gm:broadcast(GM, {set_queue_mode, Mode}),
     BQS1 = BQ:set_queue_mode(Mode, BQS),
     State #state { backing_queue_state = BQS1 }.
+
+transform(Name, Vsn, Opts, Fun, State = #state {gm                  = GM,
+                                                backing_queue       = BQ,
+                                                backing_queue_state = BQS}) ->
+    BQS1 = BQ:transform(Name, Vsn, Opts, Fun, BQS),
+    ok = gm:broadcast(GM, {transform, Name, Vsn, Opts, Fun}),
+    State#state{backing_queue_state = BQS1}.
 
 zip_msgs_and_acks(Msgs, AckTags, Accumulator,
                   #state { backing_queue = BQ,
