@@ -1,12 +1,13 @@
 #@ load("@ytt:data", "data")
 #@ load("@ytt:assert", "assert")
 #@ load("util.star", "is_unique", "group_by_one", "to_build_args")
-#@ load("helpers.star", "ci_image_tag", "ci_dep_image")
+#@ load("helpers.star", "ci_image_tag", "ci_dep_image", "skip_ci_condition")
 
 #@ def checks_job(dep):
 name: #@ dep.name + "-checks"
 needs: [prepare]
 runs-on: ubuntu-18.04
+if: #@ skip_ci_condition()
 outputs:
   step_start: ${{ steps.buildevents.outputs.step_start }}
 #@yaml/text-templated-strings
@@ -46,6 +47,7 @@ needs:
   - prepare
   - #@ dep.name + "-checks"
 runs-on: ubuntu-18.04
+if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
   - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
@@ -110,7 +112,7 @@ steps:
 name: #@ dep.name
 needs: #@ [dep.name + "-checks"] + [dep.name + "-ct-" + group["name"] for group in group_by_one(dep.suites)]
 runs-on: ubuntu-18.04
-if: always()
+if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
   - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master

@@ -4,6 +4,7 @@ jobs:
   prepare:
     name: prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     outputs:
       build_start: ${{ steps.buildevents.outputs.build_start }}
       branch_or_tag_name: ${{ steps.buildevents.outputs.branch_or_tag_name }}
@@ -42,6 +43,7 @@ jobs:
   xref:
     name: xref
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD XREF START
       id: buildevents
@@ -484,6 +486,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -518,6 +521,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     outputs:
       step_start: ${{ steps.buildevents.outputs.step_start }}
     steps:
@@ -548,6 +552,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -616,6 +621,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -684,6 +690,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -752,6 +759,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -820,6 +828,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -888,6 +897,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -956,6 +966,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1024,6 +1035,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1092,6 +1104,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1160,6 +1173,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1228,6 +1242,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1296,6 +1311,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1364,6 +1380,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1432,6 +1449,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1500,6 +1518,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1568,6 +1587,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1636,6 +1656,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1704,6 +1725,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1772,6 +1794,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1840,6 +1863,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1908,6 +1932,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1976,6 +2001,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2044,6 +2070,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2112,6 +2139,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2180,6 +2208,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2248,6 +2277,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2316,6 +2346,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2384,6 +2415,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2452,6 +2484,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2520,6 +2553,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2588,6 +2622,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2656,6 +2691,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2724,6 +2760,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2792,6 +2829,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2860,6 +2898,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2928,6 +2967,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2996,6 +3036,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3064,6 +3105,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3132,6 +3174,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3200,6 +3243,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3268,6 +3312,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3336,6 +3381,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3404,6 +3450,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3472,6 +3519,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3540,6 +3588,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3608,6 +3657,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3676,6 +3726,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3744,6 +3795,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3812,6 +3864,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3880,6 +3933,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3948,6 +4002,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4016,6 +4071,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4084,6 +4140,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4152,6 +4209,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4220,6 +4278,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4288,6 +4347,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4356,6 +4416,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4424,6 +4485,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4492,6 +4554,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4560,6 +4623,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4628,6 +4692,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4696,6 +4761,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4764,6 +4830,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4832,6 +4899,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4900,6 +4968,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4968,6 +5037,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5036,6 +5106,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5104,6 +5175,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5172,6 +5244,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5240,6 +5313,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5308,6 +5382,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5376,6 +5451,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5444,6 +5520,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5512,6 +5589,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5580,6 +5658,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5648,6 +5727,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5716,6 +5796,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5784,6 +5865,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5852,6 +5934,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5920,6 +6003,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5988,6 +6072,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6056,6 +6141,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6124,6 +6210,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6192,6 +6279,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6260,6 +6348,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6328,6 +6417,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6396,6 +6486,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6464,6 +6555,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6532,6 +6624,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6600,6 +6693,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6668,6 +6762,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6736,6 +6831,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6804,6 +6900,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6872,6 +6969,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6940,6 +7038,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -7102,7 +7201,7 @@ jobs:
     - rabbit-ct-upgrade_preparation
     - rabbit-ct-vhost
     runs-on: ubuntu-18.04
-    if: always()
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -7124,6 +7223,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7158,6 +7258,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7192,6 +7293,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7226,6 +7328,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7260,6 +7363,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7294,6 +7398,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7328,6 +7433,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7362,6 +7468,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7395,6 +7502,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7429,6 +7537,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7463,6 +7572,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7497,6 +7607,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7531,6 +7642,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7565,6 +7677,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7599,6 +7712,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7633,6 +7747,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7667,6 +7782,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7701,6 +7817,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7735,6 +7852,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7769,6 +7887,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7803,6 +7922,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7837,6 +7957,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7871,6 +7992,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7905,6 +8027,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7939,6 +8062,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7973,6 +8097,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8007,6 +8132,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8041,6 +8167,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8075,6 +8202,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8109,6 +8237,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8143,6 +8272,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8177,6 +8307,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8211,6 +8342,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8245,6 +8377,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8323,7 +8456,7 @@ jobs:
     - rabbitmq_web_stomp_examples
     - package-generic-unix
     runs-on: ubuntu-18.04
-    if: always()
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: technote-space/workflow-conclusion-action@v1
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
