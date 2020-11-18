@@ -8,7 +8,7 @@ def dep_jobs(dep):
   if not getattr(dep, "skip_tests", False):
     if dep.name == "rabbitmq_cli":
       jobs[dep.name] = rabbitmq_cli_job(dep)
-    elif len(dep.suites) > 20:
+    elif getattr(dep, "test_suites_in_parallel", False):
       jobs[dep.name + "-checks"] = checks_job(dep)
       for group in group_by_one(dep.suites):
         jobs[dep.name + "-ct-" + group["name"]] = ct_suites_job(dep, group)

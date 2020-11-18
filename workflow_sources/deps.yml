@@ -9,6 +9,7 @@ deps:
   - name: worker_pool
   - name: rabbit_env
 - name: rabbit
+  test_suites_in_parallel: true
   suites:
   - name: amqqueue_backward_compatibility
     time: 63
