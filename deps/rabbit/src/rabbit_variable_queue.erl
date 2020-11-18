@@ -16,7 +16,7 @@
          requeue/2, ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
+         info/2, invoke/3, is_duplicate/2, set_queue_mode/2, transform/5,
          zip_msgs_and_acks/4,  multiple_routing_keys/0, handle_info/2]).
 
 -export([start/2, stop/1]).
@@ -1731,6 +1731,34 @@ collect_by_predicate(Pred, QAcc, State) ->
                 false -> {MsgProps, QAcc, in_r(MsgStatus, State1)}
             end
     end.
+
+%%----------------------------------------------------------------------------
+%% Queue Message Status Transform functions (executed on feature flags enable)
+%%----------------------------------------------------------------------------
+
+transform(message_properties, _Vsn = message_properties_v2, _Opts, Fun,
+          State = #vqstate{q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4}) ->
+    NQ1 = transform_internal_queue(Q1, Fun),
+    NQ2 = transform_internal_queue(Q2, Fun),
+    NQ3 = transform_internal_queue(Q3, Fun),
+    NQ4 = transform_internal_queue(Q4, Fun),
+    State#vqstate{q1 = NQ1, q2 = NQ2, q3 = NQ3, q4 = NQ4};
+
+transform(Transform, Vsn, _Opts, _Fun, _State) ->
+    throw({unsupported_transform, {Transform, Vsn}}).
+
+transform_internal_queue(Q, Fun) ->
+    transform_internal_queue(?QUEUE:is_empty(Q), Q, Fun).
+
+transform_internal_queue(true, Q, _Fun) -> Q;
+transform_internal_queue(false, Q, Fun) ->
+    ?QUEUE:foldr(fun (MsgStatus = #msg_status { msg_props = MsgProps }, QAcc) ->
+                         MsgProps1 = Fun(MsgProps),
+                         ?QUEUE:in_r(MsgStatus#msg_status{msg_props = MsgProps1}, QAcc);
+                     (MsgStatus, QAcc) ->
+                         ?QUEUE:in_r(MsgStatus, QAcc)
+                 end,
+                 ?QUEUE:new(), Q).
 
 %%----------------------------------------------------------------------------
 %% Helpers for Public API purge/1 function

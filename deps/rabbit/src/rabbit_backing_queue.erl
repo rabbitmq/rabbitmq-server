@@ -254,6 +254,12 @@
 
 -callback set_queue_mode(queue_mode(), state()) -> state().
 
+%% Called when transforming queue(s) state to a different format, e.g. during
+%% upgrades or feature flag enablement. See 'rabbit_transform'.
+-callback transform(rabbit_types:transform_type(),
+                    rabbit_types:transform_version(),
+                    rabbit_types:transform_options(), function(), state()) -> state().
+
 -callback zip_msgs_and_acks([delivered_publish()],
                             [ack()], Acc, state())
                            -> Acc.
