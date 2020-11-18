@@ -1,5 +1,5 @@
 #@ load("@ytt:data", "data")
-#@ load("helpers.star", "ci_image")
+#@ load("helpers.star", "ci_image", "skip_ci_condition")
 
 #@ def gcs_path():
 #@   c = ['monorepo_github_actions_conclusions']
@@ -13,6 +13,7 @@ package-generic-unix:
   name: package-generic-unix
   needs: [prepare]
   runs-on: ubuntu-18.04
+  if: #@ skip_ci_condition()
   #@yaml/text-templated-strings
   steps:
     - name: RECORD STEP START
@@ -55,7 +56,7 @@ finish:
   name: finish
   needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)] + ['package-generic-unix']
   runs-on: ubuntu-18.04
-  if: always()
+  if: #@ skip_ci_condition()
   #@yaml/text-templated-strings
   steps:
     - uses: technote-space/workflow-conclusion-action@v1

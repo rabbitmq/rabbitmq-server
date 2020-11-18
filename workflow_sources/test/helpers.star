@@ -11,3 +11,7 @@ end
 def ci_dep_image(dep_name):
   return "eu.gcr.io/cf-rabbitmq-core/ci-" + dep_name + ":" + ci_image_tag()
 end
+
+def skip_ci_condition():
+  return "!contains(github.event.head_commit.message, '[ci skip]')"
+end

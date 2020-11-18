@@ -1,11 +1,12 @@
 #@ load("@ytt:data", "data")
 #@ load("util.star", "to_build_args")
-#@ load("helpers.star", "ci_image", "ci_image_tag")
+#@ load("helpers.star", "ci_image", "ci_image_tag", "skip_ci_condition")
 
 #@ def prepare_jobs():
 prepare:
   name: prepare
   runs-on: ubuntu-18.04
+  if: #@ skip_ci_condition()
   outputs:
     build_start: ${{ steps.buildevents.outputs.build_start }}
     branch_or_tag_name: ${{ steps.buildevents.outputs.branch_or_tag_name }}
@@ -53,6 +54,7 @@ prepare:
 xref:
   name: xref
   runs-on: ubuntu-18.04
+  if: #@ skip_ci_condition()
   #@yaml/text-templated-strings
   steps:
     - name: RECORD XREF START
@@ -99,6 +101,7 @@ xref:
 dialyze:
   name: dialyze
   runs-on: ubuntu-18.04
+  if: #@ skip_ci_condition()
   #@yaml/text-templated-strings
   steps:
     - name: RECORD DIALYZE START

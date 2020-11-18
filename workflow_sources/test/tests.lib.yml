@@ -1,11 +1,12 @@
 #@ load("@ytt:data", "data")
 #@ load("util.star", "to_build_args")
-#@ load("helpers.star", "ci_image")
+#@ load("helpers.star", "ci_image", "skip_ci_condition")
 
 #@ def tests_job(dep):
 name: #@ dep.name
 needs: [prepare]
 runs-on: ubuntu-18.04
+if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
   - name: RECORD STEP START
