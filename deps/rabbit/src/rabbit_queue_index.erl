@@ -14,6 +14,7 @@
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
+-export([add_delivery_count/0]).
 -export([scan_queue_segments/3, scan_queue_segments/4]).
 
 %% Migrates from global to per-vhost message stores
@@ -1460,6 +1461,44 @@ store_msg_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
     {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
      Rest};
 store_msg_segment(_) ->
+    stop.
+
+%%----------------------------------------------------------------------------
+%% Add 4-byte delivery count field. Migration carried out through feature-flag
+%%----------------------------------------------------------------------------
+-spec add_delivery_count() -> 'ok'.
+
+add_delivery_count() ->
+    foreach_queue_index({fun add_delivery_count_journal/1,
+                         fun add_delivery_count_segment/1}).
+
+add_delivery_count_journal(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                    Rest/binary>>) ->
+    {<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
+add_delivery_count_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                    Rest/binary>>) ->
+    {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
+add_delivery_count_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                    MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
+                    MsgSize:?EMBEDDED_SIZE_BITS, Msg:MsgSize/binary, Rest/binary>>) ->
+    {[ <<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS, MsgId:?MSG_ID_BITS,
+         Expiry:?EXPIRY_BITS, Size:?SIZE_BITS, 0:?DC_BITS, MsgSize:?EMBEDDED_SIZE_BITS>>,
+         Msg ], Rest};
+add_delivery_count_journal(_) ->
+    stop.
+
+add_delivery_count_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
+                    RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
+                    Expiry:?EXPIRY_BITS, Size:?SIZE_BITS, MsgSize:?EMBEDDED_SIZE_BITS,
+                    Msg:MsgSize/binary, Rest/binary>>) ->
+    {[ <<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
+         MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
+         0:?DC_BITS, MsgSize:?EMBEDDED_SIZE_BITS>>, Msg ], Rest};
+add_delivery_count_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+                    RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
+    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
+     Rest};
+add_delivery_count_segment(_) ->
     stop.
 
 
