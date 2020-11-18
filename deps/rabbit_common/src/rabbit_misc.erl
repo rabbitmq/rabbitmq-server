@@ -22,7 +22,8 @@
          protocol_error/3, protocol_error/4, protocol_error/1]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
 -export([dirty_read/1]).
--export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
+-export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1,
+         table_delete/2]).
 -export([r/3, r/2, r_arg/4, rs/1]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
@@ -137,6 +138,8 @@
           rabbit_types:ok_or_error2(any(), 'not_found').
 -spec table_lookup(rabbit_framing:amqp_table(), binary()) ->
           'undefined' | {rabbit_framing:amqp_field_type(), any()}.
+-spec table_delete(rabbit_framing:amqp_table(), binary()) ->
+          rabbit_framing:amqp_table().
 -spec set_table_value
         (rabbit_framing:amqp_table(), binary(), rabbit_framing:amqp_field_type(),
          rabbit_framing:amqp_value()) ->
@@ -377,6 +380,9 @@ table_lookup(Table, Key) ->
         {value, {_, TypeBin, ValueBin}} -> {TypeBin, ValueBin};
         false                           -> undefined
     end.
+
+table_delete(Table, Key) ->
+    lists:keydelete(Key, 1, Table).
 
 set_table_value(Table, Key, Type, Value) ->
     sort_field_table(
