@@ -49,8 +49,12 @@ all() ->
     pg2:get_members(pgname(rabbit_federation_queues)).
 
 q(QName) ->
-    pg2:create(pgname({rabbit_federation_queue, QName})),
-    pg2:get_members(pgname({rabbit_federation_queue, QName})).
+    case pg2:get_members(pgname({rabbit_federation_queue, QName})) of
+        {error, {no_such_group, _}} ->
+            [];
+        Members ->
+            Members
+    end.
 
 federation_up() ->
     proplists:is_defined(rabbitmq_federation,
@@ -180,6 +184,7 @@ terminate(Reason, #not_started{upstream        = Upstream,
                                queue           = Q}) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
+    pg2:delete(pgname({rabbit_federation_queue, QName})),
     ok;
 
 terminate(Reason, #state{dconn           = DConn,
@@ -191,6 +196,7 @@ terminate(Reason, #state{dconn           = DConn,
     rabbit_federation_link_util:ensure_connection_closed(DConn),
     rabbit_federation_link_util:ensure_connection_closed(Conn),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
+    pg2:delete(pgname({rabbit_federation_queue, QName})),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
