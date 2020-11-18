@@ -1532,7 +1532,39 @@ handle_call(sync_mirrors, _From, State) ->
 
 %% By definition if we get this message here we do not have to do anything.
 handle_call(cancel_sync_mirrors, _From, State) ->
-    reply({ok, not_syncing}, State).
+    reply({ok, not_syncing}, State);
+
+handle_call({transform, TF = #transform{name     = TName,
+                                        versions = TVersions,
+                                        options  = TOpts}, TFun}, _From,
+             State = #q{q                   = Q,
+                        backing_queue       = BQ,
+                        backing_queue_state = BQS}) ->
+    QName = rabbit_misc:rs(amqqueue:get_name(Q)),
+    {Result, BQS2} =
+        try
+            [TVersion] = TVersions,  %% We only expect a single version
+            rabbit_transform:log_info(QName, TF),
+            BQS1 = BQ:transform(TName, TVersion, TOpts, TFun, BQS),
+            %% Post check. Only apply transformation if still permitted.
+            SPids = maps:get(expected_mirrors, TOpts, []),
+            case rabbit_transform:is_permitted(SPids) of
+                true  ->
+                    rabbit_transform:log_success(QName, TF),
+                    {ok, BQS1};
+                false ->
+                    rabbit_transform:log_error(QName, TF, transform_not_permitted),
+                    {{error, transform_not_permitted}, BQS}
+            end
+        catch
+          _:{error, Reason} = Error ->
+              rabbit_transform:log_error(QName, TF, Reason),
+              {Error, BQS};
+          _:Reason ->
+              rabbit_transform:log_error(QName, TF, Reason),
+              {{error, Reason}, BQS}
+        end,
+    reply(Result, State#q{backing_queue_state = BQS2}).
 
 new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
             _SingleActiveConsumerIsOn = true, Consumers) ->
