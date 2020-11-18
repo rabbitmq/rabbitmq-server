@@ -242,5 +242,26 @@ classic_delivery_limits_migration(FeatureName, _FeatureProps, enable) ->
                              "~p migration: ~p", [FeatureName, Reason1]),
             {error, Reason1}
     end;
-classic_delivery_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
-    rabbit_transform:exists(message_properties, message_properties_v2).
+classic_delivery_limits_migration(FeatureName, _FeatureProps, is_enabled) ->
+    case rabbit_transform:exists(TP = message_properties, TV = message_properties_v2) of
+        true -> true;
+        false ->
+            %% e.g. RAM nodes leaving the cluster having been previously enabled
+            case rabbit_feature_flags:read_enabled_feature_flags_list() of
+                FFList when is_list(FFList) ->
+                    case lists:member(classic_delivery_limits, FFList) of
+                        true ->
+                            rabbit_log:warning("Feature flag ~p is enabled but "
+                                "missing transform details (name: ~p, version: ~p) "
+                                "in '~p' table. Ensure ~p metadata is fully "
+                                "synchronized",
+                                [FeatureName, TP, TV, rabbit_transform:table_name(),
+                                 node()]),
+                            true;
+                        false ->
+                            false
+                    end;
+                _ ->
+                    false
+            end
+    end.
