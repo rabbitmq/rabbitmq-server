@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+
+<!--
+Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
+Suisse, Deutsche Boerse, Envoy Technologies Inc., Goldman Sachs, HCL
+Technologies Ltd, IIT Software GmbH, iMatix Corporation, INETCO Systems Limited,
+Informatica Corporation, JPMorgan Chase & Co., Kaazing Corporation, N.A,
+Microsoft Corporation, my-Channels, Novell, Progress Software, Red Hat Inc.,
+Software AG, Solace Systems Inc., StormMQ Ltd., Tervela Inc., TWIST Process
+Innovations Ltd, GoPivotal, Inc., and WS02 Inc. 2006-2011. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<amqp name="transactions" xmlns="https://www.amqp.org/schema/amqp.xsd">
+  <section name="coordination">
+    <type name="coordinator" class="composite" source="list" provides="target">
+      <descriptor name="amqp:coordinator:list" code="0x00000000:0x00000030"/>
+      <field name="capabilities" type="symbol" requires="txn-capability" multiple="true"/>
+    </type>
+    <type name="declare" class="composite" source="list">
+      <descriptor name="amqp:declare:list" code="0x00000000:0x00000031"/>
+      <field name="global-id" type="*" requires="global-tx-id"/>
+    </type>
+    <type name="discharge" class="composite" source="list">
+      <descriptor name="amqp:discharge:list" code="0x00000000:0x00000032"/>
+      <field name="txn-id" type="*" mandatory="true" requires="txn-id"/>
+      <field name="fail" type="boolean"/>
+    </type>
+    <type name="transaction-id" class="restricted" source="binary" provides="txn-id"/>
+    <type name="declared" class="composite" source="list" provides="delivery-state, outcome">
+      <descriptor name="amqp:declared:list" code="0x00000000:0x00000033"/>
+      <field name="txn-id" type="*" mandatory="true" requires="txn-id"/>
+    </type>
+    <type name="transactional-state" class="composite" source="list" provides="delivery-state">
+      <descriptor name="amqp:transactional-state:list" code="0x00000000:0x00000034"/>
+      <field name="txn-id" type="*" mandatory="true" requires="txn-id"/>
+      <field name="outcome" type="*" requires="outcome"/>
+    </type>
+    <type name="txn-capability" class="restricted" source="symbol" provides="txn-capability">
+      <choice name="local-transactions" value="amqp:local-transactions"/>
+      <choice name="distributed-transactions" value="amqp:distributed-transactions"/>
+      <choice name="promotable-transactions" value="amqp:promotable-transactions"/>
+      <choice name="multi-txns-per-ssn" value="amqp:multi-txns-per-ssn"/>
+      <choice name="multi-ssns-per-txn" value="amqp:multi-ssns-per-txn"/>
+    </type>
+    <type name="transaction-error" class="restricted" source="symbol" provides="error-condition">
+      <choice name="unknown-id" value="amqp:transaction:unknown-id"/>
+      <choice name="transaction-rollback" value="amqp:transaction:rollback"/>
+      <choice name="transaction-timeout" value="amqp:transaction:timeout"/>
+    </type>
+  </section>
+</amqp>

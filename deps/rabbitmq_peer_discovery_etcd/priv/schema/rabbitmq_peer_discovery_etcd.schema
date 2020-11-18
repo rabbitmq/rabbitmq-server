@@ -1,0 +1,279 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+%% Endpoints
+
+{mapping, "cluster_formation.etcd.endpoints", "rabbit.cluster_formation.peer_discovery_etcd.endpoints", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "cluster_formation.etcd.endpoints.$index", "rabbit.cluster_formation.peer_discovery_etcd.endpoints", [
+    {datatype, [string, ip]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.endpoints",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.endpoints", Conf, undefined) of
+        none      -> [];
+        _ ->
+            Endpoints = cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.endpoints", Conf),
+            [V || {_, V} <- Endpoints]
+    end
+end}.
+
+%% Legacy: etcd host
+
+{mapping, "cluster_formation.etcd.host", "rabbit.cluster_formation.peer_discovery_etcd.etcd_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.host", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Legacy: etcd port
+
+{mapping, "cluster_formation.etcd.port", "rabbit.cluster_formation.peer_discovery_etcd.etcd_port", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_port",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.port", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% Legacy: etcd scheme. The key remains for backwards compatibility, it will not be used.
+
+{mapping, "cluster_formation.etcd.scheme", "rabbit.cluster_formation.peer_discovery_etcd.etcd_scheme", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_scheme",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.scheme", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% key prefix appended after /rabbitmq/{discovery,locks} (a mandatory prefix we enforce as of #22)
+
+{mapping, "cluster_formation.etcd.key_prefix", "rabbit.cluster_formation.peer_discovery_etcd.etcd_prefix", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_prefix",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.key_prefix", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% cluster name
+
+{mapping, "cluster_formation.etcd.cluster_name", "rabbit.cluster_formation.peer_discovery_etcd.cluster_name", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.cluster_name",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.cluster_name", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% node key ttl
+
+{mapping, "cluster_formation.etcd.node_ttl", "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.node_ttl", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% lock acquisition timeout
+
+{mapping, "cluster_formation.etcd.lock_wait_time", "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "cluster_formation.etcd.lock_timeout", "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+%% an alias for lock acquisition timeout to be consistent with the etcd backend
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.lock_timeout", Conf, undefined) of
+        undefined ->
+            case cuttlefish:conf_get("cluster_formation.etcd.lock_wait_time", Conf, undefined) of
+                    undefined -> cuttlefish:unset();
+                    Value     -> Value
+                end;
+        Value -> Value
+    end
+end}.
+
+%% authentication
+
+{mapping, "cluster_formation.etcd.username", "rabbit.cluster_formation.peer_discovery_etcd.etcd_username", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_username",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.username", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+{mapping, "cluster_formation.etcd.password", "rabbit.cluster_formation.peer_discovery_etcd.etcd_password", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_password",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.password", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%%
+%% TLS client options
+%%
+
+{mapping, "cluster_formation.etcd.ssl_options", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.ssl_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid cluster_formation.etcd.ssl_options")
+    end
+end}.
+
+{mapping, "cluster_formation.etcd.ssl_options.verify", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.fail_if_no_peer_cert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.cacertfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.certfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.cacerts.$name", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.ssl_options.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "cluster_formation.etcd.ssl_options.cert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("cluster_formation.etcd.ssl_options.cert", Conf))
+end}.
+
+{mapping, "cluster_formation.etcd.ssl_options.crl_check", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.depth", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.dh", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("cluster_formation.etcd.ssl_options.dh", Conf))
+end}.
+
+{mapping, "cluster_formation.etcd.ssl_options.dhfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.dhfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.key.RSAPrivateKey", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.key.DSAPrivateKey", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.key.PrivateKeyInfo", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "cluster_formation.etcd.ssl_options.keyfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.log_alert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.password", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.psk_identity", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.psk_identity",
+    [{datatype, string}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.reuse_sessions", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.secure_renegotiate", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "cluster_formation.etcd.ssl_options.versions.$version", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.ssl_options.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "cluster_formation.etcd.ssl_options.ciphers.$cipher", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.ssl_options.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.

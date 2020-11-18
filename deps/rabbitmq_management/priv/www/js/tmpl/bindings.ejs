@@ -1,0 +1,66 @@
+<%= maybe_truncate(bindings) %>
+<% if (bindings.length > 0) { %>
+    <table class="list updatable">
+      <thead>
+        <tr>
+<% if (mode == 'exchange_source') { %>
+          <th>To</th>
+<% } else { %>
+          <th>From</th>
+<% } %>
+          <th>Routing key</th>
+          <th>Arguments</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <%
+           for (var i = 0; i < bindings.length; i++) {
+               var binding = bindings[i];
+        %>
+           <tr<%= alt_rows(i)%>>
+<% if (binding.source == '') { %>
+             <td colspan="4">
+               (Default exchange binding)
+             </td>
+<% } else { %>
+<% if (mode == 'queue' || mode == 'exchange_destination') { %>
+             <td>
+               <span class="exchange">
+                 <%= link_exchange(binding.vhost, binding.source) %>
+               </span>
+             </td>
+<% } else if (binding.destination_type == 'exchange') { %>
+             <td>
+               <span class="exchange" title="Exchange">
+                 <%= link_exchange(binding.vhost, binding.destination) %>
+               </span>
+             </td>
+<% } else { %>
+             <td>
+               <span class="queue" title="Queue">
+                 <%= link_queue(binding.vhost, binding.destination) %>
+               </span>
+             </td>
+<% } %>
+             <td><%= fmt_string(binding.routing_key) %></td>
+             <td><%= fmt_table_short(binding.arguments) %></td>
+             <td class="c">
+               <form action="#/bindings" method="delete" class="confirm">
+                 <input type="hidden" name="vhost" value="<%= fmt_string(binding.vhost) %>"/>
+                 <input type="hidden" name="source" value="<%= fmt_exchange_url(binding.source) %>"/>
+                 <input type="hidden" name="destination" value="<%= fmt_string(binding.destination) %>"/>
+                 <input type="hidden" name="destination_type" value="<%= binding.destination_type.substring(0, 1) %>"/>
+                 <input type="hidden" name="properties_key" value="<%= fmt_string(binding.properties_key) %>"/>
+                 <input type="submit" value="Unbind"/>
+               </form>
+             </td>
+           <% } %>
+           </tr>
+           <% } %>
+      </tbody>
+    </table>
+
+<% } else { %>
+  <p>... no bindings ...</p>
+<% } %>

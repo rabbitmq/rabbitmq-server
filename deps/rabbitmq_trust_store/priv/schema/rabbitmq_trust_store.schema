@@ -1,0 +1,145 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+{mapping, "trust_store.providers.$name", "rabbitmq_trust_store.providers", [
+    {datatype, atom}
+]}.
+
+{translation, "rabbitmq_trust_store.providers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("trust_store.providers", Conf),
+    ProviderModule = fun
+        (file)      -> rabbit_trust_store_file_provider;
+        (http)      -> rabbit_trust_store_http_provider;
+        (Other) when is_atom(Other) -> Other;
+        (_) -> cuttlefish:invalid("Unknown/unsupported trust store provider")
+    end,
+
+    Settings = cuttlefish_variable:filter_by_prefix("trust_store.providers", Conf),
+    [ ProviderModule(V) || {_, V} <- Settings ]
+end}.
+
+
+{mapping, "trust_store.refresh_interval", "rabbitmq_trust_store.refresh_interval", [
+    {datatype, integer}
+]}.
+
+{mapping, "trust_store.directory", "rabbitmq_trust_store.directory", [
+    {datatype, string}
+]}.
+
+{mapping, "trust_store.url", "rabbitmq_trust_store.url", [
+    {datatype, string}
+]}.
+
+{mapping, "trust_store.ssl_options", "rabbitmq_trust_store.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbitmq_trust_store.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("trust_store.ssl_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid ssl_options")
+    end
+end}.
+
+{mapping, "trust_store.ssl_options.verify", "rabbitmq_trust_store.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "trust_store.ssl_options.fail_if_no_peer_cert", "rabbitmq_trust_store.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "trust_store.ssl_options.cacertfile", "rabbitmq_trust_store.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "trust_store.ssl_options.certfile", "rabbitmq_trust_store.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "trust_store.ssl_options.cacerts.$name", "rabbitmq_trust_store.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_trust_store.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("trust_store.ssl_options.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "trust_store.ssl_options.cert", "rabbitmq_trust_store.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_trust_store.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("trust_store.ssl_options.cert", Conf))
+end}.
+
+{mapping, "trust_store.ssl_options.client_renegotiation", "rabbitmq_trust_store.ssl_options.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "trust_store.ssl_options.crl_check", "rabbitmq_trust_store.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "trust_store.ssl_options.depth", "rabbitmq_trust_store.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "trust_store.ssl_options.dh", "rabbitmq_trust_store.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_trust_store.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("trust_store.ssl_options.dh", Conf))
+end}.
+
+{mapping, "trust_store.ssl_options.dhfile", "rabbitmq_trust_store.ssl_options.dhfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "trust_store.ssl_options.honor_cipher_order", "rabbitmq_trust_store.ssl_options.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "trust_store.ssl_options.key.RSAPrivateKey", "rabbitmq_trust_store.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "trust_store.ssl_options.key.DSAPrivateKey", "rabbitmq_trust_store.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "trust_store.ssl_options.key.PrivateKeyInfo", "rabbitmq_trust_store.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_trust_store.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("trust_store.ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "trust_store.ssl_options.keyfile", "rabbitmq_trust_store.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "trust_store.ssl_options.log_alert", "rabbitmq_trust_store.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "trust_store.ssl_options.password", "rabbitmq_trust_store.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "trust_store.ssl_options.psk_identity", "rabbitmq_trust_store.ssl_options.psk_identity",
+    [{datatype, string}]}.
+
+{mapping, "trust_store.ssl_options.reuse_sessions", "rabbitmq_trust_store.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "trust_store.ssl_options.secure_renegotiate", "rabbitmq_trust_store.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "trust_store.ssl_options.versions.$version", "rabbitmq_trust_store.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_trust_store.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("trust_store.ssl_options.versions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.

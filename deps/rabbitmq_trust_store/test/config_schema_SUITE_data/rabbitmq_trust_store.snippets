@@ -1,0 +1,28 @@
+[{trust_store,"trust_store.refresh_interval = 30",
+     [{rabbitmq_trust_store,[{refresh_interval,30}]}],
+     [rabbitmq_trust_store]},
+ {trust_store_file,"trust_store.directory = /tmp/foo/bar",
+     [{rabbitmq_trust_store,[{directory,"/tmp/foo/bar"}]}],
+     [rabbitmq_trust_store]},
+ {trust_store_providers,
+     "trust_store.providers.1 = file
+  trust_store.providers.2 = http
+  trust_store.providers.3 = rabbit_trust_store_opera_com_provider",
+     [{rabbitmq_trust_store,
+          [{providers,
+               [rabbit_trust_store_file_provider,
+                rabbit_trust_store_http_provider,
+                rabbit_trust_store_opera_com_provider]}]}],
+     [rabbitmq_trust_store]},
+ {trust_store_http,
+     "trust_store.providers.1 = http
+  trust_store.url = https://example.com
+  trust_store.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
+  trust_store.ssl_options.password = i_am_password",
+     [{rabbitmq_trust_store,
+          [{providers,[rabbit_trust_store_http_provider]},
+           {url,"https://example.com"},
+           {ssl_options,
+               [{certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                {password,"i_am_password"}]}]}],
+     [rabbitmq_trust_store]}].

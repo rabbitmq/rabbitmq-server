@@ -1,0 +1,100 @@
+<h1>User: <b><%= fmt_string(user.name) %></b></h1>
+
+<% if (permissions.length == 0) { %>
+<p class="warning">
+  This user does not have permission to access any virtual hosts.<br/>
+  Use "Set Permission" below to grant permission to access virtual hosts.
+</p>
+<% } %>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider">
+<table class="facts">
+  <tr>
+    <th>Tags</th>
+    <td><%= fmt_string(user.tags) %></td>
+  </tr>
+  <tr>
+    <th>Can log in with password</th>
+    <td><%= fmt_boolean(user.password_hash.length > 0) %></td>
+  </tr>
+</table>
+  </div>
+</div>
+
+<%= format('permissions', {'mode': 'user', 'permissions': permissions, 'vhosts': vhosts, 'parent': user}) %>
+
+<%= format('topic-permissions', {'mode': 'user', 'topic_permissions': topic_permissions, 'vhosts': vhosts, 'parent': user, 'exchanges': exchanges}) %>
+
+<div class="section-hidden">
+  <h2>Update this user</h2>
+  <div class="hider">
+    <form action="#/users-modify" method="put">
+      <input type="hidden" name="username" value="<%= fmt_string(user.name) %>"/>
+      <table class="form">
+        <tr>
+          <th>
+            <label>
+              <select name="has-password" class="narrow controls-appearance">
+                <% if (user.password_hash.length > 0) { %>
+                <option value="password" selected="selected">Password:</option>
+                <option value="no-password">No password</option>
+                <% } else { %>
+                <option value="password">Password:</option>
+                <option value="no-password" selected="selected">No password</option>
+                <% } %>
+              </select>
+            </label>
+          </th>
+          <td>
+            <% if (user.password_hash.length > 0) { %>
+            <div id="password-div">
+            <% } else { %>
+            <div id="password-div" style="display: none;">
+            <% } %>
+              <input type="password" name="password" />
+              <span class="mand">*</span><br/>
+              <input type="password" name="password_confirm" />
+              <span class="mand">*</span>
+              (confirm)
+            </div>
+            <% if (user.password_hash.length > 0) { %>
+            <div id="no-password-div" style="display: none;">
+            <% } else { %>
+            <div id="no-password-div">
+            <% } %>
+              User cannot log in using password.
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Tags:</label></th>
+          <td>
+            <input type="text" name="tags" id="tags" value="<%= fmt_string(user.tags) %>" />
+            <span class="help" id="user-tags"/>
+            <sub>
+              [<span class="tag-link" tag="administrator">Admin</span>]
+              [<span class="tag-link" tag="monitoring">Monitoring</span>]
+              [<span class="tag-link" tag="policymaker">Policymaker</span>]
+              [<span class="tag-link" tag="management">Management</span>]
+              [<span class="tag-link" tag="impersonator">Impersonator</span>]
+              [<span class="tag-link" tag="">None</span>]
+            </sub>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Update user"/>
+    </form>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Delete this user</h2>
+  <div class="hider">
+    <form action="#/users" method="delete" class="confirm">
+      <input type="hidden" name="username" value="<%= fmt_string(user.name) %>"/>
+      <input type="submit" value="Delete"/>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,61 @@
+<%
+  if (binary == "not_available") {
+%>
+<p class="warning">
+  Binary statistics not available.
+</p>
+<% } else { %>
+<%
+  var sections = {'queue_procs'         : ['queue',  'Classic queues (masters)'],
+                  'queue_slave_procs'   : ['queue',  'Classic queues (mirrors)'],
+                  'quorum_queue_procs'  : ['queue',  'Quorum queues'],
+                  'stream_queue_procs'          : ['queue',  'Stream queues'],
+                  'stream_queue_replica_reader_procs'  : ['queue',  'Stream queues (replica reader)'],
+                  'stream_queue_coordinator_procs'  : ['queue',  'Stream queues (coordinator)'],
+                  'connection_readers'  : ['conn',   'Connection readers'],
+                  'connection_writers'  : ['conn',   'Connection writers'],
+                  'connection_channels' : ['conn',   'Connection channels'],
+                  'connection_other'    : ['conn',   'Connections (other)'],
+                  'msg_index'           : ['table',  'Message store index'],
+                  'mgmt_db'             : ['table',  'Management database'],
+                  'plugins'             : ['proc',   'Plugins'],
+                  'other'               : ['system', 'Other binary references']};
+   var total_out = [];
+%>
+<%= format('memory-bar', {sections: sections, memory: binary, total_out: total_out}) %>
+<span class="clear">&nbsp;</span>
+<div class="box">
+<%
+var key = [[{name: 'Queues', colour: 'queue',
+             keys: [['queue_procs',         'queues'],
+                    ['queue_slave_procs',   'mirrors'],
+                    ['quorum_queue_procs',  'quorum'],
+                    ['stream_queue_procs',          'stream'],
+                    ['stream_queue_replica_reader_procs',  'stream replica reader'],
+                    ['stream_queue_coordinator_procs',  'stream coordinator']]}],
+
+           [{name: 'Connections', colour: 'conn',
+             keys: [['connection_readers',  'readers'],
+                    ['connection_writers',  'writers'],
+                    ['connection_channels', 'channels'],
+                    ['connection_other',    'other']]}],
+
+           [{name: 'Tables', colour: 'table',
+             keys: [['msg_index',           'message store index'],
+                    ['mgmt_db',             'management database']]}],
+
+           [{name: 'Processes', colour: 'proc',
+             keys: [['plugins',             'plugins']]},
+            {name: 'System', colour: 'system',
+             keys: [['other',               'other']]}]];
+%>
+<%= format('memory-table', {key: key, memory: binary}) %>
+</div>
+
+<div class="memory-info">
+  Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
+  Total referenced binaries at last update: <b><%= fmt_bytes(total_out[0]) %></b>
+  <span class="help" id="binary-use"></span>
+</div>
+
+<% } %>

@@ -1,0 +1,98 @@
+<h1>Users</h1>
+<div class="section">
+  <h2>All users</h2>
+  <div class="hider">
+<%= filter_ui(users) %>
+  <div class="updatable">
+<% if (users.length > 0) { %>
+<table class="list">
+  <thead>
+    <tr>
+      <th><%= fmt_sort('Name', 'name') %></th>
+      <th><%= fmt_sort('Tags', 'tags') %></th>
+      <th>Can access virtual hosts</th>
+      <th>Has password</th>
+    </tr>
+  </thead>
+  <tbody>
+    <%
+       for (var i = 0; i < users.length; i++) {
+         var user = users[i];
+    %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= link_user(user.name) %></td>
+         <td class="c"><%= fmt_string(user.tags) %></td>
+         <td class="c"><%= fmt_permissions(user, permissions, 'user', 'vhost',
+                           '<p class="warning">No access</p>') %></td>
+         <td class="c"><%= fmt_boolean(user.password_hash.length > 0) %></td>
+       </tr>
+    <% } %>
+  </tbody>
+</table>
+<% } else { %>
+    <p>... no users ...</p>
+<% } %>
+    <p><span class="help" id="internal-users-only"></span></p>
+  </div>
+  </div>
+</div>
+
+<div class="section-hidden">
+  <h2>Add a user</h2>
+  <div class="hider">
+    <form action="#/users-add" method="put">
+      <table class="form">
+        <tr>
+          <th><label>Username:</label></th>
+          <td>
+            <input type="text" name="username"/>
+            <span class="mand">*</span>
+          </td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              <select name="has-password" class="narrow controls-appearance">
+                <option value="password">Password:</option>
+                <option value="no-password">No password</option>
+              </select>
+            </label>
+          </th>
+          <td>
+            <div id="password-div">
+              <input type="password" name="password" />
+              <span class="mand">*</span><br/>
+              <input type="password" name="password_confirm" />
+              <span class="mand">*</span>
+              (confirm)
+            </div>
+            <div id="no-password-div" style="display: none;">
+              User cannot log in using password.
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Tags:</label></th>
+          <td>
+            <input type="text" name="tags" id="tags" />
+            <span class="help" id="user-tags"/>
+            <table class="argument-links">
+              <tr>
+                <td>Set</td>
+                <td>
+                  <span class="tag-link" tag="administrator">Admin</span> |
+                  <span class="tag-link" tag="monitoring">Monitoring</span> |
+                  <span class="tag-link" tag="policymaker">Policymaker</span><br />
+                  <span class="tag-link" tag="management">Management</span> |
+                  <span class="tag-link" tag="impersonator">Impersonator</span> |
+                  <span class="tag-link" tag="">None</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add user"/>
+    </form>
+  </div>
+</div>

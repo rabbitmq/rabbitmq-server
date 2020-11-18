@@ -1,0 +1,55 @@
+[{enable_backend,
+  "auth_backends.1 = cache
+   auth_cache.cached_backend = ldap",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+   {rabbitmq_auth_backend_cache,[{cached_backend,rabbit_auth_backend_ldap}]}],
+  [rabbitmq_auth_backend_cache]},
+ {auth_backend_cache,
+  "auth_backends.1 = cache",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]}],
+     [rabbitmq_auth_backend_cache]},
+ {cached_backend,
+  "auth_backends.1 = cache
+  auth_cache.cached_backend = ldap",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,
+          [{cached_backend,rabbit_auth_backend_ldap}]}],
+     [rabbitmq_auth_backend_cache]},
+ {cached_authn_authz,
+  "auth_backends.1 = cache
+  auth_cache.cached_backend.authn = ldap
+  auth_cache.cached_backend.authz = http",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,
+          [{cached_backend,
+               {rabbit_auth_backend_ldap,rabbit_auth_backend_http}}]}],
+     [rabbitmq_auth_backend_cache]},
+ {cached_authn,
+  "auth_backends.1 = cache
+  auth_cache.cached_backend.authn = ldap",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,
+          [{cached_backend,
+               {rabbit_auth_backend_ldap,rabbit_auth_backend_ldap}}]}],
+     [rabbitmq_auth_backend_cache]},
+ {cache_ttl,
+  "auth_backends.1 = cache
+  auth_cache.cache_ttl = 200",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,[{cache_ttl,200}]}],
+     [rabbitmq_auth_backend_cache]},
+ {cache_module,
+  "auth_backends.1 = cache
+  auth_cache.cache_module = rabbit_auth_backend_ets_segmented",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,
+          [{cache_module,rabbit_auth_backend_ets_segmented}]}],
+     [rabbitmq_auth_backend_cache]},
+ {cache_refusals,
+  "auth_backends.1 = cache
+  auth_cache.cache_refusals = true",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,
+          [{cache_refusals,true}]}],
+     [rabbitmq_auth_backend_cache]}
+].

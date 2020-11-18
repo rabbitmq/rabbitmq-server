@@ -1,0 +1,78 @@
+<h1>Shovel Status</h1>
+<%
+  var extra_width = 0;
+  if (vhosts_interesting) extra_width++;
+  if (nodes_interesting)  extra_width++;
+%>
+<div class="updatable">
+<% if (shovels.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+    <th>Name</th>
+<% if (nodes_interesting) { %>
+    <th>Node</th>
+<% } %>
+<% if (vhosts_interesting) { %>
+    <th>Virtual Host</th>
+<% } %>
+    <th>State</th>
+    <th colspan="3">Source</th>
+    <th colspan="3">Destination</th>
+    <th>Last changed</th>
+    <th>Operations</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < shovels.length; i++) {
+    var shovel = shovels[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td>
+      <%= fmt_string(shovel.name) %>
+      <sub><%= fmt_string(shovel.type) %></sub>
+    </td>
+<% if (nodes_interesting) { %>
+    <td><%= fmt_node(shovel.node) %></td>
+<% } %>
+<% if (vhosts_interesting) { %>
+    <td><%= fmt_string(shovel.vhost, '') %></td>
+<% } %>
+<% if (shovel.state == 'terminated') { %>
+    <td colspan="5"><%= fmt_state('red', shovel.state) %></td>
+    <td><%= shovel.timestamp %></td>
+  </tr>
+  <tr>
+    <td colspan="<%= 8 + extra_width %>">
+      <pre><%= fmt_string(shovel.reason) %></pre>
+    </td>
+<% } else { %>
+    <td><%= fmt_state('green', shovel.state) %></td>
+      <td><%= fmt_string(shovel.src_protocol) %></td>
+      <td><%= shovel.src_uri == undefined ? fmt_string(shovel.src_uri) : fmt_string(fmt_uri_with_credentials(shovel.src_uri)) %></td>
+      <td><%= fmt_shovel_endpoint('src_', shovel) %></td>
+      <td><%= fmt_string(shovel.dest_protocol) %></td>
+      <td><%= shovel.dest_uri == undefined ? fmt_string(shovel.dest_uri) : fmt_string(fmt_uri_with_credentials(shovel.dest_uri)) %></td>
+      <td><%= fmt_shovel_endpoint('dest_', shovel) %></td>
+    <td><%= shovel.timestamp %></td>
+<% } %>
+<% if (shovel.type == 'dynamic') { %>
+    <td>
+     <form action="#/shovel-restart-link" method="delete" class="confirm">
+     <input type="hidden" name="name" value="<%= fmt_node(shovel.name) %>"/>
+     <input type="hidden" name="vhost" value="<%= fmt_string(shovel.vhost) %>"/>
+     <input type="submit" value="Restart"/>
+     </form>
+    </td>
+<% } else { %>
+   <td/>
+  <% } %>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no shovels ...</p>
+<% } %>
+</div>

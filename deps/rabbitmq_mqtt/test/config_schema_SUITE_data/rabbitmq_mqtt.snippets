@@ -1,0 +1,144 @@
+[{defaults,
+  "listeners.tcp.default = 5672
+   mqtt.default_user     = guest
+   mqtt.default_pass     = guest
+   mqtt.allow_anonymous  = true
+   mqtt.vhost            = /
+   mqtt.exchange         = amq.topic
+   mqtt.subscription_ttl = 1800000
+   mqtt.prefetch         = 10
+   mqtt.sparkplug      = true
+   mqtt.listeners.ssl    = none
+## Default MQTT with TLS port is 8883
+#  mqtt.listeners.ssl.default = 8883
+   mqtt.listeners.tcp.default = 1883
+   mqtt.tcp_listen_options.backlog = 128
+   mqtt.tcp_listen_options.nodelay = true
+   mqtt.proxy_protocol = false",
+  [{rabbit,[{tcp_listeners,[5672]}]},
+   {rabbitmq_mqtt,
+       [{default_user,<<"guest">>},
+        {default_pass,<<"guest">>},
+        {allow_anonymous,true},
+        {vhost,<<"/">>},
+        {exchange,<<"amq.topic">>},
+        {subscription_ttl,1800000},
+        {prefetch,10},
+        {sparkplug,true},
+        {ssl_listeners,[]},
+        {tcp_listeners,[1883]},
+        {tcp_listen_options,[{backlog,128},{nodelay,true}]},
+        {proxy_protocol,false}]}],
+  [rabbitmq_mqtt]},
+
+ {listener_tcp_options,
+  "mqtt.listeners.tcp.1 = 127.0.0.1:61613
+   mqtt.listeners.tcp.2 = ::1:61613
+
+   mqtt.tcp_listen_options.backlog = 2048
+   mqtt.tcp_listen_options.recbuf = 8192
+   mqtt.tcp_listen_options.sndbuf = 8192
+
+   mqtt.tcp_listen_options.keepalive = true
+   mqtt.tcp_listen_options.nodelay   = true
+
+   mqtt.tcp_listen_options.exit_on_close = true
+
+   mqtt.tcp_listen_options.send_timeout = 120
+",
+  [{rabbitmq_mqtt,[
+                    {tcp_listeners,[
+                                    {"127.0.0.1",61613},
+                                    {"::1",61613}
+                                   ]}
+                    , {tcp_listen_options, [
+                                            {backlog, 2048},
+                                            {exit_on_close, true},
+
+                                            {recbuf, 8192},
+                                            {sndbuf, 8192},
+
+                                            {send_timeout, 120},
+
+                                            {keepalive, true},
+                                            {nodelay,   true}
+                                           ]}
+                   ]}],
+  [rabbitmq_mqtt]},
+
+
+ {ssl,
+  "ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.verify     = verify_peer
+   ssl_options.fail_if_no_peer_cert  = true
+
+   mqtt.listeners.ssl.default = 8883
+   mqtt.listeners.tcp.default = 1883",
+  [{rabbit,
+       [{ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,true}]}]},
+   {rabbitmq_mqtt,[{ssl_listeners,[8883]},{tcp_listeners,[1883]}]}],
+  [rabbitmq_mqtt]},
+ {ssl_cert_login,
+  "mqtt.ssl_cert_login = true",
+  [{rabbitmq_mqtt,[{ssl_cert_login,true}]}],
+  [rabbitmq_mqtt]},
+ {ssl_cert_login_from,
+  "ssl_cert_login_from = common_name",
+  [{rabbit,[{ssl_cert_login_from,common_name}]}],
+  [rabbitmq_mqtt]},
+ {proxy_protocol,
+  "listeners.tcp.default = 5672
+   mqtt.default_user     = guest
+   mqtt.default_pass     = guest
+   mqtt.allow_anonymous  = true
+   mqtt.vhost            = /
+   mqtt.exchange         = amq.topic
+   mqtt.subscription_ttl = undefined
+   mqtt.prefetch         = 10
+   mqtt.proxy_protocol = true",
+  [{rabbit,[{tcp_listeners,[5672]}]},
+   {rabbitmq_mqtt,
+       [{default_user,<<"guest">>},
+        {default_pass,<<"guest">>},
+        {allow_anonymous,true},
+        {vhost,<<"/">>},
+        {exchange,<<"amq.topic">>},
+        {subscription_ttl,undefined},
+        {prefetch,10},
+        {proxy_protocol,true}]}],
+  [rabbitmq_mqtt]},
+ {prefetch_retained_msg_store,
+  "mqtt.default_user     = guest
+   mqtt.default_pass     = guest
+   mqtt.allow_anonymous  = true
+   mqtt.vhost            = /
+   mqtt.exchange         = amq.topic
+   mqtt.subscription_ttl = 1800000
+   mqtt.prefetch         = 10
+## use DETS (disk-based) store for retained messages
+   mqtt.retained_message_store = rabbit_mqtt_retained_msg_store_dets
+## only used by DETS store
+   mqtt.retained_message_store_dets_sync_interval = 2000
+
+   mqtt.listeners.ssl = none
+   mqtt.listeners.tcp.default = 1883",
+  [{rabbitmq_mqtt,
+       [{default_user,<<"guest">>},
+        {default_pass,<<"guest">>},
+        {allow_anonymous,true},
+        {vhost,<<"/">>},
+        {exchange,<<"amq.topic">>},
+        {subscription_ttl,1800000},
+        {prefetch,10},
+        {retained_message_store,rabbit_mqtt_retained_msg_store_dets},
+        {retained_message_store_dets_sync_interval,2000},
+        {ssl_listeners,[]},
+        {tcp_listeners,[1883]}]}],
+  [rabbitmq_mqtt]}].

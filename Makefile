@@ -1,161 +1,25 @@
-PROJECT = rabbit
-PROJECT_DESCRIPTION = RabbitMQ
-PROJECT_MOD = rabbit
-PROJECT_REGISTERED = rabbit_amqqueue_sup \
-		     rabbit_direct_client_sup \
-		     rabbit_log \
-		     rabbit_node_monitor \
-		     rabbit_router
+PROJECT = rabbitmq_server_release
+PROJECT_DESCRIPTION = RabbitMQ Server
 
-define PROJECT_ENV
-[
-	    {tcp_listeners, [5672]},
-	    {num_tcp_acceptors, 10},
-	    {ssl_listeners, []},
-	    {num_ssl_acceptors, 10},
-	    {ssl_options, []},
-	    {vm_memory_high_watermark, 0.4},
-	    {vm_memory_high_watermark_paging_ratio, 0.5},
-	    {vm_memory_calculation_strategy, rss},
-	    {memory_monitor_interval, 2500},
-	    {disk_free_limit, 50000000}, %% 50MB
-	    {msg_store_index_module, rabbit_msg_store_ets_index},
-	    {backing_queue_module, rabbit_variable_queue},
-	    %% 0 ("no limit") would make a better default, but that
-	    %% breaks the QPid Java client
-	    {frame_max, 131072},
-	    %% see rabbitmq-server#1593
-	    {channel_max, 2047},
-	    {connection_max, infinity},
-	    {heartbeat, 60},
-	    {msg_store_file_size_limit, 16777216},
-	    {msg_store_shutdown_timeout, 600000},
-	    {fhc_write_buffering, true},
-	    {fhc_read_buffering, false},
-	    {queue_index_max_journal_entries, 32768},
-	    {queue_index_embed_msgs_below, 4096},
-	    {default_user, <<"guest">>},
-	    {default_pass, <<"guest">>},
-	    {default_user_tags, [administrator]},
-	    {default_vhost, <<"/">>},
-	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-	    {loopback_users, [<<"guest">>]},
-	    {password_hashing_module, rabbit_password_hashing_sha256},
-	    {server_properties, []},
-	    {collect_statistics, none},
-	    {collect_statistics_interval, 5000},
-	    {mnesia_table_loading_retry_timeout, 30000},
-	    {mnesia_table_loading_retry_limit, 10},
-	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
-	    {auth_backends, [rabbit_auth_backend_internal]},
-	    {delegate_count, 16},
-	    {trace_vhosts, []},
-	    {ssl_cert_login_from, distinguished_name},
-	    {ssl_handshake_timeout, 5000},
-	    {ssl_allow_poodle_attack, false},
-	    {handshake_timeout, 10000},
-	    {reverse_dns_lookups, false},
-	    {cluster_partition_handling, ignore},
-	    {cluster_keepalive_interval, 10000},
-	    {autoheal_state_transition_timeout, 60000},
-	    {tcp_listen_options, [{backlog,       128},
-	                          {nodelay,       true},
-	                          {linger,        {true, 0}},
-	                          {exit_on_close, false}
-	                         ]},
-	    {halt_on_upgrade_failure, true},
-	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% see rabbitmq-server#114
-	    {mirroring_flow_control, true},
-	    {mirroring_sync_batch_size, 4096},
-	    %% see rabbitmq-server#227 and related tickets.
-	    %% msg_store_credit_disc_bound only takes effect when
-	    %% messages are persisted to the message store. If messages
-	    %% are embedded on the queue index, then modifying this
-	    %% setting has no effect because credit_flow is not used when
-	    %% writing to the queue index. See the setting
-	    %% queue_index_embed_msgs_below above.
-	    {msg_store_credit_disc_bound, {4000, 800}},
-	    {msg_store_io_batch_size, 4096},
-	    %% see rabbitmq-server#143,
-	    %% rabbitmq-server#949, rabbitmq-server#1098
-	    {credit_flow_default_credit, {400, 200}},
-	    {quorum_commands_soft_limit, 32},
-	    {quorum_cluster_size, 5},
-	    %% see rabbitmq-server#248
-	    %% and rabbitmq-server#667
-	    {channel_operation_timeout, 15000},
+# Propagate PROJECT_VERSION (from the command line or environment) to
+# other components. If PROJECT_VERSION is unset, then an empty variable
+# is propagated and the default version will fallback to the default
+# value from rabbitmq-components.mk.
+export RABBITMQ_VERSION = $(PROJECT_VERSION)
 
-	    %% see rabbitmq-server#486
-	    {autocluster,
-              [{peer_discovery_backend, rabbit_peer_discovery_classic_config}]
-            },
-	    %% used by rabbit_peer_discovery_classic_config
-	    {cluster_nodes, {[], disc}},
+# Release artifacts are put in $(PACKAGES_DIR).
+PACKAGES_DIR ?= $(abspath PACKAGES)
 
-	    {config_entry_decoder, [{passphrase, undefined}]},
+# List of plugins to include in a RabbitMQ release.
+include plugins.mk
 
-	    %% rabbitmq-server#973
-	    {queue_explicit_gc_run_operation_threshold, 1000},
-	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
-	    {background_gc_enabled, false},
-	    {background_gc_target_interval, 60000},
-	    %% rabbitmq-server#589
-	    {proxy_protocol, false},
-	    {disk_monitor_failure_retries, 10},
-	    {disk_monitor_failure_retry_interval, 120000},
-	    %% either "stop_node" or "continue".
-	    %% by default we choose to not terminate the entire node if one
-	    %% vhost had to shut down, see server#1158 and server#1280
-	    {vhost_restart_strategy, continue},
-	    %% {global, prefetch count}
-	    {default_consumer_prefetch, {false, 0}},
-		%% interval at which the channel can perform periodic actions
-	    {channel_tick_interval, 60000},
-	    %% Default max message size is 128 MB
-	    {max_message_size, 134217728},
-	    %% Socket writer will run GC every 1 GB of outgoing data
-	    {writer_gc_threshold, 1000000000},
-	    %% interval at which connection/channel tracking executes post operations
-	    {tracking_execution_timeout, 15000},
-	    {stream_messages_soft_limit, 256},
-        {track_auth_attempt_source, false}
-	  ]
-endef
+DEPS = rabbit_common rabbit $(PLUGINS)
 
-# With Erlang.mk default behavior, the value of `$(APPS_DIR)` is always
-# relative to the top-level executed Makefile. In our case, it could be
-# a plugin for instance. However, the rabbitmq_prelaunch application is
-# in this repository, not the plugin's. That's why we need to override
-# this value here.
-APPS_DIR := $(CURDIR)/apps
-
-LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
-BUILD_DEPS = rabbitmq_cli syslog
-DEPS = cuttlefish ranch lager rabbit_common ra sysmon_handler stdout_formatter recon observer_cli osiris amqp10_common
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
-
-PLT_APPS += mnesia
-
-dep_cuttlefish = hex 2.4.1
-dep_syslog = git https://github.com/schlagert/syslog 3.4.5
-dep_osiris = git https://github.com/rabbitmq/osiris master
-
-define usage_xml_to_erl
-$(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
-endef
-
-DOCS_DIR     = docs
-MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
-WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
-
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk \
-	      rabbit_common/mk/rabbitmq-github-actions.mk
+	      rabbit_common/mk/rabbitmq-tools.mk
+
+DISABLE_DISTCLEAN = 1
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -163,142 +27,498 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+ifneq ($(wildcard deps/.hex/cache.erl),)
+deps:: restore-hex-cache-ets-file
+endif
+
 include rabbitmq-components.mk
 include erlang.mk
+include mk/stats.mk
+include mk/github-actions.mk
+include mk/topic-branches.mk
 
-# See above why we mess with `$(APPS_DIR)`.
-unexport APPS_DIR
+# --------------------------------------------------------------------
+# Mix Hex cache management.
+# --------------------------------------------------------------------
 
-ifeq ($(strip $(BATS)),)
-BATS := $(ERLANG_MK_TMP)/bats/bin/bats
+# We restore the initial Hex cache.ets file from an Erlang term created
+# at the time the source archive was prepared.
+#
+# See the `$(SOURCE_DIST)` recipe for the reason behind this step.
+
+restore-hex-cache-ets-file: deps/.hex/cache.ets
+
+deps/.hex/cache.ets: deps/.hex/cache.erl
+	$(gen_verbose) $(call erlang,$(call restore_hex_cache_from_erl_term,$<,$@))
+
+define restore_hex_cache_from_erl_term
+  In = "$(1)",
+  Out = "$(2)",
+  {ok, [Props, Entries]} = file:consult(In),
+  Name = proplists:get_value(name, Props),
+  Type = proplists:get_value(type, Props),
+  Access = proplists:get_value(protection, Props),
+  NamedTable = proplists:get_bool(named_table, Props),
+  Keypos = proplists:get_value(keypos, Props),
+  Heir = proplists:get_value(heir, Props),
+  ReadConc = proplists:get_bool(read_concurrency, Props),
+  WriteConc = proplists:get_bool(write_concurrency, Props),
+  Compressed = proplists:get_bool(compressed, Props),
+  Options0 = [
+    Type,
+    Access,
+    {keypos, Keypos},
+    {heir, Heir},
+    {read_concurrency, ReadConc},
+    {write_concurrency, WriteConc}],
+  Options1 = case NamedTable of
+    true  -> [named_table | Options0];
+    false -> Options0
+  end,
+  Options2 = case Compressed of
+    true  -> [compressed | Options0];
+    false -> Options0
+  end,
+  Tab = ets:new(Name, Options2),
+  [true = ets:insert(Tab, Entry) || Entry <- Entries],
+  ok = ets:tab2file(Tab, Out),
+  init:stop().
+endef
+
+# --------------------------------------------------------------------
+# Distribution.
+# --------------------------------------------------------------------
+
+.PHONY: source-dist clean-source-dist
+
+SOURCE_DIST_BASE ?= rabbitmq-server
+SOURCE_DIST_SUFFIXES ?= tar.xz
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)
+
+# The first source distribution file is used by packages: if the archive
+# type changes, you must update all packages' Makefile.
+SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
+
+.PHONY: $(SOURCE_DIST_FILES)
+
+source-dist: $(SOURCE_DIST_FILES)
+	@:
+
+RSYNC ?= rsync
+RSYNC_V_0 =
+RSYNC_V_1 = -v
+RSYNC_V_2 = -v
+RSYNC_V = $(RSYNC_V_$(V))
+RSYNC_FLAGS += -a $(RSYNC_V)		\
+	       --exclude '.sw?' --exclude '.*.sw?'	\
+	       --exclude '*.beam'			\
+	       --exclude '*.d'				\
+	       --exclude '*.pyc'			\
+	       --exclude '.git*'			\
+	       --exclude '.hg*'				\
+	       --exclude '.travis.yml*'			\
+	       --exclude '.*.plt'			\
+	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
+	       --exclude '_build/'			\
+	       --exclude '__pycache__/'			\
+	       --exclude 'ci/'				\
+	       --exclude 'cover/'			\
+	       --exclude 'deps/'			\
+	       --exclude 'doc/'				\
+	       --exclude 'docker/'			\
+	       --exclude 'ebin/'			\
+	       --exclude 'erl_crash.dump'		\
+	       --exclude 'escript/'			\
+	       --exclude 'MnesiaCore.*'			\
+	       --exclude '$(notdir $(DEPS_DIR))/'	\
+	       --exclude 'hexer*'			\
+	       --exclude 'logs/'			\
+	       --exclude 'packaging'			\
+	       --exclude 'PKG_*.md'			\
+	       --exclude '/plugins/'			\
+	       --include 'cli/plugins'			\
+	       --exclude '$(notdir $(DIST_DIR))/'	\
+	       --exclude 'test'				\
+	       --exclude 'xrefr'			\
+	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
+	       --exclude '/PACKAGES/'			\
+	       --exclude '/amqp_client/doc/'		\
+	       --exclude '/amqp_client/rebar.config'	\
+	       --exclude '/cowboy/doc/'			\
+	       --exclude '/cowboy/examples/'		\
+	       --exclude '/rabbit/escript/'		\
+	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
+	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/swiftmq*'\
+	       --exclude '/rabbitmq_cli/escript/'	\
+	       --exclude '/rabbitmq_mqtt/test/build/'	\
+	       --exclude '/rabbitmq_mqtt/test/test_client/'\
+	       --exclude '/rabbitmq_trust_store/examples/'\
+	       --exclude '/ranch/doc/'			\
+	       --exclude '/ranch/examples/'		\
+	       --exclude '/sockjs/examples/'		\
+	       --exclude '/workflow_sources/'		\
+	       --delete					\
+	       --delete-excluded
+
+TAR ?= tar
+TAR_V_0 =
+TAR_V_1 = -v
+TAR_V_2 = -v
+TAR_V = $(TAR_V_$(V))
+
+GZIP ?= gzip
+BZIP2 ?= bzip2
+XZ ?= xz
+
+ZIP ?= zip
+ZIP_V_0 = -q
+ZIP_V_1 =
+ZIP_V_2 =
+ZIP_V = $(ZIP_V_$(V))
+
+.PHONY: $(SOURCE_DIST)
+.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist
+
+$(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
+	$(verbose) mkdir -p $(dir $@)
+	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
+	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > "$@/git-revisions.txt"
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> "$@/git-revisions.txt"
+	$(verbose) echo "$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > "$@.git-times.txt"
+	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
+	$(verbose) mkdir -p $@/deps/licensing
+	$(verbose) set -e; for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
+		$(RSYNC) $(RSYNC_FLAGS) \
+		 $$dep \
+		 $@/deps; \
+		rm -f \
+		 $@/deps/rabbit_common/rebar.config \
+		 $@/deps/rabbit_common/rebar.lock; \
+		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
+		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
+		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
+			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
+		fi; \
+		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
+		 $@/deps/$$(basename $$dep)/Makefile && \
+		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
+		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
+		if test -f $$mix_exs; then \
+			(cd $$(dirname "$$mix_exs") && \
+			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force && \
+			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
+			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
+			 rm -rf _build deps); \
+		fi; \
+		if test -f "$$dep/license_info"; then \
+			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
+			cat "$$dep/license_info" >> $@/LICENSE; \
+		fi; \
+		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
+		(cd $$dep; \
+		 echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
+		 >> "$@/git-revisions.txt"; \
+		! test -d $$dep/.git || (cd $$dep; \
+		 echo "$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
+		 >> "$@.git-times.txt"; \
+	done
+	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
+	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
+	$(verbose) rm -rf $@/deps/licensing
+	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
+		sed -E -i.bak \
+		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
+		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(PROJECT_VERSION)"]}/' \
+		  $$file; \
+		rm $$file.bak; \
+	done
+	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
+# Remember the latest Git timestamp.
+	$(verbose) sort -r < "$@.git-times.txt" | head -n 1 > "$@.git-time.txt"
+# Mix Hex component requires a cache file, otherwise it refuses to build
+# offline... That cache is an ETS table with all the applications we
+# depend on, plus some versioning informations and checksums. There
+# are two problems with that: the table contains a date (`last_update`
+# field) and `ets:tab2file()` produces a different file each time it's
+# called.
+#
+# To make our source archive reproducible, we fix the time of the
+# `last_update` field to the last Git commit and dump the content of the
+# table as an Erlang term to a text file.
+#
+# The ETS file must be recreated before compiling RabbitMQ. See the
+# `restore-hex-cache-ets-file` Make target.
+	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$@,$@.git-time.txt))
+# Fix file timestamps to have reproducible source archives.
+	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
+	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
+
+define dump_hex_cache_to_erl_term
+  In = "$(1)/deps/.hex/cache.ets",
+  Out = "$(1)/deps/.hex/cache.erl",
+  {ok, DateStr} = file:read_file("$(2)"),
+  {match, Date} = re:run(DateStr,
+    "^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})\.([0-9]{2})",
+    [{capture, all_but_first, list}]),
+  [Year, Month, Day, Hour, Min, Sec] = [erlang:list_to_integer(V) || V <- Date],
+  {ok, Tab} = ets:file2tab(In),
+  true = ets:insert(Tab, {last_update, {{Year, Month, Day}, {Hour, Min, Sec}}}),
+  Props = [
+    Prop
+    || {Key, _} = Prop <- ets:info(Tab),
+    Key =:= name orelse
+    Key =:= type orelse
+    Key =:= protection orelse
+    Key =:= named_table orelse
+    Key =:= keypos orelse
+    Key =:= heir orelse
+    Key =:= read_concurrency orelse
+    Key =:= write_concurrency orelse
+    Key =:= compressed],
+  Entries = ets:tab2list(Tab),
+  ok = file:write_file(Out, io_lib:format("~w.~n~w.~n", [Props, Entries])),
+  ok = file:delete(In),
+  init:stop().
+endef
+
+$(SOURCE_DIST).manifest: $(SOURCE_DIST)
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) | LC_COLLATE=C sort > $@
+
+ifeq ($(shell tar --version | grep -c "GNU tar"),0)
+# Skip all flags if this is Darwin (a.k.a. macOS, a.k.a. OS X)
+ifeq ($(shell uname | grep -c "Darwin"),0)
+TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --uid 0 \
+				    --gid 0 \
+				    --numeric-owner \
+				    --no-acls \
+				    --no-fflags \
+				    --no-xattrs
 endif
-
-BATS_GIT ?= https://github.com/sstephenson/bats
-BATS_COMMIT ?= v0.4.0
-
-$(BATS):
-	$(verbose) mkdir -p $(ERLANG_MK_TMP)
-	$(gen_verbose) git clone --depth 1 --branch=$(BATS_COMMIT) $(BATS_GIT) $(ERLANG_MK_TMP)/bats
-
-.PHONY: bats
-
-bats: $(BATS)
-	$(verbose) $(BATS) $(TEST_DIR)
-
-tests:: bats
-
-SLOW_CT_SUITES := backing_queue \
-		  channel_interceptor \
-		  cluster \
-		  cluster_rename \
-		  clustering_management \
-		  config_schema \
-		  confirms_rejects \
-		  consumer_timeout \
-		  crashing_queues \
-		  dynamic_ha \
-		  dynamic_qq \
-		  eager_sync \
-		  feature_flags \
-		  health_check \
-		  lazy_queue \
-		  many_node_ha \
-		  metrics \
-		  msg_store \
-		  partitions \
-		  per_user_connection_tracking \
-		  per_vhost_connection_limit \
-		  per_vhost_connection_limit_partitions \
-		  per_vhost_msg_store \
-		  per_vhost_queue_limit \
-		  policy \
-		  priority_queue \
-		  priority_queue_recovery \
-		  publisher_confirms_parallel \
-		  queue_master_location \
-		  queue_parallel \
-		  quorum_queue \
-		  rabbit_core_metrics_gc \
-		  rabbit_fifo_prop \
-		  rabbitmq_queues_cli_integration \
-		  rabbitmqctl_integration \
-		  simple_ha \
-		  sync_detection \
-		  unit_inbroker_non_parallel \
-		  unit_inbroker_parallel \
-		  vhost
-FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
-
-ct-fast: CT_SUITES = $(FAST_CT_SUITES)
-ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
-
-# --------------------------------------------------------------------
-# Compilation.
-# --------------------------------------------------------------------
-
-RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include
-
-ifdef INSTRUMENT_FOR_QC
-RMQ_ERLC_OPTS += -DINSTR_MOD=gm_qc
 else
-RMQ_ERLC_OPTS += -DINSTR_MOD=gm
+TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --owner 0 \
+				    --group 0 \
+				    --numeric-owner
 endif
 
-ifdef CREDIT_FLOW_TRACING
-RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
-endif
+$(SOURCE_DIST).tar.gz: $(SOURCE_DIST).manifest
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
+		$(GZIP) --best > $@
 
-ifdef DEBUG_FF
-RMQ_ERLC_OPTS += -DDEBUG_QUORUM_QUEUE_FF=true
-endif
+$(SOURCE_DIST).tar.bz2: $(SOURCE_DIST).manifest
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
+		$(BZIP2) > $@
 
-ifndef USE_PROPER_QC
-# PropEr needs to be installed for property checking
-# http://proper.softlab.ntua.gr/
-USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
-RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
-endif
+$(SOURCE_DIST).tar.xz: $(SOURCE_DIST).manifest
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
+		$(XZ) > $@
+
+$(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
+	$(verbose) rm -f $@
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		$(ZIP) $(ZIP_V) --names-stdin $@ < $(SOURCE_DIST).manifest
+
+clean:: clean-source-dist
+
+clean-source-dist:
+	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
+
+distclean:: distclean-packages
+
+distclean-packages:
+	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
+
+## If a dependency doesn't have a clean target - do not call it
+clean-unpacked-source-dist:
+	for d in deps/*; do \
+		if test -f $$d/Makefile; then \
+			(! make -n clean) || (make -C $$d clean || exit $$?); \
+		fi; \
+	done
 
 # --------------------------------------------------------------------
-# Documentation.
+# Packaging.
+# --------------------------------------------------------------------
+
+.PHONY: packages package-deb \
+	package-rpm package-rpm-fedora package-rpm-suse \
+	package-windows \
+	package-generic-unix \
+	docker-image
+
+# This variable is exported so sub-make instances know where to find the
+# archive.
+PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
+
+packages package-deb package-rpm \
+package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
+package-rpm-rhel8 package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
+package-windows \
+package-generic-unix \
+docker-image: $(PACKAGES_SOURCE_DIST_FILE)
+	$(verbose) $(MAKE) -C packaging $@ \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
+
+# --------------------------------------------------------------------
+# Installation.
 # --------------------------------------------------------------------
 
 .PHONY: manpages web-manpages distclean-manpages
 
-docs:: manpages web-manpages
+manpages web-manpages distclean-manpages:
+	$(MAKE) -C $(DEPS_DIR)/rabbit $@ DEPS_DIR=$(DEPS_DIR)
 
-manpages: $(MANPAGES)
-	@:
+.PHONY: install install-erlapp install-scripts install-bin install-man \
+	install-windows install-windows-erlapp install-windows-scripts \
+	install-windows-docs
 
-web-manpages: $(WEB_MANPAGES)
-	@:
+DESTDIR ?=
 
-# We use mandoc(1) to convert manpages to HTML plus an awk script which
-# does:
-#     1. remove tables at the top and the bottom (they recall the
-#        manpage name, section and date)
-#     2. "downgrade" headers by one level (eg. h1 -> h2)
-#     3. annotate .Dl lines with more CSS classes
-%.html: %
-	$(gen_verbose) mandoc -T html -O 'fragment,man=%N.%S.html' "$<" | \
-	  awk '\
-	  /^<table class="head">$$/ { remove_table=1; next; } \
-	  /^<table class="foot">$$/ { remove_table=1; next; } \
-	  /^<\/table>$$/ { if (remove_table) { remove_table=0; next; } } \
-	  { if (!remove_table) { \
-	    line=$$0; \
-	    gsub(/<h2/, "<h3", line); \
-	    gsub(/<\/h2>/, "</h3>", line); \
-	    gsub(/<h1/, "<h2", line); \
-	    gsub(/<\/h1>/, "</h2>", line); \
-	    gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \
-	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \
-	    gsub(/&#[xX]201[cCdD];/, "\\&quot;", line); \
-	    print line; \
-	  } } \
-	  ' > "$@"
+PREFIX ?= /usr/local
+WINDOWS_PREFIX ?= rabbitmq-server-windows-$(PROJECT_VERSION)
 
-distclean:: distclean-manpages
+MANDIR ?= $(PREFIX)/share/man
+RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
+RMQ_BINDIR ?= $(RMQ_ROOTDIR)/bin
+RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
+RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(PROJECT_VERSION)
+RMQ_AUTOCOMPLETE_DIR ?= $(RMQ_ROOTDIR)/autocomplete
 
-distclean-manpages::
-	$(gen_verbose) rm -f $(WEB_MANPAGES)
+SCRIPTS = rabbitmq-defaults \
+	  rabbitmq-env \
+	  rabbitmq-server \
+	  rabbitmqctl \
+	  rabbitmq-plugins \
+	  rabbitmq-diagnostics \
+	  rabbitmq-queues \
+	  rabbitmq-upgrade
+
+AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
+
+WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
+		  rabbitmq-echopid.bat \
+		  rabbitmq-env.bat \
+		  rabbitmq-plugins.bat \
+		  rabbitmq-diagnostics.bat \
+		  rabbitmq-queues.bat \
+		  rabbitmq-server.bat \
+		  rabbitmq-service.bat \
+		  rabbitmq-upgrade.bat \
+		  rabbitmqctl.bat
+
+UNIX_TO_DOS ?= todos
+
+inst_verbose_0 = @echo " INST  " $@;
+inst_verbose = $(inst_verbose_$(V))
+
+install: install-erlapp install-scripts
+
+install-erlapp: dist
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(inst_verbose) cp -r \
+		LICENSE* \
+		$(DEPS_DIR)/rabbit/INSTALL \
+		$(DIST_DIR) \
+		$(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
+		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/$(notdir $(DIST_DIR))/README
+
+CLI_ESCRIPTS_DIR = escript
+
+install-escripts:
+	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(RMQ_ERLAPP_DIR)/$(CLI_ESCRIPTS_DIR)"
+
+install-scripts: install-escripts
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
+	$(inst_verbose) for script in $(SCRIPTS); do \
+		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
+			"$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
+		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
+	done
+
+# FIXME: We do symlinks to scripts in $(RMQ_ERLAPP_DIR))/sbin but this
+# code assumes a certain hierarchy to make relative symlinks.
+install-bin: install-scripts install-autocomplete-scripts
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_BINDIR)
+	$(inst_verbose) for script in $(SCRIPTS); do \
+		test -e $(DESTDIR)$(RMQ_BINDIR)/$$script || \
+			ln -sf ../lib/$(notdir $(RMQ_ERLAPP_DIR))/sbin/$$script \
+			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
+	done
+
+install-autocomplete-scripts:
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)
+	$(inst_verbose) for script in $(AUTOCOMPLETE_SCRIPTS); do \
+		cp "scripts/$$script" \
+			"$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)" && \
+		chmod 0755 "$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)/$$script"; \
+	done
+
+install-man: manpages
+	$(inst_verbose) sections=$$(ls -1 $(DEPS_DIR)/rabbit/docs/*.[1-9] \
+		| sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
+	for section in $$sections; do \
+		mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
+		for manpage in $(DEPS_DIR)/rabbit/docs/*.$$section; do \
+			gzip < $$manpage \
+			 > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
+		done; \
+	done
+
+install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
+
+install-windows-erlapp: dist
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
+	$(inst_verbose) cp -r \
+		LICENSE* \
+		$(DEPS_DIR)/rabbit/ebin \
+		$(DEPS_DIR)/rabbit/priv \
+		$(DEPS_DIR)/rabbit/INSTALL \
+		$(DIST_DIR) \
+		$(DESTDIR)$(WINDOWS_PREFIX)
+	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
+		> $(DESTDIR)$(WINDOWS_PREFIX)/$(notdir $(DIST_DIR))/README.txt
+	$(verbose) $(UNIX_TO_DOS) $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
+
+	@# FIXME: Why do we copy headers?
+	$(verbose) cp -r \
+		$(DEPS_DIR)/rabbit/include \
+		$(DESTDIR)$(WINDOWS_PREFIX)
+	@# rabbitmq-common provides headers too: copy them to
+	@# rabbitmq_server/include.
+	$(verbose) cp -r \
+		$(DEPS_DIR)/rabbit_common/include \
+		$(DESTDIR)$(WINDOWS_PREFIX)
+
+install-windows-escripts:
+	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(WINDOWS_PREFIX)/$(CLI_ESCRIPTS_DIR)"
+
+install-windows-scripts: install-windows-escripts
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
+	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
+		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
+			"$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
+		chmod 0755 "$(DESTDIR)$(WINDOWS_PREFIX)/sbin/$$script"; \
+	done
+
+install-windows-docs: install-windows-erlapp
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/etc
+	$(inst_verbose) man $(DEPS_DIR)/rabbit/docs/rabbitmq-service.8 > tmp-readme-service.txt
+	$(verbose) col -bx < ./tmp-readme-service.txt > $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
+	$(verbose) rm -f ./tmp-readme-service.txt
+	$(verbose) for file in \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/LICENSE* \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL; do \
+		$(UNIX_TO_DOS) "$$file"; \
+		case "$$file" in \
+		*.txt) ;; \
+		*.example) ;; \
+		*) mv "$$file" "$$file.txt" ;; \
+		esac; \
+	done

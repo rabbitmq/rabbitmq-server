@@ -1,0 +1,62 @@
+
+%% ==========================================================================
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Authorization cache
+%%
+%% ----------------------------------------------------------------------------
+
+{mapping, "auth_cache.cached_backend", "rabbitmq_auth_backend_cache.cached_backend",[
+    {datatype, atom}
+]}.
+
+{mapping, "auth_cache.cached_backend.authn", "rabbitmq_auth_backend_cache.cached_backend",[
+    {datatype, atom}
+]}.
+
+{mapping, "auth_cache.cached_backend.authz", "rabbitmq_auth_backend_cache.cached_backend",[
+    {datatype, atom}
+]}.
+
+
+{translation, "rabbitmq_auth_backend_cache.cached_backend",
+fun(Conf) ->
+    BackendModule = fun
+        (internal)  -> rabbit_auth_backend_internal;
+        (ldap)      -> rabbit_auth_backend_ldap;
+        (http)      -> rabbit_auth_backend_http;
+        (amqp)      -> rabbit_auth_backend_amqp;
+        (dummy)     -> rabbit_auth_backend_dummy;
+        (undefined) -> undefined;
+        (Other) when is_atom(Other) -> Other;
+        (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
+    end,
+    AuthN = BackendModule(cuttlefish:conf_get("auth_cache.cached_backend.authn", Conf, undefined)),
+    AuthZ = BackendModule(cuttlefish:conf_get("auth_cache.cached_backend.authz", Conf, undefined)),
+    Common = BackendModule(cuttlefish:conf_get("auth_cache.cached_backend", Conf, undefined)),
+    case {Common, AuthN, AuthZ} of
+        {undefined, V, undefined} when V =/= undefined ->
+            cuttlefish:warn(io_lib:format("Cached authZ backend undefined. Using ~p", [AuthN])),
+            {AuthN, AuthN};
+        {undefined, undefined, V} when V =/= undefined ->
+            cuttlefish:warn(io_lib:format("Cached authN backend undefined. Using ~p", [AuthZ])),
+            {AuthZ, AuthZ};
+        {V, undefined, undefined} when V =/= undefined ->
+            Common;
+        {undefined, V, V1} when V =/= undefined, V1 =/= undefined ->
+            {AuthN, AuthZ};
+        _ ->
+            cuttlefish:invalid(iolist_to_binary(io_lib:format("Cached auth backend already defined", [])))
+    end
+end}.
+
+{mapping, "auth_cache.cache_ttl", "rabbitmq_auth_backend_cache.cache_ttl", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "auth_cache.cache_module", "rabbitmq_auth_backend_cache.cache_module", [
+    {datatype, atom}
+]}.
+
+{mapping, "auth_cache.cache_refusals", "rabbitmq_auth_backend_cache.cache_refusals", [
+    {datatype, {enum, [true, false]}}
+]}.

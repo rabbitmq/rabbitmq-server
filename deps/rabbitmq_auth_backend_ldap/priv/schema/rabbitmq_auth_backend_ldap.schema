@@ -1,0 +1,339 @@
+%% ----------------------------------------------------------------------------
+%% RabbitMQ LDAP Plugin
+%%
+%% See https://www.rabbitmq.com/ldap.html for details.
+%%
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_auth_backend_ldap,
+%   [
+%%
+%% Connecting to the LDAP server(s)
+%% ================================
+%%
+
+%% Specify servers to bind to. You *must* set this in order for the plugin
+%% to work properly.
+%%
+%% {servers, ["your-server-name-goes-here"]},
+
+{mapping, "auth_ldap.servers", "rabbitmq_auth_backend_ldap.servers",
+    [{datatype, {enum, [none]}}]}.
+
+{mapping, "auth_ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.servers",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.servers", Conf, undefined) of
+        none -> [];
+        _    ->
+            Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.servers", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% Specify the LDAP port to connect to
+%%
+%% {port, 389},
+
+{mapping, "auth_ldap.port", "rabbitmq_auth_backend_ldap.port",
+    [{datatype, integer}]}.
+
+%% LDAP connection/worker pool size
+%%
+%% {pool_size, 64},
+
+{mapping, "auth_ldap.connection_pool_size", "rabbitmq_auth_backend_ldap.pool_size",
+    [{datatype, integer}]}.
+
+%% LDAP connection timeout, in milliseconds or 'infinity'
+%%
+%% {timeout, infinity},
+
+{mapping, "auth_ldap.timeout", "rabbitmq_auth_backend_ldap.timeout",
+    [{datatype, [integer, {atom, infinity}]}]}.
+
+%% LDAP connection inactivity timeout, in milliseconds or 'infinity'
+%%
+%% {idle_timeout, 300000},
+
+{mapping, "auth_ldap.idle_timeout", "rabbitmq_auth_backend_ldap.idle_timeout",
+    [{datatype, [integer, {atom, infinity}]}]}.
+
+%% Enable logging of LDAP queries.
+%% One of
+%%   - false (no logging is performed)
+%%   - true (verbose logging of the logic used by the plugin)
+%%   - network (as true, but additionally logs LDAP network traffic)
+%%   - network_unsafe (won't try to scrub any credentials)
+%%
+%% Defaults to false.
+%%
+%% {log, false},
+
+{mapping, "auth_ldap.log", "rabbitmq_auth_backend_ldap.log",
+    [{datatype, {enum, [true, false, network, network_unsafe]}}]}.
+
+%%
+%% Authentication
+%% ==============
+%%
+
+%% Pattern to convert the username given through AMQP to a different
+%% form before performing a simple bind
+%%
+%% {user_bind_pattern, "${ad_user}@${ad_domain}.com"},
+
+{mapping, "auth_ldap.user_bind_pattern", "rabbitmq_auth_backend_ldap.user_bind_pattern",
+    [{datatype, string}]}.
+
+%% Pattern to convert the username given through AMQP to a DN before
+%% binding
+%%
+%% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
+
+{mapping, "auth_ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern",
+    [{datatype, string}]}.
+
+%% Alternatively, you can convert a username to a Distinguished
+%% Name via an LDAP lookup after binding. See the documentation for
+%% full details.
+
+%% When converting a username to a dn via a lookup, set these to
+%% the name of the attribute that represents the user name, and the
+%% base DN for the lookup query.
+%%
+%% {dn_lookup_attribute,   "userPrincipalName"},
+%% {dn_lookup_base,        "DC=gopivotal,DC=com"},
+
+{mapping, "auth_ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute",
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{mapping, "auth_ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base",
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{mapping, "auth_ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [{enum, [as_user, anon]}]}]}.
+
+{mapping, "auth_ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [string]}]}.
+
+{mapping, "auth_ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [string]}]}.
+
+%%  - as_user (to bind as the authenticated user - requires a password)
+%%  - anon    (to bind anonymously)
+%%  - {UserDN, Password} (to bind with a specified user name and password)
+%%
+%% Defaults to 'as_user'.
+
+{translation, "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.dn_lookup_bind", Conf, undefined) of
+        as_user -> as_user;
+        anon    -> anon;
+        _       ->
+            User = cuttlefish:conf_get("auth_ldap.dn_lookup_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("auth_ldap.dn_lookup_bind.password", Conf),
+            case {User, Pass} of
+                {undefined, _} -> as_user;
+                {_, undefined} -> as_user;
+                _              -> {User, Pass}
+            end
+    end
+end}.
+
+%% Controls how to bind for authorisation queries and also to
+%% retrieve the details of users logging in without presenting a
+%% password (e.g., SASL EXTERNAL).
+%% One of
+%%  - as_user (to bind as the authenticated user - requires a password)
+%%  - anon    (to bind anonymously)
+%%  - {UserDN, Password} (to bind with a specified user name and password)
+%%
+%% Defaults to 'as_user'.
+
+{mapping, "auth_ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind",
+    [{datatype, {enum, [as_user, anon]}}]}.
+
+{mapping, "auth_ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.other_bind",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.other_bind", Conf, undefined) of
+        as_user -> as_user;
+        anon    -> anon;
+        _       ->
+            User = cuttlefish:conf_get("auth_ldap.other_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("auth_ldap.other_bind.password", Conf),
+            case {User, Pass} of
+                {undefined, _} -> as_user;
+                {_, undefined} -> as_user;
+                _              -> {User, Pass}
+            end
+    end
+end}.
+
+%%
+%% Authorisation
+%% =============
+%%
+
+%% Groups are searched in the DN defined by the `group_lookup_base`
+%% configuration key, or the `dn_lookup_base` variable if
+%% former is `none`.
+
+{mapping, "auth_ldap.group_lookup_base", "rabbitmq_auth_backend_ldap.group_lookup_base",
+    [{datatype, [{enum, [none]}, string]}]}.
+
+%% The LDAP plugin can perform a variety of queries against your
+%% LDAP server to determine questions of authorisation. See
+%% https://www.rabbitmq.com/ldap.html#authorisation for more
+%% information.
+
+%% Set the query to use when determining vhost access
+%%
+%% {vhost_access_query, {in_group,
+%%                       "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+
+%% Set the query to use when determining resource (e.g., queue) access
+%%
+%% {resource_access_query, {constant, true}},
+
+%% Set queries to determine which tags a user has
+%%
+%% {tag_queries, []}
+%   ]},
+
+%% Connect to the LDAP server using TLS
+%%
+%% {use_ssl, false},
+
+{mapping, "auth_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Connect to the LDAP server using StartTLS
+%%
+%% {use_starttls, false},
+
+{mapping, "auth_ldap.use_starttls", "rabbitmq_auth_backend_ldap.use_starttls",
+    [{datatype, {enum, [true, false]}}]}.
+
+
+%% TLS options
+
+{mapping, "auth_ldap.ssl_options", "rabbitmq_auth_backend_ldap.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.ssl_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid auth_ldap.ssl_options")
+    end
+end}.
+
+{mapping, "auth_ldap.ssl_options.verify", "rabbitmq_auth_backend_ldap.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "auth_ldap.ssl_options.fail_if_no_peer_cert", "rabbitmq_auth_backend_ldap.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.cacertfile", "rabbitmq_auth_backend_ldap.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.certfile", "rabbitmq_auth_backend_ldap.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.cacerts.$name", "rabbitmq_auth_backend_ldap.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "auth_ldap.ssl_options.cert", "rabbitmq_auth_backend_ldap.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_ldap.ssl_options.cert", Conf))
+end}.
+
+{mapping, "auth_ldap.ssl_options.client_renegotiation", "rabbitmq_auth_backend_ldap.ssl_options.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.crl_check", "rabbitmq_auth_backend_ldap.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "auth_ldap.ssl_options.depth", "rabbitmq_auth_backend_ldap.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "auth_ldap.ssl_options.dh", "rabbitmq_auth_backend_ldap.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_ldap.ssl_options.dh", Conf))
+end}.
+
+{mapping, "auth_ldap.ssl_options.dhfile", "rabbitmq_auth_backend_ldap.ssl_options.dhfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.honor_cipher_order", "rabbitmq_auth_backend_ldap.ssl_options.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.honor_ecc_order", "rabbitmq_auth_backend_ldap.ssl_options.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.key.RSAPrivateKey", "rabbitmq_auth_backend_ldap.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.key.DSAPrivateKey", "rabbitmq_auth_backend_ldap.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.key.PrivateKeyInfo", "rabbitmq_auth_backend_ldap.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "auth_ldap.ssl_options.keyfile", "rabbitmq_auth_backend_ldap.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.log_alert", "rabbitmq_auth_backend_ldap.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.password", "rabbitmq_auth_backend_ldap.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.psk_identity", "rabbitmq_auth_backend_ldap.ssl_options.psk_identity",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.reuse_sessions", "rabbitmq_auth_backend_ldap.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.secure_renegotiate", "rabbitmq_auth_backend_ldap.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.versions.$version", "rabbitmq_auth_backend_ldap.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.versions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.

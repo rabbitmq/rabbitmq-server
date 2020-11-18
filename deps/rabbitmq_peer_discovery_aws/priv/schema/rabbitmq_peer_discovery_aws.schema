@@ -1,0 +1,96 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+%% region
+
+{mapping, "cluster_formation.aws.region", "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_region", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_region",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.region", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% use_private_ip
+
+{mapping, "cluster_formation.aws.use_private_ip", "rabbit.cluster_formation.peer_discovery_aws.aws_use_private_ip", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_use_private_ip",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.use_private_ip", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% access_key_id
+
+{mapping, "cluster_formation.aws.access_key_id", "rabbit.cluster_formation.peer_discovery_aws.aws_access_key", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_access_key",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.access_key_id", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% secret_key
+
+{mapping, "cluster_formation.aws.secret_key", "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.secret_key", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% use_autoscaling_group
+
+{mapping, "cluster_formation.aws.use_autoscaling_group", "rabbit.cluster_formation.peer_discovery_aws.aws_autoscaling", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_autoscaling",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.use_autoscaling_group", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% ec2_tags
+
+{mapping, "cluster_formation.aws.instance_tags", "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_tags", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "cluster_formation.aws.instance_tags.$name", "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_tags", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_tags",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.instance_tags", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.aws.instance_tags", Conf),
+            [ {lists:last(K), V} || {K, V} <- Settings ]
+    end
+end}.

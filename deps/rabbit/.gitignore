@@ -1,0 +1,42 @@
+*~
+.sw?
+.*.sw?
+*.beam
+*.coverdata
+MnesiaCore.*
+/.erlang.mk/
+/cover/
+/debug/
+/deps/
+/debug/
+/doc/
+/ebin/
+/escript/
+/escript.lock
+/etc/
+/logs/
+/plugins/
+/plugins.lock
+/test/ct.cover.spec
+/test/config_schema_SUITE_data/schema/**
+/xrefr
+/sbin/
+/sbin.lock
+rabbit.d
+
+# Generated documentation.
+docs/*.html
+
+# Dialyzer
+*.plt
+
+# Tracing tools
+*-ttb
+*.ti
+*.lz4*
+callgrind.out*
+callgraph.dot*
+
+PACKAGES/*
+
+rabbit-rabbitmq-deps.mk

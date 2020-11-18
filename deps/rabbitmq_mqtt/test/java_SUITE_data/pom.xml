@@ -1,0 +1,137 @@
+<?xml version="1.0"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+  xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.rabbitmq</groupId>
+  <artifactId>amqp-client-mqtt</artifactId>
+  <version>3.8.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>RabbitMQ MQTT plugin dependencies list</name>
+  <description>Fetches test dependencies only.</description>
+  <url>https://www.rabbitmq.com</url>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.eclipse.paho</groupId>
+      <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+      <version>[1.2.1,)</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.rabbitmq</groupId>
+      <artifactId>amqp-client</artifactId>
+      <version>5.7.3</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.5.2</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <properties>
+    <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
+    <test-keystore.password>bunnychow</test-keystore.password>
+    <groovy-scripts.dir>${basedir}/src/test/scripts</groovy-scripts.dir>
+  </properties>
+
+  <build>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>2.22.2</version>
+          <configuration>
+            <environmentVariables>
+              <DEPS_DIR>${deps.dir}</DEPS_DIR>
+            </environmentVariables>
+            <systemPropertyVariables>
+              <hostname>${hostname}</hostname>
+              <certs.dir>${certs.dir}</certs.dir>
+              <mqtt.ssl.port>${mqtt.ssl.port}</mqtt.ssl.port>
+              <mqtt.port>${mqtt.port}</mqtt.port>
+              <mqtt.port.2>${mqtt.port.2}</mqtt.port.2>
+              <amqp.port>${amqp.port}</amqp.port>
+
+              <test-keystore.ca>${test-keystore.ca}</test-keystore.ca>
+              <test-keystore.password>${test-keystore.password}</test-keystore.password>
+              <test-client-cert.path>${certs.dir}/client/keycert.p12</test-client-cert.path>
+              <test-client-cert.password>bunnychow</test-client-cert.password>
+
+            </systemPropertyVariables>
+            <!--
+              needed because of bug in OpenJDK 8 u181 on Debian distros
+              see https://stackoverflow.com/questions/53010200/maven-surefire-could-not-find-forkedbooter-class
+            -->
+            <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.gmaven</groupId>
+          <artifactId>groovy-maven-plugin</artifactId>
+          <version>2.1.1</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.codehaus.groovy</groupId>
+              <artifactId>groovy-all</artifactId>
+              <version>2.4.17</version>
+            </dependency>
+          </dependencies>
+          <executions>
+            <execution>
+            <phase>generate-test-resources</phase>
+            <id>remove-old-test-keystores</id>
+            <goals>
+              <goal>execute</goal>
+            </goals>
+            <configuration>
+              <source>
+                ${groovy-scripts.dir}/remove_old_test_keystores.groovy
+              </source>
+            </configuration>
+          </execution>
+          </executions>
+        </plugin>
+
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>keytool-maven-plugin</artifactId>
+          <version>1.5</version>
+          <executions>
+            <execution>
+              <id>generate-test-ca-keystore</id>
+              <phase>generate-test-resources</phase>
+              <goals>
+                <goal>importCertificate</goal>
+              </goals>
+              <configuration>
+                <file>${certs.dir}/testca/cacert.pem</file>
+                <keystore>${test-keystore.ca}</keystore>
+                <storepass>${test-keystore.password}</storepass>
+                <noprompt>true</noprompt>
+                <alias>server1</alias>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.8.1</version>
+          <configuration>
+            <source>1.8</source>
+            <target>1.8</target>
+            <compilerArgs>
+              <arg>-Xlint:deprecation</arg>
+              <arg>-Xlint:unchecked</arg>
+            </compilerArgs>
+          </configuration>
+        </plugin>
+
+      </plugins>
+  </build>
+</project>

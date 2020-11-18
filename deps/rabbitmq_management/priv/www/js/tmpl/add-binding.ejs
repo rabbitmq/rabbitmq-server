@@ -1,0 +1,49 @@
+<% if (mode == 'queue') { %>
+    <h3 style="padding-top: 20px;">Add binding to this queue</h3>
+<% } else { %>
+    <h3 style="padding-top: 20px;">Add binding from this exchange</h3>
+<% } %>
+    <form action="#/bindings" method="post">
+            <input type="hidden" name="vhost" value="<%= fmt_string(parent.vhost) %>"/>
+<% if (mode == 'queue') { %>
+            <input type="hidden" name="destination" value="<%= fmt_string(parent.name) %>"/>
+<% } else { %>
+            <input type="hidden" name="source" value="<%= fmt_string(parent.name) %>"/>
+<% } %>
+            <table class="form">
+<% if (mode == 'queue') { %>
+              <tr>
+                <th>
+                  <label>From exchange:</label>
+                </th>
+                <td>
+                  <input type="hidden" name="destination_type" value="q"/>
+                  <input type="text" name="source" value=""/>
+                  <span class="mand">*</span>
+                </td>
+              </tr>
+<% } else { %>
+              <tr>
+                <th>
+                  <select name="destination_type" class="narrow">
+                    <option value="e">To exchange</option>
+                    <option value="q" selected="selected">To queue</option>
+                  </select>:
+                </th>
+                <td>
+                  <input type="text" name="destination" value=""/>
+                  <span class="mand">*</span>
+                </td>
+              </tr>
+<% } %>
+              <tr>
+                <th><label>Routing key:</label></th>
+                <td><input type="text" name="routing_key" value=""/></td>
+              </tr>
+              <tr>
+                <th><label>Arguments:</label></th>
+                <td><div class="multifield" id="arguments"></div></td>
+              </tr>
+            </table>
+      <input type="submit" value="Bind"/>
+    </form>

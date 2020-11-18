@@ -1,0 +1,220 @@
+[{listener,
+  "web_mqtt.tcp.listener = 127.0.0.1:12345",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, [{ip,"127.0.0.1"},{port,12345}]}]}],
+  [rabbitmq_web_mqtt]},
+ {tcp_listener_none,
+  "web_mqtt.tcp.listener = none",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, []}]}],
+  [rabbitmq_web_mqtt]},
+ {tcp_config,
+  "web_mqtt.tcp.ip = 127.0.0.3
+   web_mqtt.tcp.port = 11122",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, [{ip,"127.0.0.3"},{port,11122}]}]}],
+  [rabbitmq_web_mqtt]},
+ {tcp_config_defaut,
+  "web_mqtt.tcp.backlog = 2048",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, [{backlog, 2048}]}]}],
+  [rabbitmq_web_mqtt]},
+ {tcp_config_ip,
+  "web_mqtt.tcp.ip = 127.0.0.3",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, [{ip,"127.0.0.3"}]}]}],
+  [rabbitmq_web_mqtt]},
+ {tcp_config_port,
+  "web_mqtt.tcp.port = 34567",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, [{port,34567}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {num_acceptors_tcp,
+   "web_mqtt.num_acceptors.tcp = 20",
+   [{rabbitmq_web_mqtt,
+     [{num_tcp_acceptors, 20}]}],
+   [rabbitmq_web_mqtt]},
+
+ {num_acceptors_tls,
+  "web_mqtt.num_acceptors.ssl = 20",
+  [{rabbitmq_web_mqtt,
+    [{num_ssl_acceptors, 20}]}],
+  [rabbitmq_web_mqtt]},
+
+  {max_connections,
+   "web_mqtt.max_connections = 5000",
+   [{rabbitmq_web_mqtt,
+     [{max_connections, 5000}]}],
+   [rabbitmq_web_mqtt]},
+
+ {ssl_listener,
+  "web_mqtt.ssl.listener = 127.0.0.4:15672",
+  [{rabbitmq_web_mqtt,
+    [{ssl_config, [{ip,"127.0.0.4"},{port,15672}]}]}],
+  [rabbitmq_web_mqtt]},
+ {ssl_listener_none,
+  "web_mqtt.ssl.listener = none",
+  [],
+  [rabbitmq_web_mqtt]},
+
+ {ssl_with_listener,
+  "web_mqtt.ssl.listener   = 127.0.0.2:15671
+   web_mqtt.ssl.backlog    = 1024
+   web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_mqtt.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_mqtt.ssl.password   = changeme",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{ip,"127.0.0.2"},
+             {port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {ssl,
+  "web_mqtt.ssl.ip         = 127.0.0.2
+   web_mqtt.ssl.port       = 15671
+   web_mqtt.ssl.backlog    = 1024
+   web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_mqtt.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_mqtt.ssl.password   = changeme
+
+   web_mqtt.ssl.versions.tls1_2 = tlsv1.2
+   web_mqtt.ssl.versions.tls1_1 = tlsv1.1",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [
+             {ip,"127.0.0.2"},
+             {port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"},
+
+             {versions,['tlsv1.2','tlsv1.1']}
+            ]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {ssl_ciphers,
+  "web_mqtt.ssl.port       = 15671
+   web_mqtt.ssl.backlog    = 1024
+   web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_mqtt.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_mqtt.ssl.password   = changeme
+
+   web_mqtt.ssl.honor_cipher_order   = true
+   web_mqtt.ssl.honor_ecc_order      = true
+   web_mqtt.ssl.client_renegotiation = false
+   web_mqtt.ssl.secure_renegotiate   = true
+
+   web_mqtt.ssl.versions.1 = tlsv1.2
+   web_mqtt.ssl.versions.2 = tlsv1.1
+   web_mqtt.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+   web_mqtt.ssl.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+   web_mqtt.ssl.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+   web_mqtt.ssl.ciphers.4 = ECDHE-RSA-AES256-SHA384
+   web_mqtt.ssl.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+   web_mqtt.ssl.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+   web_mqtt.ssl.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+   web_mqtt.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
+   web_mqtt.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"},
+
+             {honor_cipher_order,   true},
+             {honor_ecc_order,      true},
+             {client_renegotiation, false},
+             {secure_renegotiate,   true},
+
+             {versions,['tlsv1.2','tlsv1.1']},
+             {ciphers, [
+               "ECDHE-ECDSA-AES256-GCM-SHA384",
+               "ECDHE-RSA-AES256-GCM-SHA384",
+               "ECDHE-ECDSA-AES256-SHA384",
+               "ECDHE-RSA-AES256-SHA384",
+               "ECDH-ECDSA-AES256-GCM-SHA384",
+               "ECDH-RSA-AES256-GCM-SHA384",
+               "ECDH-ECDSA-AES256-SHA384",
+               "ECDH-RSA-AES256-SHA384",
+               "DHE-RSA-AES256-GCM-SHA384"
+             ]}
+            ]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {websocket_endpoint,
+  "web_mqtt.ws_path = /rmq/ws",
+  [{rabbitmq_web_mqtt,
+    [{ws_path, "/rmq/ws"}]}],
+  [rabbitmq_web_mqtt]},
+
+ %%
+ %% Cowboy options
+ %%
+
+ {cowboy_max_keepalive,
+  "web_mqtt.cowboy_opts.max_keepalive = 10",
+  [{rabbitmq_web_mqtt,[{cowboy_opts,[{max_keepalive, 10}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {cowboy_timeout,
+  "web_mqtt.cowboy_opts.timeout = 10000",
+  [{rabbitmq_web_mqtt,[{cowboy_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {cowboy_idle_timeout,
+  "web_mqtt.cowboy_opts.idle_timeout = 10000",
+  [{rabbitmq_web_mqtt,[{cowboy_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ %%
+ %% Cowboy WebSocket options
+ %%
+
+{ws_opts_compress_true,
+  "web_mqtt.ws_opts.compress = true",
+  [{rabbitmq_web_mqtt,[{cowboy_ws_opts,[{compress, true}]}]}],
+  [rabbitmq_web_mqtt]},
+
+{ws_opts_compress_false,
+  "web_mqtt.ws_opts.compress = false",
+  [{rabbitmq_web_mqtt,[{cowboy_ws_opts,[{compress, false}]}]}],
+  [rabbitmq_web_mqtt]},
+
+{ws_opts_max_frame_size,
+  "web_mqtt.ws_opts.max_frame_size = 8000",
+  [{rabbitmq_web_mqtt,[{cowboy_ws_opts,[{max_frame_size, 8000}]}]}],
+  [rabbitmq_web_mqtt]},
+
+{ws_idle_timeout,
+  "web_mqtt.ws_opts.idle_timeout = 10000",
+  [{rabbitmq_web_mqtt,[{cowboy_ws_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ %%
+ %% Proxy Protocol
+ %%
+
+{proxy_protocol_disabled,
+  "web_mqtt.proxy_protocol = false",
+  [{rabbitmq_web_mqtt,[{proxy_protocol,false}]}],
+  [rabbitmq_web_mqtt]},
+
+{proxy_protocol_enabled,
+  "web_mqtt.proxy_protocol = true",
+  [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
+  [rabbitmq_web_mqtt]}
+].

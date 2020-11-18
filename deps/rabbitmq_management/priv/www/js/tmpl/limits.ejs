@@ -1,0 +1,177 @@
+<h1>Limits</h1>
+
+<div class="section">
+    <h2>Virtual host Limits</h2>
+    <div class="hider">
+        <div class="updatable">
+
+            <% if (limits.length > 0) { %>
+            <table class="list">
+              <thead>
+                <tr>
+                  <th>Virtual Host</th>
+                  <th>Limit</th>
+                  <th>Value</th>
+                  <th class="administrator-only"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% for (var i = 0; i < limits.length; i++) {
+                  var limit = limits[i];
+                  var limit_values = Object.keys(limit.value).sort().map(
+                    function(k) { return {name: k, value: limit.value[k]};});
+                %>
+
+                <% for (var j = 0; j < limit_values.length; j++) {
+                  var limit_value = limit_values[j];
+                %>
+
+                <tr<%= alt_rows(j+1)%>>
+                    <% if(j == 0) { %>
+                    <td rowspan="<%= limit_values.length %>"> <%= fmt_string(limit.vhost) %> </td>
+                    <% } %>
+                    <td><%= limit_value.name %></td>
+                    <td><%= limit_value.value %></td>
+                    <td class="administrator-only">
+                        <form action="#/limits" method="delete" class="confirm">
+                            <input type="hidden" name="name" value="<%= fmt_string(limit_value.name) %>"/>
+                            <input type="hidden" name="vhost" value="<%= fmt_string(limit.vhost) %>"/>
+                            <input type="submit" value="Clear"/>
+                        </form>
+                    </td>
+                </tr>
+                <% } %>
+                <% } %>
+              </tbody>
+            </table>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<div class="section administrator-only">
+    <h2>Set / update a virtual host limit</h2>
+    <div class="hider">
+        <form action="#/limits" method="put">
+            <table class="form">
+                <tr>
+                  <th><label>Virtual host:</label></th>
+                  <td>
+                    <select name="vhost">
+                        <% for (var i = 0; i < vhosts.length; i++) { %>
+                        <option value="<%= fmt_string(vhosts[i].name) %>">
+                            <%= fmt_string(vhosts[i].name) %>
+                        </option>
+                        <% } %>
+                    </select>
+                  </td>
+                </tr>
+                <tr>
+                    <th><label>Limit:</label></th>
+                    <td>
+                        <select name="name">
+                            <option value="max-connections">max-connections</option>
+                            <option value="max-queues">max-queues</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label>Value:</label></th>
+                    <td>
+                        <input type="text" name="value"/>
+                        <span class="mand">*</span>
+                    </td>
+                </tr>
+            </table>
+            <input type="submit" value="Set / update limit"/>
+        </form>
+    </div>
+</div>
+
+<div class="section">
+  <h2>User Limits</h2>
+  <div class="hider">
+      <div class="updatable">
+
+          <% if (user_limits.length > 0) { %>
+          <table class="list">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Limit</th>
+                <th>Value</th>
+                <th class="administrator-only"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for (var i = 0; i < user_limits.length; i++) {
+                var user_limit = user_limits[i];
+                var user_limit_values = Object.keys(user_limit.value).sort().map(
+                  function(k) { return {name: k, value: user_limit.value[k]};});
+              %>
+
+              <% for (var j = 0; j < user_limit_values.length; j++) {
+                var user_limit_value = user_limit_values[j];
+              %>
+
+              <tr<%= alt_rows(j+1)%>>
+                  <% if(j == 0) { %>
+                  <td rowspan="<%= user_limit_values.length %>"> <%= fmt_string(user_limit.user) %> </td>
+                  <% } %>
+                  <td><%= user_limit_value.name %></td>
+                  <td><%= user_limit_value.value %></td>
+                  <td class="administrator-only">
+                      <form action="#/user-limits" method="delete" class="confirm">
+                          <input type="hidden" name="name" value="<%= fmt_string(user_limit_value.name) %>"/>
+                          <input type="hidden" name="user" value="<%= fmt_string(user_limit.user) %>"/>
+                          <input type="submit" value="Clear"/>
+                      </form>
+                  </td>
+              </tr>
+              <% } %>
+              <% } %>
+            </tbody>
+          </table>
+          <% } %>
+      </div>
+  </div>
+</div>
+
+<div class="section administrator-only">
+  <h2>Set / update a user limit</h2>
+  <div class="hider">
+      <form action="#/user-limits" method="put">
+          <table class="form">
+              <tr>
+                <th><label>User:</label></th>
+                <td>
+                  <select name="user">
+                      <% for (var i = 0; i < users.length; i++) { %>
+                      <option value="<%= fmt_string(users[i].name) %>">
+                          <%= fmt_string(users[i].name) %>
+                      </option>
+                      <% } %>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                  <th><label>Limit:</label></th>
+                  <td>
+                      <select name="name">
+                          <option value="max-connections">max-connections</option>
+                          <option value="max-channels">max-channels</option>
+                      </select>
+                  </td>
+              </tr>
+              <tr>
+                  <th><label>Value:</label></th>
+                  <td>
+                      <input type="text" name="value"/>
+                      <span class="mand">*</span>
+                  </td>
+              </tr>
+          </table>
+          <input type="submit" value="Set / update limit"/>
+      </form>
+  </div>
+</div>

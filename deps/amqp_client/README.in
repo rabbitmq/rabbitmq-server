@@ -1,0 +1,10 @@
+README.in:
+
+Please see https://www.rabbitmq.com/build-erlang-client.html for build
+instructions.
+
+For your convenience, a text copy of these instructions is available
+below. Please be aware that the instructions here may not be as up to
+date as those at the above URL.
+
+===========================================================================

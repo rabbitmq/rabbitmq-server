@@ -1,0 +1,61 @@
+# vim:sw=2:et:
+
+os: linux
+dist: xenial
+language: elixir
+notifications:
+  email:
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
+addons:
+  apt:
+    packages:
+      - awscli
+cache:
+  apt: true
+env:
+  global:
+    - secure: E4FIneR14YxnWbNNgFY48+Z8YpnwWcvIR0nD1Mo06WKXaq05UfQNQ7SZCjI3kKCNJGMhac12DFRhln+mQZ+T92MQ7IeU3ugpV5RSm+JqIwwIKzVM3+bjCQnFoL24OD4E+GjhJQWYQmPyM7l4OPluMr2N8BtANItgzX3AvljvlSc=
+    - secure: L1t0CHGR4RzOXwtkpM6feRKax95rszScBLqzjstEiMPkhjTsYTlAecnNxx6lTrGMnk5hQoi4PtbhmyZOX0siHTngTogoA/Nyn8etYzicU5ZO+qmBQOYpegz51lEu70ewXgkhEHzk9DtEPxfYviH9WiILrdUVRXXgZpoXq13p1QA=
+
+    # $base_rmq_ref is used by rabbitmq-components.mk to select the
+    # appropriate branch for dependencies.
+    - base_rmq_ref=master
+
+elixir:
+  - '1.10'
+otp_release:
+  - '22.3'
+  - '23.0'
+
+install:
+  # This project being an Erlang one (we just set language to Elixir
+  # to ensure it is installed), we don't want Travis to run mix(1)
+  # automatically as it will break.
+  skip
+
+script:
+  # $current_rmq_ref is also used by rabbitmq-components.mk to select
+  # the appropriate branch for dependencies.
+  - make check-rabbitmq-components.mk
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make xref
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+  - make ct-fast
+    current_rmq_ref="${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH}}"
+
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi

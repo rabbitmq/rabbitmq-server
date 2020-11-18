@@ -1,0 +1,11 @@
+This package, the RabbitMQ commons library, is licensed under the MPL 2.0. For
+the MPL, please see LICENSE-MPL-RabbitMQ.
+
+The files `rabbit_numerical.erl' and `rabbit_http_util.erl` are (c) 2007
+Mochi Media, Inc and licensed under a MIT license, see LICENSE-MIT-Mochi.
+
+The files 'rabbit_semver.erl' and 'rabbit_semver_parser.erl' are Copyright (c) 2011
+Erlware, LLC and licensed under a MIT license, see LICENSE-MIT-Erlware-Commons.
+
+If you have any questions regarding licensing, please contact us at
+info@rabbitmq.com.

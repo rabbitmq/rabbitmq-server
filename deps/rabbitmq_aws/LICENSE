@@ -1,0 +1,6 @@
+rabbitmq-aws is licensed under the BSD 3-Clause License, see LICENSE-rabbitmq_aws.
+
+This package makes use of the following third party libraries:
+
+ - httpc-aws - https://github.com/gmr/httpc-aws - BSD 3-Clause License, see LICENSE-httpc_aws
+ - erlcloud - https://github.com/erlcloud/erlcloud - Simplified BSD License, see LICENSE-erlcloud.

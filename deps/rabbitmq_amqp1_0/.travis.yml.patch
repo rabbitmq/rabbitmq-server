@@ -1,0 +1,16 @@
+--- ../rabbit_common/.travis.yml	2019-09-13 13:48:46.258483000 +0200
++++ .travis.yml	2020-03-03 13:02:21.836228000 +0100
+@@ -11,8 +11,13 @@
+     on_failure: always
+ addons:
+   apt:
++    sources:
++      - sourceline: deb [arch=amd64] https://packages.microsoft.com/ubuntu/16.04/prod xenial main
++        key_url: https://packages.microsoft.com/keys/microsoft.asc
+     packages:
+       - awscli
++      - dotnet-sdk-2.0.0
++      - maven
+ cache:
+   apt: true
+ env:

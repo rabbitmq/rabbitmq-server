@@ -1,0 +1,169 @@
+<!doctype html>
+<html><head>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    <script src="mqttws31.js" type="text/javascript"></script>
+
+    <style>
+      #cnvs {
+          border: none;
+          -moz-border-radius: 4px;
+          cursor: url(pencil.cur),crosshair;
+          position: absolute;
+          overflow: hidden;
+          width: 100%;
+          height: 100%;
+      }
+      #cnvs:active {
+          cursor: url(pencil.cur),crosshair;
+      }
+      body {
+          overflow: hidden;
+      }
+    </style>
+    <title>RabbitMQ Web MQTT Examples: Bunny Drawing</title>
+    <link href="main.css" rel="stylesheet" type="text/css"/>
+</head><body lang="en">
+    <h1><a href="index.html">RabbitMQ Web MQTT Examples</a> > Bunny Drawing</h1>
+    <canvas id="cnvs"></canvas>
+<script>
+var send; var draw;
+send = draw = function(){};
+
+var lines = [];
+
+var canvas = document.getElementById('cnvs');
+
+if (canvas.getContext) {
+  var ctx = canvas.getContext('2d');
+
+  var img = new Image();
+  img.onload = function() {
+    ctx.drawImage(img, 230, 160);
+  };
+  img.src = 'bunny.png';
+
+  draw = function(p) {
+    ctx.beginPath();
+    ctx.moveTo(p.x1, p.y1);
+    ctx.lineTo(p.x2, p.y2);
+    ctx.stroke();
+    ctx.drawImage(img, 230, 160);
+  };
+
+  var do_resize = function() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillStyle = "#444";
+    ctx.fillText("Draw wings on the bunny!", 260, 100);
+    ctx.font = "normal 16px sans-serif";
+    ctx.fillStyle = "#888";
+    ctx.fillText("(For more fun open a second browser)", 255, 130);
+
+    ctx.drawImage(img, 230, 160);
+
+    ctx.strokeStyle = "#fa0";
+    ctx.lineWidth = "10";
+    ctx.lineCap = "round";
+
+    $.map(lines, function (p) {
+      draw(p);
+    });
+  };
+
+  $(window).resize(do_resize);
+  $(do_resize);
+
+
+  var pos = $('#cnvs').position();
+  var prev = null;
+  $('#cnvs').mousedown(function(evt) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      $('#cnvs').bind('mousemove', function(e) {
+          var curr = {x:e.pageX-pos.left, y:e.pageY-pos.top};
+          if (!prev) {
+              prev = curr;
+              return;
+          }
+          if (Math.sqrt(Math.pow(prev.x - curr.x, 2) +
+                        Math.pow(prev.y - curr.y, 2)) > 8) {
+               var p = {x1:prev.x, y1:prev.y, x2:curr.x, y2:curr.y}
+               lines.push(p);
+               draw(p);
+               send(JSON.stringify(p));
+               prev = curr;
+          }
+      });
+  });
+  $('html').mouseup(function() {
+      prev = null;
+      $('#cnvs').unbind('mousemove');
+  });
+}
+else {
+  document.write("Sorry - this demo requires a browser with canvas tag support.");
+}
+
+// MQTT boilerplate
+
+var debug = function(){
+  if (window.console && console.log && console.log.apply) {
+    console.log.apply(console, arguments);
+  }
+};
+
+var wsbroker = location.hostname;  //mqtt websocket enabled broker
+var wsport = 15675; // port for above
+
+var client = new Paho.MQTT.Client(wsbroker, wsport, "/ws",
+    "myclientid_" + parseInt(Math.random() * 100, 10));
+
+client.onConnectionLost = function (responseObject) {
+    debug("CONNECTION LOST - " + responseObject.errorMessage);
+};
+
+client.onMessageArrived = function (message) {
+    debug("RECEIVE ON " + message.destinationName + " PAYLOAD " + message.payloadString);
+
+    var p = JSON.parse(message.payloadString);
+    lines.push(p);
+    draw(p, true);
+};
+
+var options = {
+    timeout: 3,
+    keepAliveInterval: 30,
+    onSuccess: function () {
+        debug("CONNECTION SUCCESS");
+        client.subscribe("bunny", {qos: 1});
+    },
+    onFailure: function (message) {
+        debug("CONNECTION FAILURE - " + message.errorMessage);
+    }
+};
+
+if (location.protocol == "https:") {
+    options.useSSL = true;
+}
+
+debug("CONNECT TO " + wsbroker + ":" + wsport);
+client.connect(options);
+
+$('#first input').focus(function() {
+    if (!has_had_focus) {
+        has_had_focus = true;
+        $(this).val("");
+    }
+});
+
+send = function(data) {
+  message = new Paho.MQTT.Message(data);
+  message.destinationName = "bunny";
+  debug("SEND ON " + message.destinationName + " PAYLOAD " + data);
+  client.send(message);
+};
+
+</script>
+</body></html>

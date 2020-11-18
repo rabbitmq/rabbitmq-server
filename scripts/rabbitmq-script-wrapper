@@ -1,0 +1,111 @@
+#!/bin/sh
+
+## This Source Code Form is subject to the terms of the Mozilla Public
+## License, v. 2.0. If a copy of the MPL was not distributed with this
+## file, You can obtain one at https://mozilla.org/MPL/2.0/.
+##
+## Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+##
+
+SCRIPT="$(basename "$0")"
+
+main() {
+  ensure_we_are_in_a_readable_dir
+  if current_user_is_rabbitmq && calling_rabbitmq_server
+  then
+    exec_rabbitmq_server "$@"
+  elif current_user_is_rabbitmq && ! calling_rabbitmq_plugins
+  then
+    exec_script_as_rabbitmq "$@"
+  elif current_user_is_root && calling_rabbitmq_plugins
+  then
+    run_script_as_rabbitmq "$@"
+    _result="$?"
+    maybe_fixup_erlang_cookie
+    exit "$_result"
+  elif current_user_is_root
+  then
+    exec_script_as_root "$@"
+  else
+    run_script_help_and_fail
+  fi
+}
+
+maybe_fixup_erlang_cookie() {
+    # rabbitmq/rabbitmq-server-release#85
+    _rabbitmq_home="$(cd ~rabbitmq && pwd)"
+    _erlang_cookie="$_rabbitmq_home/.erlang.cookie"
+    if [ -f "$_erlang_cookie" ]
+    then
+        chown @RABBITMQ_USER@:@RABBITMQ_GROUP@ "$_erlang_cookie"
+        chmod 400 "$_erlang_cookie"
+    fi
+}
+
+ensure_we_are_in_a_readable_dir() {
+  # shellcheck disable=SC2164
+  cd ~rabbitmq || cd /
+}
+
+current_user_is_rabbitmq() {
+  [ "$(id -un)" = "rabbitmq" ]
+}
+
+current_user_is_root() {
+  [ "$(id -u)" = 0 ]
+}
+
+calling_rabbitmq_server() {
+  [ "$SCRIPT" = "rabbitmq-server" ]
+}
+
+calling_rabbitmq_plugins() {
+  [ "$SCRIPT" = "rabbitmq-plugins" ]
+}
+
+exec_rabbitmq_server() {
+  exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@"
+}
+
+run_script_as_rabbitmq() {
+  HOME="$(cd ~rabbitmq && pwd)" "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+}
+
+exec_script_as_rabbitmq() {
+  HOME="$(cd ~rabbitmq && pwd)" exec "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+}
+
+exec_script_as_root() {
+  if [ -x /sbin/runuser ]
+  then
+    # TODO:
+    # At some point all of the RabbitMQ supported distributions will be using
+    # the util-linux version of /sbin/runuser, as it has been removed from GNU
+    # coreutils as of 2012. At that point the first clause of the following
+    # if statement can become the only statement used and the if/then
+    # removed
+    if /sbin/runuser --version | grep -qF util-linux
+    then
+        exec /sbin/runuser -u rabbitmq -- "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+    else
+        exec /sbin/runuser -s /bin/sh -- rabbitmq "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+    fi
+  elif [ -x /bin/su ]
+  then
+    exec /bin/su -s /bin/sh rabbitmq -- "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+  else
+    echo "Please ensure /bin/su or /sbin/runuser exists and can be executed by $USER." 1>&2
+    exit 1
+  fi
+}
+
+run_script_help_and_fail() {
+  "/usr/lib/rabbitmq/bin/$SCRIPT" help
+
+  echo "
+Only root or rabbitmq can run $SCRIPT
+"
+  exit 1
+}
+
+main "$@"

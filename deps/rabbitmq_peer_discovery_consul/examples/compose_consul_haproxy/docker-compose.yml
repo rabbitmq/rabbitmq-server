@@ -1,0 +1,44 @@
+version: "2"
+services:
+   rabbit:
+    environment:
+      - TCP_PORTS=15672, 5672
+      - RABBITMQ_ERLANG_COOKIE="mycookie"  
+    networks:
+      - back
+    image:  rabbitmq:3.7
+    expose:
+      - 15672
+      - 5672
+      - 5671
+      - 15671
+    tty: true
+    volumes:
+      - ./conf/:/etc/rabbitmq/
+    command:  sh -c "sleep 10; rabbitmq-server;" 
+   lb:
+    image: dockercloud/haproxy
+    environment:
+      - MODE=tcp
+    links:
+      - rabbit
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 15672:15672
+      - 5672:5672
+    networks:
+      - back
+   consul1:
+    image: "consul"
+    container_name: "consul"
+    hostname: "consul"
+    ports:
+      - "8400:8400"
+      - "8500:8500"
+      - "8600:53"
+    networks:
+      - back
+      
+networks:
+  back:

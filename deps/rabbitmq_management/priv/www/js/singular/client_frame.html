@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+<iframe style="display: none;" id="authorizeFrame" src="about:blank"></iframe>
+</body>
+<script type="application/javascript" src="./rpFrame.js"></script>
+<script type="application/javascript">
+    var authorizeWindow = document.getElementById('authorizeFrame').contentWindow;
+    var rpFrame = RPFrame(window.parent.Singular, authorizeWindow, window);
+    window.addEventListener('message', rpFrame.receiveMessage, false);
+
+    rpFrame.checkClientConfig();
+    rpFrame.startCheckingSession();
+
+    window.fetchAccessToken = rpFrame.fetchAccessToken;
+    window.afterAccess = rpFrame.afterAccess;
+    window.afterAuthorize = rpFrame.afterAuthorize;
+</script>
+</html>

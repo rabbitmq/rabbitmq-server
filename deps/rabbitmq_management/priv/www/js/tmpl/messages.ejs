@@ -1,0 +1,39 @@
+<%
+   for (var i = 0; i < msgs.length; i++) {
+   var msg = msgs[i];
+%>
+<div class="box">
+<h3>Message <%= i+1 %></h3>
+<p>The server reported <b><%= msg.message_count %></b> messages remaining.</p>
+<table class="facts">
+  <tr>
+    <th>Exchange</th>
+    <td><%= fmt_exchange(msg.exchange) %></td>
+  </tr>
+  <tr>
+    <th>Routing Key</th>
+    <td><%= fmt_string(msg.routing_key) %></td>
+  </tr>
+  <tr>
+    <th>Redelivered</th>
+    <td><%= fmt_boolean(msg.redelivered) %></td>
+  </tr>
+  <tr>
+    <th>Properties</th>
+    <td><%= fmt_table_short(msg.properties) %></td>
+  </tr>
+  <tr>
+    <th>
+      Payload
+      <sub><%= msg.payload_bytes %> bytes</sub>
+      <sub>Encoding: <%= msg.payload_encoding %></sub>
+    </th>
+    <td>
+      <pre class="msg-payload"><%= fmt_maybe_wrap(msg.payload, msg.payload_encoding) %></pre>
+    </td>
+  </tr>
+</table>
+</div>
+<%
+  }
+%>

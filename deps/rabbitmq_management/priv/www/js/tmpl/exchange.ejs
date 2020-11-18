@@ -1,0 +1,97 @@
+<h1>Exchange: <b><%= fmt_exchange(highlight_extra_whitespace(exchange.name)) %></b><%= fmt_maybe_vhost(exchange.vhost) %></h1>
+
+<div class="section">
+  <h2>Overview</h2>
+  <div class="hider updatable">
+<% if (!disable_stats) { %>
+<% if (rates_mode != 'none') { %>
+    <%= message_rates('msg-rates-x', exchange.message_stats) %>
+<% } %>
+<% } %>
+    <h3>Details</h3>
+    <table class="facts">
+      <tr>
+        <th>Type</th>
+        <td class="l"><%= fmt_exchange_type(exchange.type) %></td>
+      </tr>
+      <tr>
+        <th>Features</th>
+        <td><%= fmt_features(exchange) %></td>
+      </tr>
+      <tr>
+        <th>Policy</th>
+        <td><%= link_policy(exchange.vhost, exchange.policy) %></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<% if (!disable_stats) { %>
+<% if (rates_mode == 'detailed') { %>
+<div class="section-hidden">
+<h2>Message rates breakdown</h2>
+<div class="hider updatable">
+<table class="two-col-layout">
+  <tr>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'exchange-incoming',
+                  'object': exchange.incoming,
+                  'label':  'Incoming <span class="help" id="exchange-rates-incoming"></span>'}) %>
+    </td>
+    <td>
+      <%= format('msg-detail-publishes',
+                 {'mode':   'exchange-outgoing',
+                  'object': exchange.outgoing,
+                  'label':  'Outgoing <span class="help" id="exchange-rates-outgoing"></span>'}) %>
+    </td>
+  </tr>
+</table>
+</div>
+</div>
+<% } %>
+<% } %>
+
+
+<div class="section-hidden">
+  <h2>Bindings</h2>
+  <div class="hider">
+<% if (exchange.name == "") { %>
+  <h3>Default exchange</h3>
+  <p>
+    The default exchange is implicitly bound to every queue, with a
+    routing key equal to the queue name. It is not possible to
+    explicitly bind to, or unbind from the default exchange. It also
+    cannot be deleted.
+  </p>
+<% } else { %>
+<div class="bindings-wrapper">
+<% if (bindings_destination.length > 0) { %>
+  <%= format('bindings', {'mode': 'exchange_destination', 'bindings': bindings_destination}) %>
+  <p class="arrow">&dArr;</p>
+<% } %>
+  <p><span class="exchange">This exchange</span></p>
+  <p class="arrow">&dArr;</p>
+  <%= format('bindings', {'mode': 'exchange_source', 'bindings': bindings_source}) %>
+</div>
+  <%= format('add-binding', {'mode': 'exchange_source', 'parent': exchange}) %>
+<% } %>
+</div>
+</div>
+
+<% if (!exchange.internal) { %>
+<%= format('publish', {'mode': 'exchange', 'exchange': exchange}) %>
+<% } %>
+
+<% if (exchange.name != "") { %>
+<div class="section-hidden">
+  <h2>Delete this exchange</h2>
+  <div class="hider">
+    <form action="#/exchanges" method="delete" class="confirm">
+      <input type="hidden" name="vhost" value="<%= fmt_string(exchange.vhost) %>"/>
+      <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
+      <input type="submit" value="Delete"/>
+    </form>
+  </div>
+</div>
+<% } %>

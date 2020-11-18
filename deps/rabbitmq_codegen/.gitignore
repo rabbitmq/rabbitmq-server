@@ -1,0 +1,11 @@
+*~
+.sw?
+.*.sw?
+*.beam
+*.pyc
+erl_crash.dump
+/build/
+/cover/
+/dist/
+/ebin/
+/tmp/

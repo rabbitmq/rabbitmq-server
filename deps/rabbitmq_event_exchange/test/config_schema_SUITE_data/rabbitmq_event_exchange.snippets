@@ -1,0 +1,19 @@
+[
+ {virtual_host1,
+  "event_exchange.vhost = /",
+  [
+   {rabbitmq_event_exchange, [
+                              {vhost, <<"/">>}
+                             ]}
+  ], [rabbitmq_event_exchange]
+ },
+
+ {virtual_host2,
+  "event_exchange.vhost = dev",
+  [
+   {rabbitmq_event_exchange, [
+                              {vhost, <<"dev">>}
+                             ]}
+  ], [rabbitmq_event_exchange]
+ }
+].

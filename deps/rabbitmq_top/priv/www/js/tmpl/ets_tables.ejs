@@ -1,0 +1,54 @@
+<h1>Top ETS Tables: <b><%= top.node %></b></h1>
+
+<p>
+  Node:
+  <select id="top-node-ets">
+  <% for (var i = 0; i < nodes.length; i++) { %>
+     <option name="#/top/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == top.node) { %>selected="selected"<% } %>><%= nodes[i].name %></option>
+  <% } %>
+  </select>
+
+  Rows:
+  <select id="row-count-ets">
+  <%
+    var row_counts = [20, 50, 100, 150];
+    for (var i = 0; i < row_counts.length; i++) {
+  %>
+    <option name="<%= row_counts[i] %>"
+        <% if (row_counts[i] == top.row_count) { %>selected="selected"<% } %>>
+    <%= row_counts[i] %></option>
+  <% } %>
+  </select>
+</p>
+
+<table class="list updatable">
+ <thead>
+  <tr>
+    <th><%= fmt_sort_desc_by_default('Name', 'name') %></th>
+    <th><%= fmt_sort_desc_by_default('Owner Name', 'owner_name') %></th>
+    <th><%= fmt_sort_desc_by_default('Memory', 'memory') %></th>
+    <th><%= fmt_sort_desc_by_default('Size', 'size') %></th>
+    <th><%= fmt_sort_desc_by_default('Type', 'type') %></th>
+    <th><%= fmt_sort_desc_by_default('Named', 'named_table') %></th>
+    <th>Protection</th>
+    <th>Compressed</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+ for (var i = 0; i < top.ets_tables.length; i++) {
+    var table = top.ets_tables[i];
+%>
+  <tr<%= alt_rows(i)%>>
+    <td><%= fmt_string(table.name) %></td>
+    <td><%= fmt_string(table.owner_name) %></td>
+    <td><%= fmt_bytes(table.memory * 1.0) %></td>
+    <td><%= table.size %></td>
+    <td><%= table.type %></td>
+    <td><%= table.named_table %></td>
+    <td><%= table.protection %></td>
+    <td><%= table.compressed %></td>
+  </tr>
+<% } %>
+ </tbody>
+</table>

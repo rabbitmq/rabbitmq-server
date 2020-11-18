@@ -1,0 +1,60 @@
+<h1>Feature Flags</h1>
+<div class="section">
+  <h2>All Feature Flags</h2>
+  <div class="hider">
+<%= filter_ui(feature_flags) %>
+  <div class="updatable">
+<% if (feature_flags.length > 0) { %>
+<table class="list">
+  <thead>
+    <tr>
+      <th><%= fmt_sort('Name', 'name') %></th>
+      <th class="c"><%= fmt_sort('State', 'state') %></th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <%
+       for (var i = 0; i < feature_flags.length; i++) {
+         var feature_flag = feature_flags[i];
+         var state_color = "grey";
+         if (feature_flag.state == "enabled") {
+           state_color = "green";
+         } else if (feature_flag.state == "disabled") {
+           state_color = "yellow";
+         } else if (feature_flag.state == "unsupported") {
+           state_color = "red";
+         }
+    %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= fmt_string(feature_flag.name) %></td>
+         <td class="c">
+           <% if (feature_flag.state == "disabled") { %>
+           <form action="#/feature-flags-enable" method="put" style="display: inline-block">
+           <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
+           <input type="submit" value="Enable" class="c"/>
+           </form>
+           <% } else { %>
+           <abbr class="status-<%= fmt_string(state_color) %>"
+             style="text-transform: capitalize"
+             title="Feature flag state: <%= fmt_string(feature_flag.state) %>">
+           <%= fmt_string(feature_flag.state) %>
+           </abbr>
+           <% } %>
+         </td>
+         <td>
+         <p><%= fmt_string(feature_flag.desc) %></p>
+         <% if (feature_flag.doc_url) { %>
+         <p><a href="<%= fmt_string(feature_flag.doc_url) %>">[Learn more]</a></p>
+         <% } %>
+         </td>
+       </tr>
+    <% } %>
+  </tbody>
+</table>
+<% } else { %>
+    <p>... no feature_flags ...</p>
+<% } %>
+  </div>
+  </div>
+</div>

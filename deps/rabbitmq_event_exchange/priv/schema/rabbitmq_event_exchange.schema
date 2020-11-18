@@ -1,0 +1,7 @@
+{mapping, "event_exchange.vhost", "rabbitmq_event_exchange.vhost",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_event_exchange.vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("event_exchange.vhost", Conf))
+end}.
