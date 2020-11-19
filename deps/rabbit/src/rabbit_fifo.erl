@@ -299,7 +299,7 @@ apply(#{index := Index,
     Exists = maps:is_key(ConsumerId, Consumers),
     case messages_ready(State0) of
         0 ->
-            {State0, {dequeue, empty}};
+            update_smallest_raft_index(Index, {dequeue, empty}, State0, []);
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
