@@ -389,6 +389,16 @@ jobs:
           --workdir /workspace/rabbitmq \
           eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
           ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_stream
+      run: |
+        docker run \
+          --env project=rabbitmq_stream \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_top
       run: |
         docker run \
@@ -8092,6 +8102,41 @@ jobs:
       with:
         name: rabbitmq_stomp-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_stream:
+    name: rabbitmq_stream
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_stream \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_stream-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_top:
     name: rabbitmq_top
     needs:
@@ -8446,6 +8491,7 @@ jobs:
     - rabbitmq_shovel
     - rabbitmq_shovel_management
     - rabbitmq_stomp
+    - rabbitmq_stream
     - rabbitmq_top
     - rabbitmq_tracing
     - rabbitmq_trust_store

@@ -396,6 +396,11 @@ deps:
   - name: python
   - name: connections
   - name: config_schema
+- name: rabbitmq_stream
+  suites:
+  - name: command
+  - name: config_schema
+  - name: rabbit_stream
 - name: rabbitmq_top
   suites: []
 - name: rabbitmq_tracing
