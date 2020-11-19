@@ -320,7 +320,8 @@
                   <span class="argument-link" field="arguments" key="x-overflow" type="string">Overflow behaviour</span> <span class="help" id="queue-overflow"></span> |
                   <span class="argument-link" field="arguments" key="x-single-active-consumer" type="boolean">Single active consumer</span> <span class="help" id="queue-single-active-consumer"></span><br/>
                   <span class="argument-link" field="arguments" key="x-dead-letter-exchange" type="string">Dead letter exchange</span> <span class="help" id="queue-dead-letter-exchange"></span> |
-                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span><br/>
+                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span> |
+                  <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span><br/>
                   <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
                 <% } %>
                   <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span><br/>
@@ -330,8 +331,7 @@
                 | <span class="argument-link" field="arguments" key="x-queue-master-locator" type="string" value="">Master locator</span> <span class="help" id="queue-master-locator"></span>
                 <% } %>
                 <% if (queue_type == "quorum") { %>
-                  <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
-                  | <span class="argument-link" field="arguments" key="x-max-in-memory-length" type="number">Max in memory length</span><span class="help" id="queue-max-in-memory-length"></span>
+                  <span class="argument-link" field="arguments" key="x-max-in-memory-length" type="number">Max in memory length</span><span class="help" id="queue-max-in-memory-length"></span>
                   | <span class="argument-link" field="arguments" key="x-max-in-memory-bytes" type="number">Max in memory bytes</span><span class="help" id="queue-max-in-memory-bytes"></span>
                   | <span class="argument-link" field="arguments" key="x-quorum-initial-group-size" type="number">Initial cluster size</span><span class="help" id="queue-quorum-initial-group-size"></span><br/>
                 <% } %>
