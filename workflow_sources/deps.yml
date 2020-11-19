@@ -339,6 +339,7 @@ deps:
   - name: util
 
 - name: rabbitmq_stream
+  skip_dialyzer: true
   suites:
   - name: command
   - name: config_schema

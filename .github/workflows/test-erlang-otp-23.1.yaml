@@ -610,16 +610,6 @@ jobs:
           --workdir /workspace/rabbitmq \
           eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
           ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_stream
-      run: |
-        docker run \
-          --env project=rabbitmq_stream \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
     - name: RUN DIALYZE rabbitmq_top
       run: |
         docker run \
