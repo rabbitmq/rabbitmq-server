@@ -207,7 +207,7 @@ enq_enq_checkout_get_settled_test(_) ->
 checkout_get_empty_test(_) ->
     Cid = {?FUNCTION_NAME, self()},
     State = test_init(test),
-    {_State2, {dequeue, empty}} =
+    {_State2, {dequeue, empty}, _} =
         apply(meta(1), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), State),
     ok.
 
@@ -1556,7 +1556,7 @@ queue_ttl_test(_) ->
         = rabbit_fifo:tick(Now + 2500, S2D),
 
     %% dequeue should set last applied
-    {S1Deq, {dequeue, empty}} =
+    {S1Deq, {dequeue, empty}, _} =
         apply(meta(2, Now),
               rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               S0),
@@ -1655,6 +1655,17 @@ checkout_priority_test(_) ->
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == self(), E4),
     {_S5, E5} = enq(3, 3, third, S4),
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == Pid, E5),
+    ok.
+
+empty_dequeue_should_emit_release_cursor_test(_) ->
+    State0 = test_init(?FUNCTION_NAME),
+    Cid = <<"basic.get1">>,
+    {_State, {dequeue, empty}, Effects} =
+        apply(meta(2, 1234),
+              rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State0),
+
+    ?ASSERT_EFF({release_cursor, _, _}, Effects),
     ok.
 
 %% Utility
