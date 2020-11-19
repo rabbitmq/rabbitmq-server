@@ -60,22 +60,19 @@ deps:
   - name: queue_length_limits
   - name: queue_master_location
   - name: queue_parallel
-  - name: queue_type
   - name: quorum_queue
-  - name: rabbit_confirms
   - name: rabbit_core_metrics_gc
   - name: rabbit_fifo
   - name: rabbit_fifo_int
   - name: rabbit_fifo_prop
   - name: rabbit_fifo_v0
-  - name: rabbit_msg_record
-  - name: rabbit_stream_queue
   - name: rabbitmq_queues_cli_integration
   - name: rabbitmqctl_integration
   - name: rabbitmqctl_shutdown
   - name: signal_handling
   - name: simple_ha
   - name: single_active_consumer
+  - name: sup_delayed_restart
   - name: sync_detection
   - name: term_to_binary_compat_prop
   - name: topic_permission
@@ -337,12 +334,6 @@ deps:
   - name: python
   - name: topic
   - name: util
-
-- name: rabbitmq_stream
-  suites:
-  - name: command
-  - name: config_schema
-  - name: rabbit_stream
 
 - name: rabbitmq_top
   suites: []

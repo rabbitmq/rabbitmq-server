@@ -535,7 +535,7 @@ jobs:
       env:
         project: rabbit
       run: |
-        ci/scripts/validate-workflow.sh amqqueue_backward_compatibility backing_queue channel_interceptor channel_operation_timeout cluster cluster_rename clustering_management config_schema confirms_rejects consumer_timeout crashing_queues dead_lettering definition_import disconnect_detected_during_alarm dynamic_ha dynamic_qq eager_sync feature_flags lazy_queue list_consumers_sanity_check list_queues_online_and_offline maintenance_mode many_node_ha message_size_limit metrics mirrored_supervisor msg_store peer_discovery_classic_config peer_discovery_dns per_user_connection_channel_limit per_user_connection_channel_limit_partitions per_user_connection_channel_tracking per_user_connection_tracking per_vhost_connection_limit per_vhost_connection_limit_partitions per_vhost_msg_store per_vhost_queue_limit policy priority_queue priority_queue_recovery product_info proxy_protocol publisher_confirms_parallel queue_length_limits queue_master_location queue_parallel queue_type quorum_queue rabbit_confirms rabbit_core_metrics_gc rabbit_fifo rabbit_fifo_int rabbit_fifo_prop rabbit_fifo_v0 rabbit_msg_record rabbit_stream_queue rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown signal_handling simple_ha single_active_consumer sync_detection term_to_binary_compat_prop topic_permission unit_access_control unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management unit_cluster_formation_locking_mocks unit_collections unit_config_value_encryption unit_connection_tracking unit_credit_flow unit_disk_monitor unit_disk_monitor_mocks unit_file_handle_cache unit_gen_server2 unit_gm unit_log_config unit_log_management unit_operator_policy unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue unit_queue_consumers unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor upgrade_preparation vhost
+        ci/scripts/validate-workflow.sh amqqueue_backward_compatibility backing_queue channel_interceptor channel_operation_timeout cluster cluster_rename clustering_management config_schema confirms_rejects consumer_timeout crashing_queues dead_lettering definition_import disconnect_detected_during_alarm dynamic_ha dynamic_qq eager_sync feature_flags lazy_queue list_consumers_sanity_check list_queues_online_and_offline maintenance_mode many_node_ha message_size_limit metrics mirrored_supervisor msg_store peer_discovery_classic_config peer_discovery_dns per_user_connection_channel_limit per_user_connection_channel_limit_partitions per_user_connection_channel_tracking per_user_connection_tracking per_vhost_connection_limit per_vhost_connection_limit_partitions per_vhost_msg_store per_vhost_queue_limit policy priority_queue priority_queue_recovery product_info proxy_protocol publisher_confirms_parallel queue_length_limits queue_master_location queue_parallel quorum_queue rabbit_core_metrics_gc rabbit_fifo rabbit_fifo_int rabbit_fifo_prop rabbit_fifo_v0 rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown signal_handling simple_ha single_active_consumer sup_delayed_restart sync_detection term_to_binary_compat_prop topic_permission unit_access_control unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management unit_cluster_formation_locking_mocks unit_collections unit_config_value_encryption unit_connection_tracking unit_credit_flow unit_disk_monitor unit_disk_monitor_mocks unit_file_handle_cache unit_gen_server2 unit_gm unit_log_config unit_log_management unit_operator_policy unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue unit_queue_consumers unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor upgrade_preparation vhost
     - name: RUN CHECKS
       uses: docker/build-push-action@v1
       with:
@@ -3720,75 +3720,6 @@ jobs:
       with:
         name: rabbit-ct-queue_parallel-logs-mixed-v3.8.9
         path: ct-queue_parallel-logs-v3.8.9/*-ct-logs-*.tar.xz
-  rabbit-ct-queue_type:
-    name: rabbit-ct-queue_type
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }}
-    - name: RUN ct-queue_type
-      run: |
-        mkdir ct-queue_type-logs && chmod 777 ct-queue_type-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=queue_type \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-queue_type-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-queue_type-logs
-        path: ct-queue_type-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-queue_type [mixed v3.7.28]
-      run: |
-        mkdir ct-queue_type-logs-v3.7.28 && chmod 777 ct-queue_type-logs-v3.7.28
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=queue_type \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.7.28 \
-          --volume ${PWD}/ct-queue_type-logs-v3.7.28:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.7.28]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-queue_type-logs-mixed-v3.7.28
-        path: ct-queue_type-logs-v3.7.28/*-ct-logs-*.tar.xz
-    - name: RUN ct-queue_type [mixed v3.8.9]
-      run: |
-        mkdir ct-queue_type-logs-v3.8.9 && chmod 777 ct-queue_type-logs-v3.8.9
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=queue_type \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.8.9 \
-          --volume ${PWD}/ct-queue_type-logs-v3.8.9:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.8.9]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-queue_type-logs-mixed-v3.8.9
-        path: ct-queue_type-logs-v3.8.9/*-ct-logs-*.tar.xz
   rabbit-ct-quorum_queue:
     name: rabbit-ct-quorum_queue
     needs:
@@ -3858,75 +3789,6 @@ jobs:
       with:
         name: rabbit-ct-quorum_queue-logs-mixed-v3.8.9
         path: ct-quorum_queue-logs-v3.8.9/*-ct-logs-*.tar.xz
-  rabbit-ct-rabbit_confirms:
-    name: rabbit-ct-rabbit_confirms
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }}
-    - name: RUN ct-rabbit_confirms
-      run: |
-        mkdir ct-rabbit_confirms-logs && chmod 777 ct-rabbit_confirms-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_confirms \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-rabbit_confirms-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_confirms-logs
-        path: ct-rabbit_confirms-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_confirms [mixed v3.7.28]
-      run: |
-        mkdir ct-rabbit_confirms-logs-v3.7.28 && chmod 777 ct-rabbit_confirms-logs-v3.7.28
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_confirms \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.7.28 \
-          --volume ${PWD}/ct-rabbit_confirms-logs-v3.7.28:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.7.28]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_confirms-logs-mixed-v3.7.28
-        path: ct-rabbit_confirms-logs-v3.7.28/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_confirms [mixed v3.8.9]
-      run: |
-        mkdir ct-rabbit_confirms-logs-v3.8.9 && chmod 777 ct-rabbit_confirms-logs-v3.8.9
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_confirms \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.8.9 \
-          --volume ${PWD}/ct-rabbit_confirms-logs-v3.8.9:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.8.9]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_confirms-logs-mixed-v3.8.9
-        path: ct-rabbit_confirms-logs-v3.8.9/*-ct-logs-*.tar.xz
   rabbit-ct-rabbit_core_metrics_gc:
     name: rabbit-ct-rabbit_core_metrics_gc
     needs:
@@ -4272,144 +4134,6 @@ jobs:
       with:
         name: rabbit-ct-rabbit_fifo_v0-logs-mixed-v3.8.9
         path: ct-rabbit_fifo_v0-logs-v3.8.9/*-ct-logs-*.tar.xz
-  rabbit-ct-rabbit_msg_record:
-    name: rabbit-ct-rabbit_msg_record
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }}
-    - name: RUN ct-rabbit_msg_record
-      run: |
-        mkdir ct-rabbit_msg_record-logs && chmod 777 ct-rabbit_msg_record-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_msg_record \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-rabbit_msg_record-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_msg_record-logs
-        path: ct-rabbit_msg_record-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_msg_record [mixed v3.7.28]
-      run: |
-        mkdir ct-rabbit_msg_record-logs-v3.7.28 && chmod 777 ct-rabbit_msg_record-logs-v3.7.28
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_msg_record \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.7.28 \
-          --volume ${PWD}/ct-rabbit_msg_record-logs-v3.7.28:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.7.28]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_msg_record-logs-mixed-v3.7.28
-        path: ct-rabbit_msg_record-logs-v3.7.28/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_msg_record [mixed v3.8.9]
-      run: |
-        mkdir ct-rabbit_msg_record-logs-v3.8.9 && chmod 777 ct-rabbit_msg_record-logs-v3.8.9
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_msg_record \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.8.9 \
-          --volume ${PWD}/ct-rabbit_msg_record-logs-v3.8.9:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.8.9]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_msg_record-logs-mixed-v3.8.9
-        path: ct-rabbit_msg_record-logs-v3.8.9/*-ct-logs-*.tar.xz
-  rabbit-ct-rabbit_stream_queue:
-    name: rabbit-ct-rabbit_stream_queue
-    needs:
-    - prepare
-    - rabbit-checks
-    runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
-    steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }}
-    - name: RUN ct-rabbit_stream_queue
-      run: |
-        mkdir ct-rabbit_stream_queue-logs && chmod 777 ct-rabbit_stream_queue-logs
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_stream_queue \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}/ct-rabbit_stream_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_stream_queue-logs
-        path: ct-rabbit_stream_queue-logs/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_stream_queue [mixed v3.7.28]
-      run: |
-        mkdir ct-rabbit_stream_queue-logs-v3.7.28 && chmod 777 ct-rabbit_stream_queue-logs-v3.7.28
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_stream_queue \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.7.28 \
-          --volume ${PWD}/ct-rabbit_stream_queue-logs-v3.7.28:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.7.28]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_stream_queue-logs-mixed-v3.7.28
-        path: ct-rabbit_stream_queue-logs-v3.7.28/*-ct-logs-*.tar.xz
-    - name: RUN ct-rabbit_stream_queue [mixed v3.8.9]
-      run: |
-        mkdir ct-rabbit_stream_queue-logs-v3.8.9 && chmod 777 ct-rabbit_stream_queue-logs-v3.8.9
-        docker run \
-          --env project=rabbit \
-          --env CT_SUITE=rabbit_stream_queue \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env SECONDARY_UMBRELLA_VERSION=v3.8.9 \
-          --volume ${PWD}/ct-rabbit_stream_queue-logs-v3.8.9:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
-          /workspace/rabbitmq/ci/scripts/ct-suite.sh
-    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.8.9]
-      uses: actions/upload-artifact@v2-preview
-      if: always()
-      with:
-        name: rabbit-ct-rabbit_stream_queue-logs-mixed-v3.8.9
-        path: ct-rabbit_stream_queue-logs-v3.8.9/*-ct-logs-*.tar.xz
   rabbit-ct-rabbitmq_queues_cli_integration:
     name: rabbit-ct-rabbitmq_queues_cli_integration
     needs:
@@ -4824,6 +4548,75 @@ jobs:
       with:
         name: rabbit-ct-single_active_consumer-logs-mixed-v3.8.9
         path: ct-single_active_consumer-logs-v3.8.9/*-ct-logs-*.tar.xz
+  rabbit-ct-sup_delayed_restart:
+    name: rabbit-ct-sup_delayed_restart
+    needs:
+    - prepare
+    - rabbit-checks
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PULL IMAGE
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }}
+    - name: RUN ct-sup_delayed_restart
+      run: |
+        mkdir ct-sup_delayed_restart-logs && chmod 777 ct-sup_delayed_restart-logs
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=sup_delayed_restart \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}/ct-sup_delayed_restart-logs:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-sup_delayed_restart-logs
+        path: ct-sup_delayed_restart-logs/*-ct-logs-*.tar.xz
+    - name: RUN ct-sup_delayed_restart [mixed v3.7.28]
+      run: |
+        mkdir ct-sup_delayed_restart-logs-v3.7.28 && chmod 777 ct-sup_delayed_restart-logs-v3.7.28
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=sup_delayed_restart \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env SECONDARY_UMBRELLA_VERSION=v3.7.28 \
+          --volume ${PWD}/ct-sup_delayed_restart-logs-v3.7.28:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.7.28]
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-sup_delayed_restart-logs-mixed-v3.7.28
+        path: ct-sup_delayed_restart-logs-v3.7.28/*-ct-logs-*.tar.xz
+    - name: RUN ct-sup_delayed_restart [mixed v3.8.9]
+      run: |
+        mkdir ct-sup_delayed_restart-logs-v3.8.9 && chmod 777 ct-sup_delayed_restart-logs-v3.8.9
+        docker run \
+          --env project=rabbit \
+          --env CT_SUITE=sup_delayed_restart \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env SECONDARY_UMBRELLA_VERSION=v3.8.9 \
+          --volume ${PWD}/ct-sup_delayed_restart-logs-v3.8.9:/workspace/ct-logs \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }} \
+          /workspace/rabbitmq/ci/scripts/ct-suite.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed v3.8.9]
+      uses: actions/upload-artifact@v2-preview
+      if: always()
+      with:
+        name: rabbit-ct-sup_delayed_restart-logs-mixed-v3.8.9
+        path: ct-sup_delayed_restart-logs-v3.8.9/*-ct-logs-*.tar.xz
   rabbit-ct-sync_detection:
     name: rabbit-ct-sync_detection
     needs:
@@ -7151,22 +6944,19 @@ jobs:
     - rabbit-ct-queue_length_limits
     - rabbit-ct-queue_master_location
     - rabbit-ct-queue_parallel
-    - rabbit-ct-queue_type
     - rabbit-ct-quorum_queue
-    - rabbit-ct-rabbit_confirms
     - rabbit-ct-rabbit_core_metrics_gc
     - rabbit-ct-rabbit_fifo
     - rabbit-ct-rabbit_fifo_int
     - rabbit-ct-rabbit_fifo_prop
     - rabbit-ct-rabbit_fifo_v0
-    - rabbit-ct-rabbit_msg_record
-    - rabbit-ct-rabbit_stream_queue
     - rabbit-ct-rabbitmq_queues_cli_integration
     - rabbit-ct-rabbitmqctl_integration
     - rabbit-ct-rabbitmqctl_shutdown
     - rabbit-ct-signal_handling
     - rabbit-ct-simple_ha
     - rabbit-ct-single_active_consumer
+    - rabbit-ct-sup_delayed_restart
     - rabbit-ct-sync_detection
     - rabbit-ct-term_to_binary_compat_prop
     - rabbit-ct-topic_permission
