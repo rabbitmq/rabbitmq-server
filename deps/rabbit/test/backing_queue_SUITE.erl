@@ -29,6 +29,7 @@
     variable_queue_dropfetchwhile,
     variable_queue_dropwhile_varying_ram_duration,
     variable_queue_fetchwhile_varying_ram_duration,
+    variable_queue_fetch_delivery_with_delivery_count,
     variable_queue_ack_limiting,
     variable_queue_purge,
     variable_queue_requeue,
@@ -1022,6 +1023,114 @@ variable_queue_fetchwhile_varying_ram_duration2(VQ0, _QName) ->
               VQ2
       end, VQ0).
 
+variable_queue_fetch_delivery_with_delivery_count(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_fetch_delivery_with_delivery_count1,
+      [Config, ?config(variable_queue_type, Config)]).
+
+variable_queue_fetch_delivery_with_delivery_count1(Config, default) ->
+    with_fresh_variable_queue(
+      fun variable_queue_fetch_delivery_with_delivery_count_default/2,
+      ?config(variable_queue_type, Config));
+variable_queue_fetch_delivery_with_delivery_count1(Config, lazy) ->
+    with_fresh_variable_queue(
+      fun variable_queue_fetch_delivery_with_delivery_count_lazy/2,
+      ?config(variable_queue_type, Config)).
+
+variable_queue_fetch_delivery_with_delivery_count_default(VQ0, _QName) ->
+    Count = 10,
+
+    %% add messages with sequential expiry
+    VQ1 = variable_queue_publish(
+            false, 1, Count,
+            fun (N, Props) -> message_properties:set_expiry(Props, N) end,
+            fun erlang:term_to_binary/1, VQ0),
+
+    %% set delivery count to 2 for all messages
+    {VQ2, AckTags} = variable_queue_fetch_delivery(Count, false, false, Count, VQ1),
+    {_Guids, VQ3} =
+        rabbit_variable_queue:requeue(AckTags, VQ2),
+
+    {VQ4, AckTags1} = variable_queue_fetch_delivery(Count, false, true, Count, VQ3),
+    {_Guids1, VQ5} =
+        rabbit_variable_queue:requeue(AckTags1, VQ4),
+
+    InitProps = message_properties:new(6, false, Count, 0),
+    ExpectedProps = message_properties:set_delivery_count(InitProps, 1),
+
+    %% fetch and validate delivery count
+    %% _AckTags2 = [4,3,2,1,0]
+    {ExpectedProps, {Msgs, _AckTags2}, VQ6} =
+        rabbit_variable_queue:fetchwhile(
+          fun (Props) ->
+              (message_properties:get_delivery_count(Props) =< 2) and
+                  (message_properties:get_expiry(Props) =< 5)
+          end,
+          fun (Msg, AckTag, {MsgAcc, AckAcc}) ->
+                  {[Msg | MsgAcc], [AckTag | AckAcc]}
+          end, {[], []}, VQ5),
+    true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
+
+    %% fetch remaining 5
+    VQ7 = lists:foldl(fun (N, VQN) ->
+                              {{Msg, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch_delivery(false, VQN),
+                              true = msg2int(Msg) == N,
+                              VQM
+                      end, VQ6, lists:seq(6, Count)),
+
+    %% should now be empty
+    {empty, VQ8} = rabbit_variable_queue:fetch_delivery(false, VQ7),
+
+    VQ8.
+
+variable_queue_fetch_delivery_with_delivery_count_lazy(VQ0, _QName) ->
+    Count = 10,
+
+    %% add messages with sequential expiry
+    VQ1 = variable_queue_publish(
+            false, 1, Count,
+            fun (N, Props) -> message_properties:set_expiry(Props, N) end,
+            fun erlang:term_to_binary/1, VQ0),
+
+    %% attempt setting delivery count to 2 for all messages
+    {VQ2, AckTags} = variable_queue_fetch_delivery(Count, false, false, Count, VQ1),
+    {_Guids, VQ3} =
+        rabbit_variable_queue:requeue(AckTags, VQ2),
+
+    {VQ4, AckTags1} = variable_queue_fetch_delivery(Count, false, true, Count, VQ3),
+    {_Guids1, VQ5} =
+        rabbit_variable_queue:requeue(AckTags1, VQ4),
+
+    %% Ensure delivery count remains '0'. Lazy mode not supported
+    ExpectedProps = message_properties:new(6, false, Count, 0),
+
+    %% fetch and validate delivery count
+    %% _AckTags2 = [4,3,2,1,0]
+    {ExpectedProps, {Msgs, _AckTags2}, VQ6} =
+        rabbit_variable_queue:fetchwhile(
+          fun (Props) ->
+              (message_properties:get_delivery_count(Props) == 0) and
+                  (message_properties:get_expiry(Props) =< 5)
+          end,
+          fun (Msg, AckTag, {MsgAcc, AckAcc}) ->
+                  {[Msg | MsgAcc], [AckTag | AckAcc]}
+          end, {[], []}, VQ5),
+    true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
+
+    %% fetch remaining 5
+    VQ7 = lists:foldl(fun (N, VQN) ->
+                              {{Msg, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch_delivery(false, VQN),
+                              true = msg2int(Msg) == N,
+                              VQM
+                      end, VQ6, lists:seq(6, Count)),
+
+    %% should now be empty
+    {empty, VQ8} = rabbit_variable_queue:fetch_delivery(false, VQ7),
+
+    VQ8.
+
 test_dropfetchwhile_varying_ram_duration(Fun, VQ0) ->
     VQ1 = variable_queue_publish(false, 1, VQ0),
     VQ2 = variable_queue_set_ram_duration_target(0, VQ1),
@@ -1504,11 +1613,17 @@ variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun, PayloadFun,
     variable_queue_wait_for_shuffling_end(VQ1).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
+    variable_queue_fetch(fetch, Count, IsPersistent, IsDelivered, Len, VQ).
+
+variable_queue_fetch_delivery(Count, IsPersistent, IsDelivered, Len, VQ) ->
+    variable_queue_fetch(fetch_delivery, Count, IsPersistent, IsDelivered, Len, VQ).
+
+variable_queue_fetch(FetchType, Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
                         {{#basic_message { is_persistent = IsPersistent },
                           IsDelivered, AckTagN}, VQM} =
-                            rabbit_variable_queue:fetch(true, VQN),
+                            rabbit_variable_queue:FetchType(true, VQN),
                         Rem = rabbit_variable_queue:len(VQM),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
