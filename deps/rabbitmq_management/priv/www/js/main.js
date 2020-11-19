@@ -739,11 +739,11 @@ function postprocess() {
     update_multifields();
 }
 
-function url_pagination_template(template, defaultPage, defaultPageSize){
-    var page_number_request = fmt_page_number_request(template, defaultPage);
-    var page_size = fmt_page_size_request(template, defaultPageSize);
-    var name_request = fmt_filter_name_request(template, "");
-    var use_regex = fmt_regex_request(template, "") == "checked";
+function url_pagination_template_context(template, context, defaultPage, defaultPageSize){
+    var page_number_request = fmt_page_number_request(context, defaultPage);
+    var page_size = fmt_page_size_request(context, defaultPageSize);
+    var name_request = fmt_filter_name_request(context, "");
+    var use_regex = fmt_regex_request(context, "") == "checked";
     if (use_regex) {
         name_request = esc(name_request);
     }
@@ -752,6 +752,10 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
         '&page_size=' + page_size +
         '&name=' + name_request +
         '&use_regex=' + use_regex;
+}
+
+function url_pagination_template(template, defaultPage, defaultPageSize){
+    return url_pagination_template_context(template, template, defaultPage, defaultPageSize);
 }
 
 function stored_page_info(template, page_start){
@@ -780,6 +784,12 @@ function update_pages(template, page_start){
          case 'exchanges' : renderExchanges(); break;
          case 'connections' : renderConnections(); break;
          case 'channels' : renderChannels(); break;
+         default:
+             renderCallback = RENDER_CALLBACKS[template];
+             if (renderCallback != undefined) {
+                 renderCallback();
+             }
+             break;
      }
 }
 
