@@ -176,7 +176,9 @@ protocol(unknown) ->
 protocol(Version = {_Major, _Minor, _Revision}) ->
     protocol({'AMQP', Version});
 protocol({Family, Version}) ->
-    print("~s ~s", [Family, protocol_version(Version)]).
+    print("~s ~s", [Family, protocol_version(Version)]);
+protocol(Protocol) when is_binary(Protocol) ->
+    print("~s", [Protocol]).
 
 protocol_version(Arbitrary)
   when is_list(Arbitrary)                  -> Arbitrary;

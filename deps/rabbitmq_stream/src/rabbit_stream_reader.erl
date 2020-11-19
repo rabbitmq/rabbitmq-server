@@ -1257,7 +1257,7 @@ i(ssl_key_exchange, _, _) -> '';
 i(ssl_cipher, _, _) -> '';
 i(ssl_hash, _, _) -> '';
 i(channels,           _, _) -> 0;
-i(protocol, _, _) -> {<<"stream">>, ""};
+i(protocol, _, _) -> <<"stream">>;
 i(user_who_performed_action, Connection, ConnectionState) -> i(user, Connection, ConnectionState);
 i(user,              #stream_connection{user = U}, _) -> U#user.username;
 i(vhost,             #stream_connection{virtual_host = VirtualHost}, _) -> VirtualHost;

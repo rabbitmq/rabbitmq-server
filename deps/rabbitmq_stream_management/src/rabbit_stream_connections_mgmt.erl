@@ -28,7 +28,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
   try
-    Connections = do_connections_query(ReqData, Context),
+    Connections = keep_stream_connections(do_connections_query(ReqData, Context)),
     rabbit_mgmt_util:reply_list_or_paginate(Connections, ReqData, Context)
   catch
     {error, invalid_range_parameters, Reason} ->
@@ -51,3 +51,13 @@ do_connections_query(ReqData, Context) ->
       rabbit_mgmt_util:filter_tracked_conn_list(rabbit_connection_tracking:list(),
         ReqData, Context)
   end.
+
+keep_stream_connections(Connections) ->
+  lists:filter(fun(Connection) ->
+    case lists:keyfind(protocol, 1, Connection) of
+      {protocol, <<"stream">>} ->
+        true;
+      _ ->
+        false
+    end
+               end, Connections).

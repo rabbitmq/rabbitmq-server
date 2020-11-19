@@ -26,7 +26,7 @@ var DISABLED_STATS_STREAM_COLUMNS =
 COLUMNS['streamConnections'] = disable_stats?DISABLED_STATS_STREAM_COLUMNS:ALL_STREAM_COLUMNS;
 
 function renderStreamConnections() {
-  render({'connections': {path: url_pagination_template_context('stream-connections', 'streamConnections', 1, 5),
+  render({'connections': {path: url_pagination_template_context('stream-connections', 'streamConnections', 1, 100),
                           options: {sort:true}}},
                           'streamConnections', '#/stream-connections');
 }
