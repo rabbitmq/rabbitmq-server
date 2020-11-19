@@ -172,6 +172,9 @@ routing(Config) ->
                                            durable = false}),
     amqp_channel:call(Ch, #'queue.declare'{queue   = <<"durable_q">>,
                                            durable = true}),
+    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"stream_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue       = <<"autodel_q">>,
                                            auto_delete = true}),
     run(Config, [
