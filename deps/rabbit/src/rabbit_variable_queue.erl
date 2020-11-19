@@ -673,17 +673,11 @@ fetchwhile(Pred, Fun, Acc, State) ->
 %% Non-destructive fetch operation. Delivery counts are not incremented, hence
 %% any delivery-limit policies will never result in messages being dropped.
 %% Used for internal dead-lettering fetch operations.
-fetch(AckRequired, Delivery, State) ->
-    case queue_out(State) of
-        {empty, State1} ->
-            {empty, a(State1)};
-        {{value, MsgStatus}, State1} ->
-            %% it is possible that the message wasn't read from disk
-            %% at this point, so read it in.
-            {Msg, State2} = read_msg(MsgStatus, State1),
-            {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
-            {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
-    end.
+fetch(AckRequired, State) ->
+    process_fetch(AckRequired, State,
+        fun(Msg, MsgStatus) ->
+            {Msg, MsgStatus} %% no message manipulation
+        end).
 
 %% Delivery counts are incremented. Messages will be impacted delivery-limit
 %% policies and could be dropped of limits are exceeded. Ignore 'lazy' queues.
@@ -691,13 +685,20 @@ fetch_delivery(AckRequired, State = #vqstate { mode = lazy }) ->
     fetch(AckRequired, State);
 
 fetch_delivery(AckRequired, State) ->
+    process_fetch(AckRequired, State,
+        fun(Msg, MsgStatus) ->
+            inc_delivery_count(Msg, MsgStatus)
+        end).
+
+process_fetch(AckRequired, State, Fun) ->
     case queue_out(State) of
         {empty, State1} ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
-            %% see fetch/2 explanation on reading message at this point
+            %% it is possible that the message wasn't read from disk
+            %% at this point, so read it in.
             {Msg, State2} = read_msg(MsgStatus, State1),
-            {Msg1, MsgStatus1} = inc_delivery_count(Msg, MsgStatus),
+            {Msg1, MsgStatus1} = Fun(Msg, MsgStatus),
             {AckTag, State3} = remove(AckRequired, MsgStatus1, State2),
             {{Msg1, MsgStatus1#msg_status.is_delivered, AckTag}, a(State3)}
     end.
