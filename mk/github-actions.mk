@@ -51,11 +51,11 @@ DEPS_YAML_FILE = workflow_sources/deps.yml
 
 define dep_yaml_chunk
 $(eval SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(wildcard deps/$(1)/test/*_SUITE.erl)))))
-echo -n "\n- name: $(1)\n  suites:$(if $(SUITES),$(foreach suite,$(SUITES),\n  - name: $(suite)\n    time: 0), [])" >> $(DEPS_YAML_FILE);
+echo "\n- name: $(1)\n  suites:$(if $(SUITES),$(foreach suite,$(SUITES),\n  - name: $(suite)), [])" >> $(DEPS_YAML_FILE);
 endef
 
 $(DEPS_YAML_FILE):
-	@echo -n "#@data/values\n---\n#@overlay/match missing_ok=True\ndeps:" > $@
+	@echo "#@data/values\n---\n#@overlay/match missing_ok=True\ndeps:" > $@
 	@$(foreach dep,$(VENDORED_COMPONENTS),$(call dep_yaml_chunk,$(dep)))
 	@cat $@ | git stripspace > $@.fixed && mv $@.fixed $@
 
