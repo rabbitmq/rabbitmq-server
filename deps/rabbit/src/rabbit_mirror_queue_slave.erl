@@ -1041,7 +1041,7 @@ process_instruction({transform, TName, TVersion, TOpts, TFun},
             transform_mirror_queue(QName, TPid, TF, TFun, BQ, BQS)
         of
             {ok, BQS1} ->
-                {mirror_transform_complete, BQS1};
+                {transform_complete, BQS1};
             {error, mirror_transform_not_permitted = Reason} = Error ->
                 rabbit_transform:log_error(QName, TF, Reason),
                 {Error, BQS}

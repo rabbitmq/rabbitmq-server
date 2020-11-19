@@ -770,7 +770,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
                                         sender  = SenderPid,
                                         flow    = Flow},
                    Delivered,
-                   State = #q{q = Q, backing_queue = BQ}) ->
+                   State = #q{q = Q, backing_queue = BQ, delivery_limit = DL}) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Message, Confirm, State1),
     case attempt_delivery(Delivery, Props, Delivered, State1) of
@@ -1544,14 +1544,15 @@ handle_call({transform, TF = #transform{name     = TName,
     {Result, BQS2} =
         try
             [TVersion] = TVersions,  %% We only expect a single version
+            TPid = maps:get(transform_client, TOpts, undefined),
             rabbit_transform:log_info(QName, TF),
             BQS1 = BQ:transform(TName, TVersion, TOpts, TFun, BQS),
             %% Post check. Only apply transformation if still permitted.
             SPids = maps:get(expected_mirrors, TOpts, []),
-            case rabbit_transform:is_permitted(SPids) of
+            case rabbit_transform:is_permitted([TPid | SPids]) of
                 true  ->
                     rabbit_transform:log_success(QName, TF),
-                    {ok, BQS1};
+                    {transform_complete, BQS1};
                 false ->
                     rabbit_transform:log_error(QName, TF, transform_not_permitted),
                     {{error, transform_not_permitted}, BQS}
