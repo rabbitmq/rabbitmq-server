@@ -56,7 +56,9 @@ finish:
   name: finish
   needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)] + ['package-generic-unix']
   runs-on: ubuntu-18.04
-  if: #@ skip_ci_condition()
+  #! See https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#job-status-check-functions
+  #! as to why 'always()' is needed
+  if: #@ skip_ci_condition() + " && always()"
   #@yaml/text-templated-strings
   steps:
     - uses: technote-space/workflow-conclusion-action@v1

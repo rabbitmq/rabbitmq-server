@@ -3952,7 +3952,7 @@ jobs:
     - rabbit-ct-upgrade_preparation
     - rabbit-ct-vhost
     runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && always()'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5208,7 +5208,7 @@ jobs:
     - rabbitmq_web_stomp_examples
     - package-generic-unix
     runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && always()'
     steps:
     - uses: technote-space/workflow-conclusion-action@v1
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
