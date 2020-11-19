@@ -221,8 +221,13 @@ register() ->
 
 deregister_cleanup(_) -> ok.
 
+collect_mf(per_object, Callback) ->
+    collect(true, Callback);
 collect_mf(_Registry, Callback) ->
-    {ok, PerObjectMetrics} = application:get_env(rabbitmq_prometheus, return_per_object_metrics),
+    PerObjectMetrics = application:get_env(rabbitmq_prometheus, return_per_object_metrics, false),
+    collect(PerObjectMetrics, Callback).
+
+collect(PerObjectMetrics, Callback) ->
     [begin
          Data = get_data(Table, PerObjectMetrics),
          mf(Callback, Contents, Data)

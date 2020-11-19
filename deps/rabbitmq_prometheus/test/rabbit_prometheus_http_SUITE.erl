@@ -21,6 +21,7 @@ all() ->
         {group, config_port},
         {group, aggregated_metrics},
         {group, per_object_metrics},
+        {group, per_object_endpoint_metrics},
         {group, commercial}
     ].
 
@@ -34,7 +35,11 @@ groups() ->
             specific_erlang_metrics_present_test
         ]},
         {per_object_metrics, [], [
-            per_object_metrics_test,
+            globally_configure_per_object_metrics_test,
+            specific_erlang_metrics_present_test
+        ]},
+        {per_object_endpoint_metrics, [], [
+            endpoint_per_object_metrics,
             specific_erlang_metrics_present_test
         ]},
         {commercial, [], [
@@ -67,6 +72,12 @@ init_per_group(config_port, Config0) ->
     init_per_group(config_port, Config1, [{prometheus_port, 15772}]);
 init_per_group(per_object_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{return_per_object_metrics, true}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
+    init_per_group(aggregated_metrics, Config1);
+init_per_group(per_object_endpoint_metrics, Config0) ->
+    PathConfig = {rabbitmq_prometheus, [
+        {return_per_object_metrics, false}
+    ]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(aggregated_metrics, Config1);
 init_per_group(aggregated_metrics, Config0) ->
@@ -214,8 +225,14 @@ aggregated_metrics_test(Config) ->
     %% Check raft_entry_commit_latency_seconds because we are aggregating it
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds ", [{capture, none}, multiline])).
 
-per_object_metrics_test(Config) ->
-    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+endpoint_per_object_metrics(Config) ->
+    per_object_metrics_test(Config, "/metrics/per_object").
+
+globally_configure_per_object_metrics_test(Config) ->
+    per_object_metrics_test(Config, "/metrics").
+
+per_object_metrics_test(Config, Path) ->
+    {_Headers, Body} = http_get_with_pal(Config, Path, [], 200),
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
@@ -268,6 +285,9 @@ specific_erlang_metrics_present_test(Config) ->
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),
+    http_get(Config, Path, ReqHeaders, CodeExp).
+
+http_get(Config, Path, ReqHeaders, CodeExp) ->
     Port = proplists:get_value(prometheus_port, Config, 15692),
     URI = lists:flatten(io_lib:format("http://localhost:~p~s", [Port, Path])),
     {ok, {{_HTTP, CodeAct, _}, Headers, Body}} =
@@ -276,7 +296,11 @@ http_get(Config, ReqHeaders, CodeExp) ->
     {Headers, Body}.
 
 http_get_with_pal(Config, ReqHeaders, CodeExp) ->
-    {Headers, Body} = http_get(Config, ReqHeaders, CodeExp),
+    Path = proplists:get_value(prometheus_path, Config, "/metrics"),
+    http_get_with_pal(Config, Path, ReqHeaders, CodeExp).
+
+http_get_with_pal(Config, Path, ReqHeaders, CodeExp) ->
+    {Headers, Body} = http_get(Config, Path, ReqHeaders, CodeExp),
     %% Print and log response body - it makes is easier to find why a match failed
     ct:pal(Body),
     {Headers, Body}.

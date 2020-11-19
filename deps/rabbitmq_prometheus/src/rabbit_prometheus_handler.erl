@@ -31,20 +31,22 @@ is_authorized(ReqData, Context) ->
     {true, ReqData, Context}.
 
 setup() ->
-    TelemetryRegistry = telemetry_registry(),
+    setup_metrics(telemetry_registry()),
+    setup_metrics(per_object).
 
+setup_metrics(Registry) ->
     ScrapeDuration = [{name, ?SCRAPE_DURATION},
                       {help, "Scrape duration"},
                       {labels, ["registry", "content_type"]},
-                      {registry, TelemetryRegistry}],
+                      {registry, Registry}],
     ScrapeSize = [{name, ?SCRAPE_SIZE},
                   {help, "Scrape size, not encoded"},
                   {labels, ["registry", "content_type"]},
-                  {registry, TelemetryRegistry}],
+                  {registry, Registry}],
     ScrapeEncodedSize = [{name, ?SCRAPE_ENCODED_SIZE},
                          {help, "Scrape size, encoded"},
                          {labels, ["registry", "content_type", "encoding"]},
-                         {registry, TelemetryRegistry}],
+                         {registry, Registry}],
 
     prometheus_summary:declare(ScrapeDuration),
     prometheus_summary:declare(ScrapeSize),
@@ -106,14 +108,14 @@ format_metrics(Request, Registry) ->
     encode_format(ContentType, binary_to_list(Encoding), Scrape, Registry).
 
 render_format(ContentType, Registry) ->
-    TelemetryRegistry = telemetry_registry(),
+    %TelemetryRegistry = telemetry_registry(),
 
     Scrape = prometheus_summary:observe_duration(
-               TelemetryRegistry,
+               Registry,
                ?SCRAPE_DURATION,
                [Registry, ContentType],
                fun () -> prometheus_text_format:format(Registry) end),
-    prometheus_summary:observe(TelemetryRegistry,
+    prometheus_summary:observe(Registry,
                                ?SCRAPE_SIZE,
                                [Registry, ContentType],
                                iolist_size(Scrape)),

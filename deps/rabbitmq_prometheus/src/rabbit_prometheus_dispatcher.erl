@@ -14,11 +14,21 @@
 build_dispatcher() ->
     {ok, _} = application:ensure_all_started(prometheus),
     prometheus_registry:register_collectors([prometheus_rabbitmq_core_metrics_collector]),
+    prometheus_registry:register_collectors(per_object, [
+        prometheus_vm_system_info_collector,
+        prometheus_vm_dist_collector,
+        prometheus_vm_memory_collector,
+        prometheus_mnesia_collector,
+        prometheus_vm_statistics_collector,
+        prometheus_vm_msacc_collector,
+        prometheus_rabbitmq_core_metrics_collector
+        ]),
     rabbit_prometheus_handler:setup(),
     cowboy_router:compile([{'_', dispatcher()}]).
 
 dispatcher() ->
-    [{path() ++ "/[:registry]", rabbit_prometheus_handler, []}].
+    [{path() ++ "/[:registry]", rabbit_prometheus_handler, []},
+    {path() ++ "/[:per_object]", rabbit_prometheus_handler, []}].
 
 path() ->
     application:get_env(rabbitmq_prometheus, path, ?DEFAULT_PATH).
