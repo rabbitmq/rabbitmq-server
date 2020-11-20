@@ -13,6 +13,8 @@ jobs:
       uses: softprops/turnstyle@v1
       with:
         abort-after-seconds: 180
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: RECORD BUILD START
       id: buildevents
       run: |
