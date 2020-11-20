@@ -19,11 +19,34 @@ The process is fairly standard:
 If what you are going to work on is a substantial change, please first ask the core team
 of their opinion on [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
 
+## Running Tests
+
+To run all tests in a particular project:
+
+```
+cd deps/rabbit
+make tests
+```
+
+To run a specific suite:
+
+```
+cd deps/rabbit
+make ct-cluster_rename
+```
+
+You can also run specific test groups and tests:
+
+```
+cd deps/rabbit
+make ct-cluster_rename t=cluster_size_3:partial_one_by_one
+```
+
+Test output is in the `logs/` subdirectory.
 
 ## Code of Conduct
 
 See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
-
 
 ## Contributor Agreement
 
@@ -31,7 +54,6 @@ If you want to contribute a non-trivial change, please submit a signed copy of o
 [Contributor Agreement](https://github.com/rabbitmq/ca#how-to-submit) around the time
 you submit your pull request. This will make it much easier (in some cases, possible)
 for the RabbitMQ team at Pivotal to merge your contribution.
-
 
 ## Where to Ask Questions
 
