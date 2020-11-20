@@ -142,6 +142,16 @@ doest not contain a correlation ID.
 |17
 |Yes
 
+|<<declareproducer>>
+|Client
+|18
+|Yes
+
+|<<deleteproducer>>
+|Client
+|19
+|Yes
+
 |<<create>>
 |Client
 |998
@@ -159,7 +169,6 @@ doest not contain a correlation ID.
 Publish => Key Version Stream PublishedMessages
   Key => int16 // 0
   Version => int16
-  Stream => string // the name of the stream
   PublisherId => uint8
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
@@ -249,7 +258,7 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
 PublishError => Key Version [PublishingError]
   Key => int16 // 6
   Version => int16
-  PublisherId => int8
+  PublisherId => uint8
   PublishingError => PublishingId Code
   PublishingId => int64
   Code => int16 // code to identify the problem
@@ -422,12 +431,46 @@ QueryOffsetRequest => Key Version CorrelationId Reference Stream
   Reference => string // max 256 characters
   Stream => string
 
-QueryOffsetResponse => Key Version CorrelationId Reference Stream
+QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
   Key => int16 // 17
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
   Offset => int64
+```
+
+=== DeclarePublisher
+
+```
+DeclarePublisherRequest => Key Version CorrelationId [Reference] Stream
+  Key => int16 // 18
+  Version => int16
+  CorrelationId => int32
+  Reference => string // max 256 characters
+  Stream => string
+
+DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
+  Key => int16 // 17
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+  PublisherId => uint8
+```
+
+=== DeletePublisher
+
+```
+DeletePublisherRequest => Key Version CorrelationId PublisherId
+  Key => int16 // 18
+  Version => int16
+  CorrelationId => int32
+  PublisherId => uint8
+
+DeletePublisherResponse => Key Version CorrelationId ResponseCode
+  Key => int16 // 17
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
 ```
 
 === Create
