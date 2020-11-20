@@ -45,11 +45,11 @@ write_messages(_ClusterLeader, _PublisherId, <<>>) ->
   ok;
 write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
   % FIXME handle write error
-  ok = osiris:write(ClusterLeader, {PublisherId, PublishingId}, Message),
+  ok = osiris:write(ClusterLeader, undefined, {PublisherId, PublishingId}, Message),
   write_messages(ClusterLeader, PublisherId, Rest);
 write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
   % FIXME handle write error
-  ok = osiris:write(ClusterLeader, {PublisherId, PublishingId}, {batch, MessageCount, CompressionType, Batch}),
+  ok = osiris:write(ClusterLeader, undefined, {PublisherId, PublishingId}, {batch, MessageCount, CompressionType, Batch}),
   write_messages(ClusterLeader, PublisherId, Rest).
 
 
