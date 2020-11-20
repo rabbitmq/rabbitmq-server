@@ -4,8 +4,7 @@ These are files used to build GitHub Actions workflows.
 
 ## Build
 
-To generate the full workflow files in the `.github/` subdirectory~
-
+To generate the full workflow files in the `.github/` subdirectory:
 ```
 # Change to base dir of the rabbitmq/rabbitmq-server clone
 cd ..
