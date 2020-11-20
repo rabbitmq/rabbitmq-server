@@ -78,6 +78,7 @@
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
+        protocol,
         timeout, frame_max, channel_max, client_properties, connected_at,
         node, user_who_performed_action]).
 -define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).

@@ -463,6 +463,7 @@ tracked_connection_from_connection_created(EventDetails) ->
                         username     = pget(user, EventDetails),
                         connected_at = pget(connected_at, EventDetails),
                         pid          = pget(pid, EventDetails),
+                        protocol     = pget(protocol, EventDetails),
                         type         = pget(type, EventDetails),
                         peer_host    = pget(peer_host, EventDetails),
                         peer_port    = pget(peer_port, EventDetails)}.

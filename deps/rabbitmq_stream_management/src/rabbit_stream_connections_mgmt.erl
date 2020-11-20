@@ -13,6 +13,7 @@
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 dispatcher() -> [{"/stream-connections",        ?MODULE, []}].
 
@@ -28,7 +29,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
   try
-    Connections = keep_stream_connections(do_connections_query(ReqData, Context)),
+    Connections = do_connections_query(ReqData, Context),
     rabbit_mgmt_util:reply_list_or_paginate(Connections, ReqData, Context)
   catch
     {error, invalid_range_parameters, Reason} ->
@@ -46,9 +47,10 @@ augmented(ReqData, Context) ->
 do_connections_query(ReqData, Context) ->
   case rabbit_mgmt_util:disable_stats(ReqData) of
     false ->
-      augmented(ReqData, Context);
+      keep_stream_connections(augmented(ReqData, Context));
     true ->
-      rabbit_mgmt_util:filter_tracked_conn_list(rabbit_connection_tracking:list(),
+      TrackedStreamConnections = keep_tracked_stream_connections(rabbit_connection_tracking:list()),
+      rabbit_mgmt_util:filter_tracked_conn_list(TrackedStreamConnections,
         ReqData, Context)
   end.
 
@@ -60,4 +62,11 @@ keep_stream_connections(Connections) ->
       _ ->
         false
     end
+               end, Connections).
+
+keep_tracked_stream_connections(Connections) ->
+  lists:filter(fun(#tracked_connection{protocol = <<"stream">>}) ->
+                  true;
+                  (_) ->
+                  false
                end, Connections).
