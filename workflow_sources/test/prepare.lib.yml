@@ -12,6 +12,10 @@ prepare:
     branch_or_tag_name: ${{ steps.buildevents.outputs.branch_or_tag_name }}
   #@yaml/text-templated-strings
   steps:
+    - name: Turnstyle
+      uses: softprops/turnstyle@v1
+      with:
+        abort-after-seconds: 180
     - name: RECORD BUILD START
       id: buildevents
       run: |
