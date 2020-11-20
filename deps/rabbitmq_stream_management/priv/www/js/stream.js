@@ -1,11 +1,11 @@
 dispatcher_add(function(sammy) {
-    sammy.get('#/stream-connections', function() {
+    sammy.get('#/stream/connections', function() {
             renderStreamConnections();
         });
 
 });
 
-NAVIGATION['Stream'] = ['#/stream-connections', "monitoring"];
+NAVIGATION['Stream'] = ['#/stream/connections', "monitoring"];
 
 var ALL_STREAM_COLUMNS =
      {'Overview': [['user',   'User name', true],
@@ -26,9 +26,9 @@ var DISABLED_STATS_STREAM_COLUMNS =
 COLUMNS['streamConnections'] = disable_stats?DISABLED_STATS_STREAM_COLUMNS:ALL_STREAM_COLUMNS;
 
 function renderStreamConnections() {
-  render({'connections': {path: url_pagination_template_context('stream-connections', 'streamConnections', 1, 100),
+  render({'connections': {path: url_pagination_template_context('stream/connections', 'streamConnections', 1, 100),
                           options: {sort:true}}},
-                          'streamConnections', '#/stream-connections');
+                          'streamConnections', '#/stream/connections');
 }
 
 RENDER_CALLBACKS['streamConnections'] = function() { renderStreamConnections() };
