@@ -1782,9 +1782,9 @@ transform(_TF, _Fun, _Qs = []) -> ok;
 transform(TF = #transform{options = Opts}, Fun, Qs = [_|_]) ->
     Ref = make_ref(),
     Opts1 = maps:put(transform_ref, Ref, Opts),
-    AllSPids = lists:flatten([amqqueue:get_slave_pids(Q) || Q <- Qs]),
     Opts2 = maps:put(transform_client, TClient = self(), Opts1),
-    TF1 = TF#transform{options = maps:put(transform_ref, Ref, Opts2)},
+    TF1 = TF#transform{options = Opts2},
+    AllSPids = lists:flatten([amqqueue:get_slave_pids(Q) || Q <- Qs]),
     Pids = [spawn_link(rabbit_amqqueue, emit_transform, [TF1, Fun, Q, Ref, TClient])
                 || Q <- Qs],
     case wait_for_transform_pids(Ref, Pids ++ AllSPids, transform_complete) of
