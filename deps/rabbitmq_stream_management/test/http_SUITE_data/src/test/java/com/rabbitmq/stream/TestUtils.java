@@ -28,6 +28,8 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import okhttp3.Authenticator;
+import okhttp3.Credentials;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
@@ -186,5 +188,18 @@ public class TestUtils {
         c.close();
       }
     }
+  }
+
+  static Authenticator authenticator(String usernamePassword) {
+    return (route, response) -> {
+      if (response.request().header("Authorization") != null) {
+        return null; // Give up, we've already attempted to authenticate.
+      }
+      return response
+          .request()
+          .newBuilder()
+          .header("Authorization", Credentials.basic(usernamePassword, usernamePassword))
+          .build();
+    };
   }
 }

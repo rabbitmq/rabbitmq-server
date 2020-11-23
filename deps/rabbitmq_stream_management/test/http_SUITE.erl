@@ -64,6 +64,22 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 stream_management(Config) ->
+    UserManagement = <<"user-management">>,
+    UserMonitoring = <<"user-monitoring">>,
+    Vhost1 = <<"vh1">>,
+    Vhost2 = <<"vh2">>,
+    rabbit_ct_broker_helpers:add_user(Config, UserManagement),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, UserManagement, [management]),
+    rabbit_ct_broker_helpers:add_user(Config, UserMonitoring),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, UserMonitoring, [monitoring]),
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost1),
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost2),
+
+    rabbit_ct_broker_helpers:set_full_permissions(Config, UserManagement, Vhost1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, UserMonitoring, Vhost1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost2),
+
     StreamPortNode = get_stream_port(Config),
     ManagementPortNode = get_management_port(Config),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),

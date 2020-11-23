@@ -13,6 +13,7 @@
 -export([init/2, to_json/2, content_types_provided/2, resource_exists/2, is_authorized/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 dispatcher() -> [{"/stream/connections/:vhost", ?MODULE, []}].
 
@@ -40,7 +41,7 @@ to_json(ReqData, Context) ->
   end.
 
 is_authorized(ReqData, Context) ->
-  rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+  rabbit_mgmt_util:is_authorized_vhost_visible_for_monitoring(ReqData, Context).
 
 augmented(ReqData, Context) ->
   rabbit_mgmt_util:filter_conn_ch_list(
