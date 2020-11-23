@@ -19,8 +19,6 @@ jobs:
         echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-      with:
-        path: rabbitmq
     - name: CHECKOUT ERLANG/OTP MASTER
       uses: actions/checkout@v2
       with:
@@ -39,7 +37,7 @@ jobs:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/erlang_elixir
-        dockerfile: rabbitmq/ci/dockerfiles/git/erlang_elixir
+        dockerfile: ci/dockerfiles/git/erlang_elixir
         build_args: ERLANG_VERSION=${{ steps.erlang_sha.outputs.erlang_sha }}
         tags: git
     - name: CREATE BASE CI IMAGE (git)
@@ -49,9 +47,12 @@ jobs:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci-base
-        dockerfile: rabbitmq/ci/dockerfiles/ci-base
+        dockerfile: ci/dockerfiles/ci-base
         build_args: ERLANG_VERSION=git,SECONDARY_UMBRELLA_GITREFS=v3.7.28 v3.8.9
         tags: git
+    - name: CLEANUP ERLANG/OTP MASTER
+      run: |
+        rm -rf erlang-git-master
     - name: PREPARE BUILD IMAGE
       uses: docker/build-push-action@v1
       with:
@@ -59,7 +60,7 @@ jobs:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci
-        dockerfile: rabbitmq/ci/dockerfiles/ci
+        dockerfile: ci/dockerfiles/ci
         build_args: ERLANG_VERSION=git,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
         tags: erlang-git-rabbitmq-${{ github.sha }}
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master

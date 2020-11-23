@@ -20,8 +20,6 @@ prepare:
         echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-      with:
-        path: rabbitmq
     #@ if build_base_image:
     - name: CHECKOUT ERLANG/OTP MASTER
       uses: actions/checkout@v2
@@ -41,7 +39,7 @@ prepare:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/erlang_elixir
-        dockerfile: #@ 'rabbitmq/ci/dockerfiles/{}/erlang_elixir'.format(erlang_version)
+        dockerfile: #@ 'ci/dockerfiles/{}/erlang_elixir'.format(erlang_version)
         #@ build_args = {}
         #@ build_args["ERLANG_VERSION"] = "${{ steps.erlang_sha.outputs.erlang_sha }}"
         build_args: #@ to_build_args(build_args)
@@ -53,12 +51,15 @@ prepare:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci-base
-        dockerfile: rabbitmq/ci/dockerfiles/ci-base
+        dockerfile: ci/dockerfiles/ci-base
         #@ build_args = {}
         #@ build_args["ERLANG_VERSION"] = erlang_version
         #@ build_args["SECONDARY_UMBRELLA_GITREFS"] = ' '.join(data.values.secondary_umbrella_gitrefs)
         build_args: #@ to_build_args(build_args)
         tags: #@ erlang_version
+    - name: CLEANUP ERLANG/OTP MASTER
+      run: |
+        rm -rf erlang-git-master
     #@ end
     - name: PREPARE BUILD IMAGE
       uses: docker/build-push-action@v1
@@ -67,7 +68,7 @@ prepare:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci
-        dockerfile: rabbitmq/ci/dockerfiles/ci
+        dockerfile: ci/dockerfiles/ci
         #@ build_args = {}
         #@ build_args["ERLANG_VERSION"] = erlang_version
         #@ build_args["GITHUB_RUN_ID"] = '${{ github.run_id }}'
