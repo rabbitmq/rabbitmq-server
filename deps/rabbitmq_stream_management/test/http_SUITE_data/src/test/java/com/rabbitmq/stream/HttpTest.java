@@ -225,7 +225,6 @@ public class HttpTest {
       OkHttpClient client = httpClient(configuration.user);
       for (Entry<String, Integer> request : configuration.connectionRequests.entrySet()) {
         if (request.getValue() >= 0) {
-          System.out.println(request.getKey());
           assertThat(toMaps(get(client, "/stream/connections" + request.getKey())))
               .hasSize(request.getValue());
         } else {
