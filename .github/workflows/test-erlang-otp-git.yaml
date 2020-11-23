@@ -2,6 +2,7 @@ name: Test - Erlang git master
 on:
   schedule:
   - cron: 0 3 * * *
+  workflow_dispatch: null
 jobs:
   prepare:
     name: prepare
