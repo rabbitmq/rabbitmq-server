@@ -37,7 +37,7 @@ groups() ->
         subscribe_redelivery_operator_policy,
         subscribe_redelivery_limit_with_dlx,
         consume_redelivery_count,
-        subscribe_redelivery_limit_with_mirror_promotion
+        consume_redelivery_limit_with_mirror_promotion
     ],
     [
       {cluster_size_1_network, [], ClusterSize1Tests},
@@ -394,7 +394,7 @@ consume_redelivery_count(Config) ->
                                         requeue      = true}),
     ok.
 
-subscribe_redelivery_limit_with_mirror_promotion(Config) ->
+consume_redelivery_limit_with_mirror_promotion(Config) ->
     [Node1, Node2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     %% Stop replica node
