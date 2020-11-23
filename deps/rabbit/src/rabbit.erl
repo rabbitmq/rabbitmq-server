@@ -542,10 +542,9 @@ handle_app_error(Term) ->
 is_booting() -> is_booting(node()).
 
 is_booting(Node) when Node =:= node() ->
-    case rabbit_boot_state:get() of
-        booting           -> true;
-        _                 -> false
-    end;
+    rabbit_boot_state:has_reached_and_is_active(booting)
+    andalso
+    not rabbit_boot_state:has_reached(ready);
 is_booting(Node) ->
     case rpc:call(Node, rabbit, is_booting, []) of
         {badrpc, _} = Err -> Err;
@@ -870,11 +869,30 @@ start(normal, []) ->
         log_banner(),
         warn_if_kernel_config_dubious(),
         warn_if_disc_io_options_dubious(),
-        %% We run `rabbit` boot steps only for now. Plugins boot steps
-        %% will be executed as part of the postlaunch phase after they
-        %% are started.
-        rabbit_boot_steps:run_boot_steps([rabbit]),
-        run_postlaunch_phase(),
+
+        rabbit_log_prelaunch:debug(""),
+        rabbit_log_prelaunch:debug("== Plugins (prelaunch phase) =="),
+
+        rabbit_log_prelaunch:debug("Setting plugins up"),
+        %% `Plugins` contains all the enabled plugins, plus their
+        %% dependencies. The order is important: dependencies appear
+        %% before plugin which depend on them.
+        Plugins = rabbit_plugins:setup(),
+        rabbit_log_prelaunch:debug(
+          "Loading the following plugins: ~p", [Plugins]),
+        %% We can load all plugins and refresh their feature flags at
+        %% once, because it does not involve running code from the
+        %% plugins.
+        ok = app_utils:load_applications(Plugins),
+        ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(
+               Plugins),
+
+        rabbit_log_prelaunch:debug(""),
+        rabbit_log_prelaunch:debug("== Boot steps =="),
+
+        ok = rabbit_boot_steps:run_boot_steps([rabbit | Plugins]),
+        run_postlaunch_phase(Plugins),
+        rabbit_boot_state:set(core_started),
         {ok, SupPid}
     catch
         throw:{error, _} = Error ->
@@ -893,50 +911,39 @@ start(normal, []) ->
             Error
     end.
 
-run_postlaunch_phase() ->
-    spawn(fun() -> do_run_postlaunch_phase() end).
+run_postlaunch_phase(Plugins) ->
+    spawn(fun() -> do_run_postlaunch_phase(Plugins) end).
 
-do_run_postlaunch_phase() ->
+do_run_postlaunch_phase(Plugins) ->
     %% Once RabbitMQ itself is started, we need to run a few more steps,
     %% in particular start plugins.
     rabbit_log_prelaunch:debug(""),
     rabbit_log_prelaunch:debug("== Postlaunch phase =="),
 
     try
+        %% Successful boot resets node maintenance state.
         rabbit_log_prelaunch:debug(""),
-        rabbit_log_prelaunch:debug("== Plugins =="),
+        rabbit_log_prelaunch:info("Resetting node maintenance status"),
+        _ = rabbit_maintenance:unmark_as_being_drained(),
 
-        rabbit_log_prelaunch:debug("Setting plugins up"),
-        %% `Plugins` contains all the enabled plugins, plus their
-        %% dependencies. The order is important: dependencies appear
-        %% before plugin which depend on them.
-        Plugins = rabbit_plugins:setup(),
-        rabbit_log_prelaunch:debug(
-          "Starting the following plugins: ~p", [Plugins]),
-        %% We can load all plugins and refresh their feature flags at
-        %% once, because it does not involve running code from the
-        %% plugins.
-        app_utils:load_applications(Plugins),
-        ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(
-               Plugins),
+        rabbit_log_prelaunch:debug(""),
+        rabbit_log_prelaunch:debug("== Plugins (postlaunch phase) =="),
+
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
         %% before a plugin which depends on it gets a chance to start.
+        rabbit_log_prelaunch:debug(
+          "Starting the following plugins: ~p", [Plugins]),
         lists:foreach(
           fun(Plugin) ->
-                  ok = rabbit_boot_steps:run_boot_steps([Plugin]),
                   case application:ensure_all_started(Plugin) of
                       {ok, _} -> ok;
                       Error   -> throw(Error)
                   end
           end, Plugins),
 
-        %% Successful boot resets node maintenance state.
-        rabbit_log_prelaunch:info("Resetting node maintenance status"),
-        _ = rabbit_maintenance:unmark_as_being_drained(),
-
         %% Export definitions after all plugins have been enabled,
-        %% see rabbitmq/rabbitmq-server#2384
+        %% see rabbitmq/rabbitmq-server#2384.
         case rabbit_definitions:maybe_load_definitions() of
             ok           -> ok;
             DefLoadError -> throw(DefLoadError)
@@ -951,8 +958,9 @@ do_run_postlaunch_phase() ->
         %% The node is ready: mark it as such and log it.
         %% NOTE: PLEASE DO NOT ADD CRITICAL NODE STARTUP CODE AFTER THIS.
         ok = rabbit_lager:broker_is_started(),
-        ok = log_broker_started(
-               rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
+        ActivePlugins = rabbit_plugins:active(),
+        StrictlyPlugins = rabbit_plugins:strictly_plugins(ActivePlugins),
+        ok = log_broker_started(StrictlyPlugins),
 
         rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
         rabbit_boot_state:set(ready)

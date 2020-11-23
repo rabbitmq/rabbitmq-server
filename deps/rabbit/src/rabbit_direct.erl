@@ -75,7 +75,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 connect(Creds, VHost, Protocol, Pid, Infos) ->
     ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
-    case rabbit:is_running() of
+    case rabbit_boot_state:has_reached_and_is_active(core_started) of
         true  ->
             case whereis(rabbit_direct_client_sup) of
                 undefined ->
