@@ -11,7 +11,7 @@
 % a change/transformation - whose name and version needs to retained be in the
 % broker. The actual transform function remains private / hard-codedin the system.
 % During upgrade, permission to carry-out certains "steps" is queried through a
-% rabbit_transform:is_permited/{1,2} operation, which checks for any active
+% rabbit_transform:is_permitted/{0,1} operation, which checks for any active
 % partitions or alarms.
 
 -module(rabbit_transform).
@@ -40,6 +40,8 @@
     application:get_env(rabbit, queue_transform_memory_threshold, 1073741824)).
 -define(QUEUE_TRANSFORM_TOTAL_MESSAGE_THRESHOLD,
     application:get_env(rabbit, queue_transform_total_message_threshold, 10000000)).
+
+%% ----------------------------------------------------------------------------
 
 -spec table_name() -> atom().
 table_name() -> ?TAB.
