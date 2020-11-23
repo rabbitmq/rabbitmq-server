@@ -1,18 +1,175 @@
-FROM erlang:22.3
+## The contents of this file are subject to the Mozilla Public License
+## Version 1.1 (the "License"); you may not use this file except in
+## compliance with the License. You may obtain a copy of the License
+## at http://www.mozilla.org/MPL/
+#
+## Software distributed under the License is distributed on an "AS IS"
+## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+## the License for the specific language governing rights and
+## limitations under the License.
+#
+## The Original Code is RabbitMQ.
+#
+## The Initial Developer of the Original Code is GoPivotal, Inc.
+## Copyright (c) 2018-2019 Pivotal Software, Inc.  All rights reserved.
 
-ENV ERLANG_VERSION 22.3
+FROM buildpack-deps:stretch
 
-# elixir expects utf8.
-ENV ELIXIR_VERSION="v1.10.4" \
-	LANG=C.UTF-8
+ENV LANG='C.UTF-8'
+
+# Enable backports.
+RUN echo 'deb http://httpredir.debian.org/debian stretch-backports main' \
+    >> /etc/apt/sources.list.d/backports.list
+
+# Prerequisites to mess with packages.
+RUN apt-get clean && \
+    apt-get update && \
+    apt-get install -y -V --no-install-recommends \
+      apt-transport-https \
+      ca-certificates \
+      wget \
+      debconf-utils \
+      gnupg
+
+# Our own rabbitmq-erlang repository on Bintray to take Erlang and Elixir.
+RUN echo 'deb https://dl.bintray.com/rabbitmq-erlang/debian stretch erlang' > /etc/apt/sources.list.d/rabbitmq-erlang.list && \
+    wget -O- https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc | apt-key add -
+
+# We need to set an APT preference to make sure $ERLANG_VERSION is
+# used for all erlang* packages. Without this, apt-get(1) would try to
+# install dependencies using the latest version. This would conflict
+# with the strict pinning in all packages, and thus fail.
+RUN ERLANG_VERSION=1:22.3.4.2-1 && \
+    echo 'Package: erlang*' > /etc/apt/preferences.d/erlang && \
+    echo "Pin: version $ERLANG_VERSION" >> /etc/apt/preferences.d/erlang && \
+    echo 'Pin-Priority: 1000' >> /etc/apt/preferences.d/erlang
+
+# --------------------------------------------------------------------
+# Packages to build RabbitMQ.
+# --------------------------------------------------------------------
+
+RUN apt-get clean && \
+    apt-get update && \
+    apt-get install -y -V --fix-missing --no-install-recommends \
+      build-essential \
+      curl \
+      erlang-base-hipe \
+      erlang-nox \
+      erlang-dev \
+      erlang-src \
+      erlang-common-test \
+      erlang-dialyzer \
+      libcurl3-gnutls \
+      man \
+      mandoc \
+      openssh-client \
+      rsync \
+      xmlto \
+      xsltproc \
+      zip \
+      unzip
+
+RUN apt-get install -y -V --fix-missing --no-install-recommends \
+      -t stretch-backports \
+      git
+
+# Verify the version of the installed Erlang packages.
+# The version was pinned above, but if that specific version is unavailable,
+# the latest version will be installed, which we don't want.
+RUN set -xe \
+    && installed_version=$(dpkg -s erlang-nox | grep -E '^Version:' | awk '{ print $2; }') \
+    && wanted_version=$(awk '/^Pin:/ { print $3; }' < /etc/apt/preferences.d/erlang) \
+    && test "$installed_version" = "$wanted_version"
 
 RUN set -xe \
-	&& ELIXIR_DOWNLOAD_URL="https://github.com/elixir-lang/elixir/archive/${ELIXIR_VERSION}.tar.gz" \
-	&& ELIXIR_DOWNLOAD_SHA256="8518c78f43fe36315dbe0d623823c2c1b7a025c114f3f4adbb48e04ef63f1d9f" \
-	&& curl -fSL -o elixir-src.tar.gz $ELIXIR_DOWNLOAD_URL \
-	&& echo "$ELIXIR_DOWNLOAD_SHA256  elixir-src.tar.gz" | sha256sum -c - \
-	&& mkdir -p /usr/local/src/elixir \
-	&& tar -xzC /usr/local/src/elixir --strip-components=1 -f elixir-src.tar.gz \
-	&& rm elixir-src.tar.gz \
-	&& cd /usr/local/src/elixir \
-	&& make install clean
+    && REBAR3_VERSION="3.14.1" \
+    && REBAR3_DOWNLOAD_URL="https://github.com/erlang/rebar3/archive/${REBAR3_VERSION}.tar.gz" \
+    && REBAR3_DOWNLOAD_SHA256="b01275b6cbdb354dcf9ed686fce2b5f9dfdd58972ded9e970e31b9215a8521f2" \
+    && mkdir -p /usr/src/rebar3-src \
+    && curl -fSL -o rebar3-src.tar.gz "$REBAR3_DOWNLOAD_URL" \
+    && echo "$REBAR3_DOWNLOAD_SHA256 rebar3-src.tar.gz" | sha256sum -c - \
+    && tar -xzf rebar3-src.tar.gz -C /usr/src/rebar3-src --strip-components=1 \
+    && rm rebar3-src.tar.gz \
+    && cd /usr/src/rebar3-src \
+    && HOME=$PWD ./bootstrap \
+    && install -v ./rebar3 /usr/local/bin/ \
+    && rm -rf /usr/src/rebar3-src
+
+RUN set -xe \
+  && ELIXIR_VERSION="v1.10.4" \
+  && ELIXIR_DOWNLOAD_URL="https://github.com/elixir-lang/elixir/releases/download/${ELIXIR_VERSION}/Precompiled.zip" \
+  && ELIXIR_DOWNLOAD_SHA256="2ec9891ec75a7cbd22396c6e7874b912b526d5a4bfd3c27206eee2a198b250a5" \
+  && curl -fSL -o elixir-precompiled.zip $ELIXIR_DOWNLOAD_URL \
+  && echo "$ELIXIR_DOWNLOAD_SHA256 elixir-precompiled.zip" | sha256sum -c - \
+  && unzip -d /usr/local elixir-precompiled.zip \
+  && rm elixir-precompiled.zip
+
+# Put erl_call(1) in the $PATH.
+RUN ln -fs /usr/lib/erlang/lib/erl_interface-*/bin/erl_call /usr/bin/erl_call
+
+# --------------------------------------------------------------------
+# Packages used to test RabbitMQ.
+# --------------------------------------------------------------------
+
+RUN echo 'slapd    slapd/internal/generated_adminpw    password   rabbitmq' | debconf-set-selections && \
+    echo 'slapd    slapd/internal/adminpw    password   rabbitmq' | debconf-set-selections && \
+    echo 'slapd    slapd/password2    password   rabbitmq' | debconf-set-selections && \
+    echo 'slapd    slapd/password1    password   rabbitmq' | debconf-set-selections && \
+    echo 'slapd    slapd/backend    select    HDB' | debconf-set-selections
+
+RUN apt-get install -y -V --fix-missing --no-install-recommends \
+      ldap-utils \
+      netcat \
+      python-dev \
+      python-simplejson \
+      python3 \
+      slapd \
+      daemonize
+
+RUN git clone --depth 1 https://github.com/bats-core/bats-core.git && \
+    cd bats-core && \
+    ./install.sh /usr && \
+    cd .. && \
+    rm -rf bats-core
+
+RUN apt-get install -y -V --fix-missing --no-install-recommends \
+      ca-certificates-java \
+      openjdk-8-jre-headless \
+      openjdk-8-jdk-headless
+
+# Install Java tools separately to be sure it picks the version of
+# OpenJDK installed above.
+RUN apt-get install -y -V --fix-missing --no-install-recommends \
+      maven
+
+# .NET Core 2.0 requirements (https://www.microsoft.com/net/core#linuxdebian).
+RUN apt-get install -y -V --fix-missing --no-install-recommends \
+        apt-transport-https
+
+# .NET Core 2.0 (https://www.microsoft.com/net/core#linuxdebian).
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg && \
+    mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg && \
+    sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-debian-stretch-prod stretch main" > /etc/apt/sources.list.d/dotnetdev.list'
+
+# .NET Core 2.0 (https://www.microsoft.com/net/core#linuxdebian).
+RUN apt-get update && \
+    apt-get install -y -V --fix-missing --no-install-recommends \
+    gettext \
+    libunwind8 \
+    dotnet-sdk-2.0.0
+
+# .NET Core 2.0 warmup
+RUN mkdir warmup \
+    && cd warmup \
+    && dotnet new console \
+    && cd .. \
+    && rm -rf warmup \
+    && rm -rf /tmp/NuGetScratch
+
+# Terraform, used to run some testsuites on AWS.
+RUN TERRAFORM_VERSION=0.12.24 && \
+    wget -O terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" && \
+    unzip terraform.zip && \
+    mv terraform /usr/bin && \
+    rm -f terraform.zip && \
+    terraform --version

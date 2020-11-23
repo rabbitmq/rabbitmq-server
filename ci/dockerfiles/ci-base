@@ -2,6 +2,8 @@ ARG ERLANG_VERSION
 
 FROM eu.gcr.io/cf-rabbitmq-core/erlang_elixir:${ERLANG_VERSION}
 
+ENV ERLANG_VERSION ${ERLANG_VERSION}
+
 RUN apt-get update && apt-get install -y rsync zip
 
 RUN curl -L -o buildevents https://github.com/honeycombio/buildevents/releases/latest/download/buildevents-linux-amd64

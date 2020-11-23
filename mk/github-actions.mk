@@ -82,15 +82,21 @@ monorepo-actions: \
 
 DOCKER_REPO ?= eu.gcr.io/cf-rabbitmq-core
 
-CI_BASE_IMAGES = $(foreach v,$(ERLANG_VERSIONS),ci-base-image-$(v))
-.PHONY: $(CI_BASE_IMAGES)
-$(CI_BASE_IMAGES):
+.PHONY: erlang-elixir-image-%
+erlang-elixir-image-%:
 	docker build . \
-		-f ci/dockerfiles/$(subst ci-base-image-,,$@)/base \
-		-t $(DOCKER_REPO)/ci-base:$(subst ci-base-image-,,$@)
+		-f ci/dockerfiles/$*/erlang_elixir \
+		-t $(DOCKER_REPO)/erlang_elixir:$*
+
+.PHONY: ci-base-image-%
+ci-base-image-%:
+	docker build . \
+		-f ci/dockerfiles/ci-base \
+		-t $(DOCKER_REPO)/ci-base:$* \
+		--build-arg ERLANG_VERSION=$*
 
 .PHONY: ci-base-images
-ci-base-images: $(CI_BASE_IMAGES)
+ci-base-images: ci-base-image-22.3 ci-base-image-23.1
 
 PUSHES = $(foreach v,$(ERLANG_VERSIONS),push-base-image-$(v))
 .PHONY: $(PUSHES)
