@@ -3,7 +3,7 @@
 #@ load("util.star", "is_unique", "group_by_one", "to_build_args")
 #@ load("helpers.star", "ci_image_tag", "ci_dep_image", "skip_ci_condition")
 
-#@ def checks_job(dep):
+#@ def checks_job(dep, erlang_version=None):
 name: #@ dep.name + "-checks"
 needs: [prepare]
 runs-on: ubuntu-18.04
@@ -34,14 +34,14 @@ steps:
       repository: cf-rabbitmq-core/ci-(@= dep.name @)
       dockerfile: ci/dockerfiles/ci-dep
       #@ build_args = {}
-      #@ build_args["IMAGE_TAG"] = ci_image_tag()
+      #@ build_args["IMAGE_TAG"] = ci_image_tag(erlang_version)
       #@ build_args["BUILDEVENT_APIKEY"] = '${{ secrets.HONEYCOMB_API_KEY }}'
       #@ build_args["project"] = dep.name
       build_args: #@ to_build_args(build_args)
-      tags: (@= ci_image_tag() @)
+      tags: (@= ci_image_tag(erlang_version) @)
 #@ end
 
-#@ def ct_suites_job(dep, group):
+#@ def ct_suites_job(dep, group, erlang_version=None):
 name: #@ dep.name + "-ct-" + group["name"]
 needs:
   - prepare
@@ -57,7 +57,7 @@ steps:
   - name: PULL IMAGE
     run: |
       gcloud auth configure-docker
-      docker pull (@= ci_dep_image(dep.name) @)
+      docker pull (@= ci_dep_image(erlang_version, dep.name) @)
   #@ for suite in group["suites"]:
   - name: #@ "RUN ct-" + suite
     run: |
@@ -68,7 +68,7 @@ steps:
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --volume ${PWD}/ct-(@= suite @)-logs:/workspace/ct-logs \
-        (@= ci_dep_image(dep.name) @) \
+        (@= ci_dep_image(erlang_version, dep.name) @) \
         /workspace/rabbitmq/ci/scripts/ct-suite.sh
   - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
     #! https://github.com/marketplace/actions/upload-artifact
@@ -79,7 +79,7 @@ steps:
     with:
       name: (@= dep.name @)-ct-(@= suite @)-logs
       path: "ct-(@= suite @)-logs/*-ct-logs-*.tar.xz"
-  #@ if data.values.erlang_version == data.values.erlang_versions[0]:
+  #@ if erlang_version == data.values.erlang_versions[0]:
   #@ for version in data.values.secondary_umbrella_gitrefs:
   #@   logs_dir = 'ct-{}-logs-{}'.format(suite, version)
   - name: #@ "RUN ct-{} [mixed {}]".format(suite, version)
@@ -92,7 +92,7 @@ steps:
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env SECONDARY_UMBRELLA_VERSION=(@= version @) \
         --volume ${PWD}/(@= logs_dir @):/workspace/ct-logs \
-        (@= ci_dep_image(dep.name) @) \
+        (@= ci_dep_image(erlang_version, dep.name) @) \
         /workspace/rabbitmq/ci/scripts/ct-suite.sh
   - name: #@ 'ON FAILURE UPLOAD TESTS LOGS ARTIFACT [mixed {}]'.format(version)
     #! https://github.com/marketplace/actions/upload-artifact
@@ -108,7 +108,7 @@ steps:
   #@ end
 #@ end
 
-#@ def collect_job(dep):
+#@ def collect_job(dep, erlang_version=None):
 name: #@ dep.name
 needs: #@ [dep.name + "-checks"] + [dep.name + "-ct-" + group["name"] for group in group_by_one(dep.suites)]
 runs-on: ubuntu-18.04
@@ -124,12 +124,12 @@ steps:
   - name: RECORD STEP FINISH
     run: |
       gcloud auth configure-docker
-      docker pull (@= ci_dep_image(dep.name) @)
+      docker pull (@= ci_dep_image(erlang_version, dep.name) @)
       docker run \
         --env project=(@= dep.name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env STEP_START=${{ needs.(@= dep.name @)-checks.outputs.step_start }} \
-        (@= ci_dep_image(dep.name) @) \
+        (@= ci_dep_image(erlang_version, dep.name) @) \
         /workspace/rabbitmq/ci/scripts/collect.sh
 #@ end

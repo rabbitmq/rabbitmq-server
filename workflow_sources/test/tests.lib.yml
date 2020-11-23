@@ -2,7 +2,7 @@
 #@ load("util.star", "to_build_args")
 #@ load("helpers.star", "ci_image", "skip_ci_condition")
 
-#@ def tests_job(dep):
+#@ def tests_job(dep, erlang_version=None):
 name: #@ dep.name
 needs: [prepare]
 runs-on: ubuntu-18.04
@@ -20,7 +20,7 @@ steps:
   - name: RUN TESTS
     run: |
       gcloud auth configure-docker
-      docker pull (@= ci_image() @)
+      docker pull (@= ci_image(erlang_version) @)
       mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \
@@ -29,7 +29,7 @@ steps:
         --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
         --volume ${PWD}/ct-logs:/workspace/ct-logs \
         --oom-kill-disable \
-        (@= ci_image() @) \
+        (@= ci_image(erlang_version) @) \
         ci/scripts/tests.sh
   - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
     #! https://github.com/marketplace/actions/upload-artifact

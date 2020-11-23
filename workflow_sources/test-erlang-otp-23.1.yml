@@ -1,0 +1,18 @@
+#@ load("@ytt:data", "data")
+#@ load("@ytt:template", "template")
+#@ load("util.star", "merge")
+#@ load("prepare.lib.yml", "prepare_jobs")
+#@ load("dep.star", "dep_jobs")
+#@ load("finish.lib.yml", "finish_jobs")
+
+#@ erlang_version = data.values.erlang_versions[-1]
+
+#@ prepare = prepare_jobs(erlang_version=erlang_version, build_base_image=False)
+#@ deps = [dep_jobs(dep, erlang_version=erlang_version) for dep in data.values.deps]
+#@ finish = finish_jobs([prepare[k]['name'] for k in prepare], erlang_version=erlang_version)
+
+---
+name: #@ "Test - Erlang " + erlang_version
+#! https://github.com/k14s/ytt/issues/189
+a_magic_string_that_we_will_sed_to_on: push
+jobs: #@ merge([prepare] + deps + [finish])

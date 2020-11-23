@@ -59,32 +59,26 @@ $(DEPS_YAML_FILE):
 	@$(foreach dep,$(VENDORED_COMPONENTS),$(call dep_yaml_chunk,$(dep)))
 	@cat $@ | git stripspace > $@.fixed && mv $@.fixed $@
 
-ERLANG_VERSIONS = 22.3 23.1
-ERLANG_VERSIONS_YAML1 = [$(foreach v,$(ERLANG_VERSIONS),,"$(v)")]
-UNFIXED := [,"
-ERLANG_VERSIONS_YAML2 = $(subst $(UNFIXED),[",$(ERLANG_VERSIONS_YAML1))
-
 .github/workflows/base-images.yaml: $(YTT) $(wildcard workflow_sources/base_image/*)
 	ytt -f workflow_sources/base_image \
 	-f workflow_sources/base_values.yml \
-	--data-value-yaml erlang_versions='$(ERLANG_VERSIONS_YAML2)' \
 	--output-files /tmp
 	cat /tmp/workflow.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
 	> $@
 
-.github/workflows/test-erlang-otp-%.yaml: $(YTT) $(DEPS_YAML_FILE) $(wildcard workflow_sources/test/*)
+.github/workflows/test-erlang-otp-%.yaml: \
+  $(YTT) $(DEPS_YAML_FILE) workflow_sources/test-erlang-otp-%.yml $(wildcard workflow_sources/test/*)
 	ytt -f workflow_sources/test \
 	-f workflow_sources/base_values.yml \
 	-f $(DEPS_YAML_FILE) \
-	--data-value-yaml erlang_versions='$(ERLANG_VERSIONS_YAML2)' \
-	--data-value erlang_version=$* \
+	-f workflow_sources/test-erlang-otp-$*.yml \
 	--output-files /tmp
-	cat /tmp/workflow.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
+	cat /tmp/test-erlang-otp-$*.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
 	> $@
 
 monorepo-actions: \
   .github/workflows/base-images.yaml \
-  $(foreach v,$(ERLANG_VERSIONS), .github/workflows/test-erlang-otp-$(v).yaml)
+  $(patsubst workflow_sources/%.yml,.github/workflows/%.yaml,$(wildcard workflow_sources/test-erlang-otp-*.yml))
 
 DOCKER_REPO ?= eu.gcr.io/cf-rabbitmq-core
 

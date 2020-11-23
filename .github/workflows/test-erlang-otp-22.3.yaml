@@ -17,6 +17,8 @@ jobs:
         echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
+      with:
+        path: rabbitmq
     - name: PREPARE BUILD IMAGE
       uses: docker/build-push-action@v1
       with:
@@ -24,7 +26,7 @@ jobs:
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci
-        dockerfile: ci/dockerfiles/ci
+        dockerfile: rabbitmq/ci/dockerfiles/ci
         build_args: ERLANG_VERSION=22.3,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
         tags: erlang-22.3-rabbitmq-${{ github.sha }}
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
