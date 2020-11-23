@@ -6,6 +6,12 @@ jobs:
   cleanup-images:
     name: cleanup-images
     runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        image:
+        - ci
+        - ci-base
+        - ci-rabbit
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -13,39 +19,9 @@ jobs:
         export_default_credentials: true
     - run: |
         gcloud auth configure-docker
-    - name: CLEAN OLD ci IMAGES
+    - name: CLEAN OLD ${{ matrix.image }} IMAGES
       env:
-        IMAGE: eu.gcr.io/cf-rabbitmq-core/ci
-      run: |
-        DATE=$(date -d "-1 week" '+%Y-%m-%d')
-        C=0
-        for digest in $(gcloud container images list-tags ${IMAGE} --limit=999999 --sort-by=TIMESTAMP \
-          --filter="timestamp.datetime < '${DATE}'" --format='get(digest)'); do
-          (
-            set -x
-            gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
-          )
-          C=$(expr $C + 1)
-        done
-        echo "Deleted ${C} images in ${IMAGE}." >&2
-    - name: CLEAN OLD ci-base IMAGES
-      env:
-        IMAGE: eu.gcr.io/cf-rabbitmq-core/ci-base
-      run: |
-        DATE=$(date -d "-1 week" '+%Y-%m-%d')
-        C=0
-        for digest in $(gcloud container images list-tags ${IMAGE} --limit=999999 --sort-by=TIMESTAMP \
-          --filter="timestamp.datetime < '${DATE}'" --format='get(digest)'); do
-          (
-            set -x
-            gcloud container images delete -q --force-delete-tags "${IMAGE}@${digest}"
-          )
-          C=$(expr $C + 1)
-        done
-        echo "Deleted ${C} images in ${IMAGE}." >&2
-    - name: CLEAN OLD ci-rabbit IMAGES
-      env:
-        IMAGE: eu.gcr.io/cf-rabbitmq-core/ci-rabbit
+        IMAGE: eu.gcr.io/cf-rabbitmq-core/${{ matrix.image }}
       run: |
         DATE=$(date -d "-1 week" '+%Y-%m-%d')
         C=0
