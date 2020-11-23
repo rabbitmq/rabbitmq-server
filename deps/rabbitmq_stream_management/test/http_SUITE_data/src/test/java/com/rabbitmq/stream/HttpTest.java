@@ -82,10 +82,12 @@ public class HttpTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
   static List<Map<String, Object>> toMaps(String json) {
     return Arrays.asList(gson.fromJson(json, Map[].class));
   }
 
+  @SuppressWarnings("unchecked")
   static Map<String, Object> toMap(String json) {
     return gson.fromJson(json, Map.class);
   }
