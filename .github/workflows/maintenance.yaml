@@ -4,14 +4,13 @@ on:
   - cron: '0 2 * * *'
   workflow_dispatch:
 jobs:
-  cleanup-images:
-    name: cleanup-images
+  cleanup-ci-images:
+    name: cleanup-ci-images
     runs-on: ubuntu-18.04
     strategy:
       matrix:
         image:
         - ci
-        - ci-base
         - ci-rabbit
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
