@@ -125,7 +125,6 @@ deps:
 
 - name: rabbitmq_amqp1_0
   skip_dialyzer: true
-  skip_tests: true
   suites:
   - name: amqp10_client
   - name: command
