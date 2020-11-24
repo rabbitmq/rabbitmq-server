@@ -856,7 +856,7 @@ port_receive_loop(Port, Stdout, Options, Until, DumpTimer) ->
             end,
   receive
       {Port, {exit_status, X}} ->
-          erlang:cancel_timer(DumpTimer),
+          timer:cancel(DumpTimer),
           DropStdout = lists:member(drop_stdout, Options) orelse
               Stdout =:= "",
           if
@@ -879,7 +879,7 @@ port_receive_loop(Port, Stdout, Options, Until, DumpTimer) ->
                       nomatch -> {error, X, Stdout}
                   end
           end;
-      {timeout, DumpTimer, _} ->
+      dump_output ->
           DropStdout = lists:member(drop_stdout, Options) orelse
               Stdout =:= "",
           if
@@ -898,7 +898,8 @@ port_receive_loop(Port, Stdout, Options, Until, DumpTimer) ->
   end.
 
 stdout_dump_timer() ->
-    erlang:start_timer(30000, self(), dump_output, []).
+    {ok, TRef} = timer:send_after(30000, dump_output),
+    TRef.
 
 make(Config, Dir, Args) ->
     make(Config, Dir, Args, []).
