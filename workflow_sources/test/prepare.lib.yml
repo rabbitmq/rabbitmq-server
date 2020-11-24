@@ -94,6 +94,9 @@ prepare:
           ci/scripts/collect.sh
 xref:
   name: xref
+  #@ if build_base_image:
+  needs: [prepare]
+  #@ end
   runs-on: ubuntu-18.04
   if: #@ skip_ci_condition()
   #@yaml/text-templated-strings
@@ -141,6 +144,9 @@ xref:
 #@ if/end erlang_version == data.values.erlang_versions[-1]:
 dialyze:
   name: dialyze
+  #@ if build_base_image:
+  needs: [prepare]
+  #@ end
   runs-on: ubuntu-18.04
   if: #@ skip_ci_condition()
   #@yaml/text-templated-strings
