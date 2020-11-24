@@ -286,7 +286,7 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                       correlation = Correlation0,
                       soft_limit = SftLmt,
                       slow = Slow0} = State) ->
-    ok = osiris:write(LeaderPid, Seq, msg_to_iodata(Msg)),
+    ok = osiris:write(LeaderPid, undefined, Seq, msg_to_iodata(Msg)),
     Correlation = case MsgId of
                       undefined ->
                           Correlation0;
@@ -308,7 +308,7 @@ dequeue(_, _, _, #stream_client{name = Name}) ->
     {protocol_error, not_implemented, "basic.get not supported by stream queues ~s",
      [rabbit_misc:rs(Name)]}.
 
-handle_event({osiris_written, From, Corrs}, State = #stream_client{correlation = Correlation0,
+handle_event({osiris_written, From, _WriterId, Corrs}, State = #stream_client{correlation = Correlation0,
                                                    soft_limit = SftLmt,
                                                    slow = Slow0,
                                                    name = Name}) ->

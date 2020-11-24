@@ -17,7 +17,7 @@
 -module(rabbit_stream_utils).
 
 %% API
--export([enforce_correct_stream_name/1, write_messages/3, parse_map/2,
+-export([enforce_correct_stream_name/1, write_messages/4, parse_map/2,
          auth_mechanisms/1, auth_mechanism_to_module/2,
          check_configure_permitted/3, check_write_permitted/3, check_read_permitted/3,
          extract_stream_list/2]).
@@ -41,17 +41,26 @@ check_name(<<"">>) ->
 check_name(_Name) ->
   ok.
 
-write_messages(_ClusterLeader, _PublisherId, <<>>) ->
+write_messages(_ClusterLeader, undefined, _PublisherId, <<>>) ->
   ok;
-write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
+write_messages(ClusterLeader, undefined, PublisherId, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
   % FIXME handle write error
   ok = osiris:write(ClusterLeader, undefined, {PublisherId, PublishingId}, Message),
-  write_messages(ClusterLeader, PublisherId, Rest);
-write_messages(ClusterLeader, PublisherId, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
+  write_messages(ClusterLeader, undefined, PublisherId, Rest);
+write_messages(ClusterLeader, undefined, PublisherId, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
   % FIXME handle write error
   ok = osiris:write(ClusterLeader, undefined, {PublisherId, PublishingId}, {batch, MessageCount, CompressionType, Batch}),
-  write_messages(ClusterLeader, PublisherId, Rest).
-
+  write_messages(ClusterLeader, undefined, PublisherId, Rest);
+write_messages(_ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
+  ok;
+write_messages(ClusterLeader, PublisherRef, PublisherId, <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary, Rest/binary>>) ->
+  % FIXME handle write error
+  ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
+  write_messages(ClusterLeader, PublisherRef, PublisherId, Rest);
+write_messages(ClusterLeader, PublisherRef, PublisherId, <<PublishingId:64, 1:1, CompressionType:3, _Unused:4, MessageCount:16, BatchSize:32, Batch:BatchSize/binary, Rest/binary>>) ->
+  % FIXME handle write error
+  ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, {batch, MessageCount, CompressionType, Batch}),
+  write_messages(ClusterLeader, PublisherRef, PublisherId, Rest).
 
 parse_map(<<>>, _Count) ->
   {#{}, <<>>};

@@ -442,32 +442,32 @@ QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
 === DeclarePublisher
 
 ```
-DeclarePublisherRequest => Key Version CorrelationId [Reference] Stream
+DeclarePublisherRequest => Key Version CorrelationId PublisherId [Reference] Stream
   Key => int16 // 18
   Version => int16
   CorrelationId => int32
+  PublisherId => uint8
   Reference => string // max 256 characters
   Stream => string
 
 DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
-  Key => int16 // 17
+  Key => int16 // 18
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
-  PublisherId => uint8
 ```
 
 === DeletePublisher
 
 ```
 DeletePublisherRequest => Key Version CorrelationId PublisherId
-  Key => int16 // 18
+  Key => int16 // 19
   Version => int16
   CorrelationId => int32
   PublisherId => uint8
 
 DeletePublisherResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 17
+  Key => int16 // 19
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
