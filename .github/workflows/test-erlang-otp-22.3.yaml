@@ -516,6 +516,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7253,6 +7254,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7262,6 +7264,42 @@ jobs:
       if: failure()
       with:
         name: amqp_client-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
+  amqp10_client:
+    name: amqp10_client
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=amqp10_client \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: amqp10_client-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
   amqp10_common:
     name: amqp10_common
@@ -7288,6 +7326,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7323,6 +7362,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7358,6 +7398,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7393,6 +7434,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7402,6 +7444,42 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_auth_backend_http-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_auth_backend_ldap:
+    name: rabbitmq_auth_backend_ldap
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_auth_backend_ldap \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_auth_backend_ldap-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_backend_oauth2:
     name: rabbitmq_auth_backend_oauth2
@@ -7428,6 +7506,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7463,6 +7542,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7498,6 +7578,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7567,6 +7648,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7602,6 +7684,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7637,6 +7720,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7672,6 +7756,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7707,6 +7792,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7742,6 +7828,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7777,6 +7864,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7786,6 +7874,42 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_management_agent-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_mqtt:
+    name: rabbitmq_mqtt
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_mqtt \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_mqtt-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_common:
     name: rabbitmq_peer_discovery_common
@@ -7812,6 +7936,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7821,6 +7946,50 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_peer_discovery_common-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_peer_discovery_aws:
+    name: rabbitmq_peer_discovery_aws
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PREPARE TERRAFORM SECRETS
+      run: |
+        mkdir terraform && chmod 777 terraform
+        echo "${{ secrets.TERRAFORM_SSH_KEY }}" > terraform/id_rsa_terraform
+        echo "${{ secrets.TERRAFORM_SSH_KEY_PUB }}" > terraform/id_rsa_terraform.pub
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_peer_discovery_aws \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+          --env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+          --env SSH_KEY=/workspace/terraform/id_rsa_terraform \
+          --volume ${PWD}/terraform:/workspace/terraform \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_peer_discovery_aws-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_k8s:
     name: rabbitmq_peer_discovery_k8s
@@ -7847,6 +8016,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7882,6 +8052,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7891,6 +8062,42 @@ jobs:
       if: failure()
       with:
         name: rabbitmq_peer_discovery_consul-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_peer_discovery_etcd:
+    name: rabbitmq_peer_discovery_etcd
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_peer_discovery_etcd \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_peer_discovery_etcd-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_prometheus:
     name: rabbitmq_prometheus
@@ -7917,6 +8124,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7952,6 +8160,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7987,6 +8196,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8022,6 +8232,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8057,6 +8268,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8092,6 +8304,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8127,6 +8340,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8162,6 +8376,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8197,6 +8412,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8232,6 +8448,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8267,6 +8484,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8302,6 +8520,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8337,6 +8556,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8372,6 +8592,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8407,6 +8628,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8442,6 +8664,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8502,10 +8725,12 @@ jobs:
     - rabbit_common
     - rabbit
     - amqp_client
+    - amqp10_client
     - amqp10_common
     - rabbitmq_amqp1_0
     - rabbitmq_auth_backend_cache
     - rabbitmq_auth_backend_http
+    - rabbitmq_auth_backend_ldap
     - rabbitmq_auth_backend_oauth2
     - rabbitmq_auth_mechanism_ssl
     - rabbitmq_aws
@@ -8517,9 +8742,12 @@ jobs:
     - rabbitmq_jms_topic_exchange
     - rabbitmq_management
     - rabbitmq_management_agent
+    - rabbitmq_mqtt
     - rabbitmq_peer_discovery_common
+    - rabbitmq_peer_discovery_aws
     - rabbitmq_peer_discovery_k8s
     - rabbitmq_peer_discovery_consul
+    - rabbitmq_peer_discovery_etcd
     - rabbitmq_prometheus
     - rabbitmq_random_exchange
     - rabbitmq_recent_history_exchange

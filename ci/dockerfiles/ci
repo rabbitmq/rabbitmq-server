@@ -12,15 +12,15 @@ ARG current_rmq_ref
 
 ARG RABBITMQ_VERSION
 
-ENV GITHUB_RUN_ID $GITHUB_RUN_ID
-ENV GITHUB_SHA $GITHUB_SHA
+ENV GITHUB_RUN_ID=${GITHUB_RUN_ID}
+ENV GITHUB_SHA=${GITHUB_SHA}
 
-ENV base_rmq_ref $base_rmq_ref
-ENV current_rmq_ref $current_rmq_ref
+ENV base_rmq_ref=${base_rmq_ref}
+ENV current_rmq_ref=${current_rmq_ref}
 
-ENV RABBITMQ_VERSION $RABBITMQ_VERSION
+ENV RABBITMQ_VERSION=${RABBITMQ_VERSION}
 
-ENV BUILDEVENT_CIPROVIDER GitHubActions
+ENV BUILDEVENT_CIPROVIDER=GitHubActions
 
 WORKDIR /workspace/rabbitmq
 
