@@ -156,3 +156,10 @@ docker: local-ci-image
 		--oom-score-adj -500 \
 		$(LOCAL_IMAGE) \
 		/bin/bash
+
+.PHONY: distclean-%
+distclean-%:
+	$(MAKE) -C deps/$* distclean || echo "Failed to distclean $*"
+
+.PHONY: monorepo-distclean
+monorepo-distclean: $(foreach dep,$(VENDORED_COMPONENTS),distclean-$(dep))
