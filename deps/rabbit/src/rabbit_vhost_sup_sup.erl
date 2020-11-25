@@ -7,7 +7,7 @@
 
 -module(rabbit_vhost_sup_sup).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(supervisor2).
 

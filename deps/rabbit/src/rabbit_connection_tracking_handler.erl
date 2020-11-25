@@ -21,7 +21,7 @@
 %% for compatibility with previous versions of CLI tools
 -export([close_connections/3]).
 
--include_lib("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "connection tracking event handler"},

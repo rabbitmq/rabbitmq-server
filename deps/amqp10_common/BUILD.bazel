@@ -1,0 +1,45 @@
+load("@bazel_erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+# load("@bazel_erlang//:ct.bzl", "ct_test")
+
+genrule(
+    name = "codegen",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-1.0/messaging.xml",
+        "//deps/rabbitmq_codegen:amqp-1.0/security.xml",
+        "//deps/rabbitmq_codegen:amqp-1.0/transport.xml",
+        "//deps/rabbitmq_codegen:amqp-1.0/transactions.xml",
+    ],
+    outs = ["include/amqp10_framing.hrl"],
+    tools = ["codegen.py"],
+    cmd = "env PYTHONPATH=deps/rabbitmq_codegen python3 $(location codegen.py) hrl $(SRCS) > $@",
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    srcs = glob(["src/*.erl"]),
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    # deps = ["//deps/rabbit_common:bazel_erlang_lib"]
+    visibility = ["//visibility:public"],
+)
+
+# ct_test(
+#     name = "system_SUITE",
+#     suites = ["test/system_SUITE.erl"],
+#     hdrs = glob(["include/*.hrl"]),
+#     deps = [":bazel_erlang_lib"],
+# )
+
+# ct_test(
+#     name = "unit_SUITE",
+#     suites = ["test/unit_SUITE.erl"],
+#     hdrs = glob(["include/*.hrl"]),
+#     deps = [":bazel_erlang_lib"],
+# )
+
+# test_suite(
+#     name = "all",
+#     tests = [
+#         "system_SUITE",
+#         "unit_SUITE",
+#     ],
+# )

@@ -7,7 +7,7 @@
 
 -module(term_to_binary_compat).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([term_to_binary_1/1]).
 

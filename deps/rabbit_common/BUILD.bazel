@@ -1,0 +1,108 @@
+load("@bazel_erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@bazel_erlang//:bazel_erlang_app.bzl", "bazel_erlang_app")
+load("@bazel_erlang//:ct.bzl", "ct_test")
+
+genrule(
+    name = "codegen",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+        "//deps/rabbitmq_codegen:credit_extension.json",
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
+    ],
+    outs = ["include/rabbit_framing.hrl"],
+    tools = [
+        "codegen.py",
+        "//deps/rabbitmq_codegen:amqp_codegen.py",
+    ],
+    cmd = "env PYTHONPATH=deps/rabbitmq_codegen python3 $(location codegen.py) --ignore-conflicts header $(SRCS) $@",
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    srcs = glob(["src/*.erl"]),
+    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+    visibility = ["//visibility:public"],
+)
+
+bazel_erlang_app(
+    name = "bazel_erlang_app_test",
+    app_name = "rabbit_common",
+    srcs = glob(["src/*.erl"]),
+    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+    erlc_opts = [
+        "+{parse_transform,lager_transform}",
+        "+{lager_extra_sinks,[rabbit_log,rabbit_log_channel,rabbit_log_connection,rabbit_log_feature_flags,rabbit_log_federation,rabbit_log_ldap,rabbit_log_mirroring,rabbit_log_osiris,rabbit_log_prelaunch,rabbit_log_queue,rabbit_log_ra,rabbit_log_shovel,rabbit_log_upgrade]}",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+# There are compile macros conditional for tests, so we can't just use the regular version of :bazel_erlang_lib
+ct_test(
+    name = "rabbit_env_SUITE",
+    suites = ["test/rabbit_env_SUITE.erl"],
+    hdrs = glob(["include/*.hrl"]),
+    deps = [
+        ":bazel_erlang_app_test",
+        "//deps/rabbit:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+ct_test(
+    name = "supervisor2_SUITE",
+    suites = ["test/supervisor2_SUITE.erl"],
+    hdrs = glob(["include/*.hrl"]),
+    deps = [
+        ":bazel_erlang_app_test",
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+ct_test(
+    name = "unit_priority_queue_SUITE",
+    suites = ["test/unit_priority_queue_SUITE.erl"],
+    hdrs = glob(["include/*.hrl"]),
+    deps = [
+        ":bazel_erlang_app_test",
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+ct_test(
+    name = "unit_SUITE",
+    suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
+    hdrs = glob(["include/*.hrl"]),
+    deps = [
+        ":bazel_erlang_app_test",
+        "@proper//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "@credentials_obfuscation//:bazel_erlang_lib",
+    ],
+)
+
+ct_test(
+    name = "worker_pool_SUITE",
+    suites = ["test/worker_pool_SUITE.erl"],
+    hdrs = glob(["include/*.hrl"]),
+    deps = [
+        ":bazel_erlang_app_test",
+        "@proper//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+    ],
+)
+
+test_suite(
+    name = "all",
+    tests = [
+        "rabbit_env_SUITE",
+        "supervisor2_SUITE",
+        "unit_priority_queue_SUITE",
+        "unit_SUITE",
+        "worker_pool_SUITE",
+    ],
+)

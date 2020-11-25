@@ -40,7 +40,7 @@
 %%  * rabbit_registry
 %%  * rabbit_event
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,

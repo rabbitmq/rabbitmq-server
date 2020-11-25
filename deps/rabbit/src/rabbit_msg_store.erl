@@ -27,7 +27,7 @@
 
 %%----------------------------------------------------------------------------
 
--include("rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
 -define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
