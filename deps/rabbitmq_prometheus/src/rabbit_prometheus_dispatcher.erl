@@ -27,8 +27,7 @@ build_dispatcher() ->
     cowboy_router:compile([{'_', dispatcher()}]).
 
 dispatcher() ->
-    [{path() ++ "/[:registry]", rabbit_prometheus_handler, []},
-    {path() ++ "/[:per_object]", rabbit_prometheus_handler, []}].
+    [{path() ++ "/[:registry]", rabbit_prometheus_handler, []}].
 
 path() ->
     application:get_env(rabbitmq_prometheus, path, ?DEFAULT_PATH).
