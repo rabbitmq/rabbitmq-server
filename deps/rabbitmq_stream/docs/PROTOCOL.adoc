@@ -152,6 +152,11 @@ doest not contain a correlation ID.
 |19
 |Yes
 
+|<<querypublishersequence>>
+|Client
+|20
+|Yes
+
 |<<create>>
 |Client
 |998
@@ -436,18 +441,18 @@ QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
-  Offset => int64
+  Offset => uint64
 ```
 
 === DeclarePublisher
 
 ```
-DeclarePublisherRequest => Key Version CorrelationId PublisherId [Reference] Stream
+DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherReference] Stream
   Key => int16 // 18
   Version => int16
   CorrelationId => int32
   PublisherId => uint8
-  Reference => string // max 256 characters
+  PublisherReference => string // max 256 characters
   Stream => string
 
 DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
@@ -471,6 +476,24 @@ DeletePublisherResponse => Key Version CorrelationId ResponseCode
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
+```
+
+=== QueryPublisherSequence
+
+```
+QueryPublisherRequest => Key Version CorrelationId PublisherReference Stream
+  Key => int16 // 20
+  Version => int16
+  CorrelationId => int32
+  PublisherReference => string // max 256 characters
+  Stream => string
+
+QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
+  Key => int16 // 20
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+  Sequence => uint64
 ```
 
 === Create
