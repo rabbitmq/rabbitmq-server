@@ -226,7 +226,7 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds ", [{capture, none}, multiline])).
 
 endpoint_per_object_metrics(Config) ->
-    per_object_metrics_test(Config, "/metrics/per_object").
+    per_object_metrics_test(Config, "/metrics/per-object").
 
 globally_configure_per_object_metrics_test(Config) ->
     per_object_metrics_test(Config, "/metrics").

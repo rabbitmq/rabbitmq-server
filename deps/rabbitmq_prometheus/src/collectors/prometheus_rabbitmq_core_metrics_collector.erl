@@ -221,7 +221,7 @@ register() ->
 
 deregister_cleanup(_) -> ok.
 
-collect_mf(per_object, Callback) ->
+collect_mf('per-object', Callback) ->
     collect(true, Callback);
 collect_mf(_Registry, Callback) ->
     PerObjectMetrics = application:get_env(rabbitmq_prometheus, return_per_object_metrics, false),

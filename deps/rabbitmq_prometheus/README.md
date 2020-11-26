@@ -67,9 +67,9 @@ In order to not put unnecessary pressure on your metrics system, metrics are agg
 
 When debugging, it may be useful to return metrics per object (unaggregated).
 
-This can be done by scraping the `/metrics/per_object` endpoint:
+This can be done by scraping the `/metrics/per-object` endpoint:
 ```shell
-curl -v -H "Accept:text/plain" "http://localhost:15692/metrics/per_object"
+curl -v -H "Accept:text/plain" "http://localhost:15692/metrics/per-object"
 ```
 
 This can also be enabled as the default behavior of the `/metrics` endpoint on-the-fly,

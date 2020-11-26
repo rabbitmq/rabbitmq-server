@@ -32,7 +32,7 @@ is_authorized(ReqData, Context) ->
 
 setup() ->
     setup_metrics(telemetry_registry()),
-    setup_metrics(per_object).
+    setup_metrics('per-object').
 
 setup_metrics(Registry) ->
     ScrapeDuration = [{name, ?SCRAPE_DURATION},
