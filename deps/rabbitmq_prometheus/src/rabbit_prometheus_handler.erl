@@ -108,8 +108,6 @@ format_metrics(Request, Registry) ->
     encode_format(ContentType, binary_to_list(Encoding), Scrape, Registry).
 
 render_format(ContentType, Registry) ->
-    %TelemetryRegistry = telemetry_registry(),
-
     Scrape = prometheus_summary:observe_duration(
                Registry,
                ?SCRAPE_DURATION,
