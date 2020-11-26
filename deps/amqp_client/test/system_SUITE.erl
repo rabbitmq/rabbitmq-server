@@ -77,9 +77,10 @@ all() ->
     {hard_error_loop, [{repeat, 100}, parallel], [hard_error]}
   ]).
 -define(COMMON_NON_PARALLEL_TEST_CASES, [
-    basic_qos, %% Not parallel because it's time-based.
+    basic_qos, %% Not parallel because it's time-based, or has mocks
     connection_failure,
-    channel_death
+    channel_death,
+    safe_call_timeouts
   ]).
 
 groups() ->
@@ -291,6 +292,94 @@ named_connection(Config) ->
     get_and_assert_equals(Channel, Q, Payload),
     get_and_assert_empty(Channel, Q),
     teardown(Connection, Channel).
+
+%% -------------------------------------------------------------------
+
+safe_call_timeouts(Config) ->
+    Params = ?config(amqp_client_conn_params, Config),
+    safe_call_timeouts_test(Params).
+
+safe_call_timeouts_test(Params = #amqp_params_network{}) ->
+    TestConnTimeout = 2000,
+    TestCallTimeout = 1000,
+
+    Params1 = Params#amqp_params_network{connection_timeout = TestConnTimeout},
+
+    %% Normal connection
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    {ok, Connection1} = amqp_connection:start(Params1),
+    ?assertEqual(TestConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
+
+    ?assertEqual(ok, amqp_connection:close(Connection1)),
+    wait_for_death(Connection1),
+
+    %% Failing connection
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    ok = meck:new(amqp_network_connection, [passthrough]),
+    ok = meck:expect(amqp_network_connection, connect,
+            fun(_AmqpParams, _SIF, _TypeSup, _State) ->
+                timer:sleep(TestConnTimeout),
+                {error, test_connection_timeout}
+            end),
+
+    {error, test_connection_timeout} = amqp_connection:start(Params1),
+
+    ?assertEqual(TestConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
+
+    meck:unload(amqp_network_connection);
+
+safe_call_timeouts_test(Params = #amqp_params_direct{}) ->
+    TestCallTimeout = 30000,
+    NetTicktime0 = net_kernel:get_net_ticktime(),
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    %% 1. NetTicktime >= DIRECT_OPERATION_TIMEOUT (120s)
+    NetTicktime1 = 140,
+    net_kernel:set_net_ticktime(NetTicktime1, 1),
+    wait_until_net_ticktime(NetTicktime1),
+
+    {ok, Connection1} = amqp_connection:start(Params),
+    ?assertEqual((NetTicktime1 * 1000) + ?CALL_TIMEOUT_DEVIATION,
+        amqp_util:call_timeout()),
+
+    ?assertEqual(ok, amqp_connection:close(Connection1)),
+    wait_for_death(Connection1),
+
+    %% Reset call timeout
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    %% 2. Transitioning NetTicktime >= DIRECT_OPERATION_TIMEOUT (120s)
+    NetTicktime2 = 120,
+    net_kernel:set_net_ticktime(NetTicktime2, 1),
+    ?assertEqual({ongoing_change_to, NetTicktime2}, net_kernel:get_net_ticktime()),
+
+    {ok, Connection2} = amqp_connection:start(Params),
+    ?assertEqual((NetTicktime2 * 1000) + ?CALL_TIMEOUT_DEVIATION,
+        amqp_util:call_timeout()),
+
+    wait_until_net_ticktime(NetTicktime2),
+
+    ?assertEqual(ok, amqp_connection:close(Connection2)),
+    wait_for_death(Connection2),
+
+    %% Reset call timeout
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    %% 3. NetTicktime < DIRECT_OPERATION_TIMEOUT (120s)
+    NetTicktime3 = 60,
+    net_kernel:set_net_ticktime(NetTicktime3, 1),
+    wait_until_net_ticktime(NetTicktime3),
+
+    {ok, Connection3} = amqp_connection:start(Params),
+    ?assertEqual((?DIRECT_OPERATION_TIMEOUT + ?CALL_TIMEOUT_DEVIATION),
+        amqp_util:call_timeout()),
+
+    net_kernel:set_net_ticktime(NetTicktime0, 1),
+    wait_until_net_ticktime(NetTicktime0),
+    ?assertEqual(ok, amqp_connection:close(Connection3)),
+    wait_for_death(Connection3).
 
 %% -------------------------------------------------------------------
 
@@ -1454,6 +1543,16 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
             CodeAtom = ?PROTOCOL:amqp_exception(Code)
     after 2000 ->
         exit(did_not_die)
+    end.
+
+wait_until_net_ticktime(NetTicktime) ->
+    case net_kernel:get_net_ticktime() of
+        NetTicktime -> ok;
+        {ongoing_change_to, NetTicktime} ->
+            timer:sleep(1000),
+            wait_until_net_ticktime(NetTicktime);
+        _ ->
+            throw({error, {net_ticktime_not_set, NetTicktime}})
     end.
 
 set_resource_alarm(memory, Config) ->
