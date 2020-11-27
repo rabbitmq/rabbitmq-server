@@ -117,7 +117,7 @@ test_server(Port) ->
     PublisherId = 42,
     test_declare_publisher(S, PublisherId, Stream),
     Body = <<"hello">>,
-    test_publish_confirm(S, PublisherId, Stream, Body),
+    test_publish_confirm(S, PublisherId, Body),
     SubscriptionId = 42,
     Rest = test_subscribe(S, SubscriptionId, Stream),
     test_deliver(S, Rest, SubscriptionId, Body),
@@ -213,10 +213,9 @@ test_declare_publisher(S, PublisherId, Stream) ->
     {ok, <<_Size:32, ?COMMAND_DECLARE_PUBLISHER:16, ?VERSION_0:16, 1:32, ?RESPONSE_CODE_OK:16, Rest/binary>>} = Res,
     Rest.
 
-test_publish_confirm(S, PublisherId, Stream, Body) ->
+test_publish_confirm(S, PublisherId, Body) ->
     BodySize = byte_size(Body),
-    StreamSize = byte_size(Stream),
-    PublishFrame = <<?COMMAND_PUBLISH:16, ?VERSION_0:16, StreamSize:16, Stream:StreamSize/binary,
+    PublishFrame = <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
         PublisherId:8, 1:32, 1:64, BodySize:32, Body:BodySize/binary>>,
     FrameSize = byte_size(PublishFrame),
     gen_tcp:send(S, <<FrameSize:32, PublishFrame/binary>>),
