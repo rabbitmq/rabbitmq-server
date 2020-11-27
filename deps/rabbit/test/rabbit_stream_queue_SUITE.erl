@@ -619,7 +619,7 @@ consume_timestamp_offset(Config) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
 
-    Offset = erlang:system_time(millisecond) - 600000,
+    Offset = erlang:system_time(second) - 60,
     amqp_channel:subscribe(
       Ch1,
       #'basic.consume'{queue = Q,
@@ -653,7 +653,7 @@ consume_timestamp_last_offset(Config) ->
     qos(Ch1, 10, false),
    
     %% Subscribe from now/future
-    Offset = erlang:system_time(millisecond) + 60000,
+    Offset = erlang:system_time(second) + 60,
     amqp_channel:subscribe(
       Ch1,
       #'basic.consume'{queue = Q,

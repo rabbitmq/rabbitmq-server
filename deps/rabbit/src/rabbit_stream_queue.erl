@@ -183,7 +183,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                          {_, <<"next">>} ->
                              next;
                          {timestamp, V} ->
-                             {timestamp, V};
+                             {timestamp, V * 1000};
                          {_, V} ->
                              V
                      end,
