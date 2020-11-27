@@ -3963,7 +3963,7 @@ jobs:
     - rabbit-ct-upgrade_preparation
     - rabbit-ct-vhost
     runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && always()'
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4728,6 +4728,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --env ERLANG_VERSION=23.1 \
           --env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
           --env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
           --env SSH_KEY=/workspace/terraform/id_rsa_terraform \
@@ -5518,7 +5519,7 @@ jobs:
     - rabbitmq_web_stomp_examples
     - package-generic-unix
     runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && always()'
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
     - uses: technote-space/workflow-conclusion-action@v1
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master

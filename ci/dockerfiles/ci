@@ -18,6 +18,7 @@ ENV GITHUB_SHA=${GITHUB_SHA}
 ENV base_rmq_ref=${base_rmq_ref}
 ENV current_rmq_ref=${current_rmq_ref}
 
+ENV ERLANG_VERSION=${ERLANG_VERSION}
 ENV RABBITMQ_VERSION=${RABBITMQ_VERSION}
 
 ENV BUILDEVENT_CIPROVIDER=GitHubActions

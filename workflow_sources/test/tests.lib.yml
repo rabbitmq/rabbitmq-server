@@ -34,7 +34,7 @@ steps:
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-        (@= additional_docker_args(dep) @) \
+        (@= additional_docker_args(dep, erlang_version=erlang_version) @) \
         --volume ${PWD}/ct-logs:/workspace/ct-logs \
         --oom-kill-disable \
         (@= ci_image(erlang_version) @) \
@@ -48,9 +48,10 @@ steps:
       path: "ct-logs/*-ct-logs-*.tar.xz"
 #@ end
 
-#@ def additional_docker_args(dep):
+#@ def additional_docker_args(dep, erlang_version=None):
 #@   if getattr(dep, 'use_terraform', False):
 #@     args = []
+#@     args.append("--env ERLANG_VERSION={}".format(erlang_version))
 #@     args.append("--env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}")
 #@     args.append("--env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
 #@     args.append("--env SSH_KEY=/workspace/terraform/id_rsa_terraform")
