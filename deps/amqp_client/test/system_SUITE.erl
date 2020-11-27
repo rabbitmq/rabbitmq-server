@@ -379,7 +379,24 @@ safe_call_timeouts_test(Params = #amqp_params_direct{}) ->
     net_kernel:set_net_ticktime(NetTicktime0, 1),
     wait_until_net_ticktime(NetTicktime0),
     ?assertEqual(ok, amqp_connection:close(Connection3)),
-    wait_for_death(Connection3).
+    wait_for_death(Connection3),
+
+    %% Failing direct connection
+    amqp_util:update_call_timeout(_LowCallTimeout = 1000),
+
+    ok = meck:new(amqp_direct_connection, [passthrough]),
+    ok = meck:expect(amqp_direct_connection, connect,
+            fun(_AmqpParams, _SIF, _TypeSup, _State) ->
+                timer:sleep(2000),
+                {error, test_connection_timeout}
+            end),
+
+    {error, test_connection_timeout} = amqp_connection:start(Params),
+
+    ?assertEqual((?DIRECT_OPERATION_TIMEOUT + ?CALL_TIMEOUT_DEVIATION),
+        amqp_util:call_timeout()),
+
+    meck:unload(amqp_direct_connection).
 
 %% -------------------------------------------------------------------
 
