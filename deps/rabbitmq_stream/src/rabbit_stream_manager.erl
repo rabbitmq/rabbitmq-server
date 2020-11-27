@@ -161,6 +161,7 @@ handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
                   case is_stream_queue(Q) of
                       true ->
                           #{leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
+                          % FIXME check if pid is alive in case of stale information
                           LeaderPid;
                       _ ->
                           cluster_not_found
@@ -184,6 +185,7 @@ handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
                                       Acc
                               end
                                                     end, undefined, [LeaderPid] ++ ReplicaPids),
+                          % FIXME check if pid is alive in case of stale information
                           case LocalMember of
                               undefined ->
                                   {error, not_available};

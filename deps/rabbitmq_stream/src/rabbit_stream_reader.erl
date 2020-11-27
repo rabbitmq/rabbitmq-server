@@ -19,20 +19,32 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_stream.hrl").
 
+-type stream() :: binary().
+-type publisher_id() :: byte().
+-type publisher_reference() :: binary().
+-type subscription_id() :: byte().
+
+-record(publisher, {
+    publisher_id :: publisher_id(),
+    stream :: stream(),
+    reference :: 'undefined' | publisher_reference(),
+    leader :: pid()
+}).
+
 -record(consumer, {
     socket :: rabbit_net:socket(), %% ranch_transport:socket(),
     member_pid :: pid(),
     offset :: osiris:offset(),
-    subscription_id :: integer(),
+    subscription_id :: subscription_id(),
     segment :: osiris_log:state(),
     credit :: integer(),
-    stream :: binary()
+    stream :: stream()
 }).
 
 -record(stream_connection_state, {
     data :: 'none' | binary(),
     blocked :: boolean(),
-    consumers :: #{integer() => #consumer{}}
+    consumers :: #{subscription_id() => #consumer{}}
 }).
 
 -record(stream_connection, {
@@ -49,8 +61,10 @@
     connected_at :: integer(),
     helper_sup :: pid(),
     socket :: rabbit_net:socket(),
-    stream_leaders :: #{binary() => pid()},
-    stream_subscriptions :: #{binary() => [integer()]},
+    publishers :: #{publisher_id() => #publisher{}}, %% FIXME replace with a list (0-255 lookup faster?)
+    publisher_to_ids :: #{{stream(), publisher_reference()} => publisher_id()},
+    stream_leaders :: #{stream() => pid()},
+    stream_subscriptions :: #{stream() => [subscription_id()]},
     credits :: atomics:atomics_ref(),
     authentication_state :: atom(),
     user :: 'undefined' | #user{},
@@ -60,7 +74,7 @@
     heartbeat :: integer(),
     heartbeater :: any(),
     client_properties = #{} :: #{binary() => binary()},
-    monitors = #{} :: #{reference() => binary()},
+    monitors = #{} :: #{reference() => stream()},
     stats_timer :: reference(),
     send_file_oct :: atomics:atomics_ref()
 }).
@@ -123,6 +137,8 @@ init([KeepaliveSup, Transport, Ref, #{initial_credits := InitialCredits,
                 auth_mechanism = none,
                 helper_sup = KeepaliveSup,
                 socket = RealSocket,
+                publishers = #{},
+                publisher_to_ids = #{},
                 stream_leaders = #{},
                 stream_subscriptions = #{},
                 credits = Credits,
@@ -232,6 +248,7 @@ close(Transport, S) ->
 listen_loop_post_auth(Transport, #stream_connection{socket = S,
     stream_subscriptions = StreamSubscriptions, credits = Credits,
     heartbeater = Heartbeater, monitors = Monitors, client_properties = ClientProperties,
+    publisher_to_ids = PublisherRefToIds,
     send_file_oct = SendFileOct} = Connection0,
     #stream_connection_state{consumers = Consumers, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
@@ -292,7 +309,7 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                                             {Connection, State}
                                     end,
             listen_loop_post_auth(Transport, Connection1, State1, Configuration);
-        {'$gen_cast', {queue_event, _QueueResource, {osiris_written, _QueueResource, CorrelationList}}} ->
+        {'$gen_cast', {queue_event, _QueueResource, {osiris_written, _QueueResource, undefined, CorrelationList}}} ->
             {FirstPublisherId, _FirstPublishingId} = lists:nth(1, CorrelationList),
             {LastPublisherId, LastPublishingIds, LastCount} = lists:foldl(fun({PublisherId, PublishingId}, {CurrentPublisherId, PublishingIds, Count}) ->
                 case PublisherId of
@@ -314,6 +331,32 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                 <<LastCount:32>>, LastPublishingIds]),
             CorrelationIdCount = length(CorrelationList),
             add_credits(Credits, CorrelationIdCount),
+            State1 = case Blocked of
+                         true ->
+                             case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
+                                 true ->
+                                     Transport:setopts(S, [{active, once}]),
+                                     ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+                                     State#stream_connection_state{blocked = false};
+                                 false ->
+                                     State
+                             end;
+                         false ->
+                             State
+                     end,
+            listen_loop_post_auth(Transport, Connection, State1, Configuration);
+        {'$gen_cast', {queue_event, _QueueResource, {osiris_written, #resource{name = Stream}, PublisherReference, CorrelationList}}} ->
+            %% FIXME handle case when publisher ID is not found (e.g. deleted before confirms arrive)
+            PublisherId = maps:get({Stream, PublisherReference}, PublisherRefToIds, undefined),
+            PubIds = lists:foldl(fun(PublishingId, PublishingIds) ->
+                    [PublishingIds, <<PublishingId:64>>]
+                end, <<>>, CorrelationList),
+            PublishingIdCount = length(CorrelationList),
+            FrameSize = 2 + 2 + 1 + 4 + PublishingIdCount * 8,
+            Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>,
+                <<PublisherId:8>>,
+                <<PublishingIdCount:32>>, PubIds]),
+            add_credits(Credits, PublishingIdCount),
             State1 = case Blocked of
                          true ->
                              case has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking) of
@@ -682,36 +725,92 @@ notify_auth_result(Username, AuthResult, ExtraProps, Connection, ConnectionState
         ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
-handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits,
-    virtual_host = VirtualHost, user = User} = Connection, State,
-    <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
-        StreamSize:16, Stream:StreamSize/binary,
-        PublisherId:8/unsigned,
-        MessageCount:32, Messages/binary>>, Rest) ->
+handle_frame_post_auth(Transport, #stream_connection{
+                virtual_host = VirtualHost, user = User,
+                publishers = Publishers0, publisher_to_ids = RefIds0} = Connection0, State,
+    <<?COMMAND_DECLARE_PUBLISHER:16, ?VERSION_0:16, CorrelationId:32,
+        PublisherId:8,
+        ReferenceSize:16, Reference:ReferenceSize/binary,
+        StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
     case rabbit_stream_utils:check_write_permitted(
         #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
         User,
         #{}) of
         ok ->
-            case lookup_leader(Stream, Connection) of
-                cluster_not_found ->
+            case {maps:is_key(PublisherId, Publishers0), maps:is_key({Stream, Reference}, RefIds0)} of
+                {false, false} ->
+                    case lookup_leader(Stream, Connection0) of
+                        cluster_not_found ->
+                            response(Transport, Connection0, ?COMMAND_DECLARE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                            {Connection0, State, Rest};
+                        {ClusterLeader, #stream_connection{publishers = Publishers0, publisher_to_ids = RefIds0} = Connection1} ->
+                            {PublisherReference, RefIds1} = case Reference of
+                                                                <<"">> -> {undefined, RefIds0};
+                                                                _      -> {Reference, RefIds0#{{Stream, Reference} => PublisherId}}
+                                                            end,
+                            Publisher = #publisher{publisher_id = PublisherId,
+                                stream = Stream,
+                                reference = PublisherReference,
+                                leader = ClusterLeader},
+                            response(Transport, Connection0, ?COMMAND_DECLARE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_OK),
+                            {Connection1#stream_connection{publishers = Publishers0#{PublisherId => Publisher},
+                                publisher_to_ids = RefIds1}, State, Rest}
+                    end;
+                {_, _} ->
+                    response(Transport, Connection0, ?COMMAND_DECLARE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_PRECONDITION_FAILED),
+                    {Connection0, State, Rest}
+            end;
+        error ->
+            response(Transport, Connection0, ?COMMAND_DECLARE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
+            {Connection0, State, Rest}
+    end;
+handle_frame_post_auth(Transport, #stream_connection{publishers = Publishers,
+                                                     publisher_to_ids = PubToIds} = Connection0, State,
+    <<?COMMAND_DELETE_PUBLISHER:16, ?VERSION_0:16, CorrelationId:32,
+        PublisherId:8>>, Rest) ->
+        case Publishers of
+            #{PublisherId := #publisher{stream = Stream, reference = Ref}} ->
+                Connection1 = Connection0#stream_connection{
+                    publishers = maps:remove(PublisherId, Publishers),
+                    publisher_to_ids = maps:remove({Stream, Ref}, PubToIds)},
+                Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
+                response(Transport, Connection1, ?COMMAND_DELETE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_OK),
+                {Connection2, State, Rest};
+            _ ->
+                response(Transport, Connection0, ?COMMAND_DELETE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
+                {Connection0, State, Rest}
+        end;
+handle_frame_post_auth(Transport, #stream_connection{
+        socket = S, credits = Credits,
+        virtual_host = VirtualHost, user = User, publishers = Publishers} = Connection, State,
+        <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
+            PublisherId:8/unsigned,
+            MessageCount:32, Messages/binary>>, Rest) ->
+    case Publishers of
+        #{PublisherId := Publisher} ->
+            #publisher{stream = Stream, reference = Reference, leader = Leader} = Publisher,
+            case rabbit_stream_utils:check_write_permitted(
+                #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                User,
+                #{}) of
+                ok ->
+                    rabbit_stream_utils:write_messages(Leader, Reference, PublisherId, Messages),
+                    sub_credits(Credits, MessageCount),
+                    {Connection, State, Rest};
+                error ->
                     FrameSize = 2 + 2 + 1 + 4 + (8 + 2) * MessageCount,
-                    Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, Messages),
+                    Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_ACCESS_REFUSED, Messages),
                     Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
                         PublisherId:8,
                         MessageCount:32, Details/binary>>]),
-                    {Connection, State, Rest};
-                {ClusterLeader, Connection1} ->
-                    rabbit_stream_utils:write_messages(ClusterLeader, PublisherId, Messages),
-                    sub_credits(Credits, MessageCount),
-                    {Connection1, State, Rest}
+                    {Connection, State, Rest}
             end;
-        error ->
+        _ ->
             FrameSize = 2 + 2 + 1 + 4 + (8 + 2) * MessageCount,
-            Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_ACCESS_REFUSED, Messages),
+            Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST, Messages),
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
-                PublisherId:8,
-                MessageCount:32, Details/binary>>]),
+            PublisherId:8,
+            MessageCount:32, Details/binary>>]),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
@@ -720,6 +819,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
     #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_SUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:8/unsigned, StreamSize:16, Stream:StreamSize/binary,
         OffsetType:16/signed, OffsetAndCredit/binary>>, Rest) ->
+    %% FIXME check the max number of subs is not reached already
     case rabbit_stream_utils:check_read_permitted(
         #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
         User,
@@ -788,8 +888,7 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
             response(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId, ?RESPONSE_CODE_ACCESS_REFUSED),
             {Connection, State, Rest}
     end;
-handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = StreamSubscriptions,
-    stream_leaders = StreamLeaders} = Connection,
+handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = StreamSubscriptions} = Connection,
     #stream_connection_state{consumers = Consumers} = State,
     <<?COMMAND_UNSUBSCRIBE:16, ?VERSION_0:16, CorrelationId:32, SubscriptionId:8/unsigned>>, Rest) ->
     case subscription_exists(StreamSubscriptions, SubscriptionId) of
@@ -801,28 +900,19 @@ handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = Stre
             Stream = Consumer#consumer.stream,
             #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
             SubscriptionsForThisStream1 = lists:delete(SubscriptionId, SubscriptionsForThisStream),
-            {Connection1, StreamSubscriptions1, StreamLeaders1} =
+            StreamSubscriptions1 =
                 case length(SubscriptionsForThisStream1) of
                     0 ->
-                        %% no more subscriptions for this stream
-                        %% we unregister even though it could affect publishing if the stream is published to
-                        %% from this connection and is deleted.
-                        %% to mitigate this, we remove the stream from the leaders cache
-                        %% this way the stream leader will be looked up in the next publish command
-                        %% and registered to.
-                        C = demonitor_stream(Stream, Connection),
-                        {C, maps:remove(Stream, StreamSubscriptions),
-                            maps:remove(Stream, StreamLeaders)
-                        };
+                        % no more subscription for this stream
+                        maps:remove(Stream, StreamSubscriptions);
                     _ ->
-                        {Connection, StreamSubscriptions#{Stream => SubscriptionsForThisStream1}, StreamLeaders}
+                        StreamSubscriptions#{Stream => SubscriptionsForThisStream1}
                 end,
+            Connection1 = Connection#stream_connection{stream_subscriptions = StreamSubscriptions1},
             Consumers1 = maps:remove(SubscriptionId, Consumers),
+            Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
             response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
-            {Connection1#stream_connection{
-                stream_subscriptions = StreamSubscriptions1,
-                stream_leaders = StreamLeaders1
-            }, State#stream_connection_state{consumers = Consumers1}, Rest}
+            {Connection2, State#stream_connection_state{consumers = Consumers1}, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = S, send_file_oct = SendFileOct} = Connection,
     #stream_connection_state{consumers = Consumers} = State,
@@ -900,6 +990,34 @@ handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = 
                              end,
     Transport:send(S, [<<FrameSize:32, ?COMMAND_QUERY_OFFSET:16, ?VERSION_0:16>>,
         <<CorrelationId:32>>, <<ResponseCode:16>>, <<Offset:64>>]),
+    {Connection, State, Rest};
+handle_frame_post_auth(Transport, #stream_connection{socket = S, virtual_host = VirtualHost, user = User} = Connection,
+    State,
+    <<?COMMAND_QUERY_PUBLISHER_SEQUENCE:16, ?VERSION_0:16, CorrelationId:32,
+        ReferenceSize:16, Reference:ReferenceSize/binary,
+        StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
+    FrameSize = ?RESPONSE_FRAME_SIZE + 8,
+    {ResponseCode, Sequence} = case rabbit_stream_utils:check_read_permitted(
+        #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+        User,
+        #{}) of
+                                 ok ->
+                                     case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream) of
+                                         {error, not_found} ->
+                                             {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
+                                         {ok, LocalMemberPid} ->
+                                             {?RESPONSE_CODE_OK, case osiris:fetch_writer_seq(LocalMemberPid, Reference) of
+                                                                     undefined ->
+                                                                         0;
+                                                                     Offt ->
+                                                                         Offt
+                                                                 end}
+                                     end;
+                                 error ->
+                                     {?RESPONSE_CODE_ACCESS_REFUSED, 0}
+                             end,
+    Transport:send(S, [<<FrameSize:32, ?COMMAND_QUERY_PUBLISHER_SEQUENCE:16, ?VERSION_0:16>>,
+        <<CorrelationId:32>>, <<ResponseCode:16>>, <<Sequence:64>>]),
     {Connection, State, Rest};
 handle_frame_post_auth(Transport, #stream_connection{virtual_host = VirtualHost, user = #user{username = Username} = User} = Connection,
     State,
@@ -1080,21 +1198,49 @@ handle_frame_post_close(_Transport, Connection, State, Frame, Rest) ->
     rabbit_log:warning("ignored frame on close ~p ~p.~n", [Frame, Rest]),
     {Connection, State, Rest}.
 
-clean_state_after_stream_deletion_or_failure(Stream, #stream_connection{stream_leaders = StreamLeaders, stream_subscriptions = StreamSubscriptions} = Connection,
-    #stream_connection_state{consumers = Consumers} = State) ->
-    case {maps:is_key(Stream, StreamSubscriptions), maps:is_key(Stream, StreamLeaders)} of
-        {true, _} ->
+clean_state_after_stream_deletion_or_failure(Stream,
+        #stream_connection{stream_subscriptions = StreamSubscriptions,
+                           publishers = Publishers,
+                           publisher_to_ids = PublisherToIds,
+                           stream_leaders = Leaders} = C0,
+        #stream_connection_state{consumers = Consumers} = S0) ->
+    {SubscriptionsCleaned, C1, S1} = case stream_has_subscriptions(Stream, C0) of
+        true ->
             #{Stream := SubscriptionIds} = StreamSubscriptions,
-            {cleaned, Connection#stream_connection{
-                stream_leaders = maps:remove(Stream, StreamLeaders),
+            {true, C0#stream_connection{
                 stream_subscriptions = maps:remove(Stream, StreamSubscriptions)
-            }, State#stream_connection_state{consumers = maps:without(SubscriptionIds, Consumers)}};
-        {false, true} ->
-            {cleaned, Connection#stream_connection{
-                stream_leaders = maps:remove(Stream, StreamLeaders)
-            }, State};
-        {false, false} ->
-            {not_cleaned, Connection, State}
+            }, S0#stream_connection_state{consumers = maps:without(SubscriptionIds, Consumers)}};
+        false ->
+            {false, C0, S0}
+    end,
+    {PublishersCleaned, C2, S2} = case stream_has_publishers(Stream, C1) of
+        true ->
+            {PurgedPubs, PurgedPubToIds} = maps:fold(
+                fun(PubId, #publisher{stream = S, reference = Ref}, {Pubs, PubToIds}) ->
+                    case S of
+                        Stream ->
+                            {maps:remove(PubId, Pubs), maps:remove({Stream, Ref}, PubToIds)};
+                        _ ->
+                            {Pubs, PubToIds}
+                    end
+            end, {Publishers, PublisherToIds}, Publishers),
+            {true, C1#stream_connection{publishers = PurgedPubs, publisher_to_ids = PurgedPubToIds},
+                S1};
+        false ->
+            {false, C1, S1}
+    end,
+    {LeadersCleaned, Leaders1} = case Leaders of
+        #{Stream := _} ->
+            {true, maps:remove(Stream, Leaders)};
+        _ ->
+            {false, Leaders}
+    end,
+    case SubscriptionsCleaned orelse PublishersCleaned orelse LeadersCleaned of
+        true ->
+            C3 = demonitor_stream(Stream, C2),
+            {cleaned, C3#stream_connection{stream_leaders = Leaders1}, S2};
+        false ->
+            {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
     end.
 
 lookup_leader(Stream, #stream_connection{stream_leaders = StreamLeaders, virtual_host = VirtualHost} = Connection) ->
@@ -1114,6 +1260,16 @@ lookup_leader(Stream, #stream_connection{stream_leaders = StreamLeaders, virtual
 lookup_leader_from_manager(VirtualHost, Stream) ->
     rabbit_stream_manager:lookup_leader(VirtualHost, Stream).
 
+maybe_clean_connection_from_stream(Stream, #stream_connection{stream_leaders = Leaders} = Connection0) ->
+    Connection1 =
+        case {stream_has_publishers(Stream, Connection0), stream_has_subscriptions(Stream, Connection0)} of
+            {false, false} ->
+                demonitor_stream(Stream, Connection0);
+            _ ->
+                Connection0
+        end,
+    Connection1#stream_connection{stream_leaders = maps:remove(Stream, Leaders)}.
+
 maybe_monitor_stream(Pid, Stream, #stream_connection{monitors = Monitors} = Connection) ->
     case lists:member(Stream, maps:values(Monitors)) of
         true ->
@@ -1127,6 +1283,7 @@ demonitor_stream(Stream, #stream_connection{monitors = Monitors0} = Connection) 
     Monitors = maps:fold(fun(MonitorRef, Strm, Acc) ->
         case Strm of
             Stream ->
+                demonitor(MonitorRef, [flush]),
                 Acc;
             _ ->
                 maps:put(MonitorRef, Strm, Acc)
@@ -1134,6 +1291,19 @@ demonitor_stream(Stream, #stream_connection{monitors = Monitors0} = Connection) 
         end
                          end, #{}, Monitors0),
     Connection#stream_connection{monitors = Monitors}.
+
+stream_has_subscriptions(Stream, #stream_connection{stream_subscriptions = Subscriptions}) ->
+    case Subscriptions of
+        #{Stream := StreamSubscriptions} when length(StreamSubscriptions) > 0 ->
+            true;
+        _ ->
+            false
+    end.
+
+stream_has_publishers(Stream, #stream_connection{publishers = Publishers}) ->
+    lists:any(fun(#publisher{stream = S}) ->
+                 case S of Stream -> true; _ -> false end
+              end, maps:values(Publishers)).
 
 demonitor_all_streams(#stream_connection{monitors = Monitors} = Connection) ->
     lists:foreach(fun(MonitorRef) ->

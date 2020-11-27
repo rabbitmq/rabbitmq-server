@@ -79,8 +79,8 @@ public class FailureTest {
                     (publisherId, publishingId) -> confirmLatch.get().countDown()));
     String message = "all nodes available";
     messages.add(message);
+    publisher.declarePublisher((byte) 1, null, stream);
     publisher.publish(
-        stream,
         (byte) 1,
         Collections.singletonList(
             publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
@@ -109,8 +109,9 @@ public class FailureTest {
       confirmLatch.set(new CountDownLatch(1));
       message = "2 nodes available";
       messages.add(message);
+
+      publisher.declarePublisher((byte) 1, null, stream);
       publisher.publish(
-          stream,
           (byte) 1,
           Collections.singletonList(
               publisher
@@ -135,7 +136,6 @@ public class FailureTest {
     message = "all nodes are back";
     messages.add(message);
     publisher.publish(
-        stream,
         (byte) 1,
         Collections.singletonList(
             publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
@@ -233,6 +233,7 @@ public class FailureTest {
 
                   generation.incrementAndGet();
                   published.clear();
+                  newPublisher.declarePublisher((byte) 1, null, stream);
                   publisher.set(newPublisher);
                   connected.set(true);
 
@@ -249,6 +250,7 @@ public class FailureTest {
                 .shutdownListener(shutdownListener)
                 .publishConfirmListener(publishConfirmListener));
 
+    client.declarePublisher((byte) 1, null, stream);
     publisher.set(client);
 
     AtomicBoolean keepPublishing = new AtomicBoolean(true);
@@ -270,10 +272,7 @@ public class FailureTest {
                       .build();
               try {
                 long publishingId =
-                    publisher
-                        .get()
-                        .publish(stream, (byte) 1, Collections.singletonList(message))
-                        .get(0);
+                    publisher.get().publish((byte) 1, Collections.singletonList(message)).get(0);
                 published.put(publishingId, message);
               } catch (Exception e) {
                 // keep going
@@ -389,6 +388,7 @@ public class FailureTest {
                 .port(streamMetadata.getLeader().getPort())
                 .publishConfirmListener(publishConfirmListener));
 
+    publisher.declarePublisher((byte) 1, null, stream);
     AtomicLong generation = new AtomicLong(0);
     AtomicLong sequence = new AtomicLong(0);
     AtomicBoolean keepPublishing = new AtomicBoolean(true);
@@ -408,7 +408,7 @@ public class FailureTest {
                     .build();
             try {
               long publishingId =
-                  publisher.publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
+                  publisher.publish((byte) 1, Collections.singletonList(message)).get(0);
               published.put(publishingId, message);
             } catch (Exception e) {
               // keep going
