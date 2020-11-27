@@ -780,44 +780,37 @@ handle_frame_post_auth(Transport, #stream_connection{publishers = Publishers,
                 response(Transport, Connection0, ?COMMAND_DELETE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
                 {Connection0, State, Rest}
         end;
-handle_frame_post_auth(Transport, #stream_connection{socket = S, credits = Credits,
-    virtual_host = VirtualHost, user = User, publishers = Publishers} = Connection, State,
-    <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
-        StreamSize:16, Stream:StreamSize/binary,
-        PublisherId:8/unsigned,
-        MessageCount:32, Messages/binary>>, Rest) ->
-    %% FIXME fail messages if publisher is unknown
-    {StreamToPublishTo, PublisherRef} = case Publishers of
+handle_frame_post_auth(Transport, #stream_connection{
+        socket = S, credits = Credits,
+        virtual_host = VirtualHost, user = User, publishers = Publishers} = Connection, State,
+        <<?COMMAND_PUBLISH:16, ?VERSION_0:16,
+            PublisherId:8/unsigned,
+            MessageCount:32, Messages/binary>>, Rest) ->
+    case Publishers of
         #{PublisherId := Publisher} ->
-            #publisher{stream = St, reference = R} = Publisher,
-            {St, R};
-        _ ->
-            {Stream, undefined}
-    end,
-    case rabbit_stream_utils:check_write_permitted(
-        #resource{name = StreamToPublishTo, kind = queue, virtual_host = VirtualHost},
-        User,
-        #{}) of
-        ok ->
-            case lookup_leader(StreamToPublishTo, Connection) of
-                cluster_not_found ->
+            #publisher{stream = Stream, reference = Reference, leader = Leader} = Publisher,
+            case rabbit_stream_utils:check_write_permitted(
+                #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+                User,
+                #{}) of
+                ok ->
+                    rabbit_stream_utils:write_messages(Leader, Reference, PublisherId, Messages),
+                    sub_credits(Credits, MessageCount),
+                    {Connection, State, Rest};
+                error ->
                     FrameSize = 2 + 2 + 1 + 4 + (8 + 2) * MessageCount,
-                    Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, Messages),
+                    Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_ACCESS_REFUSED, Messages),
                     Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
                         PublisherId:8,
                         MessageCount:32, Details/binary>>]),
-                    {Connection, State, Rest};
-                {ClusterLeader, Connection1} ->
-                    rabbit_stream_utils:write_messages(ClusterLeader, PublisherRef, PublisherId, Messages),
-                    sub_credits(Credits, MessageCount),
-                    {Connection1, State, Rest}
+                    {Connection, State, Rest}
             end;
-        error ->
+        _ ->
             FrameSize = 2 + 2 + 1 + 4 + (8 + 2) * MessageCount,
-            Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_ACCESS_REFUSED, Messages),
+            Details = generate_publishing_error_details(<<>>, ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST, Messages),
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
-                PublisherId:8,
-                MessageCount:32, Details/binary>>]),
+            PublisherId:8,
+            MessageCount:32, Details/binary>>]),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport, #stream_connection{socket = Socket,

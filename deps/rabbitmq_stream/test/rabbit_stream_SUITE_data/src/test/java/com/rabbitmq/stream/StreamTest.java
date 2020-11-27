@@ -92,11 +92,11 @@ public class StreamTest {
                 .publishConfirmListener(
                     (publisherId, publishingId) -> publishingLatch.countDown()));
 
+    publisher.declarePublisher((byte) 1, null, stream);
     IntStream.range(0, messageCount)
         .forEach(
             i ->
                 publisher.publish(
-                    stream,
                     (byte) 1,
                     Collections.singletonList(
                         publisher
