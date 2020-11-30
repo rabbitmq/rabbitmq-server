@@ -11,9 +11,67 @@
 ## The Original Code is RabbitMQ.
 #
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2018-2019 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
 
 FROM buildpack-deps:stretch
+
+# We'll install the build dependencies for erlang-odbc along with the erlang
+# build process:
+ADD erlang-git-master/ /usr/src/erlang/
+RUN set -xe \
+    && ERLANG_VERSION=master \
+    && runtimeDeps='libodbc1 \
+            libsctp1 \
+            libwxgtk3.0-0v5' \
+    && buildDeps='unixodbc-dev \
+            libsctp-dev \
+            libwxgtk3.0-dev' \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends $runtimeDeps \
+    && apt-get install -y --no-install-recommends $buildDeps \
+    && export ERL_TOP="/usr/src/erlang" \
+    && cd $ERL_TOP \
+    && ./otp_build autoconf \
+    && ./configure \
+        --enable-dirty-schedulers \
+    && make -j$(nproc) \
+    && make install \
+    && find /usr/local -name examples | xargs rm -rf \
+    && apt-get purge -y --auto-remove $buildDeps \
+    && rm -rf $ERL_TOP /var/lib/apt/lists/* \
+    && erl -version
+
+CMD ["erl"]
+
+# extra useful tools here: rebar & rebar3
+
+RUN set -xe \
+    && REBAR_VERSION="2.6.4" \
+    && REBAR_DOWNLOAD_URL="https://github.com/rebar/rebar/archive/${REBAR_VERSION}.tar.gz" \
+    && REBAR_DOWNLOAD_SHA256="577246bafa2eb2b2c3f1d0c157408650446884555bf87901508ce71d5cc0bd07" \
+    && mkdir -p /usr/src/rebar-src \
+    && curl -fSL -o rebar-src.tar.gz "$REBAR_DOWNLOAD_URL" \
+    && echo "$REBAR_DOWNLOAD_SHA256 rebar-src.tar.gz" | sha256sum -c - \
+    && tar -xzf rebar-src.tar.gz -C /usr/src/rebar-src --strip-components=1 \
+    && rm rebar-src.tar.gz \
+    && cd /usr/src/rebar-src \
+    && ./bootstrap \
+    && install -v ./rebar /usr/local/bin/ \
+    && rm -rf /usr/src/rebar-src
+
+RUN set -xe \
+    && REBAR3_VERSION="3.14.2" \
+    && REBAR3_DOWNLOAD_URL="https://github.com/erlang/rebar3/archive/${REBAR3_VERSION}.tar.gz" \
+    && REBAR3_DOWNLOAD_SHA256="19fcdc73debb90d405864f728e188cbc5b61c3939b911e58c0b59bf1619c4810" \
+    && mkdir -p /usr/src/rebar3-src \
+    && curl -fSL -o rebar3-src.tar.gz "$REBAR3_DOWNLOAD_URL" \
+    && echo "$REBAR3_DOWNLOAD_SHA256 rebar3-src.tar.gz" | sha256sum -c - \
+    && tar -xzf rebar3-src.tar.gz -C /usr/src/rebar3-src --strip-components=1 \
+    && rm rebar3-src.tar.gz \
+    && cd /usr/src/rebar3-src \
+    && HOME=$PWD ./bootstrap \
+    && install -v ./rebar3 /usr/local/bin/ \
+    && rm -rf /usr/src/rebar3-src
 
 ENV LANG='C.UTF-8'
 
@@ -25,22 +83,15 @@ RUN echo 'deb http://httpredir.debian.org/debian stretch-backports main' \
 RUN apt-get clean && \
     apt-get update && \
     apt-get install -y -V --no-install-recommends \
-      apt-transport-https \
       ca-certificates \
       wget \
-      debconf-utils \
-      gnupg
-
-# Our own rabbitmq-erlang repository on Bintray to take Erlang and Elixir.
-RUN echo 'deb https://dl.bintray.com/rabbitmq-erlang/debian stretch erlang' > /etc/apt/sources.list.d/rabbitmq-erlang.list && \
-    wget -O- https://github.com/rabbitmq/signing-keys/releases/download/2.0/rabbitmq-release-signing-key.asc | apt-key add -
+      debconf-utils
 
 # We need to set an APT preference to make sure $ERLANG_VERSION is
 # used for all erlang* packages. Without this, apt-get(1) would try to
 # install dependencies using the latest version. This would conflict
 # with the strict pinning in all packages, and thus fail.
-RUN ERLANG_VERSION=1:22.3.4.2-1 && \
-    echo 'Package: erlang*' > /etc/apt/preferences.d/erlang && \
+RUN echo 'Package: erlang*' > /etc/apt/preferences.d/erlang && \
     echo "Pin: version $ERLANG_VERSION" >> /etc/apt/preferences.d/erlang && \
     echo 'Pin-Priority: 1000' >> /etc/apt/preferences.d/erlang
 
@@ -53,47 +104,16 @@ RUN apt-get clean && \
     apt-get install -y -V --fix-missing --no-install-recommends \
       build-essential \
       curl \
-      erlang-base-hipe \
-      erlang-nox \
-      erlang-dev \
-      erlang-src \
-      erlang-common-test \
-      erlang-dialyzer \
+      git \
       libcurl3-gnutls \
       man \
       mandoc \
       openssh-client \
       rsync \
+      unzip \
       xmlto \
       xsltproc \
-      zip \
-      unzip
-
-RUN apt-get install -y -V --fix-missing --no-install-recommends \
-      -t stretch-backports \
-      git
-
-# Verify the version of the installed Erlang packages.
-# The version was pinned above, but if that specific version is unavailable,
-# the latest version will be installed, which we don't want.
-RUN set -xe \
-    && installed_version=$(dpkg -s erlang-nox | grep -E '^Version:' | awk '{ print $2; }') \
-    && wanted_version=$(awk '/^Pin:/ { print $3; }' < /etc/apt/preferences.d/erlang) \
-    && test "$installed_version" = "$wanted_version"
-
-RUN set -xe \
-    && REBAR3_VERSION="3.14.1" \
-    && REBAR3_DOWNLOAD_URL="https://github.com/erlang/rebar3/archive/${REBAR3_VERSION}.tar.gz" \
-    && REBAR3_DOWNLOAD_SHA256="b01275b6cbdb354dcf9ed686fce2b5f9dfdd58972ded9e970e31b9215a8521f2" \
-    && mkdir -p /usr/src/rebar3-src \
-    && curl -fSL -o rebar3-src.tar.gz "$REBAR3_DOWNLOAD_URL" \
-    && echo "$REBAR3_DOWNLOAD_SHA256 rebar3-src.tar.gz" | sha256sum -c - \
-    && tar -xzf rebar3-src.tar.gz -C /usr/src/rebar3-src --strip-components=1 \
-    && rm rebar3-src.tar.gz \
-    && cd /usr/src/rebar3-src \
-    && HOME=$PWD ./bootstrap \
-    && install -v ./rebar3 /usr/local/bin/ \
-    && rm -rf /usr/src/rebar3-src
+      zip
 
 RUN set -xe \
   && ELIXIR_VERSION="v1.10.4" \
@@ -105,7 +125,7 @@ RUN set -xe \
   && rm elixir-precompiled.zip
 
 # Put erl_call(1) in the $PATH.
-RUN ln -fs /usr/lib/erlang/lib/erl_interface-*/bin/erl_call /usr/bin/erl_call
+RUN ln -fs /usr/local/lib/erlang/lib/erl_interface-*/bin/erl_call /usr/local/bin/erl_call
 
 # --------------------------------------------------------------------
 # Packages used to test RabbitMQ.
@@ -118,13 +138,13 @@ RUN echo 'slapd    slapd/internal/generated_adminpw    password   rabbitmq' | de
     echo 'slapd    slapd/backend    select    HDB' | debconf-set-selections
 
 RUN apt-get install -y -V --fix-missing --no-install-recommends \
+      daemonize \
       ldap-utils \
       netcat \
       python-dev \
       python-simplejson \
       python3 \
-      slapd \
-      daemonize
+      slapd
 
 RUN git clone --depth 1 https://github.com/bats-core/bats-core.git && \
     cd bats-core && \
@@ -132,6 +152,9 @@ RUN git clone --depth 1 https://github.com/bats-core/bats-core.git && \
     cd .. && \
     rm -rf bats-core
 
+# We take OpenJDK from the backports. We need to be explicit
+# on the repository and with ca-certificates-java, otherwise,
+# ca-certificates-java pulls OpenJDK 7 in.
 RUN apt-get install -y -V --fix-missing --no-install-recommends \
       ca-certificates-java \
       openjdk-8-jre-headless \

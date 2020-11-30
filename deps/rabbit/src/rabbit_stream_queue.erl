@@ -182,6 +182,8 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                              last;
                          {_, <<"next">>} ->
                              next;
+                         {timestamp, V} ->
+                             {timestamp, V * 1000};
                          {_, V} ->
                              V
                      end,
@@ -219,6 +221,7 @@ begin_stream(#stream_client{readers = Readers0} = State,
                       first -> NextOffset;
                       last -> NextOffset;
                       next -> NextOffset;
+                      {timestamp, _} -> NextOffset;
                       _ -> Offset
                   end,
     Str0 = #stream{name = amqqueue:get_name(Q),
@@ -286,7 +289,7 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                       correlation = Correlation0,
                       soft_limit = SftLmt,
                       slow = Slow0} = State) ->
-    ok = osiris:write(LeaderPid, Seq, msg_to_iodata(Msg)),
+    ok = osiris:write(LeaderPid, undefined, Seq, msg_to_iodata(Msg)),
     Correlation = case MsgId of
                       undefined ->
                           Correlation0;
@@ -308,7 +311,7 @@ dequeue(_, _, _, #stream_client{name = Name}) ->
     {protocol_error, not_implemented, "basic.get not supported by stream queues ~s",
      [rabbit_misc:rs(Name)]}.
 
-handle_event({osiris_written, From, Corrs}, State = #stream_client{correlation = Correlation0,
+handle_event({osiris_written, From, _WriterId, Corrs}, State = #stream_client{correlation = Correlation0,
                                                    soft_limit = SftLmt,
                                                    slow = Slow0,
                                                    name = Name}) ->

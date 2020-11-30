@@ -2,22 +2,28 @@ name: Workflow Base Images
 on:
 - workflow_dispatch
 jobs:
-  ci-base-22_3:
-    name: ci-base-22_3
+  ci-base:
+    name: ci-base
     runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        erlang_version:
+        - "22.3"
+        - "23.1"
+      fail-fast: false
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - name: CREATE ERLANG+ELIXIR IMAGE (22.3)
+    - name: CREATE ERLANG+ELIXIR IMAGE (${{ matrix.erlang_version }})
       uses: docker/build-push-action@v1
       with:
         username: _json_key
         password: ${{ secrets.GCR_JSON_KEY }}
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/erlang_elixir
-        dockerfile: ci/dockerfiles/22.3/erlang_elixir
-        tags: "22.3"
-    - name: CREATE BASE CI IMAGE (22.3)
+        dockerfile: ci/dockerfiles/${{ matrix.erlang_version }}/erlang_elixir
+        tags: ${{ matrix.erlang_version }}
+    - name: CREATE BASE CI IMAGE (${{ matrix.erlang_version }})
       uses: docker/build-push-action@v1
       with:
         username: _json_key
@@ -25,30 +31,5 @@ jobs:
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci-base
         dockerfile: ci/dockerfiles/ci-base
-        build_args: ERLANG_VERSION=22.3,SECONDARY_UMBRELLA_GITREFS=v3.7.28 v3.8.9
-        tags: "22.3"
-  ci-base-23_1:
-    name: ci-base-23_1
-    runs-on: ubuntu-18.04
-    steps:
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2
-    - name: CREATE ERLANG+ELIXIR IMAGE (23.1)
-      uses: docker/build-push-action@v1
-      with:
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/erlang_elixir
-        dockerfile: ci/dockerfiles/23.1/erlang_elixir
-        tags: "23.1"
-    - name: CREATE BASE CI IMAGE (23.1)
-      uses: docker/build-push-action@v1
-      with:
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/ci-base
-        dockerfile: ci/dockerfiles/ci-base
-        build_args: ERLANG_VERSION=23.1,SECONDARY_UMBRELLA_GITREFS=v3.7.28 v3.8.9
-        tags: "23.1"
+        build_args: ERLANG_VERSION=${{ matrix.erlang_version }},SECONDARY_UMBRELLA_GITREFS=v3.7.28 v3.8.9
+        tags: ${{ matrix.erlang_version }}

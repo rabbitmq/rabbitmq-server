@@ -51,52 +51,52 @@ DEPS_YAML_FILE = workflow_sources/deps.yml
 
 define dep_yaml_chunk
 $(eval SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(wildcard deps/$(1)/test/*_SUITE.erl)))))
-echo -n "\n- name: $(1)\n  suites:$(if $(SUITES),$(foreach suite,$(SUITES),\n  - name: $(suite)\n    time: 0), [])" >> $(DEPS_YAML_FILE);
+echo "\n- name: $(1)\n  suites:$(if $(SUITES),$(foreach suite,$(SUITES),\n  - name: $(suite)), [])" >> $(DEPS_YAML_FILE);
 endef
 
 $(DEPS_YAML_FILE):
-	@echo -n "#@data/values\n---\n#@overlay/match missing_ok=True\ndeps:" > $@
+	@echo "#@data/values\n---\n#@overlay/match missing_ok=True\ndeps:" > $@
 	@$(foreach dep,$(VENDORED_COMPONENTS),$(call dep_yaml_chunk,$(dep)))
 	@cat $@ | git stripspace > $@.fixed && mv $@.fixed $@
-
-ERLANG_VERSIONS = 22.3 23.1
-ERLANG_VERSIONS_YAML1 = [$(foreach v,$(ERLANG_VERSIONS),,"$(v)")]
-UNFIXED := [,"
-ERLANG_VERSIONS_YAML2 = $(subst $(UNFIXED),[",$(ERLANG_VERSIONS_YAML1))
 
 .github/workflows/base-images.yaml: $(YTT) $(wildcard workflow_sources/base_image/*)
 	ytt -f workflow_sources/base_image \
 	-f workflow_sources/base_values.yml \
-	--data-value-yaml erlang_versions='$(ERLANG_VERSIONS_YAML2)' \
 	--output-files /tmp
 	cat /tmp/workflow.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
 	> $@
 
-.github/workflows/test-erlang-otp-%.yaml: $(YTT) $(DEPS_YAML_FILE) $(wildcard workflow_sources/test/*)
+.github/workflows/test-erlang-otp-%.yaml: \
+  $(YTT) $(DEPS_YAML_FILE) workflow_sources/test-erlang-otp-%.yml $(wildcard workflow_sources/test/*)
 	ytt -f workflow_sources/test \
 	-f workflow_sources/base_values.yml \
 	-f $(DEPS_YAML_FILE) \
-	--data-value-yaml erlang_versions='$(ERLANG_VERSIONS_YAML2)' \
-	--data-value erlang_version=$* \
+	-f workflow_sources/test-erlang-otp-$*.yml \
 	--output-files /tmp
-	cat /tmp/workflow.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
+	cat /tmp/test-erlang-otp-$*.yml | sed s/a_magic_string_that_we_will_sed_to_on/on/ \
 	> $@
 
 monorepo-actions: \
   .github/workflows/base-images.yaml \
-  $(foreach v,$(ERLANG_VERSIONS), .github/workflows/test-erlang-otp-$(v).yaml)
+  $(patsubst workflow_sources/%.yml,.github/workflows/%.yaml,$(wildcard workflow_sources/test-erlang-otp-*.yml))
 
 DOCKER_REPO ?= eu.gcr.io/cf-rabbitmq-core
 
-CI_BASE_IMAGES = $(foreach v,$(ERLANG_VERSIONS),ci-base-image-$(v))
-.PHONY: $(CI_BASE_IMAGES)
-$(CI_BASE_IMAGES):
+.PHONY: erlang-elixir-image-%
+erlang-elixir-image-%:
 	docker build . \
-		-f ci/dockerfiles/$(subst ci-base-image-,,$@)/base \
-		-t $(DOCKER_REPO)/ci-base:$(subst ci-base-image-,,$@)
+		-f ci/dockerfiles/$*/erlang_elixir \
+		-t $(DOCKER_REPO)/erlang_elixir:$*
+
+.PHONY: ci-base-image-%
+ci-base-image-%:
+	docker build . \
+		-f ci/dockerfiles/ci-base \
+		-t $(DOCKER_REPO)/ci-base:$* \
+		--build-arg ERLANG_VERSION=$*
 
 .PHONY: ci-base-images
-ci-base-images: $(CI_BASE_IMAGES)
+ci-base-images: ci-base-image-22.3 ci-base-image-23.1
 
 PUSHES = $(foreach v,$(ERLANG_VERSIONS),push-base-image-$(v))
 .PHONY: $(PUSHES)
@@ -156,3 +156,10 @@ docker: local-ci-image
 		--oom-score-adj -500 \
 		$(LOCAL_IMAGE) \
 		/bin/bash
+
+.PHONY: distclean-%
+distclean-%:
+	$(MAKE) -C deps/$* distclean || echo "Failed to distclean $*"
+
+.PHONY: monorepo-distclean
+monorepo-distclean: $(foreach dep,$(VENDORED_COMPONENTS),distclean-$(dep))

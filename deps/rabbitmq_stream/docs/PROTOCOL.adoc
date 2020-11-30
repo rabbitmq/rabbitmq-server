@@ -142,6 +142,21 @@ doest not contain a correlation ID.
 |17
 |Yes
 
+|<<declareproducer>>
+|Client
+|18
+|Yes
+
+|<<deleteproducer>>
+|Client
+|19
+|Yes
+
+|<<querypublishersequence>>
+|Client
+|20
+|Yes
+
 |<<create>>
 |Client
 |998
@@ -159,7 +174,6 @@ doest not contain a correlation ID.
 Publish => Key Version Stream PublishedMessages
   Key => int16 // 0
   Version => int16
-  Stream => string // the name of the stream
   PublisherId => uint8
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
@@ -249,7 +263,7 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
 PublishError => Key Version [PublishingError]
   Key => int16 // 6
   Version => int16
-  PublisherId => int8
+  PublisherId => uint8
   PublishingError => PublishingId Code
   PublishingId => int64
   Code => int16 // code to identify the problem
@@ -422,12 +436,64 @@ QueryOffsetRequest => Key Version CorrelationId Reference Stream
   Reference => string // max 256 characters
   Stream => string
 
-QueryOffsetResponse => Key Version CorrelationId Reference Stream
+QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
   Key => int16 // 17
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
-  Offset => int64
+  Offset => uint64
+```
+
+=== DeclarePublisher
+
+```
+DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherReference] Stream
+  Key => int16 // 18
+  Version => int16
+  CorrelationId => int32
+  PublisherId => uint8
+  PublisherReference => string // max 256 characters
+  Stream => string
+
+DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
+  Key => int16 // 18
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+```
+
+=== DeletePublisher
+
+```
+DeletePublisherRequest => Key Version CorrelationId PublisherId
+  Key => int16 // 19
+  Version => int16
+  CorrelationId => int32
+  PublisherId => uint8
+
+DeletePublisherResponse => Key Version CorrelationId ResponseCode
+  Key => int16 // 19
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+```
+
+=== QueryPublisherSequence
+
+```
+QueryPublisherRequest => Key Version CorrelationId PublisherReference Stream
+  Key => int16 // 20
+  Version => int16
+  CorrelationId => int32
+  PublisherReference => string // max 256 characters
+  Stream => string
+
+QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
+  Key => int16 // 20
+  Version => int16
+  CorrelationId => int32
+  ResponseCode => int16
+  Sequence => uint64
 ```
 
 === Create

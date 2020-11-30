@@ -1,11 +1,12 @@
 #@ load("@ytt:data", "data")
 #@ load("util.star", "to_build_args")
-#@ load("helpers.star", "ci_image")
+#@ load("helpers.star", "ci_image", "skip_ci_condition")
 
-#@ def tests_job(dep):
+#@ def tests_job(dep, erlang_version=None):
 name: #@ dep.name
 needs: [prepare]
 runs-on: ubuntu-18.04
+if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
   - name: RECORD STEP START
@@ -16,19 +17,27 @@ steps:
     with:
       service_account_key: ${{ secrets.GCR_JSON_KEY }}
       export_default_credentials: true
+  #@ if getattr(dep, 'use_terraform', False):
+  - name: PREPARE TERRAFORM SECRETS
+    run: |
+      mkdir terraform && chmod 777 terraform
+      echo "${{ secrets.TERRAFORM_SSH_KEY }}" > terraform/id_rsa_terraform
+      echo "${{ secrets.TERRAFORM_SSH_KEY_PUB }}" > terraform/id_rsa_terraform.pub
+  #@ end
   - name: RUN TESTS
     run: |
       gcloud auth configure-docker
-      docker pull (@= ci_image() @)
+      docker pull (@= ci_image(erlang_version) @)
       mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+        (@= additional_docker_args(dep, erlang_version=erlang_version) @) \
         --volume ${PWD}/ct-logs:/workspace/ct-logs \
         --oom-kill-disable \
-        (@= ci_image() @) \
+        (@= ci_image(erlang_version) @) \
         ci/scripts/tests.sh
   - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
     #! https://github.com/marketplace/actions/upload-artifact
@@ -37,4 +46,18 @@ steps:
     with:
       name: (@= dep.name @)-ct-logs
       path: "ct-logs/*-ct-logs-*.tar.xz"
+#@ end
+
+#@ def additional_docker_args(dep, erlang_version=None):
+#@   if getattr(dep, 'use_terraform', False):
+#@     args = []
+#@     args.append("--env ERLANG_VERSION={}".format(erlang_version))
+#@     args.append("--env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}")
+#@     args.append("--env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
+#@     args.append("--env SSH_KEY=/workspace/terraform/id_rsa_terraform")
+#@     args.append("--volume ${PWD}/terraform:/workspace/terraform")
+#@     return " \\\n  ".join(args)
+#@   else:
+#@     return ""
+#@   end
 #@ end

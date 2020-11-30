@@ -4,6 +4,7 @@ jobs:
   prepare:
     name: prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     outputs:
       build_start: ${{ steps.buildevents.outputs.build_start }}
       branch_or_tag_name: ${{ steps.buildevents.outputs.branch_or_tag_name }}
@@ -42,6 +43,7 @@ jobs:
   xref:
     name: xref
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD XREF START
       id: buildevents
@@ -387,6 +389,16 @@ jobs:
           --workdir /workspace/rabbitmq \
           eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
           ci/scripts/xref.sh
+    - name: RUN XREF rabbitmq_stream
+      run: |
+        docker run \
+          --env project=rabbitmq_stream \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --volume ${PWD}:/workspace/rabbitmq \
+          --workdir /workspace/rabbitmq \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:22.3 \
+          ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_top
       run: |
         docker run \
@@ -484,6 +496,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -503,6 +516,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -518,6 +532,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     outputs:
       step_start: ${{ steps.buildevents.outputs.step_start }}
     steps:
@@ -548,6 +563,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -616,6 +632,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -684,6 +701,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -752,6 +770,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -820,6 +839,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -888,6 +908,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -956,6 +977,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1024,6 +1046,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1092,6 +1115,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1160,6 +1184,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1228,6 +1253,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1296,6 +1322,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1364,6 +1391,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1432,6 +1460,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1500,6 +1529,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1568,6 +1598,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1636,6 +1667,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1704,6 +1736,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1772,6 +1805,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1840,6 +1874,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1908,6 +1943,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -1976,6 +2012,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2044,6 +2081,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2112,6 +2150,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2180,6 +2219,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2248,6 +2288,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2316,6 +2357,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2384,6 +2426,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2452,6 +2495,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2520,6 +2564,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2588,6 +2633,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2656,6 +2702,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2724,6 +2771,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2792,6 +2840,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2860,6 +2909,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2928,6 +2978,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -2996,6 +3047,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3064,6 +3116,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3132,6 +3185,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3200,6 +3254,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3268,6 +3323,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3336,6 +3392,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3404,6 +3461,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3472,6 +3530,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3540,6 +3599,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3608,6 +3668,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3676,6 +3737,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3744,6 +3806,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3812,6 +3875,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3880,6 +3944,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -3948,6 +4013,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4016,6 +4082,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4084,6 +4151,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4152,6 +4220,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4220,6 +4289,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4288,6 +4358,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4356,6 +4427,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4424,6 +4496,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4492,6 +4565,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4560,6 +4634,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4628,6 +4703,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4696,6 +4772,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4764,6 +4841,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4832,6 +4910,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4900,6 +4979,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -4968,6 +5048,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5036,6 +5117,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5104,6 +5186,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5172,6 +5255,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5240,6 +5324,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5308,6 +5393,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5376,6 +5462,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5444,6 +5531,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5512,6 +5600,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5580,6 +5669,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5648,6 +5738,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5716,6 +5807,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5784,6 +5876,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5852,6 +5945,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5920,6 +6014,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -5988,6 +6083,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6056,6 +6152,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6124,6 +6221,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6192,6 +6290,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6260,6 +6359,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6328,6 +6428,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6396,6 +6497,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6464,6 +6566,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6532,6 +6635,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6600,6 +6704,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6668,6 +6773,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6736,6 +6842,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6804,6 +6911,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6872,6 +6980,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -6940,6 +7049,7 @@ jobs:
     - prepare
     - rabbit-checks
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -7102,7 +7212,7 @@ jobs:
     - rabbit-ct-upgrade_preparation
     - rabbit-ct-vhost
     runs-on: ubuntu-18.04
-    if: always()
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
@@ -7124,6 +7234,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7143,6 +7254,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7153,11 +7265,48 @@ jobs:
       with:
         name: amqp_client-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  amqp10_client:
+    name: amqp10_client
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=amqp10_client \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: amqp10_client-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   amqp10_common:
     name: amqp10_common
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7177,6 +7326,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7187,11 +7337,48 @@ jobs:
       with:
         name: amqp10_common-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_amqp1_0:
+    name: rabbitmq_amqp1_0
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_amqp1_0 \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_amqp1_0-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_backend_cache:
     name: rabbitmq_auth_backend_cache
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7211,6 +7398,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7226,6 +7414,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7245,6 +7434,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7255,11 +7445,48 @@ jobs:
       with:
         name: rabbitmq_auth_backend_http-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_auth_backend_ldap:
+    name: rabbitmq_auth_backend_ldap
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_auth_backend_ldap \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_auth_backend_ldap-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_auth_backend_oauth2:
     name: rabbitmq_auth_backend_oauth2
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7279,6 +7506,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7294,6 +7522,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7313,6 +7542,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7328,6 +7558,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7347,6 +7578,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7362,6 +7594,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7395,6 +7628,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7414,6 +7648,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7429,6 +7664,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7448,6 +7684,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7463,6 +7700,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7482,6 +7720,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7497,6 +7736,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7516,6 +7756,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7531,6 +7772,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7550,6 +7792,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7565,6 +7808,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7584,6 +7828,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7599,6 +7844,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7618,6 +7864,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7628,11 +7875,48 @@ jobs:
       with:
         name: rabbitmq_management_agent-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_mqtt:
+    name: rabbitmq_mqtt
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_mqtt \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_mqtt-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_common:
     name: rabbitmq_peer_discovery_common
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7652,6 +7936,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7662,11 +7947,57 @@ jobs:
       with:
         name: rabbitmq_peer_discovery_common-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_peer_discovery_aws:
+    name: rabbitmq_peer_discovery_aws
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: PREPARE TERRAFORM SECRETS
+      run: |
+        mkdir terraform && chmod 777 terraform
+        echo "${{ secrets.TERRAFORM_SSH_KEY }}" > terraform/id_rsa_terraform
+        echo "${{ secrets.TERRAFORM_SSH_KEY_PUB }}" > terraform/id_rsa_terraform.pub
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_peer_discovery_aws \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+          --env ERLANG_VERSION=22.3 \
+          --env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+          --env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+          --env SSH_KEY=/workspace/terraform/id_rsa_terraform \
+          --volume ${PWD}/terraform:/workspace/terraform \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_peer_discovery_aws-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_peer_discovery_k8s:
     name: rabbitmq_peer_discovery_k8s
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7686,6 +8017,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7701,6 +8033,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7720,6 +8053,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7730,11 +8064,48 @@ jobs:
       with:
         name: rabbitmq_peer_discovery_consul-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_peer_discovery_etcd:
+    name: rabbitmq_peer_discovery_etcd
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_peer_discovery_etcd \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_peer_discovery_etcd-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_prometheus:
     name: rabbitmq_prometheus
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7754,6 +8125,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7769,6 +8141,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7788,6 +8161,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7803,6 +8177,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7822,6 +8197,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7837,6 +8213,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7856,6 +8233,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7871,6 +8249,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7890,6 +8269,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7905,6 +8285,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7924,6 +8305,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7939,6 +8321,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7958,6 +8341,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -7968,11 +8352,48 @@ jobs:
       with:
         name: rabbitmq_stomp-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
+  rabbitmq_stream:
+    name: rabbitmq_stream
+    needs:
+    - prepare
+    runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
+    steps:
+    - name: RECORD STEP START
+      id: buildevents
+      run: |
+        echo "::set-output name=step_start::$(date +%s)"
+    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+      with:
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
+    - name: RUN TESTS
+      run: |
+        gcloud auth configure-docker
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
+        mkdir ct-logs && chmod 777 ct-logs
+        docker run \
+          --env project=rabbitmq_stream \
+          --env GITHUB_RUN_ID=${{ github.run_id }} \
+          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
+          --volume ${PWD}/ct-logs:/workspace/ct-logs \
+          --oom-kill-disable \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
+          ci/scripts/tests.sh
+    - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
+      uses: actions/upload-artifact@v2-preview
+      if: failure()
+      with:
+        name: rabbitmq_stream-ct-logs
+        path: ct-logs/*-ct-logs-*.tar.xz
   rabbitmq_top:
     name: rabbitmq_top
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -7992,6 +8413,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8007,6 +8429,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8026,6 +8449,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8041,6 +8465,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8060,6 +8485,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8075,6 +8501,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8094,6 +8521,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8109,6 +8537,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8128,6 +8557,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8143,6 +8573,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8162,6 +8593,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8177,6 +8609,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8196,6 +8629,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8211,6 +8645,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8230,6 +8665,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
+           \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
           eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
@@ -8245,6 +8681,7 @@ jobs:
     needs:
     - prepare
     runs-on: ubuntu-18.04
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
     - name: RECORD STEP START
       id: buildevents
@@ -8289,9 +8726,12 @@ jobs:
     - rabbit_common
     - rabbit
     - amqp_client
+    - amqp10_client
     - amqp10_common
+    - rabbitmq_amqp1_0
     - rabbitmq_auth_backend_cache
     - rabbitmq_auth_backend_http
+    - rabbitmq_auth_backend_ldap
     - rabbitmq_auth_backend_oauth2
     - rabbitmq_auth_mechanism_ssl
     - rabbitmq_aws
@@ -8303,9 +8743,12 @@ jobs:
     - rabbitmq_jms_topic_exchange
     - rabbitmq_management
     - rabbitmq_management_agent
+    - rabbitmq_mqtt
     - rabbitmq_peer_discovery_common
+    - rabbitmq_peer_discovery_aws
     - rabbitmq_peer_discovery_k8s
     - rabbitmq_peer_discovery_consul
+    - rabbitmq_peer_discovery_etcd
     - rabbitmq_prometheus
     - rabbitmq_random_exchange
     - rabbitmq_recent_history_exchange
@@ -8313,6 +8756,7 @@ jobs:
     - rabbitmq_shovel
     - rabbitmq_shovel_management
     - rabbitmq_stomp
+    - rabbitmq_stream
     - rabbitmq_top
     - rabbitmq_tracing
     - rabbitmq_trust_store
@@ -8323,7 +8767,7 @@ jobs:
     - rabbitmq_web_stomp_examples
     - package-generic-unix
     runs-on: ubuntu-18.04
-    if: always()
+    if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
     - uses: technote-space/workflow-conclusion-action@v1
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master

@@ -1,5 +1,8 @@
-name: Test - Erlang 23.1
-on: push
+name: Test - Erlang git master
+on:
+  schedule:
+  - cron: 0 3 * * *
+  workflow_dispatch: null
 jobs:
   prepare:
     name: prepare
@@ -17,6 +20,40 @@ jobs:
         echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
+    - name: CHECKOUT ERLANG/OTP MASTER
+      uses: actions/checkout@v2
+      with:
+        repository: erlang/otp
+        path: erlang-git-master
+    - name: DETERMINE ERLANG SHA
+      id: erlang_sha
+      run: |
+        cd erlang-git-master
+        erlang_sha=$(git rev-parse HEAD)
+        echo "::set-output name=erlang_sha::$erlang_sha"
+    - name: CREATE ERLANG+ELIXIR IMAGE (git)
+      uses: docker/build-push-action@v1
+      with:
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
+        registry: eu.gcr.io
+        repository: cf-rabbitmq-core/erlang_elixir
+        dockerfile: ci/dockerfiles/git/erlang_elixir
+        build_args: ERLANG_VERSION=${{ steps.erlang_sha.outputs.erlang_sha }}
+        tags: git
+    - name: CREATE BASE CI IMAGE (git)
+      uses: docker/build-push-action@v1
+      with:
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
+        registry: eu.gcr.io
+        repository: cf-rabbitmq-core/ci-base
+        dockerfile: ci/dockerfiles/ci-base
+        build_args: ERLANG_VERSION=git,SECONDARY_UMBRELLA_GITREFS=v3.7.28 v3.8.9
+        tags: git
+    - name: CLEANUP ERLANG/OTP MASTER
+      run: |
+        rm -rf erlang-git-master
     - name: PREPARE BUILD IMAGE
       uses: docker/build-push-action@v1
       with:
@@ -25,8 +62,8 @@ jobs:
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci
         dockerfile: ci/dockerfiles/ci
-        build_args: ERLANG_VERSION=23.1,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
-        tags: erlang-23.1-rabbitmq-${{ github.sha }}
+        build_args: ERLANG_VERSION=git,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
+        tags: erlang-git-rabbitmq-${{ github.sha }}
     - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
@@ -38,10 +75,12 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.build_start }} \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/collect.sh
   xref:
     name: xref
+    needs:
+    - prepare
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
@@ -58,7 +97,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:23.1
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:git
     - name: RUN XREF rabbit_common
       run: |
         docker run \
@@ -67,7 +106,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbit
       run: |
@@ -77,7 +116,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF amqp_client
       run: |
@@ -87,7 +126,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF amqp10_client
       run: |
@@ -97,7 +136,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF amqp10_common
       run: |
@@ -107,7 +146,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_amqp1_0
       run: |
@@ -117,7 +156,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_auth_backend_cache
       run: |
@@ -127,7 +166,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_auth_backend_http
       run: |
@@ -137,7 +176,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_auth_backend_ldap
       run: |
@@ -147,7 +186,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_auth_backend_oauth2
       run: |
@@ -157,7 +196,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_auth_mechanism_ssl
       run: |
@@ -167,7 +206,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_aws
       run: |
@@ -177,7 +216,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_cli
       run: |
@@ -187,7 +226,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_consistent_hash_exchange
       run: |
@@ -197,7 +236,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_event_exchange
       run: |
@@ -207,7 +246,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_federation
       run: |
@@ -217,7 +256,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_federation_management
       run: |
@@ -227,7 +266,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_jms_topic_exchange
       run: |
@@ -237,7 +276,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_management
       run: |
@@ -247,7 +286,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_management_agent
       run: |
@@ -257,7 +296,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_mqtt
       run: |
@@ -267,7 +306,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_peer_discovery_common
       run: |
@@ -277,7 +316,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_peer_discovery_aws
       run: |
@@ -287,7 +326,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_peer_discovery_k8s
       run: |
@@ -297,7 +336,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_peer_discovery_consul
       run: |
@@ -307,7 +346,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_peer_discovery_etcd
       run: |
@@ -317,7 +356,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_prometheus
       run: |
@@ -327,7 +366,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_random_exchange
       run: |
@@ -337,7 +376,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_recent_history_exchange
       run: |
@@ -347,7 +386,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_sharding
       run: |
@@ -357,7 +396,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_shovel
       run: |
@@ -367,7 +406,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_shovel_management
       run: |
@@ -377,7 +416,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_stomp
       run: |
@@ -387,7 +426,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_stream
       run: |
@@ -397,7 +436,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_top
       run: |
@@ -407,7 +446,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_tracing
       run: |
@@ -417,7 +456,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_trust_store
       run: |
@@ -427,7 +466,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_web_dispatch
       run: |
@@ -437,7 +476,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_web_mqtt
       run: |
@@ -447,7 +486,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_web_mqtt_examples
       run: |
@@ -457,7 +496,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_web_stomp
       run: |
@@ -467,7 +506,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RUN XREF rabbitmq_web_stomp_examples
       run: |
@@ -477,7 +516,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}:/workspace/rabbitmq \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/xref.sh
     - name: RECORD STEP FINISH
       if: always()
@@ -489,178 +528,7 @@ jobs:
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
           --volume ${PWD}/ci/scripts:/workspace/rabbitmq/ci/scripts \
           --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/collect.sh
-  dialyze:
-    name: dialyze
-    runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
-    steps:
-    - name: RECORD DIALYZE START
-      id: buildevents
-      run: |
-        echo "::set-output name=step_start::$(date +%s)"
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
-      with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
-    - name: PULL IMAGE
-      run: |
-        gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:23.1
-    - name: RUN DIALYZE rabbit_common
-      run: |
-        docker run \
-          --env project=rabbit_common \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbit
-      run: |
-        docker run \
-          --env project=rabbit \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE amqp10_client
-      run: |
-        docker run \
-          --env project=amqp10_client \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE amqp10_common
-      run: |
-        docker run \
-          --env project=amqp10_common \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_auth_mechanism_ssl
-      run: |
-        docker run \
-          --env project=rabbitmq_auth_mechanism_ssl \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_event_exchange
-      run: |
-        docker run \
-          --env project=rabbitmq_event_exchange \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_federation_management
-      run: |
-        docker run \
-          --env project=rabbitmq_federation_management \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_peer_discovery_common
-      run: |
-        docker run \
-          --env project=rabbitmq_peer_discovery_common \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_random_exchange
-      run: |
-        docker run \
-          --env project=rabbitmq_random_exchange \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_shovel_management
-      run: |
-        docker run \
-          --env project=rabbitmq_shovel_management \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_top
-      run: |
-        docker run \
-          --env project=rabbitmq_top \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_tracing
-      run: |
-        docker run \
-          --env project=rabbitmq_tracing \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_web_mqtt_examples
-      run: |
-        docker run \
-          --env project=rabbitmq_web_mqtt_examples \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RUN DIALYZE rabbitmq_web_stomp_examples
-      run: |
-        docker run \
-          --env project=rabbitmq_web_stomp_examples \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --volume ${PWD}:/workspace/rabbitmq \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
-          ci/scripts/dialyze.sh
-    - name: RECORD STEP FINISH
-      if: always()
-      run: |
-        docker run \
-          --env project=dialyze \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume ${PWD}/ci/scripts:/workspace/rabbitmq/ci/scripts \
-          --workdir /workspace/rabbitmq \
-          eu.gcr.io/cf-rabbitmq-core/ci-base:23.1 \
+          eu.gcr.io/cf-rabbitmq-core/ci-base:git \
           ci/scripts/collect.sh
   rabbit_common:
     name: rabbit_common
@@ -680,7 +548,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbit_common \
@@ -690,7 +558,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -726,8 +594,8 @@ jobs:
         registry: eu.gcr.io
         repository: cf-rabbitmq-core/ci-rabbit
         dockerfile: ci/dockerfiles/ci-dep
-        build_args: IMAGE_TAG=erlang-23.1-rabbitmq-${{ github.sha }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},project=rabbit
-        tags: erlang-23.1-rabbitmq-${{ github.sha }}
+        build_args: IMAGE_TAG=erlang-git-rabbitmq-${{ github.sha }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},project=rabbit
+        tags: erlang-git-rabbitmq-${{ github.sha }}
   rabbit-ct-amqqueue_backward_compatibility:
     name: rabbit-ct-amqqueue_backward_compatibility
     needs:
@@ -743,7 +611,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-amqqueue_backward_compatibility
       run: |
         mkdir ct-amqqueue_backward_compatibility-logs && chmod 777 ct-amqqueue_backward_compatibility-logs
@@ -753,7 +621,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-amqqueue_backward_compatibility-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -776,7 +644,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-backing_queue
       run: |
         mkdir ct-backing_queue-logs && chmod 777 ct-backing_queue-logs
@@ -786,7 +654,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-backing_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -809,7 +677,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-channel_interceptor
       run: |
         mkdir ct-channel_interceptor-logs && chmod 777 ct-channel_interceptor-logs
@@ -819,7 +687,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-channel_interceptor-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -842,7 +710,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-channel_operation_timeout
       run: |
         mkdir ct-channel_operation_timeout-logs && chmod 777 ct-channel_operation_timeout-logs
@@ -852,7 +720,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-channel_operation_timeout-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -875,7 +743,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster
       run: |
         mkdir ct-cluster-logs && chmod 777 ct-cluster-logs
@@ -885,7 +753,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-cluster-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -908,7 +776,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster_rename
       run: |
         mkdir ct-cluster_rename-logs && chmod 777 ct-cluster_rename-logs
@@ -918,7 +786,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-cluster_rename-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -941,7 +809,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-clustering_management
       run: |
         mkdir ct-clustering_management-logs && chmod 777 ct-clustering_management-logs
@@ -951,7 +819,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-clustering_management-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -974,7 +842,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-config_schema
       run: |
         mkdir ct-config_schema-logs && chmod 777 ct-config_schema-logs
@@ -984,7 +852,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-config_schema-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1007,7 +875,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-confirms_rejects
       run: |
         mkdir ct-confirms_rejects-logs && chmod 777 ct-confirms_rejects-logs
@@ -1017,7 +885,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-confirms_rejects-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1040,7 +908,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-consumer_timeout
       run: |
         mkdir ct-consumer_timeout-logs && chmod 777 ct-consumer_timeout-logs
@@ -1050,7 +918,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-consumer_timeout-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1073,7 +941,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-crashing_queues
       run: |
         mkdir ct-crashing_queues-logs && chmod 777 ct-crashing_queues-logs
@@ -1083,7 +951,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-crashing_queues-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1106,7 +974,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-dead_lettering
       run: |
         mkdir ct-dead_lettering-logs && chmod 777 ct-dead_lettering-logs
@@ -1116,7 +984,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-dead_lettering-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1139,7 +1007,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-definition_import
       run: |
         mkdir ct-definition_import-logs && chmod 777 ct-definition_import-logs
@@ -1149,7 +1017,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-definition_import-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1172,7 +1040,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-disconnect_detected_during_alarm
       run: |
         mkdir ct-disconnect_detected_during_alarm-logs && chmod 777 ct-disconnect_detected_during_alarm-logs
@@ -1182,7 +1050,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-disconnect_detected_during_alarm-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1205,7 +1073,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_ha
       run: |
         mkdir ct-dynamic_ha-logs && chmod 777 ct-dynamic_ha-logs
@@ -1215,7 +1083,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-dynamic_ha-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1238,7 +1106,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_qq
       run: |
         mkdir ct-dynamic_qq-logs && chmod 777 ct-dynamic_qq-logs
@@ -1248,7 +1116,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-dynamic_qq-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1271,7 +1139,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-eager_sync
       run: |
         mkdir ct-eager_sync-logs && chmod 777 ct-eager_sync-logs
@@ -1281,7 +1149,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-eager_sync-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1304,7 +1172,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-feature_flags
       run: |
         mkdir ct-feature_flags-logs && chmod 777 ct-feature_flags-logs
@@ -1314,7 +1182,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-feature_flags-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1337,7 +1205,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-lazy_queue
       run: |
         mkdir ct-lazy_queue-logs && chmod 777 ct-lazy_queue-logs
@@ -1347,7 +1215,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-lazy_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1370,7 +1238,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_consumers_sanity_check
       run: |
         mkdir ct-list_consumers_sanity_check-logs && chmod 777 ct-list_consumers_sanity_check-logs
@@ -1380,7 +1248,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-list_consumers_sanity_check-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1403,7 +1271,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_queues_online_and_offline
       run: |
         mkdir ct-list_queues_online_and_offline-logs && chmod 777 ct-list_queues_online_and_offline-logs
@@ -1413,7 +1281,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-list_queues_online_and_offline-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1436,7 +1304,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-maintenance_mode
       run: |
         mkdir ct-maintenance_mode-logs && chmod 777 ct-maintenance_mode-logs
@@ -1446,7 +1314,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-maintenance_mode-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1469,7 +1337,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-many_node_ha
       run: |
         mkdir ct-many_node_ha-logs && chmod 777 ct-many_node_ha-logs
@@ -1479,7 +1347,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-many_node_ha-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1502,7 +1370,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-message_size_limit
       run: |
         mkdir ct-message_size_limit-logs && chmod 777 ct-message_size_limit-logs
@@ -1512,7 +1380,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-message_size_limit-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1535,7 +1403,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-metrics
       run: |
         mkdir ct-metrics-logs && chmod 777 ct-metrics-logs
@@ -1545,7 +1413,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-metrics-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1568,7 +1436,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-mirrored_supervisor
       run: |
         mkdir ct-mirrored_supervisor-logs && chmod 777 ct-mirrored_supervisor-logs
@@ -1578,7 +1446,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-mirrored_supervisor-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1601,7 +1469,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-msg_store
       run: |
         mkdir ct-msg_store-logs && chmod 777 ct-msg_store-logs
@@ -1611,7 +1479,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-msg_store-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1634,7 +1502,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-peer_discovery_classic_config
       run: |
         mkdir ct-peer_discovery_classic_config-logs && chmod 777 ct-peer_discovery_classic_config-logs
@@ -1644,7 +1512,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-peer_discovery_classic_config-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1667,7 +1535,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-peer_discovery_dns
       run: |
         mkdir ct-peer_discovery_dns-logs && chmod 777 ct-peer_discovery_dns-logs
@@ -1677,7 +1545,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-peer_discovery_dns-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1700,7 +1568,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_limit
       run: |
         mkdir ct-per_user_connection_channel_limit-logs && chmod 777 ct-per_user_connection_channel_limit-logs
@@ -1710,7 +1578,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_user_connection_channel_limit-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1733,7 +1601,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_limit_partitions
       run: |
         mkdir ct-per_user_connection_channel_limit_partitions-logs && chmod 777 ct-per_user_connection_channel_limit_partitions-logs
@@ -1743,7 +1611,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_user_connection_channel_limit_partitions-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1766,7 +1634,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_tracking
       run: |
         mkdir ct-per_user_connection_channel_tracking-logs && chmod 777 ct-per_user_connection_channel_tracking-logs
@@ -1776,7 +1644,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_user_connection_channel_tracking-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1799,7 +1667,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_tracking
       run: |
         mkdir ct-per_user_connection_tracking-logs && chmod 777 ct-per_user_connection_tracking-logs
@@ -1809,7 +1677,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_user_connection_tracking-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1832,7 +1700,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_connection_limit
       run: |
         mkdir ct-per_vhost_connection_limit-logs && chmod 777 ct-per_vhost_connection_limit-logs
@@ -1842,7 +1710,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_vhost_connection_limit-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1865,7 +1733,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_connection_limit_partitions
       run: |
         mkdir ct-per_vhost_connection_limit_partitions-logs && chmod 777 ct-per_vhost_connection_limit_partitions-logs
@@ -1875,7 +1743,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_vhost_connection_limit_partitions-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1898,7 +1766,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_msg_store
       run: |
         mkdir ct-per_vhost_msg_store-logs && chmod 777 ct-per_vhost_msg_store-logs
@@ -1908,7 +1776,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_vhost_msg_store-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1931,7 +1799,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_queue_limit
       run: |
         mkdir ct-per_vhost_queue_limit-logs && chmod 777 ct-per_vhost_queue_limit-logs
@@ -1941,7 +1809,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-per_vhost_queue_limit-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1964,7 +1832,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-policy
       run: |
         mkdir ct-policy-logs && chmod 777 ct-policy-logs
@@ -1974,7 +1842,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-policy-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -1997,7 +1865,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue
       run: |
         mkdir ct-priority_queue-logs && chmod 777 ct-priority_queue-logs
@@ -2007,7 +1875,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-priority_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2030,7 +1898,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue_recovery
       run: |
         mkdir ct-priority_queue_recovery-logs && chmod 777 ct-priority_queue_recovery-logs
@@ -2040,7 +1908,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-priority_queue_recovery-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2063,7 +1931,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-product_info
       run: |
         mkdir ct-product_info-logs && chmod 777 ct-product_info-logs
@@ -2073,7 +1941,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-product_info-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2096,7 +1964,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-proxy_protocol
       run: |
         mkdir ct-proxy_protocol-logs && chmod 777 ct-proxy_protocol-logs
@@ -2106,7 +1974,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-proxy_protocol-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2129,7 +1997,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-publisher_confirms_parallel
       run: |
         mkdir ct-publisher_confirms_parallel-logs && chmod 777 ct-publisher_confirms_parallel-logs
@@ -2139,7 +2007,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-publisher_confirms_parallel-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2162,7 +2030,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_length_limits
       run: |
         mkdir ct-queue_length_limits-logs && chmod 777 ct-queue_length_limits-logs
@@ -2172,7 +2040,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-queue_length_limits-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2195,7 +2063,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_master_location
       run: |
         mkdir ct-queue_master_location-logs && chmod 777 ct-queue_master_location-logs
@@ -2205,7 +2073,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-queue_master_location-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2228,7 +2096,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_parallel
       run: |
         mkdir ct-queue_parallel-logs && chmod 777 ct-queue_parallel-logs
@@ -2238,7 +2106,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-queue_parallel-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2261,7 +2129,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_type
       run: |
         mkdir ct-queue_type-logs && chmod 777 ct-queue_type-logs
@@ -2271,7 +2139,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-queue_type-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2294,7 +2162,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-quorum_queue
       run: |
         mkdir ct-quorum_queue-logs && chmod 777 ct-quorum_queue-logs
@@ -2304,7 +2172,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-quorum_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2327,7 +2195,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_confirms
       run: |
         mkdir ct-rabbit_confirms-logs && chmod 777 ct-rabbit_confirms-logs
@@ -2337,7 +2205,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_confirms-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2360,7 +2228,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_core_metrics_gc
       run: |
         mkdir ct-rabbit_core_metrics_gc-logs && chmod 777 ct-rabbit_core_metrics_gc-logs
@@ -2370,7 +2238,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_core_metrics_gc-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2393,7 +2261,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo
       run: |
         mkdir ct-rabbit_fifo-logs && chmod 777 ct-rabbit_fifo-logs
@@ -2403,7 +2271,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_fifo-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2426,7 +2294,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_int
       run: |
         mkdir ct-rabbit_fifo_int-logs && chmod 777 ct-rabbit_fifo_int-logs
@@ -2436,7 +2304,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_fifo_int-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2459,7 +2327,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_prop
       run: |
         mkdir ct-rabbit_fifo_prop-logs && chmod 777 ct-rabbit_fifo_prop-logs
@@ -2469,7 +2337,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_fifo_prop-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2492,7 +2360,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_v0
       run: |
         mkdir ct-rabbit_fifo_v0-logs && chmod 777 ct-rabbit_fifo_v0-logs
@@ -2502,7 +2370,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_fifo_v0-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2525,7 +2393,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_msg_record
       run: |
         mkdir ct-rabbit_msg_record-logs && chmod 777 ct-rabbit_msg_record-logs
@@ -2535,7 +2403,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_msg_record-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2558,7 +2426,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_stream_queue
       run: |
         mkdir ct-rabbit_stream_queue-logs && chmod 777 ct-rabbit_stream_queue-logs
@@ -2568,7 +2436,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbit_stream_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2591,7 +2459,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmq_queues_cli_integration
       run: |
         mkdir ct-rabbitmq_queues_cli_integration-logs && chmod 777 ct-rabbitmq_queues_cli_integration-logs
@@ -2601,7 +2469,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbitmq_queues_cli_integration-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2624,7 +2492,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmqctl_integration
       run: |
         mkdir ct-rabbitmqctl_integration-logs && chmod 777 ct-rabbitmqctl_integration-logs
@@ -2634,7 +2502,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbitmqctl_integration-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2657,7 +2525,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmqctl_shutdown
       run: |
         mkdir ct-rabbitmqctl_shutdown-logs && chmod 777 ct-rabbitmqctl_shutdown-logs
@@ -2667,7 +2535,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-rabbitmqctl_shutdown-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2690,7 +2558,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-signal_handling
       run: |
         mkdir ct-signal_handling-logs && chmod 777 ct-signal_handling-logs
@@ -2700,7 +2568,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-signal_handling-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2723,7 +2591,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-simple_ha
       run: |
         mkdir ct-simple_ha-logs && chmod 777 ct-simple_ha-logs
@@ -2733,7 +2601,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-simple_ha-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2756,7 +2624,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-single_active_consumer
       run: |
         mkdir ct-single_active_consumer-logs && chmod 777 ct-single_active_consumer-logs
@@ -2766,7 +2634,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-single_active_consumer-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2789,7 +2657,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-sync_detection
       run: |
         mkdir ct-sync_detection-logs && chmod 777 ct-sync_detection-logs
@@ -2799,7 +2667,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-sync_detection-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2822,7 +2690,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-term_to_binary_compat_prop
       run: |
         mkdir ct-term_to_binary_compat_prop-logs && chmod 777 ct-term_to_binary_compat_prop-logs
@@ -2832,7 +2700,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-term_to_binary_compat_prop-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2855,7 +2723,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-topic_permission
       run: |
         mkdir ct-topic_permission-logs && chmod 777 ct-topic_permission-logs
@@ -2865,7 +2733,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-topic_permission-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2888,7 +2756,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control
       run: |
         mkdir ct-unit_access_control-logs && chmod 777 ct-unit_access_control-logs
@@ -2898,7 +2766,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_access_control-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2921,7 +2789,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
       run: |
         mkdir ct-unit_access_control_authn_authz_context_propagation-logs && chmod 777 ct-unit_access_control_authn_authz_context_propagation-logs
@@ -2931,7 +2799,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_access_control_authn_authz_context_propagation-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2954,7 +2822,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control_credential_validation
       run: |
         mkdir ct-unit_access_control_credential_validation-logs && chmod 777 ct-unit_access_control_credential_validation-logs
@@ -2964,7 +2832,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_access_control_credential_validation-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -2987,7 +2855,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_amqp091_content_framing
       run: |
         mkdir ct-unit_amqp091_content_framing-logs && chmod 777 ct-unit_amqp091_content_framing-logs
@@ -2997,7 +2865,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_amqp091_content_framing-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3020,7 +2888,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_amqp091_server_properties
       run: |
         mkdir ct-unit_amqp091_server_properties-logs && chmod 777 ct-unit_amqp091_server_properties-logs
@@ -3030,7 +2898,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_amqp091_server_properties-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3053,7 +2921,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_app_management
       run: |
         mkdir ct-unit_app_management-logs && chmod 777 ct-unit_app_management-logs
@@ -3063,7 +2931,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_app_management-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3086,7 +2954,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_cluster_formation_locking_mocks
       run: |
         mkdir ct-unit_cluster_formation_locking_mocks-logs && chmod 777 ct-unit_cluster_formation_locking_mocks-logs
@@ -3096,7 +2964,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_cluster_formation_locking_mocks-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3119,7 +2987,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_collections
       run: |
         mkdir ct-unit_collections-logs && chmod 777 ct-unit_collections-logs
@@ -3129,7 +2997,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_collections-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3152,7 +3020,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_config_value_encryption
       run: |
         mkdir ct-unit_config_value_encryption-logs && chmod 777 ct-unit_config_value_encryption-logs
@@ -3162,7 +3030,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_config_value_encryption-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3185,7 +3053,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_connection_tracking
       run: |
         mkdir ct-unit_connection_tracking-logs && chmod 777 ct-unit_connection_tracking-logs
@@ -3195,7 +3063,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_connection_tracking-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3218,7 +3086,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_credit_flow
       run: |
         mkdir ct-unit_credit_flow-logs && chmod 777 ct-unit_credit_flow-logs
@@ -3228,7 +3096,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_credit_flow-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3251,7 +3119,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_disk_monitor
       run: |
         mkdir ct-unit_disk_monitor-logs && chmod 777 ct-unit_disk_monitor-logs
@@ -3261,7 +3129,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_disk_monitor-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3284,7 +3152,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_disk_monitor_mocks
       run: |
         mkdir ct-unit_disk_monitor_mocks-logs && chmod 777 ct-unit_disk_monitor_mocks-logs
@@ -3294,7 +3162,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_disk_monitor_mocks-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3317,7 +3185,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_file_handle_cache
       run: |
         mkdir ct-unit_file_handle_cache-logs && chmod 777 ct-unit_file_handle_cache-logs
@@ -3327,7 +3195,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_file_handle_cache-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3350,7 +3218,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_gen_server2
       run: |
         mkdir ct-unit_gen_server2-logs && chmod 777 ct-unit_gen_server2-logs
@@ -3360,7 +3228,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_gen_server2-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3383,7 +3251,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_gm
       run: |
         mkdir ct-unit_gm-logs && chmod 777 ct-unit_gm-logs
@@ -3393,7 +3261,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_gm-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3416,7 +3284,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_log_config
       run: |
         mkdir ct-unit_log_config-logs && chmod 777 ct-unit_log_config-logs
@@ -3426,7 +3294,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_log_config-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3449,7 +3317,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_log_management
       run: |
         mkdir ct-unit_log_management-logs && chmod 777 ct-unit_log_management-logs
@@ -3459,7 +3327,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_log_management-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3482,7 +3350,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_operator_policy
       run: |
         mkdir ct-unit_operator_policy-logs && chmod 777 ct-unit_operator_policy-logs
@@ -3492,7 +3360,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_operator_policy-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3515,7 +3383,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_pg_local
       run: |
         mkdir ct-unit_pg_local-logs && chmod 777 ct-unit_pg_local-logs
@@ -3525,7 +3393,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_pg_local-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3548,7 +3416,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_plugin_directories
       run: |
         mkdir ct-unit_plugin_directories-logs && chmod 777 ct-unit_plugin_directories-logs
@@ -3558,7 +3426,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_plugin_directories-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3581,7 +3449,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_plugin_versioning
       run: |
         mkdir ct-unit_plugin_versioning-logs && chmod 777 ct-unit_plugin_versioning-logs
@@ -3591,7 +3459,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_plugin_versioning-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3614,7 +3482,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_policy_validators
       run: |
         mkdir ct-unit_policy_validators-logs && chmod 777 ct-unit_policy_validators-logs
@@ -3624,7 +3492,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_policy_validators-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3647,7 +3515,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_priority_queue
       run: |
         mkdir ct-unit_priority_queue-logs && chmod 777 ct-unit_priority_queue-logs
@@ -3657,7 +3525,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_priority_queue-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3680,7 +3548,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_queue_consumers
       run: |
         mkdir ct-unit_queue_consumers-logs && chmod 777 ct-unit_queue_consumers-logs
@@ -3690,7 +3558,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_queue_consumers-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3713,7 +3581,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_stats_and_metrics
       run: |
         mkdir ct-unit_stats_and_metrics-logs && chmod 777 ct-unit_stats_and_metrics-logs
@@ -3723,7 +3591,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_stats_and_metrics-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3746,7 +3614,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_supervisor2
       run: |
         mkdir ct-unit_supervisor2-logs && chmod 777 ct-unit_supervisor2-logs
@@ -3756,7 +3624,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_supervisor2-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3779,7 +3647,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_vm_memory_monitor
       run: |
         mkdir ct-unit_vm_memory_monitor-logs && chmod 777 ct-unit_vm_memory_monitor-logs
@@ -3789,7 +3657,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-unit_vm_memory_monitor-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3812,7 +3680,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-upgrade_preparation
       run: |
         mkdir ct-upgrade_preparation-logs && chmod 777 ct-upgrade_preparation-logs
@@ -3822,7 +3690,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-upgrade_preparation-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3845,7 +3713,7 @@ jobs:
     - name: PULL IMAGE
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
     - name: RUN ct-vhost
       run: |
         mkdir ct-vhost-logs && chmod 777 ct-vhost-logs
@@ -3855,7 +3723,7 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --volume ${PWD}/ct-vhost-logs:/workspace/ct-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -3972,13 +3840,13 @@ jobs:
     - name: RECORD STEP FINISH
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
         docker run \
           --env project=rabbit \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ needs.rabbit-checks.outputs.step_start }} \
-          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }} \
           /workspace/rabbitmq/ci/scripts/collect.sh
   amqp_client:
     name: amqp_client
@@ -3998,7 +3866,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp_client \
@@ -4008,7 +3876,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4034,7 +3902,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_client \
@@ -4044,7 +3912,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4070,7 +3938,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_common \
@@ -4080,7 +3948,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4106,7 +3974,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_amqp1_0 \
@@ -4116,7 +3984,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4142,7 +4010,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_cache \
@@ -4152,7 +4020,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4178,7 +4046,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_http \
@@ -4188,7 +4056,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4214,7 +4082,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_ldap \
@@ -4224,7 +4092,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4250,7 +4118,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_oauth2 \
@@ -4260,7 +4128,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4286,7 +4154,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_mechanism_ssl \
@@ -4296,7 +4164,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4322,7 +4190,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_aws \
@@ -4332,7 +4200,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4358,7 +4226,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir broker-logs && chmod 777 broker-logs
         docker run \
           --env project=rabbitmq_cli \
@@ -4366,7 +4234,7 @@ jobs:
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
           --volume ${PWD}/broker-logs:/workspace/broker-logs \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/rabbitmq_cli.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4392,7 +4260,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_consistent_hash_exchange \
@@ -4402,7 +4270,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4428,7 +4296,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_event_exchange \
@@ -4438,7 +4306,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4464,7 +4332,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation \
@@ -4474,7 +4342,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4500,7 +4368,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation_management \
@@ -4510,7 +4378,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4536,7 +4404,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_jms_topic_exchange \
@@ -4546,7 +4414,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4572,7 +4440,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management \
@@ -4582,7 +4450,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4608,7 +4476,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management_agent \
@@ -4618,7 +4486,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4644,7 +4512,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_mqtt \
@@ -4654,7 +4522,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4680,7 +4548,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_common \
@@ -4690,7 +4558,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4721,21 +4589,21 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_aws \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --env ERLANG_VERSION=23.1 \
+          --env ERLANG_VERSION=git \
           --env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
           --env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
           --env SSH_KEY=/workspace/terraform/id_rsa_terraform \
           --volume ${PWD}/terraform:/workspace/terraform \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4761,7 +4629,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_k8s \
@@ -4771,7 +4639,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4797,7 +4665,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_consul \
@@ -4807,7 +4675,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4833,7 +4701,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_etcd \
@@ -4843,7 +4711,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4869,7 +4737,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_prometheus \
@@ -4879,7 +4747,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4905,7 +4773,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_random_exchange \
@@ -4915,7 +4783,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4941,7 +4809,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_recent_history_exchange \
@@ -4951,7 +4819,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -4977,7 +4845,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_sharding \
@@ -4987,7 +4855,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5013,7 +4881,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel \
@@ -5023,7 +4891,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5049,7 +4917,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel_management \
@@ -5059,7 +4927,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5085,7 +4953,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stomp \
@@ -5095,7 +4963,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5121,7 +4989,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stream \
@@ -5131,7 +4999,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5157,7 +5025,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_top \
@@ -5167,7 +5035,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5193,7 +5061,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_tracing \
@@ -5203,7 +5071,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5229,7 +5097,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_trust_store \
@@ -5239,7 +5107,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5265,7 +5133,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_dispatch \
@@ -5275,7 +5143,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5301,7 +5169,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt \
@@ -5311,7 +5179,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5337,7 +5205,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt_examples \
@@ -5347,7 +5215,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5373,7 +5241,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp \
@@ -5383,7 +5251,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5409,7 +5277,7 @@ jobs:
     - name: RUN TESTS
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp_examples \
@@ -5419,7 +5287,7 @@ jobs:
            \
           --volume ${PWD}/ct-logs:/workspace/ct-logs \
           --oom-kill-disable \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/tests.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5445,14 +5313,14 @@ jobs:
     - name: PACKAGE GENERIC UNIX
       run: |
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
           --volume ${PWD}/PACKAGES:/workspace/rabbitmq/PACKAGES \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/package_generic_unix.sh
     - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
       uses: actions/upload-artifact@v2-preview
@@ -5467,14 +5335,13 @@ jobs:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/collect.sh
   finish:
     name: finish
     needs:
     - prepare
     - xref
-    - dialyze
     - rabbit_common
     - rabbit
     - amqp_client
@@ -5534,11 +5401,11 @@ jobs:
           'gs://monorepo_github_actions_conclusions/${{ github.sha }}/${{ github.workflow }}'
 
         gcloud auth configure-docker
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env BUILD_START=${{ needs.prepare.outputs.build_start }} \
           --env BUILD_RESULT=${{ env.WORKFLOW_CONCLUSION }} \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }} \
+          eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }} \
           ci/scripts/finish.sh

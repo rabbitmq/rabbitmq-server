@@ -1,0 +1,21 @@
+#@ load("@ytt:data", "data")
+#@ load("@ytt:template", "template")
+#@ load("util.star", "merge")
+#@ load("prepare.lib.yml", "prepare_jobs")
+#@ load("dep.star", "dep_jobs")
+#@ load("finish.lib.yml", "finish_jobs")
+
+#@ erlang_version = "git"
+
+#@ prepare = prepare_jobs(erlang_version=erlang_version, build_base_image=True)
+#@ deps = [dep_jobs(dep, erlang_version=erlang_version) for dep in data.values.deps]
+#@ finish = finish_jobs([prepare[k]['name'] for k in prepare], erlang_version=erlang_version)
+
+---
+name: Test - Erlang git master
+#! https://github.com/k14s/ytt/issues/189
+a_magic_string_that_we_will_sed_to_on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs: #@ merge([prepare] + deps + [finish])
