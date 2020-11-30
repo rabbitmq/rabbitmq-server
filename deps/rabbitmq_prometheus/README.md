@@ -63,7 +63,14 @@ When metrics are returned per object, nodes with 80k queues have been measured t
 In order to not put unnecessary pressure on your metrics system, metrics are aggregated by default.
 
 When debugging, it may be useful to return metrics per object (unaggregated).
-This can be enabled on-the-fly, without restarting or configuring RabbitMQ, using the following command:
+
+This can be done by scraping the `/metrics/per-object` endpoint:
+```shell
+curl -v -H "Accept:text/plain" "http://localhost:15692/metrics/per-object"
+```
+
+This can also be enabled as the default behavior of the `/metrics` endpoint on-the-fly,
+without restarting or configuring RabbitMQ, using the following command:
 
 ```
 rabbitmqctl eval 'application:set_env(rabbitmq_prometheus, return_per_object_metrics, true).'
