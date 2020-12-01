@@ -47,9 +47,16 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 
 start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
-    rpc:call(Node, rabbit_direct, start_channel,
-             [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
-              VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams]);
+    case rpc:call(Node, rabbit_direct, start_channel,
+               [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
+                VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams], ?DIRECT_OPERATION_TIMEOUT) of
+        {ok, _Writer} = Reply ->
+            Reply;
+        {badrpc, Reason} ->
+            {error, {Reason, Node}};
+        Error ->
+            Error
+    end;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     GCThreshold = application:get_env(amqp_client, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),
     supervisor2:start_child(

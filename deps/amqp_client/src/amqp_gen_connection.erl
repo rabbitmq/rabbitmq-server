@@ -49,12 +49,14 @@ connect(Pid) ->
     gen_server:call(Pid, connect, amqp_util:call_timeout()).
 
 open_channel(Pid, ProposedNumber, Consumer) ->
-    case gen_server:call(Pid,
+    try gen_server:call(Pid,
                          {command, {open_channel, ProposedNumber, Consumer}},
                          amqp_util:call_timeout()) of
         {ok, ChannelPid} -> ok = amqp_channel:open(ChannelPid),
                             {ok, ChannelPid};
         Error            -> Error
+    catch
+        _:Reason         -> {error, Reason}
     end.
 
 hard_error_in_channel(Pid, ChannelPid, Reason) ->
