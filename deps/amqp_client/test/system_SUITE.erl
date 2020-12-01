@@ -324,7 +324,7 @@ safe_call_timeouts_test(Params = #amqp_params_network{}) ->
                 {error, test_connection_timeout}
             end),
 
-    {error, test_connection_timeout} = amqp_connection:start(Params1),
+    ?assertEqual({error, test_connection_timeout}, amqp_connection:start(Params1)),
 
     ?assertEqual(TestConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
 
@@ -391,7 +391,7 @@ safe_call_timeouts_test(Params = #amqp_params_direct{}) ->
                 {error, test_connection_timeout}
             end),
 
-    {error, test_connection_timeout} = amqp_connection:start(Params),
+    ?assertEqual({error, test_connection_timeout}, amqp_connection:start(Params)),
 
     ?assertEqual((?DIRECT_OPERATION_TIMEOUT + ?CALL_TIMEOUT_DEVIATION),
         amqp_util:call_timeout()),
