@@ -9,6 +9,7 @@
 
 -include("rabbit_core_metrics.hrl").
 
+-export([create_table/1]).
 -export([init/0]).
 -export([terminate/0]).
 
@@ -104,9 +105,13 @@
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
+
+create_table({Table, Type}) ->
+   ets:new(Table, [Type, public, named_table, {write_concurrency, true},
+    {read_concurrency, true}]).
+
 init() ->
-    _ = [ets:new(Table, [Type, public, named_table, {write_concurrency, true},
-                         {read_concurrency, true}])
+  _ = [create_table({Table, Type})
          || {Table, Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 

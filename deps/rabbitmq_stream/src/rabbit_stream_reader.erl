@@ -882,6 +882,8 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
                                     _ ->
                                         StreamSubscriptions#{Stream => [SubscriptionId]}
                                 end,
+                            rabbit_stream_metrics:consumer_created(
+                                self(), stream_r(Stream, Connection1), SubscriptionId, Credit1),
                             {Connection1#stream_connection{stream_subscriptions = StreamSubscriptions1}, State#stream_connection_state{consumers = Consumers1}, Rest}
                     end
             end;
@@ -912,6 +914,7 @@ handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = Stre
             Connection1 = Connection#stream_connection{stream_subscriptions = StreamSubscriptions1},
             Consumers1 = maps:remove(SubscriptionId, Consumers),
             Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
+            rabbit_stream_metrics:consumer_cancelled(self(), stream_r(Stream, Connection2), SubscriptionId),
             response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
             {Connection2, State#stream_connection_state{consumers = Consumers1}, Rest}
     end;
@@ -1178,8 +1181,12 @@ handle_frame_post_auth(Transport, Connection, State, Frame, Rest) ->
     frame(Transport, Connection, CloseFrame),
     {Connection#stream_connection{connection_step = close_sent}, State, Rest}.
 
-notify_connection_closed(#stream_connection{name = Name} = Connection, ConnectionState) ->
+notify_connection_closed(#stream_connection{name = Name} = Connection,
+        #stream_connection_state{consumers = Consumers} = ConnectionState) ->
     rabbit_core_metrics:connection_closed(self()),
+    [rabbit_stream_metrics:consumer_cancelled(
+        self(), stream_r(S, Connection), SubId) || #consumer{stream = S, subscription_id = SubId}
+        <- maps:values(Consumers)],
     ClientProperties = i(client_properties, Connection, ConnectionState),
     EventProperties = [{name, Name},
         {pid, self()},
@@ -1199,6 +1206,9 @@ handle_frame_post_close(_Transport, Connection, State, Frame, Rest) ->
     rabbit_log:warning("ignored frame on close ~p ~p.~n", [Frame, Rest]),
     {Connection, State, Rest}.
 
+stream_r(Stream, #stream_connection{virtual_host = VHost}) ->
+    #resource{name = Stream, kind = queue, virtual_host = VHost}.
+
 clean_state_after_stream_deletion_or_failure(Stream,
         #stream_connection{stream_subscriptions = StreamSubscriptions,
                            publishers = Publishers,
@@ -1208,6 +1218,9 @@ clean_state_after_stream_deletion_or_failure(Stream,
     {SubscriptionsCleaned, C1, S1} = case stream_has_subscriptions(Stream, C0) of
         true ->
             #{Stream := SubscriptionIds} = StreamSubscriptions,
+            [rabbit_stream_metrics:consumer_cancelled(
+                self(), stream_r(Stream, C0), SubId)
+                || SubId <- SubscriptionIds],
             {true, C0#stream_connection{
                 stream_subscriptions = maps:remove(Stream, StreamSubscriptions)
             }, S0#stream_connection_state{consumers = maps:without(SubscriptionIds, Consumers)}};
@@ -1367,13 +1380,16 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry, Co
             end
     end.
 
-emit_stats(Connection, ConnectionState) ->
+emit_stats(Connection, #stream_connection_state{consumers = Consumers} = ConnectionState) ->
     [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
         = infos(?SIMPLE_METRICS, Connection, ConnectionState),
     Infos = infos(?OTHER_METRICS, Connection, ConnectionState),
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
     rabbit_event:notify(connection_stats, Infos ++ I),
+    [rabbit_stream_metrics:consumer_updated(
+        self(), stream_r(S, Connection), Id, Credit)
+     || #consumer{stream = S, subscription_id = Id, credit = Credit} <- maps:values(Consumers)],
     Connection1 = rabbit_event:reset_stats_timer(Connection, #stream_connection.stats_timer),
     ensure_stats_timer(Connection1).
 

@@ -1,0 +1,1 @@
+-define(TABLE_CONSUMER, rabbit_stream_consumer_created).

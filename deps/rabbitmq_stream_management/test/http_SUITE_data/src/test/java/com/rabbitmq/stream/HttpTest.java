@@ -29,6 +29,7 @@ import com.rabbitmq.stream.impl.Client.ClientParameters;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -50,6 +52,7 @@ public class HttpTest {
   static OkHttpClient httpClient = httpClient("guest");
   static Gson gson = new GsonBuilder().create();
   ClientFactory cf;
+  String stream;
 
   static OkHttpClient httpClient(String usernamePassword) {
     return new OkHttpClient.Builder()
@@ -149,106 +152,154 @@ public class HttpTest {
           {"vh2", "guest"},
           {"vh2", "guest"},
         };
+    Map<String, Client> vhostClients = new HashMap<>();
     List<Client> clients =
         Arrays.stream(vhostsUsers)
             .map(
-                vhostUser ->
-                    cf.get(
-                        new ClientParameters()
-                            .virtualHost(vhostUser[0])
-                            .username(vhostUser[1])
-                            .password(vhostUser[1])))
+                vhostUser -> {
+                  Client c =
+                      cf.get(
+                          new ClientParameters()
+                              .virtualHost(vhostUser[0])
+                              .username(vhostUser[1])
+                              .password(vhostUser[1]));
+                  vhostClients.put(vhostUser[0], c);
+                  return c;
+                })
             .collect(Collectors.toList());
-    Callable<List<Map<String, Object>>> allConnectionsRequest =
-        () -> toMaps(get("/stream/connections"));
-    int initialCount = allConnectionsRequest.call().size();
-    waitUntil(() -> allConnectionsRequest.call().size() == initialCount + 5);
 
-    String vhost1ConnectionName =
-        toMaps(get("/stream/connections/vh1")).stream()
-            .filter(c -> "vh1".equals(c.get("vhost")))
-            .map(c -> c.get("name").toString())
-            .findFirst()
-            .get();
+    List<String> nonDefaultVhosts =
+        Arrays.stream(vhostsUsers)
+            .map(vhostUser -> vhostUser[0])
+            .filter(vhost -> !vhost.equals("/"))
+            .distinct()
+            .collect(Collectors.toList());
+    nonDefaultVhosts.forEach(
+        vhost -> {
+          Client c = vhostClients.get(vhost);
+          c.create(stream);
+        });
 
-    String vhost2ConnectionName =
-        toMaps(get("/stream/connections/vh2")).stream()
-            .filter(c -> "vh2".equals(c.get("vhost")))
-            .map(c -> c.get("name").toString())
-            .findFirst()
-            .get();
+    try {
+      int consumersPerConnection = 2;
 
-    class TestConfiguration {
-      final String user;
-      final Map<String, Integer> connectionRequests;
-      final Map<String, Boolean> vhostConnections;
+      IntStream.range(0, consumersPerConnection)
+          .forEach(
+              i -> {
+                clients.forEach(
+                    c -> c.subscribe((byte) i, stream, OffsetSpecification.first(), 10));
+              });
+      Callable<List<Map<String, Object>>> allConnectionsRequest =
+          () -> toMaps(get("/stream/connections"));
+      int initialCount = allConnectionsRequest.call().size();
+      waitUntil(() -> allConnectionsRequest.call().size() == initialCount + 5);
 
-      TestConfiguration(String user, Object[] connectionRequests, Object... vhostConnections) {
-        this.user = user;
-        this.connectionRequests = new LinkedHashMap<>(connectionRequests.length / 2);
-        for (int i = 0; i < connectionRequests.length; i = i + 2) {
-          this.connectionRequests.put(
-              connectionRequests[i].toString(), (Integer) connectionRequests[i + 1]);
-        }
-        this.vhostConnections = new LinkedHashMap<>();
-        for (int i = 0; i < vhostConnections.length; i = i + 2) {
-          this.vhostConnections.put(
-              vhostConnections[i].toString(), (Boolean) vhostConnections[i + 1]);
+      String vhost1ConnectionName =
+          toMaps(get("/stream/connections/vh1")).stream()
+              .filter(c -> "vh1".equals(c.get("vhost")))
+              .map(c -> c.get("name").toString())
+              .findFirst()
+              .get();
+
+      String vhost2ConnectionName =
+          toMaps(get("/stream/connections/vh2")).stream()
+              .filter(c -> "vh2".equals(c.get("vhost")))
+              .map(c -> c.get("name").toString())
+              .findFirst()
+              .get();
+
+      class TestConfiguration {
+        final String user;
+        final String endpoint;
+        final Map<String, Integer> connectionRequests;
+        final Map<String, Boolean> vhostConnections;
+
+        TestConfiguration(
+            String user, String endpoint, Object[] connectionRequests, Object... vhostConnections) {
+          this.user = user;
+          this.endpoint = endpoint;
+          this.connectionRequests = new LinkedHashMap<>(connectionRequests.length / 2);
+          for (int i = 0; i < connectionRequests.length; i = i + 2) {
+            this.connectionRequests.put(
+                connectionRequests[i].toString(), (Integer) connectionRequests[i + 1]);
+          }
+          this.vhostConnections = new LinkedHashMap<>();
+          for (int i = 0; i < vhostConnections.length; i = i + 2) {
+            this.vhostConnections.put(
+                vhostConnections[i].toString(), (Boolean) vhostConnections[i + 1]);
+          }
         }
       }
+
+      TestConfiguration[] testConfigurations =
+          new TestConfiguration[] {
+            new TestConfiguration(
+                "guest",
+                "/connections",
+                new Object[] {"", 5, "/%2f", 1, "/vh1", 2, "/vh2", 2},
+                "vh1/" + vhost1ConnectionName,
+                true,
+                "vh2/" + vhost2ConnectionName,
+                true),
+            new TestConfiguration(
+                "user-monitoring",
+                "/connections",
+                new Object[] {"", 5, "/%2f", 1, "/vh1", 2, "/vh2", 2},
+                "vh1/" + vhost1ConnectionName,
+                true,
+                "vh2/" + vhost2ConnectionName,
+                true),
+            new TestConfiguration(
+                "user-management",
+                "/connections",
+                new Object[] {"", 2, "/%2f", -1, "/vh1", 2, "/vh2", -1},
+                "vh1/" + vhost1ConnectionName,
+                true,
+                "vh2/" + vhost2ConnectionName,
+                false),
+            new TestConfiguration(
+                "guest", "/consumers", new Object[] {"", vhostsUsers.length * consumersPerConnection}),
+              new TestConfiguration(
+                  "guest", "/consumers", new Object[] {"/%2f", consumersPerConnection}),
+              new TestConfiguration(
+                  "guest", "/consumers", new Object[] {"/vh1", consumersPerConnection * 2}),
+          };
+
+      for (TestConfiguration configuration : testConfigurations) {
+        OkHttpClient client = httpClient(configuration.user);
+        for (Entry<String, Integer> request : configuration.connectionRequests.entrySet()) {
+          if (request.getValue() >= 0) {
+            assertThat(toMaps(get(client, "/stream" + configuration.endpoint + request.getKey())))
+                .hasSize(request.getValue());
+          } else {
+            assertThatThrownBy(
+                    () ->
+                        toMaps(get(client, "/stream" + configuration.endpoint + request.getKey())))
+                .hasMessageContaining("401");
+          }
+        }
+        for (Entry<String, Boolean> request : configuration.vhostConnections.entrySet()) {
+          if (request.getValue()) {
+            Condition<Object> connNameCondition =
+                new Condition<>(
+                    e -> request.getKey().endsWith(e.toString()), "connection name must match");
+            assertThat(toMap(get(client, "/stream/connections/" + request.getKey())))
+                .hasEntrySatisfying("name", connNameCondition);
+          } else {
+            assertThatThrownBy(() -> toMap(get(client, "/stream/connections/" + request.getKey())))
+                .hasMessageContaining("401");
+          }
+        }
+      }
+
+      clients.forEach(client -> client.close());
+      waitUntil(() -> allConnectionsRequest.call().size() == initialCount);
+    } finally {
+      nonDefaultVhosts.forEach(
+          vhost -> {
+            Client c = cf.get(new ClientParameters().virtualHost(vhost));
+            c.delete(stream);
+          });
     }
-
-    TestConfiguration[] testConfigurations =
-        new TestConfiguration[] {
-          new TestConfiguration(
-              "guest",
-              new Object[] {"", 5, "/%2f", 1, "/vh1", 2, "/vh2", 2},
-              "vh1/" + vhost1ConnectionName,
-              true,
-              "vh2/" + vhost2ConnectionName,
-              true),
-          new TestConfiguration(
-              "user-monitoring",
-              new Object[] {"", 5, "/%2f", 1, "/vh1", 2, "/vh2", 2},
-              "vh1/" + vhost1ConnectionName,
-              true,
-              "vh2/" + vhost2ConnectionName,
-              true),
-          new TestConfiguration(
-              "user-management",
-              new Object[] {"", 2, "/%2f", -1, "/vh1", 2, "/vh2", -1},
-              "vh1/" + vhost1ConnectionName,
-              true,
-              "vh2/" + vhost2ConnectionName,
-              false)
-        };
-
-    for (TestConfiguration configuration : testConfigurations) {
-      OkHttpClient client = httpClient(configuration.user);
-      for (Entry<String, Integer> request : configuration.connectionRequests.entrySet()) {
-        if (request.getValue() >= 0) {
-          assertThat(toMaps(get(client, "/stream/connections" + request.getKey())))
-              .hasSize(request.getValue());
-        } else {
-          assertThatThrownBy(() -> toMaps(get(client, "/stream/connections" + request.getKey())))
-              .hasMessageContaining("401");
-        }
-      }
-      for (Entry<String, Boolean> request : configuration.vhostConnections.entrySet()) {
-        if (request.getValue()) {
-          Condition<Object> connNameCondition =
-              new Condition<>(
-                  e -> request.getKey().endsWith(e.toString()), "connection name must match");
-          assertThat(toMap(get(client, "/stream/connections/" + request.getKey())))
-              .hasEntrySatisfying("name", connNameCondition);
-        } else {
-          assertThatThrownBy(() -> toMap(get(client, "/stream/connections/" + request.getKey())))
-              .hasMessageContaining("401");
-        }
-      }
-    }
-
-    clients.forEach(client -> client.close());
-    waitUntil(() -> allConnectionsRequest.call().size() == initialCount);
   }
 }

@@ -26,6 +26,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 start(_Type, _Args) ->
+    rabbit_stream_metrics:init(),
     rabbit_stream_sup:start_link().
 
 host() ->
