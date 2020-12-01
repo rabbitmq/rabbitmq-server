@@ -30,7 +30,7 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 
 LOCAL_DEPS = xmerl
 DEPS = rabbit_common
-TEST_DEPS = rabbitmq_ct_helpers rabbit
+TEST_DEPS = rabbitmq_ct_helpers rabbit meck
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \

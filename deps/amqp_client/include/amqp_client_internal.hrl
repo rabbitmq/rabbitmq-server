@@ -28,3 +28,6 @@
      {<<"authentication_failure_close">>, bool, true}]).
 
 -define(WAIT_FOR_CONFIRMS_TIMEOUT, {60000, millisecond}).
+
+-define(DIRECT_OPERATION_TIMEOUT,  120000).
+-define(CALL_TIMEOUT_DEVIATION,    10000).
