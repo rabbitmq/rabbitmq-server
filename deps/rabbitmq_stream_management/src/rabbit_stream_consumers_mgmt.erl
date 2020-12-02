@@ -54,8 +54,9 @@ to_json(ReqData, Context = #context{user = User}) ->
 is_authorized(ReqData, Context) ->
   rabbit_mgmt_util:is_authorized(ReqData, Context).
 
-filter_user(List, #user{username = _Username, tags = Tags}) ->
+filter_user(List, #user{username = Username, tags = Tags}) ->
   case rabbit_mgmt_util:is_monitor(Tags) of
     true  -> List;
-    false -> List
+    false -> [I || I <- List,
+                rabbit_misc:pget(user, rabbit_misc:pget(connection_details, I)) == Username]
   end.
