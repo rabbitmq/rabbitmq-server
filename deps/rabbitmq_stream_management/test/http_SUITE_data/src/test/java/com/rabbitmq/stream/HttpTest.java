@@ -95,6 +95,12 @@ public class HttpTest {
     return gson.fromJson(json, Map.class);
   }
 
+  static String connectionName(Client client) {
+    InetSocketAddress localAddress = (InetSocketAddress) client.localAddress();
+    InetSocketAddress remoteAddress = (InetSocketAddress) client.remoteAddress();
+    return format("127.0.0.1:%d -> 127.0.0.1:%d", localAddress.getPort(), remoteAddress.getPort());
+  }
+
   @Test
   void connections() throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/connections"));
@@ -115,10 +121,7 @@ public class HttpTest {
             .findFirst()
             .get();
 
-    InetSocketAddress localAddress = (InetSocketAddress) client.localAddress();
-    InetSocketAddress remoteAddress = (InetSocketAddress) client.remoteAddress();
-    String connectionName =
-        format("127.0.0.1:%d -> 127.0.0.1:%d", localAddress.getPort(), remoteAddress.getPort());
+    String connectionName = connectionName(client);
     assertThat(c).containsEntry("name", connectionName);
 
     Callable<Map<String, Object>> cRequest =
@@ -140,6 +143,50 @@ public class HttpTest {
 
     assertThatThrownBy(() -> cRequest.call()).isInstanceOf(IOException.class);
     waitUntil(() -> request.call().size() == initialCount);
+  }
+
+  @Test
+  void consumers() throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/consumers"));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    AtomicBoolean closed = new AtomicBoolean(false);
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .clientProperty("connection_name", connectionProvidedName)
+                .shutdownListener(shutdownContext -> closed.set(true)));
+
+    client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> consumers(request.call(), client).size() == 1);
+
+    Map<String, Object> consumer = consumers(request.call(), client).get(0);
+    assertThat(((Number) consumer.get("credits")).intValue()).isEqualTo(10);
+    assertThat(((Number) consumer.get("subscription_id")).intValue()).isEqualTo(0);
+    assertThat(((Map) consumer.get("connection_details")))
+        .containsEntry("name", connectionName(client));
+    assertThat(((Map) consumer.get("queue")))
+        .containsEntry("name", stream)
+        .containsEntry("vhost", "/");
+
+    client.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
+    waitUntil(() -> consumers(request.call(), client).size() == 2);
+
+    client.unsubscribe((byte) 0);
+    waitUntil(() -> consumers(request.call(), client).size() == 1);
+    client.unsubscribe((byte) 1);
+    waitUntil(() -> consumers(request.call(), client).isEmpty());
+  }
+
+  static List<Map<String, Object>> consumers(List<Map<String, Object>> consumers, Client client) {
+    String connectionName = connectionName(client);
+    return consumers.stream()
+        .filter(
+            c ->
+                c.get("connection_details") instanceof Map
+                    && connectionName.equals(((Map) c.get("connection_details")).get("name")))
+        .collect(Collectors.toList());
   }
 
   @Test
@@ -258,11 +305,13 @@ public class HttpTest {
                 "vh2/" + vhost2ConnectionName,
                 false),
             new TestConfiguration(
-                "guest", "/consumers", new Object[] {"", vhostsUsers.length * consumersPerConnection}),
-              new TestConfiguration(
-                  "guest", "/consumers", new Object[] {"/%2f", consumersPerConnection}),
-              new TestConfiguration(
-                  "guest", "/consumers", new Object[] {"/vh1", consumersPerConnection * 2}),
+                "guest",
+                "/consumers",
+                new Object[] {"", vhostsUsers.length * consumersPerConnection}),
+            new TestConfiguration(
+                "guest", "/consumers", new Object[] {"/%2f", consumersPerConnection}),
+            new TestConfiguration(
+                "guest", "/consumers", new Object[] {"/vh1", consumersPerConnection * 2}),
           };
 
       for (TestConfiguration configuration : testConfigurations) {
