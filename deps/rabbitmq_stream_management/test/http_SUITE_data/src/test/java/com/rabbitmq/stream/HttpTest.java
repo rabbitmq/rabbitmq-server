@@ -165,7 +165,9 @@ public class HttpTest {
     assertThat(((Number) consumer.get("credits")).intValue()).isEqualTo(10);
     assertThat(((Number) consumer.get("subscription_id")).intValue()).isEqualTo(0);
     assertThat(((Map) consumer.get("connection_details")))
-        .containsEntry("name", connectionName(client));
+        .containsEntry("name", connectionName(client))
+        .containsEntry("user", "guest")
+        .containsKey("node");
     assertThat(((Map) consumer.get("queue")))
         .containsEntry("name", stream)
         .containsEntry("vhost", "/");

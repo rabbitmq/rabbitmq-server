@@ -24,7 +24,7 @@ consumer_data(_Pid, VHost) ->
   maps:from_list(
     [begin
        AugmentedConsumer = augment_consumer(C),
-       {C, rabbit_mgmt_data:augment_details(AugmentedConsumer, []) ++ AugmentedConsumer}
+       {C, augment_connection_pid(AugmentedConsumer) ++ AugmentedConsumer}
      end
        || C <- consumers_by_vhost(VHost)]
   ).
@@ -39,6 +39,21 @@ consumers_by_vhost(VHost) ->
     [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
       [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
       ['$_']}]).
+
+augment_connection_pid(Consumer) ->
+  Pid = rabbit_misc:pget(connection, Consumer),
+  Conn = rabbit_mgmt_data:lookup_element(connection_created_stats, Pid, 3),
+  ConnDetails = case Conn of
+    [] -> %% If the connection has just been opened, we might not yet have the data
+      [];
+    _ ->
+      [{name,         rabbit_misc:pget(name,         Conn)},
+       {user,         rabbit_misc:pget(user,         Conn)},
+       {node,         rabbit_misc:pget(node,         Conn)},
+       {peer_port,    rabbit_misc:pget(peer_port,    Conn)},
+       {peer_host,    rabbit_misc:pget(peer_host,    Conn)}]
+  end,
+  [{connection_details, ConnDetails}].
 
 format_resource(unknown) -> unknown;
 format_resource(Res)     -> format_resource(name, Res).
