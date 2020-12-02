@@ -1518,7 +1518,9 @@ open_channels(Conn, N) ->
 
 open_channel(Conn) when is_pid(Conn) ->
     try amqp_connection:open_channel(Conn) of
-      {ok, Ch} -> Ch
+      {ok, Ch} -> Ch;
+      {error, _} ->
+            {error, not_allowed}
     catch
       _:_Error -> {error, not_allowed}
    end.
