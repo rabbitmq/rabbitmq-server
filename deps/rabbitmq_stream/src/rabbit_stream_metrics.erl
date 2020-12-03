@@ -27,23 +27,16 @@ init() ->
     ok.
 
 consumer_created(Connection, StreamResource, SubscriptionId, Credits) ->
-    Fmt = format([{credits, Credits}], {[], false}),
-    ets:insert(?TABLE_CONSUMER, {{StreamResource, Connection, SubscriptionId}, Fmt}),
+    Values = [{credits, Credits}],
+    ets:insert(?TABLE_CONSUMER, {{StreamResource, Connection, SubscriptionId}, Values}),
     ok.
 
 consumer_updated(Connection, StreamResource, SubscriptionId, Credits) ->
-    Fmt = format([{credits, Credits}], {[], false}),
-    ets:insert(?TABLE_CONSUMER, {{StreamResource, Connection, SubscriptionId}, Fmt}),
+    Values = [{credits, Credits}],
+    ets:insert(?TABLE_CONSUMER, {{StreamResource, Connection, SubscriptionId}, Values}),
     ok.
 
 consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
     ets:delete(?TABLE_CONSUMER, {StreamResource, Connection, SubscriptionId}),
     ok.
 
-format(Stats, {[], _}) ->
-    [Stat || {_Name, Value} = Stat <- Stats, Value =/= unknown];
-format(Stats, {Fs, true}) ->
-    [Fs(Stat) || {_Name, Value} = Stat <- Stats, Value =/= unknown];
-format(Stats, {Fs, false}) ->
-    lists:concat([Fs(Stat) || {_Name, Value} = Stat <- Stats,
-        Value =/= unknown]).

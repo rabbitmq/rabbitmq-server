@@ -44,7 +44,8 @@ hostname_from_node() ->
         [_, Hostname] ->
             Hostname;
         [_] ->
-            rabbit_data_coercion:to_binary(inet:gethostname())
+            {ok, H} = inet:gethostname(),
+            rabbit_data_coercion:to_binary(H)
     end.
 
 port() ->

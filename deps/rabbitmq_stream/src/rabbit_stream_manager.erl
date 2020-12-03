@@ -34,7 +34,8 @@ init([Conf]) ->
     {ok, #state{configuration = Conf}}.
 
 -spec create(binary(), binary(), #{binary() => binary()}, binary()) ->
-    {ok, map()} | {error, reference_already_exists} | {error, internal_error}.
+    {ok, map()} | {error, reference_already_exists} | {error, internal_error}
+     | {error, validation_failed}.
 create(VirtualHost, Reference, Arguments, Username) ->
     gen_server:call(?MODULE, {create, VirtualHost, Reference, Arguments, Username}).
 
@@ -47,12 +48,14 @@ delete(VirtualHost, Reference, Username) ->
 lookup_leader(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_leader, VirtualHost, Stream}).
 
--spec lookup_local_member(binary(), binary()) -> {ok, pid()} | {error, not_found}.
+-spec lookup_local_member(binary(), binary()) -> {ok, pid()}
+    | {error, not_found} | {error, not_available}.
 lookup_local_member(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_local_member, VirtualHost, Stream}).
 
 -spec topology(binary(), binary()) ->
-    {ok, #{leader_node => pid(), replica_nodes => [pid()]}} | {error, stream_not_found}.
+    {ok, #{leader_node => undefined | pid(), replica_nodes => [pid()]}}
+     | {error, stream_not_found} | {error, stream_not_available}.
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
 
@@ -122,8 +125,9 @@ handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State)
                         {reply, {ok, amqqueue:get_type_state(Q)}, State};
                     {existing, _} ->
                         {reply, {error, reference_already_exists}, State};
-                    {error, Err} ->
-                        rabbit_log:warning("Error while creating ~p stream, ~p~n", [Reference, Err]),
+                    {protocol_error, Type, Reason, Args} ->
+                        rabbit_log:warning("Error while creating ~p stream, ~p (~p)~n",
+                            [Reference, Type, rabbit_misc:format(Reason, Args)]),
                         {reply, {error, internal_error}, State}
                 end
             catch
@@ -201,9 +205,7 @@ handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
                           {error, not_found};
                       _ ->
                           {error, not_available}
-                  end;
-              _ ->
-                  {error, not_found}
+                  end
           end,
     {reply, Res, State};
 handle_call({topology, VirtualHost, Stream}, _From, State) ->
@@ -240,9 +242,7 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                           {error, stream_not_found};
                       _ ->
                           {error, stream_not_available}
-                  end;
-              _ ->
-                  {error, stream_not_found}
+                  end
           end,
     {reply, Res, State};
 handle_call(which_children, _From, State) ->

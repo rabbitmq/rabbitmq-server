@@ -48,7 +48,7 @@
 }).
 
 -record(stream_connection, {
-    name :: string(),
+    name :: binary(),
     %% server host
     host,
     %% client host
@@ -71,11 +71,11 @@
     virtual_host :: 'undefined' | binary(),
     connection_step :: atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max :: integer(),
-    heartbeat :: integer(),
+    heartbeat :: undefined | integer(),
     heartbeater :: any(),
     client_properties = #{} :: #{binary() => binary()},
     monitors = #{} :: #{reference() => stream()},
-    stats_timer :: reference(),
+    stats_timer :: undefined | reference(),
     send_file_oct :: atomics:atomics_ref()
 }).
 
