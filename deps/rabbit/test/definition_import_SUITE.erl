@@ -43,7 +43,8 @@ groups() ->
                                import_case10,
                                import_case11,
                                import_case12,
-                               import_case13
+                               import_case13,
+                               import_case14
                               ]},
         {boot_time_import, [], [
             import_on_a_booting_node
@@ -144,6 +145,8 @@ import_case13(Config) ->
         Skip ->
             Skip
     end.
+
+import_case14(Config) -> import_file_case(Config, "case14").
 
 export_import_round_trip_case1(Config) ->
     %% case 6 has runtime parameters that do not depend on any plugins
