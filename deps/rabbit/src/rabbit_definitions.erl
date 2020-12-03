@@ -623,6 +623,7 @@ get_or_missing(K, L) ->
         V         -> V
     end.
 
+args(undefined) -> args(#{});
 args([]) -> args(#{});
 args(L)  -> rabbit_misc:to_amqp_table(L).
 
