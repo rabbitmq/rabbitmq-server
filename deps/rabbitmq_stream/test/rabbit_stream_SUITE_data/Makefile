@@ -12,7 +12,7 @@ MVN_FLAGS += -Dhostname=$(HOSTNAME) \
 tests:
 	# Note: to run a single test
 	# @mvnw -q $(MVN_FLAGS) -Dtest=StreamTest#metadataOnClusterShouldReturnLeaderAndReplicas test
-	@mvnw $(MVN_FLAGS) test
+	@mvnw -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -B $(MVN_FLAGS) test
 
 clean:
 	@mvnw clean

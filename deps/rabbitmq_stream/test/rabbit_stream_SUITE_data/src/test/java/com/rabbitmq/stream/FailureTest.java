@@ -126,7 +126,7 @@ public class FailureTest {
 
     // wait until all the replicas are there
     TestUtils.waitAtMost(
-        Duration.ofSeconds(5),
+        Duration.ofSeconds(10),
         () -> {
           Client.StreamMetadata m = publisher.metadata(stream).get(stream);
           return m.getReplicas().size() == 2;
