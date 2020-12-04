@@ -162,7 +162,8 @@ declare_racer_loop(Parent, Conn, Decl) ->
             try
                 case amqp_connection:open_channel(Conn) of
                     {ok, Ch} -> amqp_channel:call(Ch, Decl);
-                    closing  -> ok
+                    closing  -> ok;
+                    {error, _} -> ok
                 end
             catch
                 exit:_ ->

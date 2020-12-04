@@ -399,7 +399,14 @@ connect_ssl(Config) ->
 
 client_id_propagation(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config,
-      rabbit_auth_backend_mqtt_mock),
+                                                             rabbit_auth_backend_mqtt_mock),
+    %% setup creates the ETS table required for the mqtt auth mock
+    %% it blocks indefinitely so we need to spawn
+    _ = spawn(fun () ->
+                      rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_mqtt_mock,
+                                                   setup,
+                                                   [])
+              end),
     ClientId = <<"client-id-propagation">>,
     {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>,
                            Config, ClientId),
