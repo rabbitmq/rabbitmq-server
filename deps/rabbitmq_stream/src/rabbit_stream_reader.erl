@@ -1257,7 +1257,7 @@ clean_state_after_stream_deletion_or_failure(Stream,
                 self(), stream_r(Stream, C0), SubId)
                 || SubId <- SubscriptionIds],
             [rabbit_stream_metrics:publisher_deleted(self(), stream_r(S, C0), PubId)
-                || #publisher{stream = S, publisher_id = PubId} <- maps:values(Publishers)
+                || #publisher{stream = S, publisher_id = PubId} <- maps:values(Publishers), S == Stream
             ],
             {true, C0#stream_connection{
                 stream_subscriptions = maps:remove(Stream, StreamSubscriptions)

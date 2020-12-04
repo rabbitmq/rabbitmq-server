@@ -53,5 +53,5 @@ publisher_updated(Connection, StreamResource, PublisherId, Published, Confirmed,
     ok.
 
 publisher_deleted(Connection, StreamResource, PublisherId) ->
-   ets:delete(?TABLE_PUBLISHER, {{StreamResource, Connection, PublisherId}}),
+   ets:delete(?TABLE_PUBLISHER, {StreamResource, Connection, PublisherId}),
    ok.

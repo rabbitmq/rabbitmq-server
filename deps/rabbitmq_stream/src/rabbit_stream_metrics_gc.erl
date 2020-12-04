@@ -44,6 +44,7 @@ handle_cast(_Request, State) ->
 handle_info(start_gc, State) ->
     GbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
     gc_process_and_entity(?TABLE_CONSUMER, GbSet),
+    gc_process_and_entity(?TABLE_PUBLISHER, GbSet),
     {noreply, start_timer(State)}.
 
 terminate(_Reason, #state{timer = TRef}) ->

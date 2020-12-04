@@ -28,7 +28,9 @@ import com.rabbitmq.stream.impl.Client;
 import com.rabbitmq.stream.impl.Client.ClientParameters;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -101,9 +103,9 @@ public class HttpTest {
     return format("127.0.0.1:%d -> 127.0.0.1:%d", localAddress.getPort(), remoteAddress.getPort());
   }
 
-  static List<Map<String, Object>> consumers(List<Map<String, Object>> consumers, Client client) {
+  static List<Map<String, Object>> entities(List<Map<String, Object>> entities, Client client) {
     String connectionName = connectionName(client);
-    return consumers.stream()
+    return entities.stream()
         .filter(
             c ->
                 c.get("connection_details") instanceof Map
@@ -156,6 +158,53 @@ public class HttpTest {
   }
 
   @Test
+  void publishers() throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/publishers"));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    AtomicBoolean closed = new AtomicBoolean(false);
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .clientProperty("connection_name", connectionProvidedName)
+                .shutdownListener(shutdownContext -> closed.set(true)));
+
+    client.declarePublisher((byte) 0, null, stream);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    Map<String, Object> publisher = entities(request.call(), client).get(0);
+    assertThat(((Number) publisher.get("published")).intValue()).isEqualTo(0);
+    assertThat(((Number) publisher.get("confirmed")).intValue()).isEqualTo(0);
+    assertThat(((Number) publisher.get("errored")).intValue()).isEqualTo(0);
+    assertThat(((Number) publisher.get("publisher_id")).intValue()).isEqualTo(0);
+    assertThat(((Map) publisher.get("connection_details")))
+        .containsEntry("name", connectionName(client))
+        .containsEntry("user", "guest")
+        .containsKey("node");
+    assertThat(((Map) publisher.get("queue")))
+        .containsEntry("name", stream)
+        .containsEntry("vhost", "/");
+
+    client.publish((byte) 0, Collections.singletonList(
+       client.messageBuilder().addData("".getBytes(StandardCharsets.UTF_8)).build()
+    ));
+
+    waitUntil(() -> ((Number) entities(request.call(), client).get(0).get("confirmed")).intValue() == 1);
+    publisher = entities(request.call(), client).get(0);
+    assertThat(((Number) publisher.get("published")).intValue()).isEqualTo(1);
+    assertThat(((Number) publisher.get("confirmed")).intValue()).isEqualTo(1);
+
+    client.declarePublisher((byte) 1, null, stream);
+    waitUntil(() -> entities(request.call(), client).size() == 2);
+
+    client.deletePublisher((byte) 0);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+    client.deletePublisher((byte) 1);
+    waitUntil(() -> entities(request.call(), client).isEmpty());
+  }
+
+  @Test
   void consumers() throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/consumers"));
     int initialCount = request.call().size();
@@ -169,9 +218,9 @@ public class HttpTest {
 
     client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10);
     waitUntil(() -> request.call().size() == initialCount + 1);
-    waitUntil(() -> consumers(request.call(), client).size() == 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
 
-    Map<String, Object> consumer = consumers(request.call(), client).get(0);
+    Map<String, Object> consumer = entities(request.call(), client).get(0);
     assertThat(((Number) consumer.get("credits")).intValue()).isEqualTo(10);
     assertThat(((Number) consumer.get("subscription_id")).intValue()).isEqualTo(0);
     assertThat(((Map) consumer.get("connection_details")))
@@ -183,12 +232,12 @@ public class HttpTest {
         .containsEntry("vhost", "/");
 
     client.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-    waitUntil(() -> consumers(request.call(), client).size() == 2);
+    waitUntil(() -> entities(request.call(), client).size() == 2);
 
     client.unsubscribe((byte) 0);
-    waitUntil(() -> consumers(request.call(), client).size() == 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
     client.unsubscribe((byte) 1);
-    waitUntil(() -> consumers(request.call(), client).isEmpty());
+    waitUntil(() -> entities(request.call(), client).isEmpty());
   }
 
   @Test
@@ -230,13 +279,16 @@ public class HttpTest {
         });
 
     try {
-      int consumersPerConnection = 2;
+      int entitiesPerConnection = 2;
 
-      IntStream.range(0, consumersPerConnection)
+      IntStream.range(0, entitiesPerConnection)
           .forEach(
               i -> {
                 clients.forEach(
-                    c -> c.subscribe((byte) i, stream, OffsetSpecification.first(), 10));
+                    c -> {
+                      c.subscribe((byte) i, stream, OffsetSpecification.first(), 10);
+                      c.declarePublisher((byte) i, null, stream);
+                    });
               });
       Callable<List<Map<String, Object>>> allConnectionsRequest =
           () -> toMaps(get("/stream/connections"));
@@ -285,18 +337,24 @@ public class HttpTest {
                 false),
             new PermissionsTestConfiguration(
                 "guest",
-                "/consumers",
+                "",
                 requests(
-                    r("", vhostsUsers.length * consumersPerConnection),
-                    r("/%2f", consumersPerConnection),
-                    r("/vh1", consumersPerConnection * 2))),
-            new PermissionsTestConfiguration(
+                    r("/consumers", vhostsUsers.length * entitiesPerConnection),
+                    r("/publishers", vhostsUsers.length * entitiesPerConnection),
+                    r("/consumers/%2f", entitiesPerConnection),
+                    r("/publishers/%2f", entitiesPerConnection),
+                    r("/consumers/vh1", entitiesPerConnection * 2),
+                    r("/publishers/vh1", entitiesPerConnection * 2))),
+      new PermissionsTestConfiguration(
                 "user-management",
-                "/consumers",
+                "",
                 requests(
-                    r("", consumersPerConnection * 2), // only their connections
-                    r("/vh1", consumersPerConnection * 2),
-                    r("/vh2", 0)))
+                    r("/consumers", entitiesPerConnection * 2), // only their connections
+                    r("/publishers", entitiesPerConnection * 2), // only their connections
+                    r("/consumers/vh1", entitiesPerConnection * 2),
+                    r("/publishers/vh1", entitiesPerConnection * 2),
+                    r("/consumers/vh2", 0),
+                    r("/consumers/vh2", 0)))
           };
 
       for (PermissionsTestConfiguration configuration : testConfigurations) {
