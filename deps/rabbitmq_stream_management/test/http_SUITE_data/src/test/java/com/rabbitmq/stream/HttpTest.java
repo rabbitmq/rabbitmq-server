@@ -50,7 +50,7 @@ import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 @ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
@@ -227,6 +227,70 @@ public class HttpTest {
   }
 
   @Test
+  void connectionPublishers() throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/connections"));
+    int initialCount = request.call().size();
+    String s = UUID.randomUUID().toString();
+    Client c1 = cf.get(new ClientParameters().virtualHost("vh1"));
+    try {
+      c1.create(s);
+      assertThat(c1.declarePublisher((byte) 0, null, s).isOk()).isTrue();
+      assertThat(c1.declarePublisher((byte) 1, null, s).isOk()).isTrue();
+      Client c2 =
+          cf.get(
+              new ClientParameters()
+                  .virtualHost("vh1")
+                  .username("user-management")
+                  .password("user-management"));
+      assertThat(c2.declarePublisher((byte) 0, null, s).isOk()).isTrue();
+      waitUntil(() -> request.call().size() == initialCount + 2);
+
+      Callable<Map<String, Object>> cRequest =
+          () -> toMap(get("/stream/connections/vh1/" + connectionName(c1)));
+      // wait until some stats are in the response
+      waitUntil(() -> cRequest.call().containsKey("recv_oct_details"));
+
+      Callable<List<Map<String, Object>>> publishersRequest =
+          () -> toMaps(get("/stream/connections/vh1/" + connectionName(c1) + "/publishers"));
+      List<Map<String, Object>> publishers = publishersRequest.call();
+
+      assertThat(publishers).hasSize(2);
+      publishers.forEach(
+          c -> {
+            assertThat(c)
+                .containsKeys(
+                    "publisher_id",
+                    "reference",
+                    "published",
+                    "confirmed",
+                    "errored",
+                    "connection_details",
+                    "queue");
+            assertThat(c)
+                .extractingByKey("connection_details", as(MAP))
+                .containsValue(connectionName(c1));
+          });
+
+      publishersRequest =
+          () -> toMaps(get("/stream/connections/vh1/" + connectionName(c2) + "/publishers"));
+      publishers = publishersRequest.call();
+      assertThat(publishers).hasSize(1);
+      assertThat(publishers.get(0))
+          .extractingByKey("connection_details", as(MAP))
+          .containsValue(connectionName(c2));
+
+      assertThatThrownBy(
+              () ->
+                  get(
+                      httpClient("user-management"),
+                      "/stream/connections/vh1/" + connectionName(c1) + "/publishers"))
+          .hasMessageContaining("401");
+    } finally {
+      c1.delete(s);
+    }
+  }
+
+  @Test
   void publishers() throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/publishers"));
     int initialCount = request.call().size();
@@ -278,7 +342,7 @@ public class HttpTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"foo"})
-  @NullAndEmptySource
+  @NullSource
   void publisherReference(String reference) throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/publishers"));
     int initialCount = request.call().size();
@@ -305,7 +369,7 @@ public class HttpTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"foo"})
-  @NullAndEmptySource
+  @NullSource
   void publisherShouldBeDeletedAfterStreamDeletion(String reference) throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/publishers"));
     int initialCount = request.call().size();

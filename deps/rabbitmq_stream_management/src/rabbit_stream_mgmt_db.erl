@@ -7,12 +7,15 @@
 
 -module(rabbit_stream_mgmt_db).
 
+-define(ENTITY_CONSUMER, consumer).
+-define(ENTITY_PUBLISHER, publisher).
+
 -include_lib("rabbitmq_stream/include/rabbit_stream_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([get_all_consumers/1, get_all_publishers/1]).
--export([consumer_data/3, publisher_data/2]).
--export([get_connection_consumers/1]).
+-export([entity_data/4]).
+-export([get_connection_consumers/1, get_connection_publishers/1]).
 
 get_all_consumers(VHosts) ->
   rabbit_mgmt_db:submit(fun(_Interval) -> consumers_stats(VHosts) end).
@@ -23,44 +26,43 @@ get_all_publishers(VHosts) ->
 get_connection_consumers(ConnectionPid) when is_pid(ConnectionPid) ->
   rabbit_mgmt_db:submit(fun(_Interval) -> connection_consumers_stats(ConnectionPid) end).
 
+get_connection_publishers(ConnectionPid) when is_pid(ConnectionPid) ->
+  rabbit_mgmt_db:submit(fun(_Interval) -> connection_publishers_stats(ConnectionPid) end).
+
 consumers_stats(VHost) ->
-  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, consumer_data,
-    [VHost, fun consumers_by_vhost/1]}),
+  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, entity_data,
+    [VHost, ?ENTITY_CONSUMER, fun consumers_by_vhost/1]}),
   [V || {_, V} <- maps:to_list(Data)].
 
 publishers_stats(VHost) ->
-  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, publisher_data, [VHost]}),
+  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, entity_data,
+    [VHost, ?ENTITY_PUBLISHER, fun publishers_by_vhost/1]}),
   [V || {_, V} <- maps:to_list(Data)].
 
 connection_consumers_stats(ConnectionPid) ->
-  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, consumer_data,
-    [ConnectionPid, fun consumers_by_connection/1]}),
+  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, entity_data,
+    [ConnectionPid, ?ENTITY_CONSUMER, fun consumers_by_connection/1]}),
   [V || {_, V} <- maps:to_list(Data)].
 
-consumer_data(_Pid, Param, QueryFun) ->
+connection_publishers_stats(ConnectionPid) ->
+  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, entity_data,
+    [ConnectionPid, ?ENTITY_PUBLISHER, fun publishers_by_connection/1]}),
+  [V || {_, V} <- maps:to_list(Data)].
+
+entity_data(_Pid, Param, EntityType, QueryFun) ->
   maps:from_list(
     [begin
-       AugmentedConsumer = augment_consumer(C),
-       {C, augment_connection_pid(AugmentedConsumer) ++ AugmentedConsumer}
+       AugmentedPublisher = augment_entity(EntityType, P),
+       {P, augment_connection_pid(AugmentedPublisher) ++ AugmentedPublisher}
      end
-       || C <- QueryFun(Param)]
+      || P <- QueryFun(Param)]
   ).
 
-publisher_data(_Pid, VHost) ->
-  maps:from_list(
-    [begin
-       AugmentedPublisher = augment_publisher(C),
-       {C, augment_connection_pid(AugmentedPublisher) ++ AugmentedPublisher}
-     end
-      || C <- publishers_by_vhost(VHost)]
-  ).
-
-augment_consumer({{Q, ConnPid, SubId}, Props}) ->
+augment_entity(?ENTITY_CONSUMER, {{Q, ConnPid, SubId}, Props}) ->
   [{queue, format_resource(Q)},
    {connection, ConnPid},
-   {subscription_id, SubId} | Props].
-
-augment_publisher({{Q, ConnPid, PubId}, Props}) ->
+   {subscription_id, SubId} | Props];
+augment_entity(?ENTITY_PUBLISHER, {{Q, ConnPid, PubId}, Props}) ->
   [{queue, format_resource(Q)},
     {connection, ConnPid},
     {publisher_id, PubId} | Props].
@@ -79,6 +81,9 @@ publishers_by_vhost(VHost) ->
 
 consumers_by_connection(ConnectionPid) ->
   get_entity_stats(?TABLE_CONSUMER, ConnectionPid).
+
+publishers_by_connection(ConnectionPid) ->
+  get_entity_stats(?TABLE_PUBLISHER, ConnectionPid).
 
 get_entity_stats(Table, Id) ->
   ets:select(Table, match_entity_spec(Id)).
