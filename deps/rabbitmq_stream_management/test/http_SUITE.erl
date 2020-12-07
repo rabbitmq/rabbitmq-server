@@ -37,7 +37,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:run_setup_steps(Config1,
       [fun(StepConfig) ->
         rabbit_ct_helpers:merge_app_env(StepConfig,
-          {rabbit, [{collect_statistics_interval, 1000}]})
+          {rabbit, [{collect_statistics_interval, 500}]})
        end] ++
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).

@@ -70,11 +70,11 @@
 <% } %>
 <% if(connection.client_properties) { %>
     <td>
-      <%= link_conn(connection.name) %>
+      <%= link_stream_conn(connection.vhost, connection.name) %>
       <sub><%= fmt_string(short_conn(connection.client_properties.connection_name)) %></sub>
     </td>
 <% } else { %>
-    <td><%= link_conn(connection.name) %></td>
+    <td><%= link_stream_conn(connection.vhost, connection.name) %></td>
 <% } %>
 <% if (nodes_interesting) { %>
     <td><%= fmt_node(connection.node) %></td>

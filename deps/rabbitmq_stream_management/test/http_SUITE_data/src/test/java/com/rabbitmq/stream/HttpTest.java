@@ -18,8 +18,10 @@ package com.rabbitmq.stream;
 
 import static com.rabbitmq.stream.TestUtils.waitUntil;
 import static java.lang.String.format;
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -166,6 +168,62 @@ public class HttpTest {
 
     assertThatThrownBy(() -> cRequest.call()).isInstanceOf(IOException.class);
     waitUntil(() -> request.call().size() == initialCount);
+  }
+
+  @Test
+  void connectionConsumers() throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/connections"));
+    int initialCount = request.call().size();
+    String s = UUID.randomUUID().toString();
+    Client c1 = cf.get(new ClientParameters().virtualHost("vh1"));
+    try {
+      c1.create(s);
+      assertThat(c1.subscribe((byte) 0, s, OffsetSpecification.first(), 10).isOk()).isTrue();
+      assertThat(c1.subscribe((byte) 1, s, OffsetSpecification.first(), 5).isOk()).isTrue();
+      Client c2 =
+          cf.get(
+              new ClientParameters()
+                  .virtualHost("vh1")
+                  .username("user-management")
+                  .password("user-management"));
+      assertThat(c2.subscribe((byte) 0, s, OffsetSpecification.first(), 10).isOk()).isTrue();
+      waitUntil(() -> request.call().size() == initialCount + 2);
+
+      Callable<Map<String, Object>> cRequest =
+          () -> toMap(get("/stream/connections/vh1/" + connectionName(c1)));
+      // wait until some stats are in the response
+      waitUntil(() -> cRequest.call().containsKey("recv_oct_details"));
+
+      Callable<List<Map<String, Object>>> consumersRequest =
+          () -> toMaps(get("/stream/connections/vh1/" + connectionName(c1) + "/consumers"));
+      List<Map<String, Object>> consumers = consumersRequest.call();
+
+      assertThat(consumers).hasSize(2);
+      consumers.forEach(
+          c -> {
+            assertThat(c).containsKeys("subscription_id", "credits", "connection_details", "queue");
+            assertThat(c)
+                .extractingByKey("connection_details", as(MAP))
+                .containsValue(connectionName(c1));
+          });
+
+      consumersRequest =
+          () -> toMaps(get("/stream/connections/vh1/" + connectionName(c2) + "/consumers"));
+      consumers = consumersRequest.call();
+      assertThat(consumers).hasSize(1);
+      assertThat(consumers.get(0))
+          .extractingByKey("connection_details", as(MAP))
+          .containsValue(connectionName(c2));
+
+      assertThatThrownBy(
+              () ->
+                  get(
+                      httpClient("user-management"),
+                      "/stream/connections/vh1/" + connectionName(c1) + "/consumers"))
+          .hasMessageContaining("401");
+    } finally {
+      c1.delete(s);
+    }
   }
 
   @Test

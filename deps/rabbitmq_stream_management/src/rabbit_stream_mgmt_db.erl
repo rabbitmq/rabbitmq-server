@@ -11,7 +11,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([get_all_consumers/1, get_all_publishers/1]).
--export([consumer_data/2, publisher_data/2]).
+-export([consumer_data/3, publisher_data/2]).
+-export([get_connection_consumers/1]).
 
 get_all_consumers(VHosts) ->
   rabbit_mgmt_db:submit(fun(_Interval) -> consumers_stats(VHosts) end).
@@ -19,21 +20,30 @@ get_all_consumers(VHosts) ->
 get_all_publishers(VHosts) ->
   rabbit_mgmt_db:submit(fun(_Interval) -> publishers_stats(VHosts) end).
 
+get_connection_consumers(ConnectionPid) when is_pid(ConnectionPid) ->
+  rabbit_mgmt_db:submit(fun(_Interval) -> connection_consumers_stats(ConnectionPid) end).
+
 consumers_stats(VHost) ->
-  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, consumer_data, [VHost]}),
+  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, consumer_data,
+    [VHost, fun consumers_by_vhost/1]}),
   [V || {_, V} <- maps:to_list(Data)].
 
 publishers_stats(VHost) ->
   Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, publisher_data, [VHost]}),
   [V || {_, V} <- maps:to_list(Data)].
 
-consumer_data(_Pid, VHost) ->
+connection_consumers_stats(ConnectionPid) ->
+  Data = rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db, consumer_data,
+    [ConnectionPid, fun consumers_by_connection/1]}),
+  [V || {_, V} <- maps:to_list(Data)].
+
+consumer_data(_Pid, Param, QueryFun) ->
   maps:from_list(
     [begin
        AugmentedConsumer = augment_consumer(C),
        {C, augment_connection_pid(AugmentedConsumer) ++ AugmentedConsumer}
      end
-       || C <- consumers_by_vhost(VHost)]
+       || C <- QueryFun(Param)]
   ).
 
 publisher_data(_Pid, VHost) ->
@@ -66,6 +76,15 @@ publishers_by_vhost(VHost) ->
     [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
       [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
       ['$_']}]).
+
+consumers_by_connection(ConnectionPid) ->
+  get_entity_stats(?TABLE_CONSUMER, ConnectionPid).
+
+get_entity_stats(Table, Id) ->
+  ets:select(Table, match_entity_spec(Id)).
+
+match_entity_spec(ConnectionId) ->
+  [{{{'_', '$1', '_'}, '_'}, [{'==', ConnectionId, '$1'}], ['$_']}].
 
 augment_connection_pid(Consumer) ->
   Pid = rabbit_misc:pget(connection, Consumer),
