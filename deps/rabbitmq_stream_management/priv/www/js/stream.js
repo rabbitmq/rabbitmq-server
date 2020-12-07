@@ -6,7 +6,8 @@ dispatcher_add(function(sammy) {
                 var vhost = esc(this.params['vhost']);
                 var name = esc(this.params['name']);
                 render({'connection': {path:    '/stream/connections/'+ vhost + '/' + name,
-                                       options: {ranges: ['data-rates-conn']}}},
+                                       options: {ranges: ['data-rates-conn']}},
+                        'consumers': '/stream/connections/' + vhost + '/' + name + '/consumers'},
                         'streamConnection', '#/stream/connections');
             });
 
@@ -14,7 +15,7 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Stream'] = ['#/stream/connections', "monitoring"];
 
-var ALL_STREAM_COLUMNS =
+var ALL_STREAM_CONNECTION_COLUMNS =
      {'Overview': [['user',   'User name', true],
                    ['state',  'State',     true]],
       'Details': [['protocol',       'Protocol',       true],
@@ -26,11 +27,23 @@ var ALL_STREAM_COLUMNS =
                   ['heartbeat',    'Heartbeat',    false],
                   ['connected_at', 'Connected at', false]]};
 
-var DISABLED_STATS_STREAM_COLUMNS =
+var DISABLED_STATS_STREAM_CONNECTION_COLUMNS =
      {'Overview': [['user',   'User name', true],
                    ['state',  'State',     true]]};
 
-COLUMNS['streamConnections'] = disable_stats?DISABLED_STATS_STREAM_COLUMNS:ALL_STREAM_COLUMNS;
+COLUMNS['streamConnections'] = disable_stats?DISABLED_STATS_STREAM_CONNECTION_COLUMNS:ALL_STREAM_CONNECTION_COLUMNS;
+
+var ALL_STREAM_CONNECTION_COLUMNS =
+     {'Overview': [['user',   'User name', true],
+                   ['state',  'State',     true]],
+      'Details': [['protocol',       'Protocol',       true],
+                  ['frame_max',      'Frame max',      false],
+                  ['auth_mechanism', 'Auth mechanism', false],
+                  ['client',         'Client',         false]],
+      'Network': [['from_client',  'From client',  true],
+                  ['to_client',    'To client',    true],
+                  ['heartbeat',    'Heartbeat',    false],
+                  ['connected_at', 'Connected at', false]]};
 
 function renderStreamConnections() {
   render({'connections': {path: url_pagination_template_context('stream/connections', 'streamConnections', 1, 100),
