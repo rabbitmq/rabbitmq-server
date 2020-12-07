@@ -21,7 +21,7 @@
 %% API
 -export([init/0]).
 -export([consumer_created/4, consumer_updated/4, consumer_cancelled/3]).
--export([publisher_created/3, publisher_updated/6, publisher_deleted/3]).
+-export([publisher_created/4, publisher_updated/7, publisher_deleted/3]).
 
 init() ->
     rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
@@ -42,16 +42,25 @@ consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
     ets:delete(?TABLE_CONSUMER, {StreamResource, Connection, SubscriptionId}),
     ok.
 
-publisher_created(Connection, StreamResource, PublisherId) ->
-   Values = [{published, 0}, {confirmed, 0}, {errored, 0}],
+publisher_created(Connection, StreamResource, PublisherId, Reference) ->
+   Values = [
+     {reference, format_publisher_reference(Reference)},
+     {published, 0}, {confirmed, 0}, {errored, 0}],
    ets:insert(?TABLE_PUBLISHER, {{StreamResource, Connection, PublisherId}, Values}),
    ok.
 
-publisher_updated(Connection, StreamResource, PublisherId, Published, Confirmed, Errored) ->
-    Values = [{published, Published}, {confirmed, Confirmed}, {errored, Errored}],
+publisher_updated(Connection, StreamResource, PublisherId, Reference, Published, Confirmed, Errored) ->
+    Values = [
+      {reference, format_publisher_reference(Reference)},
+      {published, Published}, {confirmed, Confirmed}, {errored, Errored}],
     ets:insert(?TABLE_PUBLISHER, {{StreamResource, Connection, PublisherId}, Values}),
     ok.
 
 publisher_deleted(Connection, StreamResource, PublisherId) ->
    ets:delete(?TABLE_PUBLISHER, {StreamResource, Connection, PublisherId}),
    ok.
+
+format_publisher_reference(undefined) ->
+  <<"">>;
+format_publisher_reference(Ref) when is_binary(Ref) ->
+  Ref.

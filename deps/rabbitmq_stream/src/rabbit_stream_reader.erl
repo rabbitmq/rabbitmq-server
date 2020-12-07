@@ -779,7 +779,8 @@ handle_frame_post_auth(Transport, #stream_connection{
                                 leader = ClusterLeader,
                                 message_counters = atomics:new(3, [{signed, false}])},
                             response(Transport, Connection0, ?COMMAND_DECLARE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_OK),
-                            rabbit_stream_metrics:publisher_created(self(), stream_r(Stream, Connection1), PublisherId),
+                            rabbit_stream_metrics:publisher_created(
+                                self(), stream_r(Stream, Connection1), PublisherId, PublisherReference),
                             {Connection1#stream_connection{publishers = Publishers0#{PublisherId => Publisher},
                                 publisher_to_ids = RefIds1}, State, Rest}
                     end;
@@ -1256,9 +1257,6 @@ clean_state_after_stream_deletion_or_failure(Stream,
             [rabbit_stream_metrics:consumer_cancelled(
                 self(), stream_r(Stream, C0), SubId)
                 || SubId <- SubscriptionIds],
-            [rabbit_stream_metrics:publisher_deleted(self(), stream_r(S, C0), PubId)
-                || #publisher{stream = S, publisher_id = PubId} <- maps:values(Publishers), S == Stream
-            ],
             {true, C0#stream_connection{
                 stream_subscriptions = maps:remove(Stream, StreamSubscriptions)
             }, S0#stream_connection_state{consumers = maps:without(SubscriptionIds, Consumers)}};
@@ -1271,6 +1269,7 @@ clean_state_after_stream_deletion_or_failure(Stream,
                 fun(PubId, #publisher{stream = S, reference = Ref}, {Pubs, PubToIds}) ->
                     case S of
                         Stream ->
+                            rabbit_stream_metrics:publisher_deleted(self(), stream_r(S, C1), PubId),
                             {maps:remove(PubId, Pubs), maps:remove({Stream, Ref}, PubToIds)};
                         _ ->
                             {Pubs, PubToIds}
@@ -1430,9 +1429,10 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
         self(), stream_r(S, Connection), Id, Credit)
      || #consumer{stream = S, subscription_id = Id, credit = Credit} <- maps:values(Consumers)],
     [rabbit_stream_metrics:publisher_updated(
-        self(), stream_r(S, Connection), Id,
+        self(), stream_r(S, Connection), Id, PubReference,
         messages_published(Counters), messages_confirmed(Counters), messages_errored(Counters))
-        || #publisher{stream = S, publisher_id = Id, message_counters = Counters} <- maps:values(Publishers)],
+        || #publisher{stream = S, publisher_id = Id, reference = PubReference,
+                      message_counters = Counters} <- maps:values(Publishers)],
     Connection1 = rabbit_event:reset_stats_timer(Connection, #stream_connection.stats_timer),
     ensure_stats_timer(Connection1).
 

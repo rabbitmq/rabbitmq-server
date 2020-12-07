@@ -69,6 +69,19 @@ public class TestUtils {
     fail("Waited " + duration.getSeconds() + " second(s), condition never got true");
   }
 
+  static Authenticator authenticator(String usernamePassword) {
+    return (route, response) -> {
+      if (response.request().header("Authorization") != null) {
+        return null; // Give up, we've already attempted to authenticate.
+      }
+      return response
+          .request()
+          .newBuilder()
+          .header("Authorization", Credentials.basic(usernamePassword, usernamePassword))
+          .build();
+    };
+  }
+
   @FunctionalInterface
   interface CallableBooleanSupplier {
     boolean getAsBoolean() throws Exception;
@@ -188,18 +201,5 @@ public class TestUtils {
         c.close();
       }
     }
-  }
-
-  static Authenticator authenticator(String usernamePassword) {
-    return (route, response) -> {
-      if (response.request().header("Authorization") != null) {
-        return null; // Give up, we've already attempted to authenticate.
-      }
-      return response
-          .request()
-          .newBuilder()
-          .header("Authorization", Credentials.basic(usernamePassword, usernamePassword))
-          .build();
-    };
   }
 }

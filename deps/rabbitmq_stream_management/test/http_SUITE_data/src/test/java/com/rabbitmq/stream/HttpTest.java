@@ -47,6 +47,9 @@ import okhttp3.Response;
 import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
 public class HttpTest {
@@ -113,6 +116,14 @@ public class HttpTest {
         .collect(Collectors.toList());
   }
 
+  static TestRequest[] requests(TestRequest... requests) {
+    return requests;
+  }
+
+  static TestRequest r(String endpoint, int expectedCount) {
+    return new TestRequest(endpoint, expectedCount);
+  }
+
   @Test
   void connections() throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/connections"));
@@ -174,6 +185,7 @@ public class HttpTest {
     waitUntil(() -> entities(request.call(), client).size() == 1);
 
     Map<String, Object> publisher = entities(request.call(), client).get(0);
+    assertThat(publisher.get("reference").toString()).isEmpty();
     assertThat(((Number) publisher.get("published")).intValue()).isEqualTo(0);
     assertThat(((Number) publisher.get("confirmed")).intValue()).isEqualTo(0);
     assertThat(((Number) publisher.get("errored")).intValue()).isEqualTo(0);
@@ -186,11 +198,13 @@ public class HttpTest {
         .containsEntry("name", stream)
         .containsEntry("vhost", "/");
 
-    client.publish((byte) 0, Collections.singletonList(
-       client.messageBuilder().addData("".getBytes(StandardCharsets.UTF_8)).build()
-    ));
+    client.publish(
+        (byte) 0,
+        Collections.singletonList(
+            client.messageBuilder().addData("".getBytes(StandardCharsets.UTF_8)).build()));
 
-    waitUntil(() -> ((Number) entities(request.call(), client).get(0).get("confirmed")).intValue() == 1);
+    waitUntil(
+        () -> ((Number) entities(request.call(), client).get(0).get("confirmed")).intValue() == 1);
     publisher = entities(request.call(), client).get(0);
     assertThat(((Number) publisher.get("published")).intValue()).isEqualTo(1);
     assertThat(((Number) publisher.get("confirmed")).intValue()).isEqualTo(1);
@@ -202,6 +216,79 @@ public class HttpTest {
     waitUntil(() -> entities(request.call(), client).size() == 1);
     client.deletePublisher((byte) 1);
     waitUntil(() -> entities(request.call(), client).isEmpty());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"foo"})
+  @NullAndEmptySource
+  void publisherReference(String reference) throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/publishers"));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    AtomicBoolean closed = new AtomicBoolean(false);
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .clientProperty("connection_name", connectionProvidedName)
+                .shutdownListener(shutdownContext -> closed.set(true)));
+
+    client.declarePublisher((byte) 0, reference, stream);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    Map<String, Object> publisher = entities(request.call(), client).get(0);
+    String publisherReference = (String) publisher.get("reference");
+    if (reference == null || reference.isEmpty()) {
+      assertThat(publisherReference).isEmpty();
+    } else {
+      assertThat(publisher.get("reference").toString()).isEqualTo(reference);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"foo"})
+  @NullAndEmptySource
+  void publisherShouldBeDeletedAfterStreamDeletion(String reference) throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/publishers"));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    String s = UUID.randomUUID().toString();
+    AtomicBoolean closed = new AtomicBoolean(false);
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .clientProperty("connection_name", connectionProvidedName)
+                .shutdownListener(shutdownContext -> closed.set(true)));
+
+    client.create(s);
+    client.declarePublisher((byte) 0, reference, s);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    client.delete(s);
+    waitUntil(() -> request.call().size() == 0);
+  }
+
+  @Test
+  void consumerShouldBeDeletedAfterStreamDeletion() throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/consumers"));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    String s = UUID.randomUUID().toString();
+    AtomicBoolean closed = new AtomicBoolean(false);
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .clientProperty("connection_name", connectionProvidedName)
+                .shutdownListener(shutdownContext -> closed.set(true)));
+
+    client.create(s);
+    client.subscribe((byte) 0, s, OffsetSpecification.first(), 10);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    client.delete(s);
+    waitUntil(() -> request.call().size() == 0);
   }
 
   @Test
@@ -345,7 +432,7 @@ public class HttpTest {
                     r("/publishers/%2f", entitiesPerConnection),
                     r("/consumers/vh1", entitiesPerConnection * 2),
                     r("/publishers/vh1", entitiesPerConnection * 2))),
-      new PermissionsTestConfiguration(
+            new PermissionsTestConfiguration(
                 "user-management",
                 "",
                 requests(
@@ -414,10 +501,6 @@ public class HttpTest {
     }
   }
 
-  static TestRequest[] requests(TestRequest... requests) {
-    return requests;
-  }
-
   static class TestRequest {
     final String endpoint;
     final int expectedCount;
@@ -426,9 +509,5 @@ public class HttpTest {
       this.endpoint = endpoint;
       this.expectedCount = expectedCount;
     }
-  }
-
-  static TestRequest r(String endpoint, int expectedCount) {
-    return new TestRequest(endpoint, expectedCount);
   }
 }
