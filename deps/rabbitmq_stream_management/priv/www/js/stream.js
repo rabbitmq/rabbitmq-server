@@ -7,7 +7,8 @@ dispatcher_add(function(sammy) {
                 var name = esc(this.params['name']);
                 render({'connection': {path:    '/stream/connections/'+ vhost + '/' + name,
                                        options: {ranges: ['data-rates-conn']}},
-                        'consumers': '/stream/connections/' + vhost + '/' + name + '/consumers'},
+                        'consumers': '/stream/connections/' + vhost + '/' + name + '/consumers',
+                        'publishers': '/stream/connections/' + vhost + '/' + name + '/publishers'},
                         'streamConnection', '#/stream/connections');
             });
 
