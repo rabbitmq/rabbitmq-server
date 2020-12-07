@@ -604,6 +604,21 @@ public class HttpTest {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "/stream/connections/%2F/foo-connection-name",
+        "/stream/connections/foo-virtual-host",
+        "/stream/connections/foo-virtual-host/foo-connection-name",
+        "/stream/connections/%2F/foo-connection-name/consumers",
+        "/stream/connections/%2F/foo-connection-name/publishers",
+        "/stream/consumers/foo-virtual-host",
+        "/stream/publishers/foo-virtual-host"
+      })
+  void shouldReturnNotFound(String endpoint) {
+    assertThatThrownBy(() -> get(endpoint)).hasMessageContaining("404");
+  }
+
   static class PermissionsTestConfiguration {
     final String user;
     final String endpoint;
