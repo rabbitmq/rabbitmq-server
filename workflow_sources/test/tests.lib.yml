@@ -52,8 +52,8 @@ steps:
 #@   if getattr(dep, 'use_terraform', False):
 #@     args = []
 #@     args.append("--env ERLANG_VERSION={}".format(erlang_version))
-#@     args.append("--env AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}")
-#@     args.append("--env AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
+#@     args.append("--env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }}")
+#@     args.append("--env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }}")
 #@     args.append("--env SSH_KEY=/workspace/terraform/id_rsa_terraform")
 #@     args.append("--volume ${PWD}/terraform:/workspace/terraform")
 #@     return " \\\n  ".join(args)
