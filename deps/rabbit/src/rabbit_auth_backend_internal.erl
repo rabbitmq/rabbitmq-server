@@ -39,6 +39,8 @@
 %% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
 
+-import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
+
 %%----------------------------------------------------------------------------
 
 -type regexp() :: binary().
@@ -662,9 +664,9 @@ put_user(User, Version, ActingUser) ->
                                   true  -> [administrator];
                                   false -> []
                               end;
-                          {TagsS, _} ->
-                              [list_to_atom(string:strip(T)) ||
-                                  T <- string:tokens(binary_to_list(TagsS), ",")]
+                          {TagsVal, _} ->
+                              rabbit_log:debug("TagsVal: ~p", [TagsVal]),
+                              tag_list_from(TagsVal)
                       end,
 
     %% pre-configured, only applies to newly created users
@@ -812,6 +814,11 @@ clear_user_limits(Username, LimitType, ActingUser) ->
                               internal_user:update_limits(remove, User, LimitType)
                           end),
     notify_limit_clear(Username, ActingUser).
+
+tag_list_from(Tags) when is_list(Tags) ->
+    [to_atom(string:strip(to_list(T))) || T <- Tags];
+tag_list_from(Tags) when is_binary(Tags) ->
+    [to_atom(string:strip(T)) || T <- string:tokens(to_list(Tags), ",")].
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
