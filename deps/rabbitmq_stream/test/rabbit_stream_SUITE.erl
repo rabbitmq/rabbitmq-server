@@ -93,7 +93,7 @@ test_gc_consumers(Config) ->
 test_gc_publishers(Config) ->
     Pid = spawn(fun() -> ok end),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stream_metrics, publisher_created,
-        [Pid, #resource{name = <<"test">>, kind = queue, virtual_host = <<"/">>}, 0]
+        [Pid, #resource{name = <<"test">>, kind = queue, virtual_host = <<"/">>}, 0, <<"ref">>]
     ),
     ok = wait_until(fun() -> publisher_count(Config) == 0 end),
     ok.
