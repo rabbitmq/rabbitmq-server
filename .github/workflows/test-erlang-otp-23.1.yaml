@@ -27,7 +27,7 @@ jobs:
         dockerfile: ci/dockerfiles/ci
         build_args: ERLANG_VERSION=23.1,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
         tags: erlang-23.1-rabbitmq-${{ github.sha }}
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -51,7 +51,7 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -502,7 +502,7 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -673,7 +673,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -736,7 +736,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -769,7 +769,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -802,7 +802,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -835,7 +835,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -868,7 +868,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -901,7 +901,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -934,7 +934,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -967,7 +967,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1000,7 +1000,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1033,7 +1033,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1066,7 +1066,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1099,7 +1099,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1132,7 +1132,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1165,7 +1165,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1198,7 +1198,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1231,7 +1231,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1264,7 +1264,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1297,7 +1297,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1330,7 +1330,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1363,7 +1363,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1396,7 +1396,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1429,7 +1429,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1462,7 +1462,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1495,7 +1495,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1528,7 +1528,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1561,7 +1561,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1594,7 +1594,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1627,7 +1627,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1660,7 +1660,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1693,7 +1693,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1726,7 +1726,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1759,7 +1759,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1792,7 +1792,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1825,7 +1825,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1858,7 +1858,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1891,7 +1891,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1924,7 +1924,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1957,7 +1957,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -1990,7 +1990,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2023,7 +2023,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2056,7 +2056,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2089,7 +2089,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2122,7 +2122,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2155,7 +2155,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2188,7 +2188,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2221,7 +2221,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2254,7 +2254,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2287,7 +2287,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2320,7 +2320,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2353,7 +2353,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2386,7 +2386,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2419,7 +2419,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2452,7 +2452,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2485,7 +2485,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2518,7 +2518,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2551,7 +2551,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2584,7 +2584,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2617,7 +2617,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2650,7 +2650,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2683,7 +2683,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2716,7 +2716,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2749,7 +2749,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2782,7 +2782,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2815,7 +2815,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2848,7 +2848,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2881,7 +2881,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2914,7 +2914,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2947,7 +2947,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -2980,7 +2980,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3013,7 +3013,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3046,7 +3046,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3079,7 +3079,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3112,7 +3112,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3145,7 +3145,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3178,7 +3178,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3211,7 +3211,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3244,7 +3244,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3277,7 +3277,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3310,7 +3310,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3343,7 +3343,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3376,7 +3376,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3409,7 +3409,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3442,7 +3442,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3475,7 +3475,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3508,7 +3508,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3541,7 +3541,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3574,7 +3574,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3607,7 +3607,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3640,7 +3640,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3673,7 +3673,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3706,7 +3706,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3739,7 +3739,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3772,7 +3772,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3805,7 +3805,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3838,7 +3838,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3965,7 +3965,7 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -3991,7 +3991,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4027,7 +4027,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4063,7 +4063,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4099,7 +4099,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4135,7 +4135,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4171,7 +4171,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4207,7 +4207,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4243,7 +4243,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4279,7 +4279,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4315,7 +4315,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4351,7 +4351,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4385,7 +4385,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4421,7 +4421,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4457,7 +4457,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4493,7 +4493,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4529,7 +4529,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4565,7 +4565,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4601,7 +4601,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4637,7 +4637,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4673,7 +4673,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4709,7 +4709,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4754,7 +4754,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4790,7 +4790,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4826,7 +4826,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4862,7 +4862,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4898,7 +4898,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4934,7 +4934,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -4970,7 +4970,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5006,7 +5006,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5042,7 +5042,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5078,7 +5078,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5114,7 +5114,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5150,7 +5150,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5186,7 +5186,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5222,7 +5222,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5258,7 +5258,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5294,7 +5294,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5330,7 +5330,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5366,7 +5366,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5402,7 +5402,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5438,7 +5438,7 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
@@ -5522,7 +5522,7 @@ jobs:
     if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
     - uses: technote-space/workflow-conclusion-action@v1
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true

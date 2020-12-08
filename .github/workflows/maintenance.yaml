@@ -13,7 +13,7 @@ jobs:
         - ci
         - ci-rabbit
     steps:
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
