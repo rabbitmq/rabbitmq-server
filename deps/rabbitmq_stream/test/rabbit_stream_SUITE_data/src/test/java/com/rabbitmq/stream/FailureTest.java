@@ -142,7 +142,7 @@ public class FailureTest {
     assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
     confirmLatch.set(null);
 
-    CountDownLatch consumeLatch = new CountDownLatch(2);
+    CountDownLatch consumeLatch = new CountDownLatch(messages.size());
     Set<String> bodies = ConcurrentHashMap.newKeySet();
     Client consumer =
         cf.get(
@@ -163,8 +163,8 @@ public class FailureTest {
         });
     assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(bodies)
-        .hasSize(3)
-        .contains("all nodes available", "2 nodes available", "all nodes are back");
+        .hasSameSizeAs(messages)
+        .containsAll(messages);
   }
 
   @Test
