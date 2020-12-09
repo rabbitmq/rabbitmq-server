@@ -665,7 +665,6 @@ put_user(User, Version, ActingUser) ->
                                   false -> []
                               end;
                           {TagsVal, _} ->
-                              rabbit_log:debug("TagsVal: ~p", [TagsVal]),
                               tag_list_from(TagsVal)
                       end,
 
