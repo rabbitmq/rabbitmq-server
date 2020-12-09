@@ -866,15 +866,18 @@ function filter_ui(items) {
 
 }
 
-function paginate_header_ui(pages, context){
+function paginate_header_ui(pages, context, label){
+     if (label == undefined) {
+         label = context;
+     }
      var res = '<h2 class="updatable">';
-     res += ' All ' + context +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?  ', filtered down to ' + pages.filtered_count  : '') +  ')';
+     res += ' All ' + label +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?  ', filtered down to ' + pages.filtered_count  : '') +  ')';
      res += '</h2>';
     return res;
 }
 
-function paginate_ui(pages, context){
-    var res = paginate_header_ui(pages, context);
+function paginate_ui(pages, context, label){
+    var res = paginate_header_ui(pages, context, label);
     res += '<div class="hider">';
     res += '<h3>Pagination</h3>';
     res += '<div class="filter">';
