@@ -1377,7 +1377,7 @@ subscription_exists(StreamSubscriptions, SubscriptionId) ->
     lists:any(fun(Id) -> Id =:= SubscriptionId end, SubscriptionIds).
 
 send_file_callback(Transport, #consumer{socket = S, subscription_id = SubscriptionId}, Counter) ->
-    fun(Size) ->
+    fun(_Header, Size) ->
         FrameSize = 2 + 2 + 1 + Size,
         FrameBeginning = <<FrameSize:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8/unsigned>>,
         Transport:send(S, FrameBeginning),
