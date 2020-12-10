@@ -17,16 +17,39 @@ jobs:
         echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - name: PREPARE BUILD IMAGE
-      uses: docker/build-push-action@v1
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    - name: Cache Docker layers
+      uses: actions/cache@v2
       with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    - name: Login to GCR
+      uses: docker/login-action@v1
+      with:
+        registry: eu.gcr.io
         username: _json_key
         password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/ci
-        dockerfile: ci/dockerfiles/ci
-        build_args: ERLANG_VERSION=23.1,GITHUB_RUN_ID=${{ github.run_id }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},GITHUB_SHA=${{ github.sha }},base_rmq_ref=master,current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }},RABBITMQ_VERSION=3.9.0
-        tags: erlang-23.1-rabbitmq-${{ github.sha }}
+    - name: PREPARE BUILD IMAGE
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        file: ci/dockerfiles/ci
+        tags: eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
+        build-args: |
+          ERLANG_VERSION=23.1
+          GITHUB_RUN_ID=${{ github.run_id }}
+          BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
+          GITHUB_SHA=${{ github.sha }}
+          base_rmq_ref=master
+          current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }}
+          RABBITMQ_VERSION=3.9.0
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
     - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
@@ -51,13 +74,16 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:23.1
     - name: RUN XREF rabbit_common
       run: |
@@ -502,13 +528,16 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-base:23.1
     - name: RUN DIALYZE rabbit_common
       run: |
@@ -673,13 +702,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -718,16 +750,35 @@ jobs:
         project: rabbit
       run: |
         ci/scripts/validate-workflow.sh amqqueue_backward_compatibility backing_queue channel_interceptor channel_operation_timeout cluster cluster_rename clustering_management config_schema confirms_rejects consumer_timeout crashing_queues dead_lettering definition_import disconnect_detected_during_alarm dynamic_ha dynamic_qq eager_sync feature_flags lazy_queue list_consumers_sanity_check list_queues_online_and_offline maintenance_mode many_node_ha message_size_limit metrics mirrored_supervisor msg_store peer_discovery_classic_config peer_discovery_dns per_user_connection_channel_limit per_user_connection_channel_limit_partitions per_user_connection_channel_tracking per_user_connection_tracking per_vhost_connection_limit per_vhost_connection_limit_partitions per_vhost_msg_store per_vhost_queue_limit policy priority_queue priority_queue_recovery product_info proxy_protocol publisher_confirms_parallel queue_length_limits queue_master_location queue_parallel queue_type quorum_queue rabbit_confirms rabbit_core_metrics_gc rabbit_fifo rabbit_fifo_int rabbit_fifo_prop rabbit_fifo_v0 rabbit_msg_record rabbit_stream_queue rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown signal_handling simple_ha single_active_consumer sync_detection term_to_binary_compat_prop topic_permission unit_access_control unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management unit_cluster_formation_locking_mocks unit_collections unit_config_value_encryption unit_connection_tracking unit_credit_flow unit_disk_monitor unit_disk_monitor_mocks unit_file_handle_cache unit_gen_server2 unit_gm unit_log_config unit_log_management unit_operator_policy unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue unit_queue_consumers unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor upgrade_preparation vhost
-    - name: RUN CHECKS
-      uses: docker/build-push-action@v1
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    - name: Cache Docker layers
+      uses: actions/cache@v2
       with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    - name: Login to GCR
+      uses: docker/login-action@v1
+      with:
+        registry: eu.gcr.io
         username: _json_key
         password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/ci-rabbit
-        dockerfile: ci/dockerfiles/ci-dep
-        build_args: IMAGE_TAG=erlang-23.1-rabbitmq-${{ github.sha }},BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }},project=rabbit
-        tags: erlang-23.1-rabbitmq-${{ github.sha }}
+    - name: RUN CHECKS
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        file: ci/dockerfiles/ci-dep
+        tags: eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        build-args: |
+          IMAGE_TAG=erlang-23.1-rabbitmq-${{ github.sha }}
+          BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
+          project=rabbit
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
   rabbit-ct-amqqueue_backward_compatibility:
     name: rabbit-ct-amqqueue_backward_compatibility
     needs:
@@ -736,13 +787,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-amqqueue_backward_compatibility
       run: |
@@ -769,13 +823,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-backing_queue
       run: |
@@ -802,13 +859,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-channel_interceptor
       run: |
@@ -835,13 +895,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-channel_operation_timeout
       run: |
@@ -868,13 +931,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster
       run: |
@@ -901,13 +967,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster_rename
       run: |
@@ -934,13 +1003,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-clustering_management
       run: |
@@ -967,13 +1039,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-config_schema
       run: |
@@ -1000,13 +1075,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-confirms_rejects
       run: |
@@ -1033,13 +1111,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-consumer_timeout
       run: |
@@ -1066,13 +1147,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-crashing_queues
       run: |
@@ -1099,13 +1183,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dead_lettering
       run: |
@@ -1132,13 +1219,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-definition_import
       run: |
@@ -1165,13 +1255,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-disconnect_detected_during_alarm
       run: |
@@ -1198,13 +1291,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_ha
       run: |
@@ -1231,13 +1327,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_qq
       run: |
@@ -1264,13 +1363,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-eager_sync
       run: |
@@ -1297,13 +1399,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-feature_flags
       run: |
@@ -1330,13 +1435,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-lazy_queue
       run: |
@@ -1363,13 +1471,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_consumers_sanity_check
       run: |
@@ -1396,13 +1507,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_queues_online_and_offline
       run: |
@@ -1429,13 +1543,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-maintenance_mode
       run: |
@@ -1462,13 +1579,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-many_node_ha
       run: |
@@ -1495,13 +1615,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-message_size_limit
       run: |
@@ -1528,13 +1651,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-metrics
       run: |
@@ -1561,13 +1687,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-mirrored_supervisor
       run: |
@@ -1594,13 +1723,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-msg_store
       run: |
@@ -1627,13 +1759,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-peer_discovery_classic_config
       run: |
@@ -1660,13 +1795,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-peer_discovery_dns
       run: |
@@ -1693,13 +1831,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_limit
       run: |
@@ -1726,13 +1867,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_limit_partitions
       run: |
@@ -1759,13 +1903,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_tracking
       run: |
@@ -1792,13 +1939,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_tracking
       run: |
@@ -1825,13 +1975,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_connection_limit
       run: |
@@ -1858,13 +2011,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_connection_limit_partitions
       run: |
@@ -1891,13 +2047,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_msg_store
       run: |
@@ -1924,13 +2083,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_queue_limit
       run: |
@@ -1957,13 +2119,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-policy
       run: |
@@ -1990,13 +2155,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue
       run: |
@@ -2023,13 +2191,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue_recovery
       run: |
@@ -2056,13 +2227,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-product_info
       run: |
@@ -2089,13 +2263,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-proxy_protocol
       run: |
@@ -2122,13 +2299,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-publisher_confirms_parallel
       run: |
@@ -2155,13 +2335,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_length_limits
       run: |
@@ -2188,13 +2371,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_master_location
       run: |
@@ -2221,13 +2407,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_parallel
       run: |
@@ -2254,13 +2443,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_type
       run: |
@@ -2287,13 +2479,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-quorum_queue
       run: |
@@ -2320,13 +2515,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_confirms
       run: |
@@ -2353,13 +2551,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_core_metrics_gc
       run: |
@@ -2386,13 +2587,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo
       run: |
@@ -2419,13 +2623,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_int
       run: |
@@ -2452,13 +2659,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_prop
       run: |
@@ -2485,13 +2695,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_v0
       run: |
@@ -2518,13 +2731,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_msg_record
       run: |
@@ -2551,13 +2767,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_stream_queue
       run: |
@@ -2584,13 +2803,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmq_queues_cli_integration
       run: |
@@ -2617,13 +2839,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmqctl_integration
       run: |
@@ -2650,13 +2875,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmqctl_shutdown
       run: |
@@ -2683,13 +2911,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-signal_handling
       run: |
@@ -2716,13 +2947,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-simple_ha
       run: |
@@ -2749,13 +2983,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-single_active_consumer
       run: |
@@ -2782,13 +3019,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-sync_detection
       run: |
@@ -2815,13 +3055,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-term_to_binary_compat_prop
       run: |
@@ -2848,13 +3091,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-topic_permission
       run: |
@@ -2881,13 +3127,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control
       run: |
@@ -2914,13 +3163,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
       run: |
@@ -2947,13 +3199,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control_credential_validation
       run: |
@@ -2980,13 +3235,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_amqp091_content_framing
       run: |
@@ -3013,13 +3271,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_amqp091_server_properties
       run: |
@@ -3046,13 +3307,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_app_management
       run: |
@@ -3079,13 +3343,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_cluster_formation_locking_mocks
       run: |
@@ -3112,13 +3379,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_collections
       run: |
@@ -3145,13 +3415,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_config_value_encryption
       run: |
@@ -3178,13 +3451,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_connection_tracking
       run: |
@@ -3211,13 +3487,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_credit_flow
       run: |
@@ -3244,13 +3523,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_disk_monitor
       run: |
@@ -3277,13 +3559,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_disk_monitor_mocks
       run: |
@@ -3310,13 +3595,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_file_handle_cache
       run: |
@@ -3343,13 +3631,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_gen_server2
       run: |
@@ -3376,13 +3667,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_gm
       run: |
@@ -3409,13 +3703,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_log_config
       run: |
@@ -3442,13 +3739,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_log_management
       run: |
@@ -3475,13 +3775,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_operator_policy
       run: |
@@ -3508,13 +3811,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_pg_local
       run: |
@@ -3541,13 +3847,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_plugin_directories
       run: |
@@ -3574,13 +3883,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_plugin_versioning
       run: |
@@ -3607,13 +3919,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_policy_validators
       run: |
@@ -3640,13 +3955,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_priority_queue
       run: |
@@ -3673,13 +3991,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_queue_consumers
       run: |
@@ -3706,13 +4027,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_stats_and_metrics
       run: |
@@ -3739,13 +4063,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_supervisor2
       run: |
@@ -3772,13 +4099,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_vm_memory_monitor
       run: |
@@ -3805,13 +4135,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-upgrade_preparation
       run: |
@@ -3838,13 +4171,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-vhost
       run: |
@@ -3965,13 +4301,16 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RECORD STEP FINISH
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
         docker run \
           --env project=rabbit \
@@ -3991,13 +4330,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4027,13 +4369,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4063,13 +4408,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4099,13 +4447,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4135,13 +4486,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4171,13 +4525,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4207,13 +4564,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4243,13 +4603,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4279,13 +4642,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4315,13 +4681,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4351,13 +4720,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir broker-logs && chmod 777 broker-logs
         docker run \
@@ -4385,13 +4757,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4421,13 +4796,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4457,13 +4835,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4493,13 +4874,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4529,13 +4913,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4565,13 +4952,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4601,13 +4991,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4637,13 +5030,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4673,13 +5069,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4709,10 +5108,14 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PREPARE TERRAFORM SECRETS
       run: |
         mkdir terraform && chmod 777 terraform
@@ -4720,7 +5123,6 @@ jobs:
         echo "${{ secrets.TERRAFORM_SSH_KEY_PUB }}" > terraform/id_rsa_terraform.pub
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4754,13 +5156,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4790,13 +5195,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4826,13 +5234,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4862,13 +5273,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4898,13 +5312,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4934,13 +5351,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -4970,13 +5390,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5006,13 +5429,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5042,13 +5468,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5078,13 +5507,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5114,13 +5546,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5150,13 +5585,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5186,13 +5624,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5222,13 +5663,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5258,13 +5702,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5294,13 +5741,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5330,13 +5780,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5366,13 +5819,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5402,13 +5858,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RUN TESTS
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
@@ -5438,13 +5897,14 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PACKAGE GENERIC UNIX
       run: |
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
@@ -5526,6 +5986,14 @@ jobs:
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1
+      with:
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion
@@ -5533,7 +6001,6 @@ jobs:
         gsutil cp conclusion \
           'gs://monorepo_github_actions_conclusions/${{ github.sha }}/${{ github.workflow }}'
 
-        gcloud auth configure-docker
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \

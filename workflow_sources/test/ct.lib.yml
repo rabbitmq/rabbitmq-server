@@ -25,20 +25,35 @@ steps:
     #@ None if is_unique(suite_names) else assert.fail('{} suite names are not unique'.format(dep.name))
     run: |
       ci/scripts/validate-workflow.sh (@= " ".join(suite_names) @)
-  - name: RUN CHECKS
-    uses: docker/build-push-action@v1
+  - name: Set up QEMU
+    uses: docker/setup-qemu-action@v1
+  - name: Set up Docker Buildx
+    uses: docker/setup-buildx-action@v1
+  - name: Cache Docker layers
+    uses: actions/cache@v2
     with:
+      path: /tmp/.buildx-cache
+      key: ${{ runner.os }}-buildx-${{ github.sha }}
+      restore-keys: |
+        ${{ runner.os }}-buildx-
+  - name: Login to GCR
+    uses: docker/login-action@v1 
+    with:
+      registry: eu.gcr.io
       username: _json_key
       password: ${{ secrets.GCR_JSON_KEY }}
-      registry: eu.gcr.io
-      repository: cf-rabbitmq-core/ci-(@= dep.name @)
-      dockerfile: ci/dockerfiles/ci-dep
-      #@ build_args = {}
-      #@ build_args["IMAGE_TAG"] = ci_image_tag(erlang_version)
-      #@ build_args["BUILDEVENT_APIKEY"] = '${{ secrets.HONEYCOMB_API_KEY }}'
-      #@ build_args["project"] = dep.name
-      build_args: #@ to_build_args(build_args)
-      tags: (@= ci_image_tag(erlang_version) @)
+  - name: RUN CHECKS
+    uses: docker/build-push-action@v2
+    with:
+      push: true
+      file: ci/dockerfiles/ci-dep
+      tags: #@ 'eu.gcr.io/cf-rabbitmq-core/ci-{}:{}'.format(dep.name, ci_image_tag(erlang_version))
+      build-args: |
+        IMAGE_TAG=(@= ci_image_tag(erlang_version) @)
+        BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
+        project=(@= dep.name @)
+      cache-from: type=local,src=/tmp/.buildx-cache
+      cache-to: type=local,dest=/tmp/.buildx-cache
 #@ end
 
 #@ def ct_suites_job(dep, group, erlang_version=None):
@@ -50,13 +65,16 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
-  - uses: google-github-actions/setup-gcloud@master
+  - uses: satackey/action-docker-layer-caching@v0.0.10
+    continue-on-error: true
+  - name: Login to GCR
+    uses: docker/login-action@v1 
     with:
-      service_account_key: ${{ secrets.GCR_JSON_KEY }}
-      export_default_credentials: true
+      registry: eu.gcr.io
+      username: _json_key
+      password: ${{ secrets.GCR_JSON_KEY }}
   - name: PULL IMAGE
     run: |
-      gcloud auth configure-docker
       docker pull (@= ci_dep_image(erlang_version, dep.name) @)
   #@ for suite in group["suites"]:
   - name: #@ "RUN ct-" + suite
@@ -117,13 +135,16 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition() + " && (success() || failure())"
 #@yaml/text-templated-strings
 steps:
-  - uses: google-github-actions/setup-gcloud@master
+  - uses: satackey/action-docker-layer-caching@v0.0.10
+    continue-on-error: true
+  - name: Login to GCR
+    uses: docker/login-action@v1 
     with:
-      service_account_key: ${{ secrets.GCR_JSON_KEY }}
-      export_default_credentials: true
+      registry: eu.gcr.io
+      username: _json_key
+      password: ${{ secrets.GCR_JSON_KEY }}
   - name: RECORD STEP FINISH
     run: |
-      gcloud auth configure-docker
       docker pull (@= ci_dep_image(erlang_version, dep.name) @)
       docker run \
         --env project=(@= dep.name @) \

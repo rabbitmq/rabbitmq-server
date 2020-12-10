@@ -20,13 +20,14 @@ package-generic-unix:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - name: Login to GCR
+      uses: docker/login-action@v1 
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PACKAGE GENERIC UNIX
       run: |
-        gcloud auth configure-docker
         docker pull (@= ci_image(erlang_version) @)
         mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
@@ -66,6 +67,14 @@ finish:
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
+    - name: Login to GCR
+      uses: docker/login-action@v1 
+      with:
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion
@@ -73,7 +82,6 @@ finish:
         gsutil cp conclusion \
           'gs://(@= gcs_path() @)'
 
-        gcloud auth configure-docker
         docker pull (@= ci_image(erlang_version) @)
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
