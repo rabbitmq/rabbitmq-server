@@ -38,7 +38,6 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         push: true
-        load: true
         file: ci/dockerfiles/ci
         tags: eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         build-args: |

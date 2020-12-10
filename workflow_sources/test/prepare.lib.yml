@@ -78,7 +78,6 @@ prepare:
       uses: docker/build-push-action@v2
       with:
         push: true
-        load: true
         file: ci/dockerfiles/ci
         tags: #@ 'eu.gcr.io/cf-rabbitmq-core/ci:{}'.format(ci_image_tag(erlang_version))
         #@ rabbitmq_version = data.values.base_rmq_ref.replace('master', '3.9.x').replace('.x', '.0')
