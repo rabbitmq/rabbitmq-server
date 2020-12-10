@@ -78,6 +78,7 @@ prepare:
       uses: docker/build-push-action@v2
       with:
         push: true
+        load: true
         file: ci/dockerfiles/ci
         tags: #@ 'eu.gcr.io/cf-rabbitmq-core/ci:{}'.format(ci_image_tag(erlang_version))
         #@ rabbitmq_version = data.values.base_rmq_ref.replace('master', '3.9.x').replace('.x', '.0')
@@ -119,6 +120,8 @@ xref:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -170,6 +173,8 @@ dialyze:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
+    - uses: satackey/action-docker-layer-caching@v0.0.10
+      continue-on-error: true
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
