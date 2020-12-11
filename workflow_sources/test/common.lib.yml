@@ -1,0 +1,10 @@
+#@ def docker_layer_caching_step():
+uses: satackey/action-docker-layer-caching@v0.0.10
+continue-on-error: true
+with:
+  key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+  restore-keys: |
+    docker-cache-${{ github.workflow }}-${{ github.job }}-
+    docker-cache-${{ github.workflow }}-
+    docker-cache-
+#@ end
