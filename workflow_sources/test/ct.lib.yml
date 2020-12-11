@@ -46,8 +46,6 @@ steps:
         IMAGE_TAG=(@= ci_image_tag(erlang_version) @)
         BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
         project=(@= dep.name @)
-      cache-from: type=local,src=/tmp/.buildx-cache
-      cache-to: type=local,dest=/tmp/.buildx-cache
   - uses: actions/cache@v2
     with:
       key: #@ ci_image_tag(erlang_version)

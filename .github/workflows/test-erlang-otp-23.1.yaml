@@ -772,8 +772,6 @@ jobs:
           IMAGE_TAG=erlang-23.1-rabbitmq-${{ github.sha }}
           BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
           project=rabbit
-        cache-from: type=local,src=/tmp/.buildx-cache
-        cache-to: type=local,dest=/tmp/.buildx-cache
     - uses: actions/cache@v2
       with:
         key: erlang-23.1-rabbitmq-${{ github.sha }}
