@@ -2,7 +2,6 @@
 #@ load("@ytt:assert", "assert")
 #@ load("util.star", "is_unique", "to_build_args")
 #@ load("helpers.star", "ci_image_tag", "ci_dep_image", "skip_ci_condition")
-#@ load("common.lib.yml", "docker_layer_caching_step")
 
 #@ def checks_job(dep, erlang_version=None):
 name: #@ dep.name + "-checks"
@@ -46,7 +45,7 @@ steps:
   - name: RUN CHECKS
     uses: docker/build-push-action@v2
     with:
-      push: true
+      load: true
       file: ci/dockerfiles/ci-dep
       tags: #@ 'eu.gcr.io/cf-rabbitmq-core/ci-{}:{}'.format(dep.name, ci_image_tag(erlang_version))
       build-args: |
@@ -55,6 +54,13 @@ steps:
         project=(@= dep.name @)
       cache-from: type=local,src=/tmp/.buildx-cache
       cache-to: type=local,dest=/tmp/.buildx-cache
+  - uses: actions/cache@v2
+    with:
+      key: #@ ci_image_tag(erlang_version)
+      path: ci-(@= dep.name @).tar
+  - name: SAVE CI DOCKER IMAGE IN CACHE
+    run: |
+      docker save -o ci-(@= dep.name @).tar (@= ci_dep_image(erlang_version, dep.name) @)
 #@ end
 
 #@ def ct_suites_job(dep, suite_name, erlang_version=None):
@@ -66,16 +72,13 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
-  - #@ docker_layer_caching_step()
-  - name: Login to GCR
-    uses: docker/login-action@v1 
+  - uses: actions/cache@v2
     with:
-      registry: eu.gcr.io
-      username: _json_key
-      password: ${{ secrets.GCR_JSON_KEY }}
-  - name: PULL IMAGE
+      key: #@ ci_image_tag(erlang_version)
+      path: ci-(@= dep.name @).tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
-      docker pull (@= ci_dep_image(erlang_version, dep.name) @)
+      docker load -o ci-(@= dep.name @).tar
   - name: #@ "RUN ct-" + suite_name
     id: tests
     run: |
@@ -134,16 +137,15 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition() + " && (success() || failure())"
 #@yaml/text-templated-strings
 steps:
-  - #@ docker_layer_caching_step()
-  - name: Login to GCR
-    uses: docker/login-action@v1 
+  - uses: actions/cache@v2
     with:
-      registry: eu.gcr.io
-      username: _json_key
-      password: ${{ secrets.GCR_JSON_KEY }}
+      key: #@ ci_image_tag(erlang_version)
+      path: ci-(@= dep.name @).tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
+    run: |
+      docker load -o ci-(@= dep.name @).tar
   - name: RECORD STEP FINISH
     run: |
-      docker pull (@= ci_dep_image(erlang_version, dep.name) @)
       docker run \
         --env project=(@= dep.name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \

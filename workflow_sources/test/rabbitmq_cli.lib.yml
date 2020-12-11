@@ -1,6 +1,5 @@
 #@ load("@ytt:data", "data")
-#@ load("helpers.star", "ci_image", "skip_ci_condition")
-#@ load("common.lib.yml", "docker_layer_caching_step")
+#@ load("helpers.star", "ci_image", "ci_image_tag", "skip_ci_condition")
 
 #@ def rabbitmq_cli_job(dep, erlang_version=None):
 name: #@ dep.name
@@ -14,16 +13,15 @@ steps:
     id: buildevents
     run: |
       echo "::set-output name=step_start::$(date +%s)"
-  - #@ docker_layer_caching_step()
-  - name: Login to GCR
-    uses: docker/login-action@v1
+  - uses: actions/cache@v2
     with:
-      registry: eu.gcr.io
-      username: _json_key
-      password: ${{ secrets.GCR_JSON_KEY }}
+      key: #@ ci_image_tag(erlang_version)
+      path: ci.tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
+    run: |
+      docker load -o ci.tar
   - name: RUN TESTS
     run: |
-      docker pull (@= ci_image(erlang_version) @)
       mkdir broker-logs && chmod 777 broker-logs
       docker run \
         --env project=(@= dep.name @) \

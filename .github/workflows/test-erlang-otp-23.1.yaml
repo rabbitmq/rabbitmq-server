@@ -37,7 +37,7 @@ jobs:
     - name: PREPARE BUILD IMAGE
       uses: docker/build-push-action@v2
       with:
-        push: true
+        load: true
         file: ci/dockerfiles/ci
         tags: eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         build-args: |
@@ -50,6 +50,13 @@ jobs:
           RABBITMQ_VERSION=3.9.0
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
+    - uses: actions/cache@v2
+      with:
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
+      run: |
+        docker save -o ci.tar eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
     - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
@@ -74,14 +81,6 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
-      with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -534,14 +533,6 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
-      with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -714,20 +705,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -788,7 +772,7 @@ jobs:
     - name: RUN CHECKS
       uses: docker/build-push-action@v2
       with:
-        push: true
+        load: true
         file: ci/dockerfiles/ci-dep
         tags: eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
         build-args: |
@@ -797,6 +781,13 @@ jobs:
           project=rabbit
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
+    - uses: actions/cache@v2
+      with:
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
+      run: |
+        docker save -o ci-rabbit.tar eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
   rabbit-ct-amqqueue_backward_compatibility:
     name: rabbit-ct-amqqueue_backward_compatibility
     needs:
@@ -805,23 +796,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-amqqueue_backward_compatibility
       id: tests
       run: |
@@ -848,23 +829,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-backing_queue
       id: tests
       run: |
@@ -891,23 +862,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-channel_interceptor
       id: tests
       run: |
@@ -934,23 +895,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-channel_operation_timeout
       id: tests
       run: |
@@ -977,23 +928,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-cluster
       id: tests
       run: |
@@ -1020,23 +961,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-cluster_rename
       id: tests
       run: |
@@ -1063,23 +994,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-clustering_management
       id: tests
       run: |
@@ -1106,23 +1027,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-config_schema
       id: tests
       run: |
@@ -1149,23 +1060,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-confirms_rejects
       id: tests
       run: |
@@ -1192,23 +1093,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-consumer_timeout
       id: tests
       run: |
@@ -1235,23 +1126,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-crashing_queues
       id: tests
       run: |
@@ -1278,23 +1159,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-dead_lettering
       id: tests
       run: |
@@ -1321,23 +1192,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-definition_import
       id: tests
       run: |
@@ -1364,23 +1225,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-disconnect_detected_during_alarm
       id: tests
       run: |
@@ -1407,23 +1258,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-dynamic_ha
       id: tests
       run: |
@@ -1450,23 +1291,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-dynamic_qq
       id: tests
       run: |
@@ -1493,23 +1324,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-eager_sync
       id: tests
       run: |
@@ -1536,23 +1357,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-feature_flags
       id: tests
       run: |
@@ -1579,23 +1390,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-lazy_queue
       id: tests
       run: |
@@ -1622,23 +1423,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-list_consumers_sanity_check
       id: tests
       run: |
@@ -1665,23 +1456,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-list_queues_online_and_offline
       id: tests
       run: |
@@ -1708,23 +1489,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-maintenance_mode
       id: tests
       run: |
@@ -1751,23 +1522,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-many_node_ha
       id: tests
       run: |
@@ -1794,23 +1555,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-message_size_limit
       id: tests
       run: |
@@ -1837,23 +1588,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-metrics
       id: tests
       run: |
@@ -1880,23 +1621,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-mirrored_supervisor
       id: tests
       run: |
@@ -1923,23 +1654,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-msg_store
       id: tests
       run: |
@@ -1966,23 +1687,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-peer_discovery_classic_config
       id: tests
       run: |
@@ -2009,23 +1720,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-peer_discovery_dns
       id: tests
       run: |
@@ -2052,23 +1753,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_limit
       id: tests
       run: |
@@ -2095,23 +1786,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_limit_partitions
       id: tests
       run: |
@@ -2138,23 +1819,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_tracking
       id: tests
       run: |
@@ -2181,23 +1852,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_user_connection_tracking
       id: tests
       run: |
@@ -2224,23 +1885,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_vhost_connection_limit
       id: tests
       run: |
@@ -2267,23 +1918,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_vhost_connection_limit_partitions
       id: tests
       run: |
@@ -2310,23 +1951,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_vhost_msg_store
       id: tests
       run: |
@@ -2353,23 +1984,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-per_vhost_queue_limit
       id: tests
       run: |
@@ -2396,23 +2017,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-policy
       id: tests
       run: |
@@ -2439,23 +2050,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-priority_queue
       id: tests
       run: |
@@ -2482,23 +2083,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-priority_queue_recovery
       id: tests
       run: |
@@ -2525,23 +2116,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-product_info
       id: tests
       run: |
@@ -2568,23 +2149,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-proxy_protocol
       id: tests
       run: |
@@ -2611,23 +2182,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-publisher_confirms_parallel
       id: tests
       run: |
@@ -2654,23 +2215,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-queue_length_limits
       id: tests
       run: |
@@ -2697,23 +2248,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-queue_master_location
       id: tests
       run: |
@@ -2740,23 +2281,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-queue_parallel
       id: tests
       run: |
@@ -2783,23 +2314,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-queue_type
       id: tests
       run: |
@@ -2826,23 +2347,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-quorum_queue
       id: tests
       run: |
@@ -2869,23 +2380,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_confirms
       id: tests
       run: |
@@ -2912,23 +2413,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_core_metrics_gc
       id: tests
       run: |
@@ -2955,23 +2446,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_fifo
       id: tests
       run: |
@@ -2998,23 +2479,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_int
       id: tests
       run: |
@@ -3041,23 +2512,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_prop
       id: tests
       run: |
@@ -3084,23 +2545,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_v0
       id: tests
       run: |
@@ -3127,23 +2578,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_msg_record
       id: tests
       run: |
@@ -3170,23 +2611,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbit_stream_queue
       id: tests
       run: |
@@ -3213,23 +2644,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbitmq_queues_cli_integration
       id: tests
       run: |
@@ -3256,23 +2677,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbitmqctl_integration
       id: tests
       run: |
@@ -3299,23 +2710,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-rabbitmqctl_shutdown
       id: tests
       run: |
@@ -3342,23 +2743,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-signal_handling
       id: tests
       run: |
@@ -3385,23 +2776,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-simple_ha
       id: tests
       run: |
@@ -3428,23 +2809,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-single_active_consumer
       id: tests
       run: |
@@ -3471,23 +2842,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-sync_detection
       id: tests
       run: |
@@ -3514,23 +2875,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-term_to_binary_compat_prop
       id: tests
       run: |
@@ -3557,23 +2908,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-topic_permission
       id: tests
       run: |
@@ -3600,23 +2941,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_access_control
       id: tests
       run: |
@@ -3643,23 +2974,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
       id: tests
       run: |
@@ -3686,23 +3007,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_access_control_credential_validation
       id: tests
       run: |
@@ -3729,23 +3040,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_amqp091_content_framing
       id: tests
       run: |
@@ -3772,23 +3073,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_amqp091_server_properties
       id: tests
       run: |
@@ -3815,23 +3106,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_app_management
       id: tests
       run: |
@@ -3858,23 +3139,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_cluster_formation_locking_mocks
       id: tests
       run: |
@@ -3901,23 +3172,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_collections
       id: tests
       run: |
@@ -3944,23 +3205,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_config_value_encryption
       id: tests
       run: |
@@ -3987,23 +3238,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_connection_tracking
       id: tests
       run: |
@@ -4030,23 +3271,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_credit_flow
       id: tests
       run: |
@@ -4073,23 +3304,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_disk_monitor
       id: tests
       run: |
@@ -4116,23 +3337,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_disk_monitor_mocks
       id: tests
       run: |
@@ -4159,23 +3370,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_file_handle_cache
       id: tests
       run: |
@@ -4202,23 +3403,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_gen_server2
       id: tests
       run: |
@@ -4245,23 +3436,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_gm
       id: tests
       run: |
@@ -4288,23 +3469,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_log_config
       id: tests
       run: |
@@ -4331,23 +3502,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_log_management
       id: tests
       run: |
@@ -4374,23 +3535,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_operator_policy
       id: tests
       run: |
@@ -4417,23 +3568,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_pg_local
       id: tests
       run: |
@@ -4460,23 +3601,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_plugin_directories
       id: tests
       run: |
@@ -4503,23 +3634,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_plugin_versioning
       id: tests
       run: |
@@ -4546,23 +3667,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_policy_validators
       id: tests
       run: |
@@ -4589,23 +3700,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_priority_queue
       id: tests
       run: |
@@ -4632,23 +3733,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_queue_consumers
       id: tests
       run: |
@@ -4675,23 +3766,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_stats_and_metrics
       id: tests
       run: |
@@ -4718,23 +3799,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_supervisor2
       id: tests
       run: |
@@ -4761,23 +3832,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-unit_vm_memory_monitor
       id: tests
       run: |
@@ -4804,23 +3865,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-upgrade_preparation
       id: tests
       run: |
@@ -4847,23 +3898,13 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-    - name: PULL IMAGE
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
+        docker load -o ci-rabbit.tar
     - name: RUN ct-vhost
       id: tests
       run: |
@@ -4984,23 +4025,15 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci-rabbit.tar
     - name: RECORD STEP FINISH
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
         docker run \
           --env project=rabbit \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
@@ -5019,20 +4052,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5064,20 +4090,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5109,20 +4128,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5154,20 +4166,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5199,20 +4204,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5244,20 +4242,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5289,20 +4280,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5334,20 +4318,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5379,20 +4356,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5424,20 +4394,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5469,23 +4432,15 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir broker-logs && chmod 777 broker-logs
         docker run \
           --env project=rabbitmq_cli \
@@ -5512,20 +4467,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5557,20 +4505,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5602,20 +4543,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5647,20 +4581,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5692,20 +4619,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5737,20 +4657,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5782,20 +4695,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5827,20 +4733,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5872,20 +4771,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -5917,20 +4809,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: PREPARE TERRAFORM SECRETS
       run: |
         mkdir terraform && chmod 777 terraform
@@ -5971,20 +4856,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6016,20 +4894,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6061,20 +4932,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6106,20 +4970,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6151,20 +5008,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6196,20 +5046,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6241,20 +5084,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6286,20 +5122,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6331,20 +5160,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6376,20 +5198,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6421,20 +5236,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6466,20 +5274,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6511,20 +5312,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6556,20 +5350,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6601,20 +5388,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6646,20 +5426,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6691,20 +5464,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6736,20 +5502,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6781,20 +5540,13 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
@@ -6826,15 +5578,15 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: Login to GCR
-      uses: docker/login-action@v1
+    - uses: actions/cache@v2
       with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: PACKAGE GENERIC UNIX
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
@@ -6915,20 +5667,13 @@ jobs:
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
-    - uses: satackey/action-docker-layer-caching@v0.0.10
-      continue-on-error: true
+    - uses: actions/cache@v2
       with:
-        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
-        restore-keys: |
-          docker-cache-${{ github.workflow }}-${{ github.job }}-
-          docker-cache-${{ github.workflow }}-
-          docker-cache-
-    - name: Login to GCR
-      uses: docker/login-action@v1
-      with:
-        registry: eu.gcr.io
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
+        key: erlang-23.1-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load -o ci.tar
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion
@@ -6936,7 +5681,6 @@ jobs:
         gsutil cp conclusion \
           'gs://monorepo_github_actions_conclusions/${{ github.sha }}/${{ github.workflow }}'
 
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \

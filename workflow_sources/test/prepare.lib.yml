@@ -1,7 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("util.star", "to_build_args")
 #@ load("helpers.star", "ci_image", "ci_image_tag", "skip_ci_condition")
-#@ load("common.lib.yml", "docker_layer_caching_step")
 
 #@ def prepare_jobs(erlang_version=None, build_base_image=False):
 prepare:
@@ -78,9 +77,9 @@ prepare:
     - name: PREPARE BUILD IMAGE
       uses: docker/build-push-action@v2
       with:
-        push: true
+        load: true
         file: ci/dockerfiles/ci
-        tags: #@ 'eu.gcr.io/cf-rabbitmq-core/ci:{}'.format(ci_image_tag(erlang_version))
+        tags: #@ ci_image(erlang_version)
         #@ rabbitmq_version = data.values.base_rmq_ref.replace('master', '3.9.x').replace('.x', '.0')
         build-args: |
           ERLANG_VERSION=(@= erlang_version @)
@@ -92,6 +91,13 @@ prepare:
           RABBITMQ_VERSION=(@= rabbitmq_version @)
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
+    - uses: actions/cache@v2
+      with:
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
+      run: |
+        docker save -o ci.tar (@= ci_image(erlang_version) @)
     - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
@@ -120,7 +126,6 @@ xref:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - #@ docker_layer_caching_step()
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -172,7 +177,6 @@ dialyze:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - #@ docker_layer_caching_step()
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
