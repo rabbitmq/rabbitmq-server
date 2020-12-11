@@ -13,11 +13,11 @@ steps:
     id: buildevents
     run: |
       echo "::set-output name=step_start::$(date +%s)"
-  - uses: actions/cache@v2
+  - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
+    uses: actions/download-artifact@v2
     with:
-      key: #@ ci_image_tag(erlang_version)
-      path: ci.tar
-  - name: LOAD CI DOCKER IMAGE FROM CACHE
+      name: ci-image
+  - name: LOAD CI DOCKER IMAGE
     run: |
       docker load --input ci.tar
   #@ if getattr(dep, 'use_terraform', False):
@@ -29,7 +29,6 @@ steps:
   #@ end
   - name: RUN TESTS
     run: |
-      docker pull (@= ci_image(erlang_version) @)
       mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \

@@ -54,13 +54,14 @@ steps:
         project=(@= dep.name @)
       cache-from: type=local,src=/tmp/.buildx-cache
       cache-to: type=local,dest=/tmp/.buildx-cache
-  - uses: actions/cache@v2
-    with:
-      key: #@ ci_image_tag(erlang_version)
-      path: ci-(@= dep.name @).tar
-  - name: SAVE CI DOCKER IMAGE IN CACHE
+  - name: SAVE THE CI DOCKER IMAGE
     run: |
       docker save --output ci-(@= dep.name @).tar (@= ci_dep_image(erlang_version, dep.name) @)
+  - name: UPLOAD CI DOCKER IMAGE ARTIFACT
+    uses: actions/upload-artifact@v2-preview
+    with:
+      name: ci-(@= dep.name @)-image
+      path: ci-(@= dep.name @).tar
 #@ end
 
 #@ def ct_suites_job(dep, suite_name, erlang_version=None):
@@ -72,11 +73,11 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
-  - uses: actions/cache@v2
+  - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
+    uses: actions/download-artifact@v2
     with:
-      key: #@ ci_image_tag(erlang_version)
-      path: ci-(@= dep.name @).tar
-  - name: LOAD CI DOCKER IMAGE FROM CACHE
+      name: ci-(@= dep.name @)-image
+  - name: LOAD CI DOCKER IMAGE
     run: |
       docker load --input ci-(@= dep.name @).tar
   - name: #@ "RUN ct-" + suite_name
@@ -137,11 +138,11 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition() + " && (success() || failure())"
 #@yaml/text-templated-strings
 steps:
-  - uses: actions/cache@v2
+  - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
+    uses: actions/download-artifact@v2
     with:
-      key: #@ ci_image_tag(erlang_version)
-      path: ci-(@= dep.name @).tar
-  - name: LOAD CI DOCKER IMAGE FROM CACHE
+      name: ci-(@= dep.name @)-image
+  - name: LOAD CI DOCKER IMAGE
     run: |
       docker load --input ci-(@= dep.name @).tar
   - name: RECORD STEP FINISH

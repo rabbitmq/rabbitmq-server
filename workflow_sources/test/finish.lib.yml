@@ -20,11 +20,11 @@ package-generic-unix:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: actions/cache@v2
+    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
+      uses: actions/download-artifact@v2
       with:
-        key: #@ ci_image_tag(erlang_version)
-        path: ci.tar
-    - name: LOAD CI DOCKER IMAGE FROM CACHE
+        name: ci-image
+    - name: LOAD CI DOCKER IMAGE
       run: |
         docker load --input ci.tar
     - name: PACKAGE GENERIC UNIX
@@ -67,11 +67,11 @@ finish:
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
-    - uses: actions/cache@v2
+    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
+      uses: actions/download-artifact@v2
       with:
-        key: #@ ci_image_tag(erlang_version)
-        path: ci.tar
-    - name: LOAD CI DOCKER IMAGE FROM CACHE
+        name: ci-image
+    - name: LOAD CI DOCKER IMAGE
       run: |
         docker load --input ci.tar
     - name: RECORD BUILD FINISH
