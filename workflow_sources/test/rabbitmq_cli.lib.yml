@@ -13,11 +13,11 @@ steps:
     id: buildevents
     run: |
       echo "::set-output name=step_start::$(date +%s)"
-  - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-    uses: actions/download-artifact@v2
+  - uses: actions/cache@v2
     with:
-      name: ci-image
-  - name: LOAD CI DOCKER IMAGE
+      key: #@ ci_image_tag(erlang_version)
+      path: ci.tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
       docker load --input ci.tar
   - name: RUN TESTS

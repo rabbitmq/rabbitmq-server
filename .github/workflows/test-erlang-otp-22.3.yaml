@@ -50,14 +50,17 @@ jobs:
           RABBITMQ_VERSION=3.9.0
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
-    - name: SAVE THE CI DOCKER IMAGE
+    - uses: actions/cache@v2
+      with:
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
       run: |
         docker save --output ci.tar eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
-    - name: UPLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/upload-artifact@v2-preview
+    - uses: google-github-actions/setup-gcloud@master
       with:
-        name: ci-image
-        path: ci.tar
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
     - name: RECORD STEP FINISH
       run: |
         docker run \
@@ -530,15 +533,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbit_common \
@@ -605,14 +609,13 @@ jobs:
           project=rabbit
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
-    - name: SAVE THE CI DOCKER IMAGE
+    - uses: actions/cache@v2
+      with:
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
       run: |
         docker save --output ci-rabbit.tar eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-22.3-rabbitmq-${{ github.sha }}
-    - name: UPLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      with:
-        name: ci-rabbit-image
-        path: ci-rabbit.tar
   rabbit-ct-amqqueue_backward_compatibility:
     name: rabbit-ct-amqqueue_backward_compatibility
     needs:
@@ -621,11 +624,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-amqqueue_backward_compatibility
@@ -692,11 +695,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-backing_queue
@@ -763,11 +766,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-channel_interceptor
@@ -834,11 +837,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-channel_operation_timeout
@@ -905,11 +908,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-cluster
@@ -976,11 +979,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-cluster_rename
@@ -1047,11 +1050,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-clustering_management
@@ -1118,11 +1121,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-config_schema
@@ -1189,11 +1192,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-confirms_rejects
@@ -1260,11 +1263,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-consumer_timeout
@@ -1331,11 +1334,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-crashing_queues
@@ -1402,11 +1405,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-dead_lettering
@@ -1473,11 +1476,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-definition_import
@@ -1544,11 +1547,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-disconnect_detected_during_alarm
@@ -1615,11 +1618,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-dynamic_ha
@@ -1686,11 +1689,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-dynamic_qq
@@ -1757,11 +1760,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-eager_sync
@@ -1828,11 +1831,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-feature_flags
@@ -1899,11 +1902,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-lazy_queue
@@ -1970,11 +1973,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-list_consumers_sanity_check
@@ -2041,11 +2044,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-list_queues_online_and_offline
@@ -2112,11 +2115,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-maintenance_mode
@@ -2183,11 +2186,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-many_node_ha
@@ -2254,11 +2257,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-message_size_limit
@@ -2325,11 +2328,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-metrics
@@ -2396,11 +2399,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-mirrored_supervisor
@@ -2467,11 +2470,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-msg_store
@@ -2538,11 +2541,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-peer_discovery_classic_config
@@ -2609,11 +2612,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-peer_discovery_dns
@@ -2680,11 +2683,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_limit
@@ -2751,11 +2754,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_limit_partitions
@@ -2822,11 +2825,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_tracking
@@ -2893,11 +2896,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_tracking
@@ -2964,11 +2967,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_connection_limit
@@ -3035,11 +3038,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_connection_limit_partitions
@@ -3106,11 +3109,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_msg_store
@@ -3177,11 +3180,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_queue_limit
@@ -3248,11 +3251,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-policy
@@ -3319,11 +3322,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-priority_queue
@@ -3390,11 +3393,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-priority_queue_recovery
@@ -3461,11 +3464,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-product_info
@@ -3532,11 +3535,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-proxy_protocol
@@ -3603,11 +3606,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-publisher_confirms_parallel
@@ -3674,11 +3677,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-queue_length_limits
@@ -3745,11 +3748,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-queue_master_location
@@ -3816,11 +3819,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-queue_parallel
@@ -3887,11 +3890,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-queue_type
@@ -3958,11 +3961,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-quorum_queue
@@ -4029,11 +4032,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_confirms
@@ -4100,11 +4103,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_core_metrics_gc
@@ -4171,11 +4174,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo
@@ -4242,11 +4245,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_int
@@ -4313,11 +4316,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_prop
@@ -4384,11 +4387,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_v0
@@ -4455,11 +4458,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_msg_record
@@ -4526,11 +4529,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_stream_queue
@@ -4597,11 +4600,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbitmq_queues_cli_integration
@@ -4668,11 +4671,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbitmqctl_integration
@@ -4739,11 +4742,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-rabbitmqctl_shutdown
@@ -4810,11 +4813,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-signal_handling
@@ -4881,11 +4884,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-simple_ha
@@ -4952,11 +4955,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-single_active_consumer
@@ -5023,11 +5026,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-sync_detection
@@ -5094,11 +5097,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-term_to_binary_compat_prop
@@ -5165,11 +5168,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-topic_permission
@@ -5236,11 +5239,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_access_control
@@ -5307,11 +5310,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
@@ -5378,11 +5381,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_access_control_credential_validation
@@ -5449,11 +5452,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_amqp091_content_framing
@@ -5520,11 +5523,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_amqp091_server_properties
@@ -5591,11 +5594,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_app_management
@@ -5662,11 +5665,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_cluster_formation_locking_mocks
@@ -5733,11 +5736,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_collections
@@ -5804,11 +5807,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_config_value_encryption
@@ -5875,11 +5878,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_connection_tracking
@@ -5946,11 +5949,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_credit_flow
@@ -6017,11 +6020,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_disk_monitor
@@ -6088,11 +6091,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_disk_monitor_mocks
@@ -6159,11 +6162,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_file_handle_cache
@@ -6230,11 +6233,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_gen_server2
@@ -6301,11 +6304,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_gm
@@ -6372,11 +6375,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_log_config
@@ -6443,11 +6446,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_log_management
@@ -6514,11 +6517,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_operator_policy
@@ -6585,11 +6588,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_pg_local
@@ -6656,11 +6659,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_plugin_directories
@@ -6727,11 +6730,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_plugin_versioning
@@ -6798,11 +6801,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_policy_validators
@@ -6869,11 +6872,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_priority_queue
@@ -6940,11 +6943,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_queue_consumers
@@ -7011,11 +7014,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_stats_and_metrics
@@ -7082,11 +7085,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_supervisor2
@@ -7153,11 +7156,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-unit_vm_memory_monitor
@@ -7224,11 +7227,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-upgrade_preparation
@@ -7295,11 +7298,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RUN ct-vhost
@@ -7460,11 +7463,11 @@ jobs:
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-rabbit-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci-rabbit.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci-rabbit.tar
     - name: RECORD STEP FINISH
@@ -7487,15 +7490,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp_client \
@@ -7524,15 +7528,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_client \
@@ -7561,15 +7566,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_common \
@@ -7598,15 +7604,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_amqp1_0 \
@@ -7635,15 +7642,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_cache \
@@ -7672,15 +7680,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_http \
@@ -7709,15 +7718,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_ldap \
@@ -7746,15 +7756,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_oauth2 \
@@ -7783,15 +7794,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_mechanism_ssl \
@@ -7820,15 +7832,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_aws \
@@ -7857,11 +7870,11 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
@@ -7892,15 +7905,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_consistent_hash_exchange \
@@ -7929,15 +7943,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_event_exchange \
@@ -7966,15 +7981,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation \
@@ -8003,15 +8019,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation_management \
@@ -8040,15 +8057,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_jms_topic_exchange \
@@ -8077,15 +8095,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management \
@@ -8114,15 +8133,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management_agent \
@@ -8151,15 +8171,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_mqtt \
@@ -8188,15 +8209,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_common \
@@ -8225,11 +8247,11 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: PREPARE TERRAFORM SECRETS
@@ -8239,6 +8261,7 @@ jobs:
         echo "${{ secrets.TERRAFORM_SSH_KEY_PUB }}" > terraform/id_rsa_terraform.pub
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_aws \
@@ -8271,15 +8294,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_k8s \
@@ -8308,15 +8332,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_consul \
@@ -8345,15 +8370,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_etcd \
@@ -8382,15 +8408,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_prometheus \
@@ -8419,15 +8446,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_random_exchange \
@@ -8456,15 +8484,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_recent_history_exchange \
@@ -8493,15 +8522,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_sharding \
@@ -8530,15 +8560,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel \
@@ -8567,15 +8598,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel_management \
@@ -8604,15 +8636,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stomp \
@@ -8641,15 +8674,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stream \
@@ -8678,15 +8712,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_top \
@@ -8715,15 +8750,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_tracing \
@@ -8752,15 +8788,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_trust_store \
@@ -8789,15 +8826,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_dispatch \
@@ -8826,15 +8864,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt \
@@ -8863,15 +8902,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt_examples \
@@ -8900,15 +8940,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp \
@@ -8937,15 +8978,16 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
+        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp_examples \
@@ -8974,11 +9016,11 @@ jobs:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: PACKAGE GENERIC UNIX
@@ -9062,11 +9104,11 @@ jobs:
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
-    - name: DOWNLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/download-artifact@v2
+    - uses: actions/cache@v2
       with:
-        name: ci-image
-    - name: LOAD CI DOCKER IMAGE
+        key: erlang-22.3-rabbitmq-${{ github.sha }}
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
         docker load --input ci.tar
     - name: RECORD BUILD FINISH

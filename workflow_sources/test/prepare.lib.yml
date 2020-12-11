@@ -91,14 +91,17 @@ prepare:
           RABBITMQ_VERSION=(@= rabbitmq_version @)
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
-    - name: SAVE THE CI DOCKER IMAGE
+    - uses: actions/cache@v2
+      with:
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
       run: |
         docker save --output ci.tar (@= ci_image(erlang_version) @)
-    - name: UPLOAD CI DOCKER IMAGE ARTIFACT
-      uses: actions/upload-artifact@v2-preview
+    - uses: google-github-actions/setup-gcloud@master
       with:
-        name: ci-image
-        path: ci.tar
+        service_account_key: ${{ secrets.GCR_JSON_KEY }}
+        export_default_credentials: true
     - name: RECORD STEP FINISH
       run: |
         docker run \
