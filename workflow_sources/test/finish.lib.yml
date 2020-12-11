@@ -26,7 +26,7 @@ package-generic-unix:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: PACKAGE GENERIC UNIX
       run: |
         mkdir PACKAGES && chmod 777 PACKAGES
@@ -73,7 +73,7 @@ finish:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion

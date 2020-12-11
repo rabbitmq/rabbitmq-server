@@ -94,7 +94,7 @@ jobs:
         path: ci.tar
     - name: SAVE CI DOCKER IMAGE IN CACHE
       run: |
-        docker save -o ci.tar eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
+        docker save --output ci.tar eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
     - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
@@ -579,7 +579,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -655,7 +655,7 @@ jobs:
         path: ci-rabbit.tar
     - name: SAVE CI DOCKER IMAGE IN CACHE
       run: |
-        docker save -o ci-rabbit.tar eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
+        docker save --output ci-rabbit.tar eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-git-rabbitmq-${{ github.sha }}
   rabbit-ct-amqqueue_backward_compatibility:
     name: rabbit-ct-amqqueue_backward_compatibility
     needs:
@@ -670,7 +670,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-amqqueue_backward_compatibility
       id: tests
       run: |
@@ -703,7 +703,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-backing_queue
       id: tests
       run: |
@@ -736,7 +736,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-channel_interceptor
       id: tests
       run: |
@@ -769,7 +769,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-channel_operation_timeout
       id: tests
       run: |
@@ -802,7 +802,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-cluster
       id: tests
       run: |
@@ -835,7 +835,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-cluster_rename
       id: tests
       run: |
@@ -868,7 +868,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-clustering_management
       id: tests
       run: |
@@ -901,7 +901,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-config_schema
       id: tests
       run: |
@@ -934,7 +934,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-confirms_rejects
       id: tests
       run: |
@@ -967,7 +967,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-consumer_timeout
       id: tests
       run: |
@@ -1000,7 +1000,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-crashing_queues
       id: tests
       run: |
@@ -1033,7 +1033,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-dead_lettering
       id: tests
       run: |
@@ -1066,7 +1066,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-definition_import
       id: tests
       run: |
@@ -1099,7 +1099,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-disconnect_detected_during_alarm
       id: tests
       run: |
@@ -1132,7 +1132,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-dynamic_ha
       id: tests
       run: |
@@ -1165,7 +1165,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-dynamic_qq
       id: tests
       run: |
@@ -1198,7 +1198,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-eager_sync
       id: tests
       run: |
@@ -1231,7 +1231,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-feature_flags
       id: tests
       run: |
@@ -1264,7 +1264,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-lazy_queue
       id: tests
       run: |
@@ -1297,7 +1297,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-list_consumers_sanity_check
       id: tests
       run: |
@@ -1330,7 +1330,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-list_queues_online_and_offline
       id: tests
       run: |
@@ -1363,7 +1363,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-maintenance_mode
       id: tests
       run: |
@@ -1396,7 +1396,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-many_node_ha
       id: tests
       run: |
@@ -1429,7 +1429,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-message_size_limit
       id: tests
       run: |
@@ -1462,7 +1462,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-metrics
       id: tests
       run: |
@@ -1495,7 +1495,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-mirrored_supervisor
       id: tests
       run: |
@@ -1528,7 +1528,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-msg_store
       id: tests
       run: |
@@ -1561,7 +1561,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-peer_discovery_classic_config
       id: tests
       run: |
@@ -1594,7 +1594,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-peer_discovery_dns
       id: tests
       run: |
@@ -1627,7 +1627,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_limit
       id: tests
       run: |
@@ -1660,7 +1660,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_limit_partitions
       id: tests
       run: |
@@ -1693,7 +1693,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_channel_tracking
       id: tests
       run: |
@@ -1726,7 +1726,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_user_connection_tracking
       id: tests
       run: |
@@ -1759,7 +1759,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_connection_limit
       id: tests
       run: |
@@ -1792,7 +1792,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_connection_limit_partitions
       id: tests
       run: |
@@ -1825,7 +1825,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_msg_store
       id: tests
       run: |
@@ -1858,7 +1858,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-per_vhost_queue_limit
       id: tests
       run: |
@@ -1891,7 +1891,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-policy
       id: tests
       run: |
@@ -1924,7 +1924,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-priority_queue
       id: tests
       run: |
@@ -1957,7 +1957,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-priority_queue_recovery
       id: tests
       run: |
@@ -1990,7 +1990,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-product_info
       id: tests
       run: |
@@ -2023,7 +2023,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-proxy_protocol
       id: tests
       run: |
@@ -2056,7 +2056,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-publisher_confirms_parallel
       id: tests
       run: |
@@ -2089,7 +2089,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-queue_length_limits
       id: tests
       run: |
@@ -2122,7 +2122,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-queue_master_location
       id: tests
       run: |
@@ -2155,7 +2155,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-queue_parallel
       id: tests
       run: |
@@ -2188,7 +2188,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-queue_type
       id: tests
       run: |
@@ -2221,7 +2221,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-quorum_queue
       id: tests
       run: |
@@ -2254,7 +2254,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_confirms
       id: tests
       run: |
@@ -2287,7 +2287,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_core_metrics_gc
       id: tests
       run: |
@@ -2320,7 +2320,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo
       id: tests
       run: |
@@ -2353,7 +2353,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_int
       id: tests
       run: |
@@ -2386,7 +2386,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_prop
       id: tests
       run: |
@@ -2419,7 +2419,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_fifo_v0
       id: tests
       run: |
@@ -2452,7 +2452,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_msg_record
       id: tests
       run: |
@@ -2485,7 +2485,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbit_stream_queue
       id: tests
       run: |
@@ -2518,7 +2518,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbitmq_queues_cli_integration
       id: tests
       run: |
@@ -2551,7 +2551,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbitmqctl_integration
       id: tests
       run: |
@@ -2584,7 +2584,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-rabbitmqctl_shutdown
       id: tests
       run: |
@@ -2617,7 +2617,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-signal_handling
       id: tests
       run: |
@@ -2650,7 +2650,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-simple_ha
       id: tests
       run: |
@@ -2683,7 +2683,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-single_active_consumer
       id: tests
       run: |
@@ -2716,7 +2716,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-sync_detection
       id: tests
       run: |
@@ -2749,7 +2749,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-term_to_binary_compat_prop
       id: tests
       run: |
@@ -2782,7 +2782,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-topic_permission
       id: tests
       run: |
@@ -2815,7 +2815,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_access_control
       id: tests
       run: |
@@ -2848,7 +2848,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
       id: tests
       run: |
@@ -2881,7 +2881,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_access_control_credential_validation
       id: tests
       run: |
@@ -2914,7 +2914,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_amqp091_content_framing
       id: tests
       run: |
@@ -2947,7 +2947,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_amqp091_server_properties
       id: tests
       run: |
@@ -2980,7 +2980,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_app_management
       id: tests
       run: |
@@ -3013,7 +3013,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_cluster_formation_locking_mocks
       id: tests
       run: |
@@ -3046,7 +3046,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_collections
       id: tests
       run: |
@@ -3079,7 +3079,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_config_value_encryption
       id: tests
       run: |
@@ -3112,7 +3112,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_connection_tracking
       id: tests
       run: |
@@ -3145,7 +3145,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_credit_flow
       id: tests
       run: |
@@ -3178,7 +3178,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_disk_monitor
       id: tests
       run: |
@@ -3211,7 +3211,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_disk_monitor_mocks
       id: tests
       run: |
@@ -3244,7 +3244,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_file_handle_cache
       id: tests
       run: |
@@ -3277,7 +3277,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_gen_server2
       id: tests
       run: |
@@ -3310,7 +3310,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_gm
       id: tests
       run: |
@@ -3343,7 +3343,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_log_config
       id: tests
       run: |
@@ -3376,7 +3376,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_log_management
       id: tests
       run: |
@@ -3409,7 +3409,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_operator_policy
       id: tests
       run: |
@@ -3442,7 +3442,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_pg_local
       id: tests
       run: |
@@ -3475,7 +3475,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_plugin_directories
       id: tests
       run: |
@@ -3508,7 +3508,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_plugin_versioning
       id: tests
       run: |
@@ -3541,7 +3541,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_policy_validators
       id: tests
       run: |
@@ -3574,7 +3574,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_priority_queue
       id: tests
       run: |
@@ -3607,7 +3607,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_queue_consumers
       id: tests
       run: |
@@ -3640,7 +3640,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_stats_and_metrics
       id: tests
       run: |
@@ -3673,7 +3673,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_supervisor2
       id: tests
       run: |
@@ -3706,7 +3706,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-unit_vm_memory_monitor
       id: tests
       run: |
@@ -3739,7 +3739,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-upgrade_preparation
       id: tests
       run: |
@@ -3772,7 +3772,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RUN ct-vhost
       id: tests
       run: |
@@ -3899,7 +3899,7 @@ jobs:
         path: ci-rabbit.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci-rabbit.tar
+        docker load --input ci-rabbit.tar
     - name: RECORD STEP FINISH
       run: |
         docker run \
@@ -3926,7 +3926,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -3964,7 +3964,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4002,7 +4002,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4040,7 +4040,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4078,7 +4078,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4116,7 +4116,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4154,7 +4154,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4192,7 +4192,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4230,7 +4230,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4268,7 +4268,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4306,7 +4306,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         mkdir broker-logs && chmod 777 broker-logs
@@ -4341,7 +4341,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4379,7 +4379,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4417,7 +4417,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4455,7 +4455,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4493,7 +4493,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4531,7 +4531,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4569,7 +4569,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4607,7 +4607,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4645,7 +4645,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4683,7 +4683,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: PREPARE TERRAFORM SECRETS
       run: |
         mkdir terraform && chmod 777 terraform
@@ -4730,7 +4730,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4768,7 +4768,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4806,7 +4806,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4844,7 +4844,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4882,7 +4882,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4920,7 +4920,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4958,7 +4958,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -4996,7 +4996,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5034,7 +5034,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5072,7 +5072,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5110,7 +5110,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5148,7 +5148,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5186,7 +5186,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5224,7 +5224,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5262,7 +5262,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5300,7 +5300,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5338,7 +5338,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5376,7 +5376,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5414,7 +5414,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RUN TESTS
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-git-rabbitmq-${{ github.sha }}
@@ -5452,7 +5452,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: PACKAGE GENERIC UNIX
       run: |
         mkdir PACKAGES && chmod 777 PACKAGES
@@ -5540,7 +5540,7 @@ jobs:
         path: ci.tar
     - name: LOAD CI DOCKER IMAGE FROM CACHE
       run: |
-        docker load -o ci.tar
+        docker load --input ci.tar
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion

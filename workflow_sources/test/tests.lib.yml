@@ -19,7 +19,7 @@ steps:
       path: ci.tar
   - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
-      docker load -o ci.tar
+      docker load --input ci.tar
   #@ if getattr(dep, 'use_terraform', False):
   - name: PREPARE TERRAFORM SECRETS
     run: |

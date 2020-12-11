@@ -60,7 +60,7 @@ steps:
       path: ci-(@= dep.name @).tar
   - name: SAVE CI DOCKER IMAGE IN CACHE
     run: |
-      docker save -o ci-(@= dep.name @).tar (@= ci_dep_image(erlang_version, dep.name) @)
+      docker save --output ci-(@= dep.name @).tar (@= ci_dep_image(erlang_version, dep.name) @)
 #@ end
 
 #@ def ct_suites_job(dep, suite_name, erlang_version=None):
@@ -78,7 +78,7 @@ steps:
       path: ci-(@= dep.name @).tar
   - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
-      docker load -o ci-(@= dep.name @).tar
+      docker load --input ci-(@= dep.name @).tar
   - name: #@ "RUN ct-" + suite_name
     id: tests
     run: |
@@ -143,7 +143,7 @@ steps:
       path: ci-(@= dep.name @).tar
   - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
-      docker load -o ci-(@= dep.name @).tar
+      docker load --input ci-(@= dep.name @).tar
   - name: RECORD STEP FINISH
     run: |
       docker run \

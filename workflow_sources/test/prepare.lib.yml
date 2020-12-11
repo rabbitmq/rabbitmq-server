@@ -97,7 +97,7 @@ prepare:
         path: ci.tar
     - name: SAVE CI DOCKER IMAGE IN CACHE
       run: |
-        docker save -o ci.tar (@= ci_image(erlang_version) @)
+        docker save --output ci.tar (@= ci_image(erlang_version) @)
     - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
