@@ -76,6 +76,12 @@ jobs:
       uses: actions/checkout@v2
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -530,6 +536,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -615,6 +627,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -690,6 +708,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -765,6 +789,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -840,6 +870,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -915,6 +951,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -990,6 +1032,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1065,6 +1113,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1140,6 +1194,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1215,6 +1275,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1290,6 +1356,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1365,6 +1437,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1440,6 +1518,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1515,6 +1599,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1590,6 +1680,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1665,6 +1761,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1740,6 +1842,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1815,6 +1923,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1890,6 +2004,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -1965,6 +2085,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2040,6 +2166,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2115,6 +2247,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2190,6 +2328,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2265,6 +2409,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2340,6 +2490,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2415,6 +2571,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2490,6 +2652,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2565,6 +2733,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2640,6 +2814,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2715,6 +2895,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2790,6 +2976,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2865,6 +3057,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -2940,6 +3138,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3015,6 +3219,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3090,6 +3300,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3165,6 +3381,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3240,6 +3462,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3315,6 +3543,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3390,6 +3624,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3465,6 +3705,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3540,6 +3786,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3615,6 +3867,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3690,6 +3948,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3765,6 +4029,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3840,6 +4110,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3915,6 +4191,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -3990,6 +4272,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4065,6 +4353,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4140,6 +4434,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4215,6 +4515,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4290,6 +4596,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4365,6 +4677,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4440,6 +4758,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4515,6 +4839,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4590,6 +4920,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4665,6 +5001,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4740,6 +5082,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4815,6 +5163,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4890,6 +5244,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -4965,6 +5325,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5040,6 +5406,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5115,6 +5487,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5190,6 +5568,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5265,6 +5649,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5340,6 +5730,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5415,6 +5811,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5490,6 +5892,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5565,6 +5973,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5640,6 +6054,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5715,6 +6135,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5790,6 +6216,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5865,6 +6297,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -5940,6 +6378,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6015,6 +6459,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6090,6 +6540,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6165,6 +6621,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6240,6 +6702,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6315,6 +6783,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6390,6 +6864,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6465,6 +6945,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6540,6 +7026,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6615,6 +7107,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6690,6 +7188,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6765,6 +7269,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6840,6 +7350,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6915,6 +7431,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -6990,6 +7512,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7065,6 +7593,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7140,6 +7674,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7215,6 +7755,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7290,6 +7836,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7365,6 +7917,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7440,6 +7998,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7515,6 +8079,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7590,6 +8160,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7665,6 +8241,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7834,6 +8416,12 @@ jobs:
     steps:
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7863,6 +8451,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7902,6 +8496,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7941,6 +8541,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -7980,6 +8586,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8019,6 +8631,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8058,6 +8676,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8097,6 +8721,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8136,6 +8766,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8175,6 +8811,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8214,6 +8856,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8253,6 +8901,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8290,6 +8944,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8329,6 +8989,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8368,6 +9034,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8407,6 +9079,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8446,6 +9124,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8485,6 +9169,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8524,6 +9214,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8563,6 +9259,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8602,6 +9304,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8641,6 +9349,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8689,6 +9403,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8728,6 +9448,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8767,6 +9493,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8806,6 +9538,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8845,6 +9583,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8884,6 +9628,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8923,6 +9673,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -8962,6 +9718,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9001,6 +9763,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9040,6 +9808,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9079,6 +9853,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9118,6 +9898,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9157,6 +9943,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9196,6 +9988,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9235,6 +10033,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9274,6 +10078,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9313,6 +10123,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9352,6 +10168,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9391,6 +10213,12 @@ jobs:
         echo "::set-output name=step_start::$(date +%s)"
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
@@ -9518,6 +10346,12 @@ jobs:
         export_default_credentials: true
     - uses: satackey/action-docker-layer-caching@v0.0.10
       continue-on-error: true
+      with:
+        key: docker-cache-${{ github.workflow }}-${{ github.job }}-{hash}
+        restore-keys: |
+          docker-cache-${{ github.workflow }}-${{ github.job }}-
+          docker-cache-${{ github.workflow }}-
+          docker-cache-
     - name: Login to GCR
       uses: docker/login-action@v1
       with:
