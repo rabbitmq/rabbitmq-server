@@ -5,19 +5,27 @@ bazel_erlang_lib(
     name = "bazel_erlang_lib",
     srcs = glob(["src/*.erl"]),
     hdrs = glob(["include/*.hrl"]),
-    deps = ["//deps/rabbit_common:bazel_erlang_lib"]
+    deps = ["//deps/rabbit_common:bazel_erlang_lib"],
 )
 
 ct_test(
     name = "system_SUITE",
     suites = ["test/system_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
-    deps = [":bazel_erlang_lib"],
+    deps = [
+        ":bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
 )
 
 ct_test(
     name = "unit_SUITE",
     suites = ["test/unit_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
-    deps = [":bazel_erlang_lib"],
+    deps = [
+        ":bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+    ],
 )
