@@ -799,6 +799,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-amqqueue_backward_compatibility
+      id: tests
       run: |
         mkdir ct-amqqueue_backward_compatibility-logs && chmod 777 ct-amqqueue_backward_compatibility-logs
         docker run \
@@ -811,7 +812,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-amqqueue_backward_compatibility-logs
         path: ct-amqqueue_backward_compatibility-logs/*-ct-logs-*.tar.xz
@@ -835,6 +836,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-backing_queue
+      id: tests
       run: |
         mkdir ct-backing_queue-logs && chmod 777 ct-backing_queue-logs
         docker run \
@@ -847,7 +849,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-backing_queue-logs
         path: ct-backing_queue-logs/*-ct-logs-*.tar.xz
@@ -871,6 +873,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-channel_interceptor
+      id: tests
       run: |
         mkdir ct-channel_interceptor-logs && chmod 777 ct-channel_interceptor-logs
         docker run \
@@ -883,7 +886,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-channel_interceptor-logs
         path: ct-channel_interceptor-logs/*-ct-logs-*.tar.xz
@@ -907,6 +910,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-channel_operation_timeout
+      id: tests
       run: |
         mkdir ct-channel_operation_timeout-logs && chmod 777 ct-channel_operation_timeout-logs
         docker run \
@@ -919,7 +923,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-channel_operation_timeout-logs
         path: ct-channel_operation_timeout-logs/*-ct-logs-*.tar.xz
@@ -943,6 +947,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster
+      id: tests
       run: |
         mkdir ct-cluster-logs && chmod 777 ct-cluster-logs
         docker run \
@@ -955,7 +960,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-cluster-logs
         path: ct-cluster-logs/*-ct-logs-*.tar.xz
@@ -979,6 +984,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-cluster_rename
+      id: tests
       run: |
         mkdir ct-cluster_rename-logs && chmod 777 ct-cluster_rename-logs
         docker run \
@@ -991,7 +997,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-cluster_rename-logs
         path: ct-cluster_rename-logs/*-ct-logs-*.tar.xz
@@ -1015,6 +1021,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-clustering_management
+      id: tests
       run: |
         mkdir ct-clustering_management-logs && chmod 777 ct-clustering_management-logs
         docker run \
@@ -1027,7 +1034,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-clustering_management-logs
         path: ct-clustering_management-logs/*-ct-logs-*.tar.xz
@@ -1051,6 +1058,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-config_schema
+      id: tests
       run: |
         mkdir ct-config_schema-logs && chmod 777 ct-config_schema-logs
         docker run \
@@ -1063,7 +1071,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-config_schema-logs
         path: ct-config_schema-logs/*-ct-logs-*.tar.xz
@@ -1087,6 +1095,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-confirms_rejects
+      id: tests
       run: |
         mkdir ct-confirms_rejects-logs && chmod 777 ct-confirms_rejects-logs
         docker run \
@@ -1099,7 +1108,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-confirms_rejects-logs
         path: ct-confirms_rejects-logs/*-ct-logs-*.tar.xz
@@ -1123,6 +1132,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-consumer_timeout
+      id: tests
       run: |
         mkdir ct-consumer_timeout-logs && chmod 777 ct-consumer_timeout-logs
         docker run \
@@ -1135,7 +1145,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-consumer_timeout-logs
         path: ct-consumer_timeout-logs/*-ct-logs-*.tar.xz
@@ -1159,6 +1169,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-crashing_queues
+      id: tests
       run: |
         mkdir ct-crashing_queues-logs && chmod 777 ct-crashing_queues-logs
         docker run \
@@ -1171,7 +1182,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-crashing_queues-logs
         path: ct-crashing_queues-logs/*-ct-logs-*.tar.xz
@@ -1195,6 +1206,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dead_lettering
+      id: tests
       run: |
         mkdir ct-dead_lettering-logs && chmod 777 ct-dead_lettering-logs
         docker run \
@@ -1207,7 +1219,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-dead_lettering-logs
         path: ct-dead_lettering-logs/*-ct-logs-*.tar.xz
@@ -1231,6 +1243,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-definition_import
+      id: tests
       run: |
         mkdir ct-definition_import-logs && chmod 777 ct-definition_import-logs
         docker run \
@@ -1243,7 +1256,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-definition_import-logs
         path: ct-definition_import-logs/*-ct-logs-*.tar.xz
@@ -1267,6 +1280,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-disconnect_detected_during_alarm
+      id: tests
       run: |
         mkdir ct-disconnect_detected_during_alarm-logs && chmod 777 ct-disconnect_detected_during_alarm-logs
         docker run \
@@ -1279,7 +1293,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-disconnect_detected_during_alarm-logs
         path: ct-disconnect_detected_during_alarm-logs/*-ct-logs-*.tar.xz
@@ -1303,6 +1317,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_ha
+      id: tests
       run: |
         mkdir ct-dynamic_ha-logs && chmod 777 ct-dynamic_ha-logs
         docker run \
@@ -1315,7 +1330,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-dynamic_ha-logs
         path: ct-dynamic_ha-logs/*-ct-logs-*.tar.xz
@@ -1339,6 +1354,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-dynamic_qq
+      id: tests
       run: |
         mkdir ct-dynamic_qq-logs && chmod 777 ct-dynamic_qq-logs
         docker run \
@@ -1351,7 +1367,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-dynamic_qq-logs
         path: ct-dynamic_qq-logs/*-ct-logs-*.tar.xz
@@ -1375,6 +1391,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-eager_sync
+      id: tests
       run: |
         mkdir ct-eager_sync-logs && chmod 777 ct-eager_sync-logs
         docker run \
@@ -1387,7 +1404,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-eager_sync-logs
         path: ct-eager_sync-logs/*-ct-logs-*.tar.xz
@@ -1411,6 +1428,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-feature_flags
+      id: tests
       run: |
         mkdir ct-feature_flags-logs && chmod 777 ct-feature_flags-logs
         docker run \
@@ -1423,7 +1441,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-feature_flags-logs
         path: ct-feature_flags-logs/*-ct-logs-*.tar.xz
@@ -1447,6 +1465,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-lazy_queue
+      id: tests
       run: |
         mkdir ct-lazy_queue-logs && chmod 777 ct-lazy_queue-logs
         docker run \
@@ -1459,7 +1478,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-lazy_queue-logs
         path: ct-lazy_queue-logs/*-ct-logs-*.tar.xz
@@ -1483,6 +1502,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_consumers_sanity_check
+      id: tests
       run: |
         mkdir ct-list_consumers_sanity_check-logs && chmod 777 ct-list_consumers_sanity_check-logs
         docker run \
@@ -1495,7 +1515,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-list_consumers_sanity_check-logs
         path: ct-list_consumers_sanity_check-logs/*-ct-logs-*.tar.xz
@@ -1519,6 +1539,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-list_queues_online_and_offline
+      id: tests
       run: |
         mkdir ct-list_queues_online_and_offline-logs && chmod 777 ct-list_queues_online_and_offline-logs
         docker run \
@@ -1531,7 +1552,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-list_queues_online_and_offline-logs
         path: ct-list_queues_online_and_offline-logs/*-ct-logs-*.tar.xz
@@ -1555,6 +1576,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-maintenance_mode
+      id: tests
       run: |
         mkdir ct-maintenance_mode-logs && chmod 777 ct-maintenance_mode-logs
         docker run \
@@ -1567,7 +1589,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-maintenance_mode-logs
         path: ct-maintenance_mode-logs/*-ct-logs-*.tar.xz
@@ -1591,6 +1613,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-many_node_ha
+      id: tests
       run: |
         mkdir ct-many_node_ha-logs && chmod 777 ct-many_node_ha-logs
         docker run \
@@ -1603,7 +1626,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-many_node_ha-logs
         path: ct-many_node_ha-logs/*-ct-logs-*.tar.xz
@@ -1627,6 +1650,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-message_size_limit
+      id: tests
       run: |
         mkdir ct-message_size_limit-logs && chmod 777 ct-message_size_limit-logs
         docker run \
@@ -1639,7 +1663,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-message_size_limit-logs
         path: ct-message_size_limit-logs/*-ct-logs-*.tar.xz
@@ -1663,6 +1687,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-metrics
+      id: tests
       run: |
         mkdir ct-metrics-logs && chmod 777 ct-metrics-logs
         docker run \
@@ -1675,7 +1700,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-metrics-logs
         path: ct-metrics-logs/*-ct-logs-*.tar.xz
@@ -1699,6 +1724,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-mirrored_supervisor
+      id: tests
       run: |
         mkdir ct-mirrored_supervisor-logs && chmod 777 ct-mirrored_supervisor-logs
         docker run \
@@ -1711,7 +1737,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-mirrored_supervisor-logs
         path: ct-mirrored_supervisor-logs/*-ct-logs-*.tar.xz
@@ -1735,6 +1761,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-msg_store
+      id: tests
       run: |
         mkdir ct-msg_store-logs && chmod 777 ct-msg_store-logs
         docker run \
@@ -1747,7 +1774,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-msg_store-logs
         path: ct-msg_store-logs/*-ct-logs-*.tar.xz
@@ -1771,6 +1798,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-peer_discovery_classic_config
+      id: tests
       run: |
         mkdir ct-peer_discovery_classic_config-logs && chmod 777 ct-peer_discovery_classic_config-logs
         docker run \
@@ -1783,7 +1811,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-peer_discovery_classic_config-logs
         path: ct-peer_discovery_classic_config-logs/*-ct-logs-*.tar.xz
@@ -1807,6 +1835,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-peer_discovery_dns
+      id: tests
       run: |
         mkdir ct-peer_discovery_dns-logs && chmod 777 ct-peer_discovery_dns-logs
         docker run \
@@ -1819,7 +1848,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-peer_discovery_dns-logs
         path: ct-peer_discovery_dns-logs/*-ct-logs-*.tar.xz
@@ -1843,6 +1872,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_limit
+      id: tests
       run: |
         mkdir ct-per_user_connection_channel_limit-logs && chmod 777 ct-per_user_connection_channel_limit-logs
         docker run \
@@ -1855,7 +1885,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_user_connection_channel_limit-logs
         path: ct-per_user_connection_channel_limit-logs/*-ct-logs-*.tar.xz
@@ -1879,6 +1909,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_limit_partitions
+      id: tests
       run: |
         mkdir ct-per_user_connection_channel_limit_partitions-logs && chmod 777 ct-per_user_connection_channel_limit_partitions-logs
         docker run \
@@ -1891,7 +1922,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_user_connection_channel_limit_partitions-logs
         path: ct-per_user_connection_channel_limit_partitions-logs/*-ct-logs-*.tar.xz
@@ -1915,6 +1946,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_channel_tracking
+      id: tests
       run: |
         mkdir ct-per_user_connection_channel_tracking-logs && chmod 777 ct-per_user_connection_channel_tracking-logs
         docker run \
@@ -1927,7 +1959,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_user_connection_channel_tracking-logs
         path: ct-per_user_connection_channel_tracking-logs/*-ct-logs-*.tar.xz
@@ -1951,6 +1983,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_user_connection_tracking
+      id: tests
       run: |
         mkdir ct-per_user_connection_tracking-logs && chmod 777 ct-per_user_connection_tracking-logs
         docker run \
@@ -1963,7 +1996,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_user_connection_tracking-logs
         path: ct-per_user_connection_tracking-logs/*-ct-logs-*.tar.xz
@@ -1987,6 +2020,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_connection_limit
+      id: tests
       run: |
         mkdir ct-per_vhost_connection_limit-logs && chmod 777 ct-per_vhost_connection_limit-logs
         docker run \
@@ -1999,7 +2033,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_vhost_connection_limit-logs
         path: ct-per_vhost_connection_limit-logs/*-ct-logs-*.tar.xz
@@ -2023,6 +2057,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_connection_limit_partitions
+      id: tests
       run: |
         mkdir ct-per_vhost_connection_limit_partitions-logs && chmod 777 ct-per_vhost_connection_limit_partitions-logs
         docker run \
@@ -2035,7 +2070,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_vhost_connection_limit_partitions-logs
         path: ct-per_vhost_connection_limit_partitions-logs/*-ct-logs-*.tar.xz
@@ -2059,6 +2094,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_msg_store
+      id: tests
       run: |
         mkdir ct-per_vhost_msg_store-logs && chmod 777 ct-per_vhost_msg_store-logs
         docker run \
@@ -2071,7 +2107,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_vhost_msg_store-logs
         path: ct-per_vhost_msg_store-logs/*-ct-logs-*.tar.xz
@@ -2095,6 +2131,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-per_vhost_queue_limit
+      id: tests
       run: |
         mkdir ct-per_vhost_queue_limit-logs && chmod 777 ct-per_vhost_queue_limit-logs
         docker run \
@@ -2107,7 +2144,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-per_vhost_queue_limit-logs
         path: ct-per_vhost_queue_limit-logs/*-ct-logs-*.tar.xz
@@ -2131,6 +2168,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-policy
+      id: tests
       run: |
         mkdir ct-policy-logs && chmod 777 ct-policy-logs
         docker run \
@@ -2143,7 +2181,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-policy-logs
         path: ct-policy-logs/*-ct-logs-*.tar.xz
@@ -2167,6 +2205,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue
+      id: tests
       run: |
         mkdir ct-priority_queue-logs && chmod 777 ct-priority_queue-logs
         docker run \
@@ -2179,7 +2218,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-priority_queue-logs
         path: ct-priority_queue-logs/*-ct-logs-*.tar.xz
@@ -2203,6 +2242,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-priority_queue_recovery
+      id: tests
       run: |
         mkdir ct-priority_queue_recovery-logs && chmod 777 ct-priority_queue_recovery-logs
         docker run \
@@ -2215,7 +2255,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-priority_queue_recovery-logs
         path: ct-priority_queue_recovery-logs/*-ct-logs-*.tar.xz
@@ -2239,6 +2279,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-product_info
+      id: tests
       run: |
         mkdir ct-product_info-logs && chmod 777 ct-product_info-logs
         docker run \
@@ -2251,7 +2292,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-product_info-logs
         path: ct-product_info-logs/*-ct-logs-*.tar.xz
@@ -2275,6 +2316,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-proxy_protocol
+      id: tests
       run: |
         mkdir ct-proxy_protocol-logs && chmod 777 ct-proxy_protocol-logs
         docker run \
@@ -2287,7 +2329,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-proxy_protocol-logs
         path: ct-proxy_protocol-logs/*-ct-logs-*.tar.xz
@@ -2311,6 +2353,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-publisher_confirms_parallel
+      id: tests
       run: |
         mkdir ct-publisher_confirms_parallel-logs && chmod 777 ct-publisher_confirms_parallel-logs
         docker run \
@@ -2323,7 +2366,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-publisher_confirms_parallel-logs
         path: ct-publisher_confirms_parallel-logs/*-ct-logs-*.tar.xz
@@ -2347,6 +2390,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_length_limits
+      id: tests
       run: |
         mkdir ct-queue_length_limits-logs && chmod 777 ct-queue_length_limits-logs
         docker run \
@@ -2359,7 +2403,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-queue_length_limits-logs
         path: ct-queue_length_limits-logs/*-ct-logs-*.tar.xz
@@ -2383,6 +2427,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_master_location
+      id: tests
       run: |
         mkdir ct-queue_master_location-logs && chmod 777 ct-queue_master_location-logs
         docker run \
@@ -2395,7 +2440,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-queue_master_location-logs
         path: ct-queue_master_location-logs/*-ct-logs-*.tar.xz
@@ -2419,6 +2464,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_parallel
+      id: tests
       run: |
         mkdir ct-queue_parallel-logs && chmod 777 ct-queue_parallel-logs
         docker run \
@@ -2431,7 +2477,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-queue_parallel-logs
         path: ct-queue_parallel-logs/*-ct-logs-*.tar.xz
@@ -2455,6 +2501,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-queue_type
+      id: tests
       run: |
         mkdir ct-queue_type-logs && chmod 777 ct-queue_type-logs
         docker run \
@@ -2467,7 +2514,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-queue_type-logs
         path: ct-queue_type-logs/*-ct-logs-*.tar.xz
@@ -2491,6 +2538,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-quorum_queue
+      id: tests
       run: |
         mkdir ct-quorum_queue-logs && chmod 777 ct-quorum_queue-logs
         docker run \
@@ -2503,7 +2551,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-quorum_queue-logs
         path: ct-quorum_queue-logs/*-ct-logs-*.tar.xz
@@ -2527,6 +2575,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_confirms
+      id: tests
       run: |
         mkdir ct-rabbit_confirms-logs && chmod 777 ct-rabbit_confirms-logs
         docker run \
@@ -2539,7 +2588,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_confirms-logs
         path: ct-rabbit_confirms-logs/*-ct-logs-*.tar.xz
@@ -2563,6 +2612,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_core_metrics_gc
+      id: tests
       run: |
         mkdir ct-rabbit_core_metrics_gc-logs && chmod 777 ct-rabbit_core_metrics_gc-logs
         docker run \
@@ -2575,7 +2625,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_core_metrics_gc-logs
         path: ct-rabbit_core_metrics_gc-logs/*-ct-logs-*.tar.xz
@@ -2599,6 +2649,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo
+      id: tests
       run: |
         mkdir ct-rabbit_fifo-logs && chmod 777 ct-rabbit_fifo-logs
         docker run \
@@ -2611,7 +2662,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_fifo-logs
         path: ct-rabbit_fifo-logs/*-ct-logs-*.tar.xz
@@ -2635,6 +2686,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_int
+      id: tests
       run: |
         mkdir ct-rabbit_fifo_int-logs && chmod 777 ct-rabbit_fifo_int-logs
         docker run \
@@ -2647,7 +2699,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_fifo_int-logs
         path: ct-rabbit_fifo_int-logs/*-ct-logs-*.tar.xz
@@ -2671,6 +2723,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_prop
+      id: tests
       run: |
         mkdir ct-rabbit_fifo_prop-logs && chmod 777 ct-rabbit_fifo_prop-logs
         docker run \
@@ -2683,7 +2736,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_fifo_prop-logs
         path: ct-rabbit_fifo_prop-logs/*-ct-logs-*.tar.xz
@@ -2707,6 +2760,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_fifo_v0
+      id: tests
       run: |
         mkdir ct-rabbit_fifo_v0-logs && chmod 777 ct-rabbit_fifo_v0-logs
         docker run \
@@ -2719,7 +2773,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_fifo_v0-logs
         path: ct-rabbit_fifo_v0-logs/*-ct-logs-*.tar.xz
@@ -2743,6 +2797,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_msg_record
+      id: tests
       run: |
         mkdir ct-rabbit_msg_record-logs && chmod 777 ct-rabbit_msg_record-logs
         docker run \
@@ -2755,7 +2810,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_msg_record-logs
         path: ct-rabbit_msg_record-logs/*-ct-logs-*.tar.xz
@@ -2779,6 +2834,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbit_stream_queue
+      id: tests
       run: |
         mkdir ct-rabbit_stream_queue-logs && chmod 777 ct-rabbit_stream_queue-logs
         docker run \
@@ -2791,7 +2847,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbit_stream_queue-logs
         path: ct-rabbit_stream_queue-logs/*-ct-logs-*.tar.xz
@@ -2815,6 +2871,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmq_queues_cli_integration
+      id: tests
       run: |
         mkdir ct-rabbitmq_queues_cli_integration-logs && chmod 777 ct-rabbitmq_queues_cli_integration-logs
         docker run \
@@ -2827,7 +2884,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbitmq_queues_cli_integration-logs
         path: ct-rabbitmq_queues_cli_integration-logs/*-ct-logs-*.tar.xz
@@ -2851,6 +2908,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmqctl_integration
+      id: tests
       run: |
         mkdir ct-rabbitmqctl_integration-logs && chmod 777 ct-rabbitmqctl_integration-logs
         docker run \
@@ -2863,7 +2921,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbitmqctl_integration-logs
         path: ct-rabbitmqctl_integration-logs/*-ct-logs-*.tar.xz
@@ -2887,6 +2945,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-rabbitmqctl_shutdown
+      id: tests
       run: |
         mkdir ct-rabbitmqctl_shutdown-logs && chmod 777 ct-rabbitmqctl_shutdown-logs
         docker run \
@@ -2899,7 +2958,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-rabbitmqctl_shutdown-logs
         path: ct-rabbitmqctl_shutdown-logs/*-ct-logs-*.tar.xz
@@ -2923,6 +2982,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-signal_handling
+      id: tests
       run: |
         mkdir ct-signal_handling-logs && chmod 777 ct-signal_handling-logs
         docker run \
@@ -2935,7 +2995,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-signal_handling-logs
         path: ct-signal_handling-logs/*-ct-logs-*.tar.xz
@@ -2959,6 +3019,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-simple_ha
+      id: tests
       run: |
         mkdir ct-simple_ha-logs && chmod 777 ct-simple_ha-logs
         docker run \
@@ -2971,7 +3032,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-simple_ha-logs
         path: ct-simple_ha-logs/*-ct-logs-*.tar.xz
@@ -2995,6 +3056,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-single_active_consumer
+      id: tests
       run: |
         mkdir ct-single_active_consumer-logs && chmod 777 ct-single_active_consumer-logs
         docker run \
@@ -3007,7 +3069,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-single_active_consumer-logs
         path: ct-single_active_consumer-logs/*-ct-logs-*.tar.xz
@@ -3031,6 +3093,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-sync_detection
+      id: tests
       run: |
         mkdir ct-sync_detection-logs && chmod 777 ct-sync_detection-logs
         docker run \
@@ -3043,7 +3106,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-sync_detection-logs
         path: ct-sync_detection-logs/*-ct-logs-*.tar.xz
@@ -3067,6 +3130,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-term_to_binary_compat_prop
+      id: tests
       run: |
         mkdir ct-term_to_binary_compat_prop-logs && chmod 777 ct-term_to_binary_compat_prop-logs
         docker run \
@@ -3079,7 +3143,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-term_to_binary_compat_prop-logs
         path: ct-term_to_binary_compat_prop-logs/*-ct-logs-*.tar.xz
@@ -3103,6 +3167,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-topic_permission
+      id: tests
       run: |
         mkdir ct-topic_permission-logs && chmod 777 ct-topic_permission-logs
         docker run \
@@ -3115,7 +3180,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-topic_permission-logs
         path: ct-topic_permission-logs/*-ct-logs-*.tar.xz
@@ -3139,6 +3204,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control
+      id: tests
       run: |
         mkdir ct-unit_access_control-logs && chmod 777 ct-unit_access_control-logs
         docker run \
@@ -3151,7 +3217,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_access_control-logs
         path: ct-unit_access_control-logs/*-ct-logs-*.tar.xz
@@ -3175,6 +3241,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control_authn_authz_context_propagation
+      id: tests
       run: |
         mkdir ct-unit_access_control_authn_authz_context_propagation-logs && chmod 777 ct-unit_access_control_authn_authz_context_propagation-logs
         docker run \
@@ -3187,7 +3254,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_access_control_authn_authz_context_propagation-logs
         path: ct-unit_access_control_authn_authz_context_propagation-logs/*-ct-logs-*.tar.xz
@@ -3211,6 +3278,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_access_control_credential_validation
+      id: tests
       run: |
         mkdir ct-unit_access_control_credential_validation-logs && chmod 777 ct-unit_access_control_credential_validation-logs
         docker run \
@@ -3223,7 +3291,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_access_control_credential_validation-logs
         path: ct-unit_access_control_credential_validation-logs/*-ct-logs-*.tar.xz
@@ -3247,6 +3315,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_amqp091_content_framing
+      id: tests
       run: |
         mkdir ct-unit_amqp091_content_framing-logs && chmod 777 ct-unit_amqp091_content_framing-logs
         docker run \
@@ -3259,7 +3328,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_amqp091_content_framing-logs
         path: ct-unit_amqp091_content_framing-logs/*-ct-logs-*.tar.xz
@@ -3283,6 +3352,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_amqp091_server_properties
+      id: tests
       run: |
         mkdir ct-unit_amqp091_server_properties-logs && chmod 777 ct-unit_amqp091_server_properties-logs
         docker run \
@@ -3295,7 +3365,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_amqp091_server_properties-logs
         path: ct-unit_amqp091_server_properties-logs/*-ct-logs-*.tar.xz
@@ -3319,6 +3389,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_app_management
+      id: tests
       run: |
         mkdir ct-unit_app_management-logs && chmod 777 ct-unit_app_management-logs
         docker run \
@@ -3331,7 +3402,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_app_management-logs
         path: ct-unit_app_management-logs/*-ct-logs-*.tar.xz
@@ -3355,6 +3426,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_cluster_formation_locking_mocks
+      id: tests
       run: |
         mkdir ct-unit_cluster_formation_locking_mocks-logs && chmod 777 ct-unit_cluster_formation_locking_mocks-logs
         docker run \
@@ -3367,7 +3439,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_cluster_formation_locking_mocks-logs
         path: ct-unit_cluster_formation_locking_mocks-logs/*-ct-logs-*.tar.xz
@@ -3391,6 +3463,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_collections
+      id: tests
       run: |
         mkdir ct-unit_collections-logs && chmod 777 ct-unit_collections-logs
         docker run \
@@ -3403,7 +3476,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_collections-logs
         path: ct-unit_collections-logs/*-ct-logs-*.tar.xz
@@ -3427,6 +3500,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_config_value_encryption
+      id: tests
       run: |
         mkdir ct-unit_config_value_encryption-logs && chmod 777 ct-unit_config_value_encryption-logs
         docker run \
@@ -3439,7 +3513,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_config_value_encryption-logs
         path: ct-unit_config_value_encryption-logs/*-ct-logs-*.tar.xz
@@ -3463,6 +3537,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_connection_tracking
+      id: tests
       run: |
         mkdir ct-unit_connection_tracking-logs && chmod 777 ct-unit_connection_tracking-logs
         docker run \
@@ -3475,7 +3550,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_connection_tracking-logs
         path: ct-unit_connection_tracking-logs/*-ct-logs-*.tar.xz
@@ -3499,6 +3574,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_credit_flow
+      id: tests
       run: |
         mkdir ct-unit_credit_flow-logs && chmod 777 ct-unit_credit_flow-logs
         docker run \
@@ -3511,7 +3587,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_credit_flow-logs
         path: ct-unit_credit_flow-logs/*-ct-logs-*.tar.xz
@@ -3535,6 +3611,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_disk_monitor
+      id: tests
       run: |
         mkdir ct-unit_disk_monitor-logs && chmod 777 ct-unit_disk_monitor-logs
         docker run \
@@ -3547,7 +3624,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_disk_monitor-logs
         path: ct-unit_disk_monitor-logs/*-ct-logs-*.tar.xz
@@ -3571,6 +3648,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_disk_monitor_mocks
+      id: tests
       run: |
         mkdir ct-unit_disk_monitor_mocks-logs && chmod 777 ct-unit_disk_monitor_mocks-logs
         docker run \
@@ -3583,7 +3661,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_disk_monitor_mocks-logs
         path: ct-unit_disk_monitor_mocks-logs/*-ct-logs-*.tar.xz
@@ -3607,6 +3685,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_file_handle_cache
+      id: tests
       run: |
         mkdir ct-unit_file_handle_cache-logs && chmod 777 ct-unit_file_handle_cache-logs
         docker run \
@@ -3619,7 +3698,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_file_handle_cache-logs
         path: ct-unit_file_handle_cache-logs/*-ct-logs-*.tar.xz
@@ -3643,6 +3722,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_gen_server2
+      id: tests
       run: |
         mkdir ct-unit_gen_server2-logs && chmod 777 ct-unit_gen_server2-logs
         docker run \
@@ -3655,7 +3735,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_gen_server2-logs
         path: ct-unit_gen_server2-logs/*-ct-logs-*.tar.xz
@@ -3679,6 +3759,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_gm
+      id: tests
       run: |
         mkdir ct-unit_gm-logs && chmod 777 ct-unit_gm-logs
         docker run \
@@ -3691,7 +3772,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_gm-logs
         path: ct-unit_gm-logs/*-ct-logs-*.tar.xz
@@ -3715,6 +3796,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_log_config
+      id: tests
       run: |
         mkdir ct-unit_log_config-logs && chmod 777 ct-unit_log_config-logs
         docker run \
@@ -3727,7 +3809,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_log_config-logs
         path: ct-unit_log_config-logs/*-ct-logs-*.tar.xz
@@ -3751,6 +3833,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_log_management
+      id: tests
       run: |
         mkdir ct-unit_log_management-logs && chmod 777 ct-unit_log_management-logs
         docker run \
@@ -3763,7 +3846,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_log_management-logs
         path: ct-unit_log_management-logs/*-ct-logs-*.tar.xz
@@ -3787,6 +3870,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_operator_policy
+      id: tests
       run: |
         mkdir ct-unit_operator_policy-logs && chmod 777 ct-unit_operator_policy-logs
         docker run \
@@ -3799,7 +3883,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_operator_policy-logs
         path: ct-unit_operator_policy-logs/*-ct-logs-*.tar.xz
@@ -3823,6 +3907,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_pg_local
+      id: tests
       run: |
         mkdir ct-unit_pg_local-logs && chmod 777 ct-unit_pg_local-logs
         docker run \
@@ -3835,7 +3920,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_pg_local-logs
         path: ct-unit_pg_local-logs/*-ct-logs-*.tar.xz
@@ -3859,6 +3944,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_plugin_directories
+      id: tests
       run: |
         mkdir ct-unit_plugin_directories-logs && chmod 777 ct-unit_plugin_directories-logs
         docker run \
@@ -3871,7 +3957,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_plugin_directories-logs
         path: ct-unit_plugin_directories-logs/*-ct-logs-*.tar.xz
@@ -3895,6 +3981,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_plugin_versioning
+      id: tests
       run: |
         mkdir ct-unit_plugin_versioning-logs && chmod 777 ct-unit_plugin_versioning-logs
         docker run \
@@ -3907,7 +3994,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_plugin_versioning-logs
         path: ct-unit_plugin_versioning-logs/*-ct-logs-*.tar.xz
@@ -3931,6 +4018,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_policy_validators
+      id: tests
       run: |
         mkdir ct-unit_policy_validators-logs && chmod 777 ct-unit_policy_validators-logs
         docker run \
@@ -3943,7 +4031,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_policy_validators-logs
         path: ct-unit_policy_validators-logs/*-ct-logs-*.tar.xz
@@ -3967,6 +4055,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_priority_queue
+      id: tests
       run: |
         mkdir ct-unit_priority_queue-logs && chmod 777 ct-unit_priority_queue-logs
         docker run \
@@ -3979,7 +4068,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_priority_queue-logs
         path: ct-unit_priority_queue-logs/*-ct-logs-*.tar.xz
@@ -4003,6 +4092,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_queue_consumers
+      id: tests
       run: |
         mkdir ct-unit_queue_consumers-logs && chmod 777 ct-unit_queue_consumers-logs
         docker run \
@@ -4015,7 +4105,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_queue_consumers-logs
         path: ct-unit_queue_consumers-logs/*-ct-logs-*.tar.xz
@@ -4039,6 +4129,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_stats_and_metrics
+      id: tests
       run: |
         mkdir ct-unit_stats_and_metrics-logs && chmod 777 ct-unit_stats_and_metrics-logs
         docker run \
@@ -4051,7 +4142,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_stats_and_metrics-logs
         path: ct-unit_stats_and_metrics-logs/*-ct-logs-*.tar.xz
@@ -4075,6 +4166,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_supervisor2
+      id: tests
       run: |
         mkdir ct-unit_supervisor2-logs && chmod 777 ct-unit_supervisor2-logs
         docker run \
@@ -4087,7 +4179,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_supervisor2-logs
         path: ct-unit_supervisor2-logs/*-ct-logs-*.tar.xz
@@ -4111,6 +4203,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-unit_vm_memory_monitor
+      id: tests
       run: |
         mkdir ct-unit_vm_memory_monitor-logs && chmod 777 ct-unit_vm_memory_monitor-logs
         docker run \
@@ -4123,7 +4216,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-unit_vm_memory_monitor-logs
         path: ct-unit_vm_memory_monitor-logs/*-ct-logs-*.tar.xz
@@ -4147,6 +4240,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-upgrade_preparation
+      id: tests
       run: |
         mkdir ct-upgrade_preparation-logs && chmod 777 ct-upgrade_preparation-logs
         docker run \
@@ -4159,7 +4253,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-upgrade_preparation-logs
         path: ct-upgrade_preparation-logs/*-ct-logs-*.tar.xz
@@ -4183,6 +4277,7 @@ jobs:
       run: |
         docker pull eu.gcr.io/cf-rabbitmq-core/ci-rabbit:erlang-23.1-rabbitmq-${{ github.sha }}
     - name: RUN ct-vhost
+      id: tests
       run: |
         mkdir ct-vhost-logs && chmod 777 ct-vhost-logs
         docker run \
@@ -4195,7 +4290,7 @@ jobs:
           /workspace/rabbitmq/ci/scripts/ct-suite.sh
     - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
       uses: actions/upload-artifact@v2-preview
-      if: always()
+      if: failure() && steps.tests.outcome == 'failure'
       with:
         name: rabbit-ct-vhost-logs
         path: ct-vhost-logs/*-ct-logs-*.tar.xz
