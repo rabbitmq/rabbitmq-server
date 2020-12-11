@@ -25,12 +25,11 @@ steps:
     #@ None if is_unique(suite_names) else assert.fail('{} suite names are not unique'.format(dep.name))
     run: |
       ci/scripts/validate-workflow.sh (@= " ".join(suite_names) @)
-  - uses: actions/cache@v2
+  - name: FETCH ci DOCKER IMAGE CACHE
+    uses: actions/cache@v2
     with:
       key: #@ ci_image_tag(erlang_version)
-      path: |
-        ci.tar
-        ci-(@= dep.name @).tar
+      path: ci.tar
   - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
       docker load --input ci.tar
@@ -48,6 +47,11 @@ steps:
         IMAGE_TAG=(@= ci_image_tag(erlang_version) @)
         BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
         project=(@= dep.name @)
+  - name: FETCH ci-(@= dep.name @) DOCKER IMAGE CACHE
+    uses: actions/cache@v2
+    with:
+      key: #@ ci_image_tag(erlang_version) + "+" + dep.name
+      path: ci-(@= dep.name @).tar
   - name: SAVE CI DOCKER IMAGE IN CACHE
     run: |
       docker save --output ci-(@= dep.name @).tar (@= ci_dep_image(erlang_version, dep.name) @)
@@ -64,7 +68,7 @@ if: #@ skip_ci_condition()
 steps:
   - uses: actions/cache@v2
     with:
-      key: #@ ci_image_tag(erlang_version)
+      key: #@ ci_image_tag(erlang_version) + "+" + dep.name
       path: ci-(@= dep.name @).tar
   - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
@@ -129,7 +133,7 @@ if: #@ skip_ci_condition() + " && (success() || failure())"
 steps:
   - uses: actions/cache@v2
     with:
-      key: #@ ci_image_tag(erlang_version)
+      key: #@ ci_image_tag(erlang_version) + "+" + dep.name
       path: ci-(@= dep.name @).tar
   - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
