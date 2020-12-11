@@ -100,14 +100,3 @@ ct_test(
     ],
     size = "small",
 )
-
-test_suite(
-    name = "all",
-    tests = [
-        "rabbit_env_SUITE",
-        "supervisor2_SUITE",
-        "unit_priority_queue_SUITE",
-        "unit_SUITE",
-        "worker_pool_SUITE",
-    ],
-)

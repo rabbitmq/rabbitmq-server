@@ -21,11 +21,3 @@ ct_test(
     hdrs = glob(["include/*.hrl"]),
     deps = [":bazel_erlang_lib"],
 )
-
-test_suite(
-    name = "all",
-    tests = [
-        "system_SUITE",
-        "unit_SUITE",
-    ],
-)
