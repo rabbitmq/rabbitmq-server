@@ -714,7 +714,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbit_common \
@@ -4061,7 +4060,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp_client \
@@ -4099,7 +4097,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_client \
@@ -4137,7 +4134,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=amqp10_common \
@@ -4175,7 +4171,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_amqp1_0 \
@@ -4213,7 +4208,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_cache \
@@ -4251,7 +4245,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_http \
@@ -4289,7 +4282,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_ldap \
@@ -4327,7 +4319,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_backend_oauth2 \
@@ -4365,7 +4356,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_auth_mechanism_ssl \
@@ -4403,7 +4393,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_aws \
@@ -4476,7 +4465,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_consistent_hash_exchange \
@@ -4514,7 +4502,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_event_exchange \
@@ -4552,7 +4539,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation \
@@ -4590,7 +4576,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_federation_management \
@@ -4628,7 +4613,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_jms_topic_exchange \
@@ -4666,7 +4650,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management \
@@ -4704,7 +4687,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_management_agent \
@@ -4742,7 +4724,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_mqtt \
@@ -4780,7 +4761,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_common \
@@ -4823,7 +4803,6 @@ jobs:
         echo "${{ secrets.TERRAFORM_SSH_KEY_PUB }}" > terraform/id_rsa_terraform.pub
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_aws \
@@ -4865,7 +4844,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_k8s \
@@ -4903,7 +4881,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_consul \
@@ -4941,7 +4918,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_peer_discovery_etcd \
@@ -4979,7 +4955,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_prometheus \
@@ -5017,7 +4992,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_random_exchange \
@@ -5055,7 +5029,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_recent_history_exchange \
@@ -5093,7 +5066,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_sharding \
@@ -5131,7 +5103,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel \
@@ -5169,7 +5140,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_shovel_management \
@@ -5207,7 +5177,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stomp \
@@ -5245,7 +5214,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_stream \
@@ -5283,7 +5251,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_top \
@@ -5321,7 +5288,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_tracing \
@@ -5359,7 +5325,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_trust_store \
@@ -5397,7 +5362,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_dispatch \
@@ -5435,7 +5399,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt \
@@ -5473,7 +5436,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_mqtt_examples \
@@ -5511,7 +5473,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp \
@@ -5549,7 +5510,6 @@ jobs:
         docker load --input ci.tar
     - name: RUN TESTS
       run: |
-        docker pull eu.gcr.io/cf-rabbitmq-core/ci:erlang-23.1-rabbitmq-${{ github.sha }}
         mkdir ct-logs && chmod 777 ct-logs
         docker run \
           --env project=rabbitmq_web_stomp_examples \

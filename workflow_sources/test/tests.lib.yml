@@ -29,7 +29,6 @@ steps:
   #@ end
   - name: RUN TESTS
     run: |
-      docker pull (@= ci_image(erlang_version) @)
       mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \
