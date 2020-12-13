@@ -2,19 +2,27 @@ load("@bazel_erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("@bazel_erlang//:bazel_erlang_app.bzl", "bazel_erlang_app")
 load("@bazel_erlang//:ct.bzl", "ct_test")
 
-genrule(
+py_binary(
     name = "codegen",
+    srcs = [
+        "codegen.py",
+    ],
+    deps = [
+        "//deps/rabbitmq_codegen:amqp_codegen",
+    ],
+    imports = ["../../deps/rabbitmq_codegen"],
+)
+
+genrule(
+    name = "generated_headers",
     srcs = [
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
         "//deps/rabbitmq_codegen:credit_extension.json",
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
     ],
     outs = ["include/rabbit_framing.hrl"],
-    tools = [
-        "codegen.py",
-        "//deps/rabbitmq_codegen:amqp_codegen.py",
-    ],
-    cmd = "env PYTHONPATH=deps/rabbitmq_codegen python3 $(location codegen.py) --ignore-conflicts header $(SRCS) $@",
+    tools = [":codegen"],
+    cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
 )
 
 bazel_erlang_lib(
