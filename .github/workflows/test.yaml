@@ -33,4 +33,4 @@ jobs:
         chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
     - name: RUN TESTS
       run: |
-        bazel test deps/rabbit_common:all
+        bazel test deps/rabbit_common:all -s --sandbox_debug
