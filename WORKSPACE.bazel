@@ -1,16 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 
-local_repository(
-    name = "bazel_erlang",
-    path = "../bazel-erlang",
-)
-
-# local_repository(
-#     name = "erlang",
-#     path = "~/kerl/23.1/",
-# )
-
 http_archive(
     name = "credentials_obfuscation",
     urls = ["https://github.com/rabbitmq/credentials-obfuscation/archive/7618a6b7ab243466ea190b9e3a82be07956287cb.zip"],

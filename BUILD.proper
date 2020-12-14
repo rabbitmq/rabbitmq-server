@@ -1,4 +1,4 @@
-load("@bazel_erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
 bazel_erlang_lib(
     name = "erl_first_files",
