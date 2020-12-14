@@ -169,7 +169,7 @@ Section "Start Menu" RabbitStartMenu
   ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - stop.lnk"
 
   SetOutPath "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk" "$SYSDIR\cmd.exe" "/k cd $INSTDIR\rabbitmq_server-%%VERSION%%\sbin" "$SYSDIR\cmd.exe"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk" "$SYSDIR\cmd.exe" "/k cd /d $INSTDIR\rabbitmq_server-%%VERSION%%\sbin" "$SYSDIR\cmd.exe"
   ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk"
 
   SetOutPath $INSTDIR
