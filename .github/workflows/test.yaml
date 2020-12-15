@@ -35,5 +35,4 @@ jobs:
       run: |
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         "${GITHUB_WORKSPACE}/bin/bazel" test deps/rabbit_common:all \
-          --//bazel_erlang:erlang_home=${ERLANG_HOME} \
-          --sandbox_debug
+          --//bazel_erlang:erlang_home=${ERLANG_HOME}
