@@ -1453,14 +1453,20 @@ add_code_path_to_node(Node, Module) ->
                                   true ->
                                       ok;
                                   false ->
-                                      true = rpc:call(
-                                               Node, code, add_pathz, [P]),
-                                      ok
+                                      case rpc:call(
+                                             Node, code, add_pathz, [P]) of
+                                          true ->
+                                              ok;
+                                          Error ->
+                                              ct:pal(?LOW_IMPORTANCE,
+                                                     "Failed to add_pathz with ~p to node ~s: ~p~n",
+                                                     [P, Node, Error])
+                                      end
                               end
                       end, Paths);
                 Error ->
                     ct:pal(?LOW_IMPORTANCE,
-                           "Failed to add code path to node ~s: ~p~n",
+                           "Failed to retrieve current code path from node ~s: ~p~n",
                            [Node, Error]),
                     ok
             end
