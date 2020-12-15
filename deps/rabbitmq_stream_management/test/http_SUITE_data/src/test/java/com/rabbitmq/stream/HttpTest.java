@@ -46,6 +46,7 @@ import java.util.stream.IntStream;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -76,13 +77,23 @@ public class HttpTest {
     try (Response response = client.newCall(request).execute()) {
       if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
 
-      String body = response.body().string();
-      return body;
+      ResponseBody body = response.body();
+      return body == null ? "" : body.string();
     }
   }
 
   static String url(String endpoint) {
     return "http://localhost:" + TestUtils.managementPort() + "/api" + endpoint;
+  }
+
+  @SuppressWarnings("unchecked")
+  static Map<String, String> connectionDetails(Map<String, Object> parent) {
+    return (Map<String, String>) parent.get("connection_details");
+  }
+
+  @SuppressWarnings("unchecked")
+  static Map<String, String> queue(Map<String, Object> parent) {
+    return (Map<String, String>) parent.get("queue");
   }
 
   static void delete(String endpoint) throws IOException {
@@ -114,7 +125,7 @@ public class HttpTest {
         .filter(
             c ->
                 c.get("connection_details") instanceof Map
-                    && connectionName.equals(((Map) c.get("connection_details")).get("name")))
+                    && connectionName.equals(connectionDetails(c).get("name")))
         .collect(Collectors.toList());
   }
 
@@ -164,9 +175,9 @@ public class HttpTest {
 
     assertThat(closed.get()).isFalse();
     delete("/stream/connections/%2F/" + connectionName);
-    waitUntil(() -> closed.get());
+    waitUntil(closed::get);
 
-    assertThatThrownBy(() -> cRequest.call()).isInstanceOf(IOException.class);
+    assertThatThrownBy(cRequest::call).isInstanceOf(IOException.class);
     waitUntil(() -> request.call().size() == initialCount);
   }
 
@@ -312,13 +323,11 @@ public class HttpTest {
     assertThat(((Number) publisher.get("confirmed")).intValue()).isEqualTo(0);
     assertThat(((Number) publisher.get("errored")).intValue()).isEqualTo(0);
     assertThat(((Number) publisher.get("publisher_id")).intValue()).isEqualTo(0);
-    assertThat(((Map) publisher.get("connection_details")))
+    assertThat(connectionDetails(publisher))
         .containsEntry("name", connectionName(client))
         .containsEntry("user", "guest")
         .containsKey("node");
-    assertThat(((Map) publisher.get("queue")))
-        .containsEntry("name", stream)
-        .containsEntry("vhost", "/");
+    assertThat(queue(publisher)).containsEntry("name", stream).containsEntry("vhost", "/");
 
     client.publish(
         (byte) 0,
@@ -423,6 +432,9 @@ public class HttpTest {
         cf.get(
             new ClientParameters()
                 .clientProperty("connection_name", connectionProvidedName)
+                .chunkListener(
+                    (client1, subscriptionId, offset, messageCount, dataSize) ->
+                        client1.credit(subscriptionId, 1))
                 .shutdownListener(shutdownContext -> closed.set(true)));
 
     client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10);
@@ -431,20 +443,44 @@ public class HttpTest {
 
     Map<String, Object> consumer = entities(request.call(), client).get(0);
     assertThat(((Number) consumer.get("credits")).intValue()).isEqualTo(10);
+    assertThat(((Number) consumer.get("consumed")).intValue()).isEqualTo(0);
+    assertThat(((Number) consumer.get("offset")).intValue()).isEqualTo(0);
     assertThat(((Number) consumer.get("subscription_id")).intValue()).isEqualTo(0);
-    assertThat(((Map) consumer.get("connection_details")))
+    assertThat(connectionDetails(consumer))
         .containsEntry("name", connectionName(client))
         .containsEntry("user", "guest")
         .containsKey("node");
-    assertThat(((Map) consumer.get("queue")))
-        .containsEntry("name", stream)
-        .containsEntry("vhost", "/");
+    assertThat(queue(consumer)).containsEntry("name", stream).containsEntry("vhost", "/");
 
     client.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
     waitUntil(() -> entities(request.call(), client).size() == 2);
 
     client.unsubscribe((byte) 0);
     waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    int messageCount = 10_000;
+    assertThat(client.declarePublisher((byte) 0, null, stream).isOk()).isTrue();
+    IntStream.range(0, messageCount)
+        .forEach(
+            i ->
+                client.publish(
+                    (byte) 0,
+                    Collections.singletonList(
+                        client
+                            .messageBuilder()
+                            .addData("".getBytes(StandardCharsets.UTF_8))
+                            .build())));
+
+    waitUntil(
+        () -> {
+          Map<String, Object> c = entities(request.call(), client).get(0);
+          return ((Number) c.get("consumed")).intValue() == messageCount;
+        });
+
+    consumer = entities(request.call(), client).get(0);
+    assertThat(((Number) consumer.get("consumed")).intValue()).isEqualTo(messageCount);
+    assertThat(((Number) consumer.get("offset")).intValue()).isPositive();
+
     client.unsubscribe((byte) 1);
     waitUntil(() -> entities(request.call(), client).isEmpty());
   }
@@ -492,13 +528,12 @@ public class HttpTest {
 
       IntStream.range(0, entitiesPerConnection)
           .forEach(
-              i -> {
-                clients.forEach(
-                    c -> {
-                      c.subscribe((byte) i, stream, OffsetSpecification.first(), 10);
-                      c.declarePublisher((byte) i, null, stream);
-                    });
-              });
+              i ->
+                  clients.forEach(
+                      c -> {
+                        c.subscribe((byte) i, stream, OffsetSpecification.first(), 10);
+                        c.declarePublisher((byte) i, null, stream);
+                      }));
       Callable<List<Map<String, Object>>> allConnectionsRequest =
           () -> toMaps(get("/stream/connections"));
       int initialCount = allConnectionsRequest.call().size();
@@ -593,7 +628,7 @@ public class HttpTest {
         }
       }
 
-      clients.forEach(client -> client.close());
+      clients.forEach(Client::close);
       waitUntil(() -> allConnectionsRequest.call().size() == initialCount);
     } finally {
       nonDefaultVhosts.forEach(

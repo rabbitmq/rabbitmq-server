@@ -39,7 +39,8 @@
     subscription_id :: subscription_id(),
     segment :: osiris_log:state(),
     credit :: integer(),
-    stream :: stream()
+    stream :: stream(),
+    counters :: atomics:atomics_ref()
 }).
 
 -record(stream_connection_state, {
@@ -189,6 +190,12 @@ has_credits(CreditReference) ->
 has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
+increase_messages_consumed(Counters, Count) ->
+    atomics:add(Counters, 1, Count).
+
+set_consumer_offset(Counters, Offset) ->
+    atomics:put(Counters, 2, Offset).
+
 increase_messages_published(Counters, Count) ->
     atomics:add(Counters, 1, Count).
 
@@ -197,6 +204,12 @@ increase_messages_confirmed(Counters, Count) ->
 
 increase_messages_errored(Counters, Count) ->
     atomics:add(Counters, 3, Count).
+
+messages_consumed(Counters) ->
+    atomics:get(Counters, 1).
+
+consumer_offset(Counters) ->
+    atomics:get(Counters, 2).
 
 messages_published(Counters) ->
     atomics:get(Counters, 1).
@@ -888,11 +901,13 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
                                                            {{timestamp, Timestamp}, Crdt}
                                                    end,
                             {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec),
+                            ConsumerCounters = atomics:new(2, [{signed, false}]),
                             ConsumerState = #consumer{
                                 member_pid = LocalMemberPid, offset = OffsetSpec, subscription_id = SubscriptionId, socket = Socket,
                                 segment = Segment,
                                 credit = Credit,
-                                stream = Stream
+                                stream = Stream,
+                                counters = ConsumerCounters
                             },
 
                             Connection1 = maybe_monitor_stream(LocalMemberPid, Stream, Connection),
@@ -914,7 +929,9 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
                                         StreamSubscriptions#{Stream => [SubscriptionId]}
                                 end,
                             rabbit_stream_metrics:consumer_created(
-                                self(), stream_r(Stream, Connection1), SubscriptionId, Credit1),
+                                self(), stream_r(Stream, Connection1), SubscriptionId, Credit1,
+                                messages_consumed(ConsumerCounters),
+                                consumer_offset(ConsumerCounters)),
                             {Connection1#stream_connection{stream_subscriptions = StreamSubscriptions1}, State#stream_connection_state{consumers = Consumers1}, Rest}
                     end
             end;
@@ -1376,12 +1393,15 @@ subscription_exists(StreamSubscriptions, SubscriptionId) ->
     SubscriptionIds = lists:flatten(maps:values(StreamSubscriptions)),
     lists:any(fun(Id) -> Id =:= SubscriptionId end, SubscriptionIds).
 
-send_file_callback(Transport, #consumer{socket = S, subscription_id = SubscriptionId}, Counter) ->
-    fun(_Header, Size) ->
+send_file_callback(Transport, #consumer{socket = S, subscription_id = SubscriptionId, counters = Counters}, Counter) ->
+    fun(#{chunk_id := FirstOffsetInChunk,
+          num_entries := NumEntries}, Size) ->
         FrameSize = 2 + 2 + 1 + Size,
         FrameBeginning = <<FrameSize:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8/unsigned>>,
         Transport:send(S, FrameBeginning),
-        atomics:add(Counter, 1, Size)
+        atomics:add(Counter, 1, Size),
+        increase_messages_consumed(Counters, NumEntries),
+        set_consumer_offset(Counters, FirstOffsetInChunk)
     end.
 
 send_chunks(Transport, #consumer{credit = Credit} = State, Counter) ->
@@ -1426,8 +1446,10 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
     rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
     rabbit_event:notify(connection_stats, Infos ++ I),
     [rabbit_stream_metrics:consumer_updated(
-        self(), stream_r(S, Connection), Id, Credit)
-     || #consumer{stream = S, subscription_id = Id, credit = Credit} <- maps:values(Consumers)],
+        self(), stream_r(S, Connection), Id, Credit,
+        messages_consumed(Counters), consumer_offset(Counters))
+     || #consumer{stream = S, subscription_id = Id,
+                  credit = Credit, counters = Counters} <- maps:values(Consumers)],
     [rabbit_stream_metrics:publisher_updated(
         self(), stream_r(S, Connection), Id, PubReference,
         messages_published(Counters), messages_confirmed(Counters), messages_errored(Counters))

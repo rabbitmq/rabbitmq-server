@@ -85,7 +85,7 @@ test_stream(Config) ->
 test_gc_consumers(Config) ->
     Pid = spawn(fun() -> ok end),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stream_metrics, consumer_created,
-       [Pid, #resource{name = <<"test">>, kind = queue, virtual_host = <<"/">>}, 0, 10]
+       [Pid, #resource{name = <<"test">>, kind = queue, virtual_host = <<"/">>}, 0, 10, 0, 0]
     ),
     ok = wait_until(fun() -> consumer_count(Config) == 0 end),
     ok.

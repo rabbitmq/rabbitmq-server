@@ -20,7 +20,7 @@
 
 %% API
 -export([init/0]).
--export([consumer_created/4, consumer_updated/4, consumer_cancelled/3]).
+-export([consumer_created/6, consumer_updated/6, consumer_cancelled/3]).
 -export([publisher_created/4, publisher_updated/7, publisher_deleted/3]).
 
 init() ->
@@ -28,13 +28,13 @@ init() ->
     rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
     ok.
 
-consumer_created(Connection, StreamResource, SubscriptionId, Credits) ->
-    Values = [{credits, Credits}],
+consumer_created(Connection, StreamResource, SubscriptionId, Credits, MessageCount, Offset) ->
+    Values = [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
     ets:insert(?TABLE_CONSUMER, {{StreamResource, Connection, SubscriptionId}, Values}),
     ok.
 
-consumer_updated(Connection, StreamResource, SubscriptionId, Credits) ->
-    Values = [{credits, Credits}],
+consumer_updated(Connection, StreamResource, SubscriptionId, Credits, MessageCount, Offset) ->
+    Values = [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
     ets:insert(?TABLE_CONSUMER, {{StreamResource, Connection, SubscriptionId}, Values}),
     ok.
 
