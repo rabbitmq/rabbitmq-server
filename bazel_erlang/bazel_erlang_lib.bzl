@@ -65,7 +65,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
     ctx.actions.run_shell(
         inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
         outputs = outs,
-        command = "set -x; tree && " + erlang_home + "/bin/erlc $@",
+        command = "set -x; find . && " + erlang_home + "/bin/erlc $@",
         arguments = [erl_args]
     )
 
