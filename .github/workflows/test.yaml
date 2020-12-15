@@ -20,7 +20,7 @@ jobs:
         # https://github.com/elixir-lang/elixir/releases
         elixir-version: 1.10.4
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: "/home/runner/.cache/bazel"
         # use a version keyed cache, since we don't control the version of erlang/elixir within bazel yet
