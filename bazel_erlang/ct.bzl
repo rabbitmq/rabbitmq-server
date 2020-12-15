@@ -47,6 +47,7 @@ ct_test = rule(
         "hdrs": attr.label_list(allow_files=[".hrl"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
+        "_erlang_home": attr.label(default = ":erlang_home"),
     },
     test = True,
 )

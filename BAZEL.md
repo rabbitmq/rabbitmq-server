@@ -4,6 +4,12 @@
 
 ## Running tests
 
+First, create a `.bazelrc` file with at least:
+
+```
+build --//bazel_erlang:erlang_home=/path/to/erlang/installation
+```
+
 ### Run all tests
 
 `bazel test //...`

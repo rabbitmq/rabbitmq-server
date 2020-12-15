@@ -1,0 +1,10 @@
+load("erlang_home.bzl", "erlang_home")
+
+# This allows us to
+# `bazel build //my/target \
+#    --//bazel_erlang:erlang_home=/path/to/erlang/installation`
+erlang_home(
+    name = "erlang_home",
+    build_setting_default = "~/kerl/23.1",
+    visibility = ["//visibility:public"],
+)

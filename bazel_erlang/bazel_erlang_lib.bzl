@@ -1,3 +1,5 @@
+load(":erlang_home.bzl", "ErlangHomeProvider")
+
 ErlangLibInfo = provider(
     doc = "Compiled Erlang sources",
     fields = {
@@ -52,12 +54,13 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
     dep_hdrs = depset(transitive = [dep[ErlangLibInfo].hdrs for dep in ctx.attr.deps])
     dep_beam_files = depset(transitive = [dep[ErlangLibInfo].beam_files for dep in ctx.attr.deps])
 
+    erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
+
     ctx.actions.run(
         inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
         outputs = outs,
-        executable = "erlc",
+        executable = erlang_home + "/bin/erlc",
         arguments = [erl_args],
-        use_default_shell_env = True,
     )
     # ctx.actions.run_shell(
     #     inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
@@ -90,10 +93,6 @@ bazel_erlang_lib = rule(
         "srcs": attr.label_list(allow_files=[".erl"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
-        #TODO: use a local repository in the workspace to bring in erlc
-        # "_erlc": attr.label(
-        #     default = "~/kerl/23.1/bin/erlc",
-        #     executable = True,
-        # )
+        "_erlang_home": attr.label(default = ":erlang_home"),
     },
 )

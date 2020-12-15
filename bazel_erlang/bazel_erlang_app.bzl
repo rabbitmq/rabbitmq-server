@@ -30,10 +30,6 @@ bazel_erlang_app = rule(
         "srcs": attr.label_list(allow_files=[".erl"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
-        #TODO: use a local repository in the workspace to bring in erlc
-        # "_erlc": attr.label(
-        #     default = "/Users/kuryloskip/kerl/23.1/bin/erlc",
-        #     executable = True,
-        # )
+        "_erlang_home": attr.label(default = ":erlang_home"),
     },
 )
