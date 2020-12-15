@@ -33,7 +33,6 @@ jobs:
         chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
     - name: RUN TESTS
       run: |
-        printenv HOME
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         bazel test deps/rabbit_common:all \
           --//bazel_erlang:erlang_home=${ERLANG_HOME} \

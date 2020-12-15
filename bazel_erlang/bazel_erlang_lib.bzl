@@ -56,17 +56,30 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
 
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
 
+    home_dir = ctx.actions.declare_directory("home")
+    ctx.actions.run(
+        outputs = [home_dir],
+        executable = "mkdir",
+        arguments = [home_dir.path],
+    )
+
     # ctx.actions.run(
     #     inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
     #     outputs = outs,
     #     executable = erlang_home + "/bin/erlc",
     #     arguments = [erl_args],
+    #     env = {
+    #         "HOME": home_dir.path,
+    #     },
     # )
     ctx.actions.run_shell(
         inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
         outputs = outs,
         command = "set -x; find . && " + erlang_home + "/bin/erlc $@",
-        arguments = [erl_args]
+        arguments = [erl_args],
+        env = {
+            "HOME": home_dir.path,
+        },
     )
 
     return ErlangLibInfo(
