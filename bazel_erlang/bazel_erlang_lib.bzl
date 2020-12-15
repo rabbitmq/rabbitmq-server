@@ -63,24 +63,24 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
         arguments = [home_dir.path],
     )
 
-    # ctx.actions.run(
-    #     inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
-    #     outputs = outs,
-    #     executable = erlang_home + "/bin/erlc",
-    #     arguments = [erl_args],
-    #     env = {
-    #         "HOME": home_dir.path,
-    #     },
-    # )
-    ctx.actions.run_shell(
+    ctx.actions.run(
         inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
         outputs = outs,
-        command = "set -x; find . && " + erlang_home + "/bin/erlc $@",
+        executable = erlang_home + "/bin/erlc",
         arguments = [erl_args],
         env = {
             "HOME": home_dir.path,
         },
     )
+    # ctx.actions.run_shell(
+    #     inputs = srcs + hdrs + dep_beam_files.to_list() + dep_hdrs.to_list(),
+    #     outputs = outs,
+    #     command = "set -x; find . && " + erlang_home + "/bin/erlc $@",
+    #     arguments = [erl_args],
+    #     env = {
+    #         "HOME": home_dir.path,
+    #     },
+    # )
 
     return ErlangLibInfo(
         hdrs = depset(direct = hdrs, transitive = [dep_hdrs]),
