@@ -30,6 +30,7 @@
 -export([args_hash/1]).
 
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
+-import(rabbit_data_coercion, [to_binary/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -215,15 +216,16 @@ internal_user(User) ->
      {password_hash,     base64:encode(internal_user:get_password_hash(User))},
      {hashing_algorithm, rabbit_auth_backend_internal:hashing_module_for_user(
                              User)},
-     {tags,              tags(internal_user:get_tags(User))},
+     {tags,              tags_as_binaries(internal_user:get_tags(User))},
      {limits,            internal_user:get_limits(User)}].
 
 user(User) ->
     [{name, User#user.username},
-     {tags, tags(User#user.tags)}].
+     {tags, tags_as_binaries(User#user.tags)}].
 
-tags(Tags) ->
-    list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
+tags_as_binaries(Tags) ->
+    [to_binary(T) || T <- Tags].
+
 
 listener(#listener{node = Node, protocol = Protocol,
                    ip_address = IPAddress, port = Port, opts=Opts}) ->

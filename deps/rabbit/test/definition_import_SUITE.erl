@@ -40,7 +40,8 @@ groups() ->
                                import_case11,
                                import_case12,
                                import_case13,
-                               import_case14
+                               import_case14,
+                               import_case15
                               ]},
         {boot_time_import, [], [
             import_on_a_booting_node
@@ -143,6 +144,8 @@ import_case13(Config) ->
     end.
 
 import_case14(Config) -> import_file_case(Config, "case14").
+%% contains a user with tags as a list
+import_case15(Config) -> import_file_case(Config, "case15").
 
 export_import_round_trip_case1(Config) ->
     %% case 6 has runtime parameters that do not depend on any plugins
