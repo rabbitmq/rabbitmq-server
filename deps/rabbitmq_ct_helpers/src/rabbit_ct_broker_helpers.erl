@@ -1458,9 +1458,7 @@ add_code_path_to_node(Node, Module) ->
                                           true ->
                                               ok;
                                           Error ->
-                                              ct:pal(?LOW_IMPORTANCE,
-                                                     "Failed to add_pathz with ~p to node ~s: ~p~n",
-                                                     [P, Node, Error])
+                                              erlang:error({Error, P})
                                       end
                               end
                       end, Paths);
