@@ -37,5 +37,4 @@ jobs:
         echo ${ERLANG_HOME}
         bazel test deps/rabbit_common:all \
           --//bazel_erlang:erlang_home=${ERLANG_HOME} \
-          --sandbox_debug \
-          -s
+          --sandbox_debug
