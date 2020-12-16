@@ -1,5 +1,5 @@
 #@ load("@ytt:data", "data")
-#@ load("helpers.star", "ci_image", "skip_ci_condition")
+#@ load("helpers.star", "ci_image", "ci_image_tag", "skip_ci_condition")
 
 #@ def gcs_path():
 #@   c = ['monorepo_github_actions_conclusions']
@@ -8,7 +8,7 @@
 #@   return '/'.join(c)
 #@ end
 
-#@ def finish_jobs(prepare_jobs_names):
+#@ def finish_jobs(prepare_jobs_names, erlang_version=None):
 package-generic-unix:
   name: package-generic-unix
   needs: [prepare]
@@ -20,21 +20,22 @@ package-generic-unix:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: actions/cache@v2
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load --input ci.tar
     - name: PACKAGE GENERIC UNIX
       run: |
-        gcloud auth configure-docker
-        docker pull (@= ci_image() @)
         mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
           --volume ${PWD}/PACKAGES:/workspace/rabbitmq/PACKAGES \
-          (@= ci_image() @) \
+          (@= ci_image(erlang_version) @) \
           ci/scripts/package_generic_unix.sh
     - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
       #! https://github.com/marketplace/actions/upload-artifact
@@ -50,22 +51,29 @@ package-generic-unix:
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          (@= ci_image() @) \
+          (@= ci_image(erlang_version) @) \
           ci/scripts/collect.sh
 finish:
   name: finish
   needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)] + ['package-generic-unix']
   runs-on: ubuntu-18.04
   #! See https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#job-status-check-functions
-  #! as to why 'always()' is needed
-  if: #@ skip_ci_condition() + " && always()"
+  #! as to why '(success() || failure())' is needed
+  if: #@ skip_ci_condition() + " && (success() || failure())"
   #@yaml/text-templated-strings
   steps:
     - uses: technote-space/workflow-conclusion-action@v1
-    - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+    - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
+    - uses: actions/cache@v2
+      with:
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load --input ci.tar
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion
@@ -73,13 +81,11 @@ finish:
         gsutil cp conclusion \
           'gs://(@= gcs_path() @)'
 
-        gcloud auth configure-docker
-        docker pull (@= ci_image() @)
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
           --env BUILD_START=${{ needs.prepare.outputs.build_start }} \
           --env BUILD_RESULT=${{ env.WORKFLOW_CONCLUSION }} \
-          (@= ci_image() @) \
+          (@= ci_image(erlang_version) @) \
           ci/scripts/finish.sh
 #@ end

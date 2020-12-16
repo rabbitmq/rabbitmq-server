@@ -42,17 +42,6 @@ def partition(target, groups, suites):
   return partition(target, groups + [group], rest)
 end
 
-def group_by_time(suites):
-  longest = max([suite.time for suite in suites])
-  groups = partition(longest, [], suites)
-  return [{"name": name(suites), "suites": [suite.name for suite in suites]} for suites in groups]
-end
-
-# Used when we don't actually want multiple ct-suites per job
-def group_by_one(suites):
-  return [{"name": suite.name, "suites": [suite.name]} for suite in suites]
-end
-
 def to_build_args(d):
   return ",".join(['{0}={1}'.format(k,d[k]) for k in d.keys()])
 end

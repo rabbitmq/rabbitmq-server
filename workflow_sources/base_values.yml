@@ -1,10 +1,9 @@
 #@data/values
 ---
-base_rmq_ref: master
+base_rmq_ref: v3.8.x
 secondary_umbrella_gitrefs:
 - v3.7.28
 - v3.8.9
-#! these values are injected at template time from the cli,
-#! but must be declared first here
-erlang_versions: []
-erlang_version: null
+erlang_versions:
+- "22.3"
+- "23.1"
