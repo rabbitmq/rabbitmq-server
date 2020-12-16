@@ -114,7 +114,6 @@ deps:
   - name: unit
 
 - name: amqp10_client
-  skip_tests: true
   suites:
   - name: msg
   - name: system
@@ -148,7 +147,6 @@ deps:
 
 - name: rabbitmq_auth_backend_ldap
   skip_dialyzer: true
-  skip_tests: true
   suites:
   - name: config_schema
   - name: system
@@ -240,7 +238,6 @@ deps:
 
 - name: rabbitmq_mqtt
   skip_dialyzer: true
-  skip_tests: true
   suites:
   - name: auth
   - name: cluster
@@ -260,7 +257,7 @@ deps:
 
 - name: rabbitmq_peer_discovery_aws
   skip_dialyzer: true
-  skip_tests: true
+  use_terraform: true
   suites:
   - name: config_schema
   - name: integration
@@ -280,7 +277,6 @@ deps:
 
 - name: rabbitmq_peer_discovery_etcd
   skip_dialyzer: true
-  skip_tests: true
   suites:
   - name: config_schema
   - name: system
