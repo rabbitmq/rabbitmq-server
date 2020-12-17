@@ -510,6 +510,14 @@ tcp_listen_options.exit_on_close = false",
   ]}],
   []},
   
+
+  {ssl_options_bypass_pem_cache,
+   "ssl_options.bypass_pem_cache = true",
+   [{ssl, [
+      {bypass_pem_cache, true}
+     ]}],
+   []},
+
  {tcp_listen_options_linger_on,
   "tcp_listen_options.linger.on = true
    tcp_listen_options.linger.timeout = 100",
