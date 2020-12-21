@@ -21,7 +21,8 @@ all() ->
 
 all_tests() ->
     [
-     basics
+     basics,
+     many_downs
     ].
 
 groups() ->
@@ -56,6 +57,7 @@ basics(_Config) ->
     ClientId = <<"id1">>,
     {S1, ok, _} = mqtt_machine:apply(meta(1), {register, ClientId, self()}, S0),
     ?assertMatch(#machine_state{client_ids = Ids} when map_size(Ids) == 1, S1),
+    ?assertMatch(#machine_state{pids = Pids} when map_size(Pids) == 1, S1),
     {S2, ok, _} = mqtt_machine:apply(meta(2), {register, ClientId, self()}, S1),
     ?assertMatch(#machine_state{client_ids = Ids} when map_size(Ids) == 1, S2),
     {S3, ok, _} = mqtt_machine:apply(meta(3), {down, self(), noproc}, S2),
@@ -65,6 +67,28 @@ basics(_Config) ->
 
     ok.
 
+many_downs(_Config) ->
+    S0 = mqtt_machine:init(#{}),
+    Clients = [{list_to_binary(integer_to_list(I)), spawn(fun() -> ok end)}
+               || I <- lists:seq(1, 10000)],
+    S1 = lists:foldl(
+           fun ({ClientId, Pid}, Acc0) ->
+                   {Acc, ok, _} = mqtt_machine:apply(meta(1), {register, ClientId, Pid}, Acc0),
+                   Acc
+           end, S0, Clients),
+    _ = lists:foldl(
+           fun ({_ClientId, Pid}, Acc0) ->
+                   {Acc, ok, _} = mqtt_machine:apply(meta(1), {down, Pid, noproc}, Acc0),
+                   Acc
+           end, S1, Clients),
+    _ = lists:foldl(
+           fun ({ClientId, Pid}, Acc0) ->
+                   {Acc, ok, _} = mqtt_machine:apply(meta(1), {unregister, ClientId,
+                                                               Pid}, Acc0),
+                   Acc
+           end, S0, Clients),
+
+    ok.
 %% Utility
 
 meta(Idx) ->

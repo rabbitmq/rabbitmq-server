@@ -5,4 +5,5 @@
 %% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--record(machine_state, {client_ids = #{}}).
+-record(machine_state, {client_ids = #{},
+                        pids = #{}}).
