@@ -47,12 +47,25 @@ apply(_Meta, {register, ClientId, Pid},
                             {monitor, process, Pid},
                             {mod_call, ?MODULE, notify_connection,
                              [OldPid, duplicate_id]}],
-                {Effects0, maps:remove(ClientId, Ids), Pids0};
-            _ ->
-              Pids1 = maps:update_with(Pid, fun(CIds) -> [ClientId | CIds] end,
+                Pids2 = case maps:take(OldPid, Pids0) of
+                            error ->
+                                Pids0;
+                            {[ClientId], Pids1} ->
+                                Pids1;
+                            {ClientIds, Pids1} ->
+                                Pids1#{ClientId => lists:delete(ClientId, ClientIds)}
+                        end,
+                Pids3 = maps:update_with(Pid, fun(CIds) -> [ClientId | CIds] end,
+                                         [ClientId], Pids2),
+                {Effects0, maps:remove(ClientId, Ids), Pids3};
+
+            {ok, Pid}  ->
+                {[], Ids, Pids0};
+            error ->
+                Pids1 = maps:update_with(Pid, fun(CIds) -> [ClientId | CIds] end,
                                          [ClientId], Pids0),
-              Effects0 = [{monitor, process, Pid}],
-              {Effects0, Ids, Pids1}
+                Effects0 = [{monitor, process, Pid}],
+                {Effects0, Ids, Pids1}
         end,
     State = State0#machine_state{client_ids = maps:put(ClientId, Pid, Ids1),
                                  pids = Pids},
@@ -148,7 +161,8 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids,
 apply(_Meta, {machine_version, 0, 1}, {machine_state, Ids}) ->
     Pids = maps:fold(
              fun(Id, Pid, Acc) ->
-                     maps:update_with(Pid, fun(CIds) -> [Id | CIds] end,
+                     maps:update_with(Pid,
+                                      fun(CIds) -> [Id | CIds] end,
                                       [Id], Acc)
              end, #{}, Ids),
     {#machine_state{client_ids = Ids,
