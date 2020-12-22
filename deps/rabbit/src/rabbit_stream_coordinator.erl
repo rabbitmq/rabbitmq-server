@@ -185,8 +185,15 @@ apply(#{from := From}, {policy_changed, #{stream_id := StreamId}} = Cmd,
                 Conf ->
                     %% No changes, ensure we only trigger an election if it's a must
                     {State, ok, []};
-                _ ->
-                    {State, ok, [{mod_call, osiris_writer, stop, [Conf]}]}
+                #{retention := Retention,
+                  leader_pid := Pid} = Conf0 ->
+                    case maps:remove(retention, Conf) == maps:remove(retention, Conf0) of
+                        true ->
+                            %% Only retention policy has changed, it doesn't need a full restart
+                            {State, ok, [{mod_call, osiris, update_retention, [Pid, Retention]}]};
+                        false ->
+                            {State, ok, [{mod_call, osiris_writer, stop, [Conf]}]}
+                    end
             end;
         SState0 ->
             Streams = maps:put(StreamId, add_pending_cmd(From, Cmd, SState0), Streams0),
