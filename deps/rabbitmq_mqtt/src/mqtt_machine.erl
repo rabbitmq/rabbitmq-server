@@ -9,7 +9,9 @@
 
 -include("mqtt_machine.hrl").
 
--export([init/1,
+-export([version/0,
+         which_module/1,
+         init/1,
          apply/3,
          state_enter/2,
          notify_connection/2]).
@@ -24,6 +26,10 @@
 -type command() :: {register, client_id(), pid()} |
                    {unregister, client_id(), pid()} |
                    list.
+version() -> 1.
+
+which_module(1) -> ?MODULE;
+which_module(0) -> mqtt_machine_v0.
 
 -spec init(config()) -> state().
 init(_Conf) ->
@@ -139,9 +145,16 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids,
     State = State0#machine_state{client_ids = Keep,
                                  pids = maps:without(maps:keys(Remove), Pids0)},
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
-
+apply(_Meta, {machine_version, 0, 1}, {machine_state, Ids}) ->
+    Pids = maps:fold(
+             fun(Id, Pid, Acc) ->
+                     maps:update_with(Pid, fun(CIds) -> [Id | CIds] end,
+                                      [Id], Acc)
+             end, #{}, Ids),
+    {#machine_state{client_ids = Ids,
+                    pids = Pids}, ok, []};
 apply(_Meta, Unknown, State) ->
-    error_logger:error_msg("MQTT Raft state machine received unknown command ~p~n", [Unknown]),
+    error_logger:error_msg("MQTT Raft state machine v1 received unknown command ~p~n", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
 state_enter(leader, State) ->
