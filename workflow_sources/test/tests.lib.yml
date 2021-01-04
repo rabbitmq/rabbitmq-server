@@ -1,6 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("util.star", "to_build_args")
-#@ load("helpers.star", "ci_image", "skip_ci_condition")
+#@ load("helpers.star", "ci_image", "ci_image_tag", "skip_ci_condition")
 
 #@ def tests_job(dep, erlang_version=None):
 name: #@ dep.name
@@ -13,10 +13,13 @@ steps:
     id: buildevents
     run: |
       echo "::set-output name=step_start::$(date +%s)"
-  - uses: google-github-actions/setup-gcloud@master
+  - uses: actions/cache@v2
     with:
-      service_account_key: ${{ secrets.GCR_JSON_KEY }}
-      export_default_credentials: true
+      key: #@ ci_image_tag(erlang_version)
+      path: ci.tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
+    run: |
+      docker load --input ci.tar
   #@ if getattr(dep, 'use_terraform', False):
   - name: PREPARE TERRAFORM SECRETS
     run: |
@@ -26,8 +29,6 @@ steps:
   #@ end
   - name: RUN TESTS
     run: |
-      gcloud auth configure-docker
-      docker pull (@= ci_image(erlang_version) @)
       mkdir ct-logs && chmod 777 ct-logs
       docker run \
         --env project=(@= dep.name @) \

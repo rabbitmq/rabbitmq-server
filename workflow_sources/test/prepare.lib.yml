@@ -20,6 +20,23 @@ prepare:
         echo "::set-output name=branch_or_tag_name::$branch_or_tag_name"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    - name: Cache Docker layers
+      uses: actions/cache@v2
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    - name: Login to GCR
+      uses: docker/login-action@v1
+      with:
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     #@ if build_base_image:
     - name: CHECKOUT ERLANG/OTP MASTER
       uses: actions/checkout@v2
@@ -33,52 +50,54 @@ prepare:
         erlang_sha=$(git rev-parse HEAD)
         echo "::set-output name=erlang_sha::$erlang_sha"
     - name: #@ 'CREATE ERLANG+ELIXIR IMAGE ({})'.format(erlang_version)
-      uses: docker/build-push-action@v1
+      uses: docker/build-push-action@v2
       with:
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/erlang_elixir
-        dockerfile: #@ 'ci/dockerfiles/{}/erlang_elixir'.format(erlang_version)
-        #@ build_args = {}
-        #@ build_args["ERLANG_VERSION"] = "${{ steps.erlang_sha.outputs.erlang_sha }}"
-        build_args: #@ to_build_args(build_args)
-        tags: #@ erlang_version
+        push: true
+        file: #@ 'ci/dockerfiles/{}/erlang_elixir'.format(erlang_version)
+        tags: #@ 'eu.gcr.io/cf-rabbitmq-core/erlang_elixir:{}'.format(erlang_version)
+        build-args: |
+          ERLANG_VERSION=${{ steps.erlang_sha.outputs.erlang_sha }}
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
     - name: #@ 'CREATE BASE CI IMAGE ({})'.format(erlang_version)
-      uses: docker/build-push-action@v1
+      uses: docker/build-push-action@v2
       with:
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/ci-base
-        dockerfile: ci/dockerfiles/ci-base
-        #@ build_args = {}
-        #@ build_args["ERLANG_VERSION"] = erlang_version
-        #@ build_args["SECONDARY_UMBRELLA_GITREFS"] = ' '.join(data.values.secondary_umbrella_gitrefs)
-        build_args: #@ to_build_args(build_args)
-        tags: #@ erlang_version
+        push: true
+        file: ci/dockerfiles/ci-base
+        tags: #@ 'eu.gcr.io/cf-rabbitmq-core/ci-base:{}'.format(erlang_version)
+        build-args: |
+          ERLANG_VERSION=(@= erlang_version @)
+          SECONDARY_UMBRELLA_GITREFS=(@= ' '.join(data.values.secondary_umbrella_gitrefs) @)
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
     - name: CLEANUP ERLANG/OTP MASTER
       run: |
         rm -rf erlang-git-master
     #@ end
     - name: PREPARE BUILD IMAGE
-      uses: docker/build-push-action@v1
+      uses: docker/build-push-action@v2
       with:
-        username: _json_key
-        password: ${{ secrets.GCR_JSON_KEY }}
-        registry: eu.gcr.io
-        repository: cf-rabbitmq-core/ci
-        dockerfile: ci/dockerfiles/ci
-        #@ build_args = {}
-        #@ build_args["ERLANG_VERSION"] = erlang_version
-        #@ build_args["GITHUB_RUN_ID"] = '${{ github.run_id }}'
-        #@ build_args["BUILDEVENT_APIKEY"] = '${{ secrets.HONEYCOMB_API_KEY }}'
-        #@ build_args["GITHUB_SHA"] = '${{ github.sha }}'
-        #@ build_args["base_rmq_ref"] = data.values.base_rmq_ref
-        #@ build_args["current_rmq_ref"] = '${{ steps.buildevents.outputs.branch_or_tag_name }}'
-        #@ build_args["RABBITMQ_VERSION"] = data.values.base_rmq_ref.replace('master', '3.9.x').replace('.x', '.0')
-        build_args: #@ to_build_args(build_args)
-        tags: (@= ci_image_tag(erlang_version) @)
+        load: true
+        file: ci/dockerfiles/ci
+        tags: #@ ci_image(erlang_version)
+        #@ rabbitmq_version = data.values.base_rmq_ref.replace('master', '3.9.x').replace('.x', '.0')
+        build-args: |
+          ERLANG_VERSION=(@= erlang_version @)
+          GITHUB_RUN_ID=${{ github.run_id }}
+          BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }}
+          GITHUB_SHA=${{ github.sha }}
+          base_rmq_ref=(@= data.values.base_rmq_ref @)
+          current_rmq_ref=${{ steps.buildevents.outputs.branch_or_tag_name }}
+          RABBITMQ_VERSION=(@= rabbitmq_version @)
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
+    - uses: actions/cache@v2
+      with:
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: SAVE CI DOCKER IMAGE IN CACHE
+      run: |
+        docker save --output ci.tar (@= ci_image(erlang_version) @)
     - uses: google-github-actions/setup-gcloud@master
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
@@ -107,14 +126,15 @@ xref:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: google-github-actions/setup-gcloud@master
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       #@ base_image = "eu.gcr.io/cf-rabbitmq-core/ci-base:" + erlang_version
       run: |
-        gcloud auth configure-docker
         docker pull (@= base_image @)
     #@ for dep in [d for d in data.values.deps if not getattr(d, "skip_xref", False)]:
     - name: RUN XREF (@= dep.name @)
@@ -157,14 +177,15 @@ dialyze:
         echo "::set-output name=step_start::$(date +%s)"
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - uses: google-github-actions/setup-gcloud@master
+    - name: Login to GCR
+      uses: docker/login-action@v1
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        registry: eu.gcr.io
+        username: _json_key
+        password: ${{ secrets.GCR_JSON_KEY }}
     - name: PULL IMAGE
       #@ base_image = "eu.gcr.io/cf-rabbitmq-core/ci-base:" + erlang_version
       run: |
-        gcloud auth configure-docker
         docker pull (@= base_image @)
     #@ for dep in [d for d in data.values.deps if not getattr(d, "skip_dialyzer", False)]:
     - name: RUN DIALYZE (@= dep.name @)

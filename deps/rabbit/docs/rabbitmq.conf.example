@@ -131,6 +131,8 @@
 # ssl_options.ciphers.35 = ECDH-ECDSA-AES128-SHA
 # ssl_options.ciphers.36 = ECDH-RSA-AES128-SHA
 
+# ssl_options.bypass_pem_cache = true
+
 ## Select an authentication/authorisation backend to use.
 ##
 ## Alternative backends are provided by plugins, such as rabbitmq-auth-backend-ldap.

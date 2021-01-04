@@ -294,6 +294,9 @@ fun(Conf) ->
     lists:reverse([V || {_, V} <- Settings])
 end}.
 
+{mapping, "ssl_options.bypass_pem_cache", "ssl.bypass_pem_cache",
+    [{datatype, {enum, [true, false]}}]}.
+
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.

@@ -1,4 +1,3 @@
-load("util.star", "group_by_one")
 load("rabbitmq_cli.lib.yml", "rabbitmq_cli_job")
 load("ct.lib.yml", "checks_job", "ct_suites_job", "collect_job")
 load("tests.lib.yml", "tests_job")
@@ -10,8 +9,8 @@ def dep_jobs(dep, erlang_version=None):
       jobs[dep.name] = rabbitmq_cli_job(dep, erlang_version=erlang_version)
     elif getattr(dep, "test_suites_in_parallel", False):
       jobs[dep.name + "-checks"] = checks_job(dep, erlang_version=erlang_version)
-      for group in group_by_one(dep.suites):
-        jobs[dep.name + "-ct-" + group["name"]] = ct_suites_job(dep, group, erlang_version=erlang_version)
+      for suite in dep.suites:
+        jobs[dep.name + "-ct-" + suite.name] = ct_suites_job(dep, suite.name, erlang_version=erlang_version)
       end
       jobs[dep.name] = collect_job(dep, erlang_version=erlang_version)
     else:

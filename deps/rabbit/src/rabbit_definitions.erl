@@ -26,6 +26,7 @@
 -export([decode/1, decode/2, args/1]).
 
 -import(rabbit_misc, [pget/2]).
+-import(rabbit_data_coercion, [to_binary/1]).
 
 %%
 %% API
@@ -765,4 +766,4 @@ topic_permission_definition(P0) ->
     maps:from_list(P).
 
 tags_as_binaries(Tags) ->
-    list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
+    [to_binary(T) || T <- Tags].

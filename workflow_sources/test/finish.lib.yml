@@ -1,5 +1,5 @@
 #@ load("@ytt:data", "data")
-#@ load("helpers.star", "ci_image", "skip_ci_condition")
+#@ load("helpers.star", "ci_image", "ci_image_tag", "skip_ci_condition")
 
 #@ def gcs_path():
 #@   c = ['monorepo_github_actions_conclusions']
@@ -20,14 +20,15 @@ package-generic-unix:
       id: buildevents
       run: |
         echo "::set-output name=step_start::$(date +%s)"
-    - uses: google-github-actions/setup-gcloud@master
+    - uses: actions/cache@v2
       with:
-        service_account_key: ${{ secrets.GCR_JSON_KEY }}
-        export_default_credentials: true
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load --input ci.tar
     - name: PACKAGE GENERIC UNIX
       run: |
-        gcloud auth configure-docker
-        docker pull (@= ci_image(erlang_version) @)
         mkdir PACKAGES && chmod 777 PACKAGES
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
@@ -66,6 +67,13 @@ finish:
       with:
         service_account_key: ${{ secrets.GCR_JSON_KEY }}
         export_default_credentials: true
+    - uses: actions/cache@v2
+      with:
+        key: #@ ci_image_tag(erlang_version)
+        path: ci.tar
+    - name: LOAD CI DOCKER IMAGE FROM CACHE
+      run: |
+        docker load --input ci.tar
     - name: RECORD BUILD FINISH
       run: |
         echo -n "${{ env.WORKFLOW_CONCLUSION }}" > conclusion
@@ -73,8 +81,6 @@ finish:
         gsutil cp conclusion \
           'gs://(@= gcs_path() @)'
 
-        gcloud auth configure-docker
-        docker pull (@= ci_image(erlang_version) @)
         docker run \
           --env GITHUB_RUN_ID=${{ github.run_id }} \
           --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \

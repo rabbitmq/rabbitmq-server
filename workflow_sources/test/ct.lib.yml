@@ -1,6 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("@ytt:assert", "assert")
-#@ load("util.star", "is_unique", "group_by_one", "to_build_args")
+#@ load("util.star", "is_unique", "to_build_args")
 #@ load("helpers.star", "ci_image_tag", "ci_dep_image", "skip_ci_condition")
 
 #@ def checks_job(dep, erlang_version=None):
@@ -25,24 +25,34 @@ steps:
     #@ None if is_unique(suite_names) else assert.fail('{} suite names are not unique'.format(dep.name))
     run: |
       ci/scripts/validate-workflow.sh (@= " ".join(suite_names) @)
-  - name: RUN CHECKS
-    uses: docker/build-push-action@v1
+  - name: FETCH ci DOCKER IMAGE CACHE
+    uses: actions/cache@v2
     with:
-      username: _json_key
-      password: ${{ secrets.GCR_JSON_KEY }}
-      registry: eu.gcr.io
-      repository: cf-rabbitmq-core/ci-(@= dep.name @)
-      dockerfile: ci/dockerfiles/ci-dep
-      #@ build_args = {}
-      #@ build_args["IMAGE_TAG"] = ci_image_tag(erlang_version)
-      #@ build_args["BUILDEVENT_APIKEY"] = '${{ secrets.HONEYCOMB_API_KEY }}'
-      #@ build_args["project"] = dep.name
-      build_args: #@ to_build_args(build_args)
-      tags: (@= ci_image_tag(erlang_version) @)
+      key: #@ ci_image_tag(erlang_version)
+      path: ci.tar
+  - name: LOAD ci DOCKER IMAGE FROM CACHE
+    run: |
+      docker load --input ci.tar
+  - name: RUN CHECKS
+    run: |
+      docker build . \
+        --file ci/dockerfiles/ci-dep \
+        --build-arg IMAGE_TAG=(@= ci_image_tag(erlang_version) @) \
+        --build-arg BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
+        --build-arg project=(@= dep.name @) \
+        --tag eu.gcr.io/cf-rabbitmq-core/ci-(@= dep.name @):(@= ci_image_tag(erlang_version) @)
+  - name: FETCH ci-(@= dep.name @) DOCKER IMAGE CACHE
+    uses: actions/cache@v2
+    with:
+      key: #@ ci_image_tag(erlang_version) + "+" + dep.name
+      path: ci-(@= dep.name @).tar
+  - name: SAVE CI DOCKER IMAGE IN CACHE
+    run: |
+      docker save --output ci-(@= dep.name @).tar (@= ci_dep_image(erlang_version, dep.name) @)
 #@ end
 
-#@ def ct_suites_job(dep, group, erlang_version=None):
-name: #@ dep.name + "-ct-" + group["name"]
+#@ def ct_suites_job(dep, suite_name, erlang_version=None):
+name: #@ dep.name + "-ct-" + suite_name
 needs:
   - prepare
   - #@ dep.name + "-checks"
@@ -50,44 +60,43 @@ runs-on: ubuntu-18.04
 if: #@ skip_ci_condition()
 #@yaml/text-templated-strings
 steps:
-  - uses: google-github-actions/setup-gcloud@master
+  - uses: actions/cache@v2
     with:
-      service_account_key: ${{ secrets.GCR_JSON_KEY }}
-      export_default_credentials: true
-  - name: PULL IMAGE
+      key: #@ ci_image_tag(erlang_version) + "+" + dep.name
+      path: ci-(@= dep.name @).tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
     run: |
-      gcloud auth configure-docker
-      docker pull (@= ci_dep_image(erlang_version, dep.name) @)
-  #@ for suite in group["suites"]:
-  - name: #@ "RUN ct-" + suite
+      docker load --input ci-(@= dep.name @).tar
+  - name: #@ "RUN ct-" + suite_name
+    id: tests
     run: |
-      mkdir ct-(@= suite @)-logs && chmod 777 ct-(@= suite @)-logs
+      mkdir ct-(@= suite_name @)-logs && chmod 777 ct-(@= suite_name @)-logs
       docker run \
         --env project=(@= dep.name @) \
-        --env CT_SUITE=(@= suite @) \
+        --env CT_SUITE=(@= suite_name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-        --volume ${PWD}/ct-(@= suite @)-logs:/workspace/ct-logs \
+        --volume ${PWD}/ct-(@= suite_name @)-logs:/workspace/ct-logs \
         (@= ci_dep_image(erlang_version, dep.name) @) \
         /workspace/rabbitmq/ci/scripts/ct-suite.sh
   - name: ON FAILURE UPLOAD TESTS LOGS ARTIFACT
     #! https://github.com/marketplace/actions/upload-artifact
     uses: actions/upload-artifact@v2-preview
-    #! For whatever reason, "if: steps.(@= suite @).outcome == 'failure'" never executes,
-    #! so just run always
-    if: always()
+    if: failure() && steps.tests.outcome == 'failure'
     with:
-      name: (@= dep.name @)-ct-(@= suite @)-logs
-      path: "ct-(@= suite @)-logs/*-ct-logs-*.tar.xz"
+      name: (@= dep.name @)-ct-(@= suite_name @)-logs
+      path: "ct-(@= suite_name @)-logs/*-ct-logs-*.tar.xz"
   #@ if erlang_version == data.values.erlang_versions[0]:
   #@ for version in data.values.secondary_umbrella_gitrefs:
-  #@   logs_dir = 'ct-{}-logs-{}'.format(suite, version)
-  - name: #@ "RUN ct-{} [mixed {}]".format(suite, version)
+  #@   logs_dir = 'ct-{}-logs-{}'.format(suite_name, version)
+  #@   step_id = "tests-{}".format(version.replace(".","_"))
+  - name: #@ "RUN ct-{} [mixed {}]".format(suite_name, version)
+    id: #@ step_id
     run: |
       mkdir (@= logs_dir @) && chmod 777 (@= logs_dir @)
       docker run \
         --env project=(@= dep.name @) \
-        --env CT_SUITE=(@= suite @) \
+        --env CT_SUITE=(@= suite_name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \
         --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
         --env SECONDARY_UMBRELLA_VERSION=(@= version @) \
@@ -99,32 +108,32 @@ steps:
     uses: actions/upload-artifact@v2-preview
     #! For whatever reason, "if: steps.(@= suite @).outcome == 'failure'" never executes,
     #! so just run always
-    if: always()
+    if: failure() && steps.(@= step_id @).outcome == 'failure'
     with:
-      name: (@= dep.name @)-ct-(@= suite @)-logs-mixed-(@= version @)
+      name: (@= dep.name @)-ct-(@= suite_name @)-logs-mixed-(@= version @)
       path: "(@= logs_dir @)/*-ct-logs-*.tar.xz"
-  #@ end
   #@ end
   #@ end
 #@ end
 
 #@ def collect_job(dep, erlang_version=None):
 name: #@ dep.name
-needs: #@ [dep.name + "-checks"] + [dep.name + "-ct-" + group["name"] for group in group_by_one(dep.suites)]
+needs: #@ [dep.name + "-checks"] + [dep.name + "-ct-" + suite.name for suite in dep.suites]
 runs-on: ubuntu-18.04
 #! See https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#job-status-check-functions
 #! as to why '(success() || failure())' is needed
 if: #@ skip_ci_condition() + " && (success() || failure())"
 #@yaml/text-templated-strings
 steps:
-  - uses: google-github-actions/setup-gcloud@master
+  - uses: actions/cache@v2
     with:
-      service_account_key: ${{ secrets.GCR_JSON_KEY }}
-      export_default_credentials: true
+      key: #@ ci_image_tag(erlang_version) + "+" + dep.name
+      path: ci-(@= dep.name @).tar
+  - name: LOAD CI DOCKER IMAGE FROM CACHE
+    run: |
+      docker load --input ci-(@= dep.name @).tar
   - name: RECORD STEP FINISH
     run: |
-      gcloud auth configure-docker
-      docker pull (@= ci_dep_image(erlang_version, dep.name) @)
       docker run \
         --env project=(@= dep.name @) \
         --env GITHUB_RUN_ID=${{ github.run_id }} \

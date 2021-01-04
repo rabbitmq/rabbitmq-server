@@ -632,7 +632,7 @@ var user;
 function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
     rates_mode = overview.rates_mode;
-    user_tags = expand_user_tags(user.tags.split(","));
+    user_tags = expand_user_tags(user.tags);
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
