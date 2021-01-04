@@ -41,7 +41,8 @@
          phase_start_new_leader/1,
          phase_stop_replicas/1,
          phase_start_replica/3,
-         phase_delete_replica/2]).
+         phase_delete_replica/2,
+         phase_update_retention/4]).
 
 -export([log_overview/1]).
 
@@ -109,7 +110,8 @@ add_replica(StreamId, Node) ->
                                       retries => 1}}).
 
 policy_changed(StreamId) ->
-    process_command({policy_changed, #{stream_id => StreamId}}).
+    process_command({policy_changed, #{stream_id => StreamId,
+                                       retries => 1}}).
 
 delete_replica(StreamId, Node) ->
     process_command({delete_replica, #{stream_id => StreamId, node => Node}}).
@@ -174,23 +176,32 @@ init(_Conf) ->
     #?MODULE{streams = #{},
              monitors = #{}}.
 
-apply(#{from := From}, {policy_changed, #{stream_id := StreamId}} = Cmd,
+apply(#{from := From}, {policy_changed, #{stream_id := StreamId,
+                                          retries := Retries}} = Cmd,
       #?MODULE{streams = Streams0} = State) ->
     case maps:get(StreamId, Streams0, undefined) of
         undefined ->
             {State, ok, []};
         #{conf := Conf,
-          state := running} ->
+          state := running} = SState0 ->
             case rabbit_stream_queue:update_stream_conf(Conf) of
                 Conf ->
                     %% No changes, ensure we only trigger an election if it's a must
                     {State, ok, []};
                 #{retention := Retention,
-                  leader_pid := Pid} = Conf0 ->
+                  leader_pid := Pid,
+                  replica_pids := Pids} = Conf0 ->
                     case maps:remove(retention, Conf) == maps:remove(retention, Conf0) of
                         true ->
                             %% Only retention policy has changed, it doesn't need a full restart
-                            {State, ok, [{mod_call, osiris, update_retention, [Pid, Retention]}]};
+                            Phase = phase_update_retention,
+                            %% TODO do it over replicas too
+                            PhaseArgs = [[Pid | Pids], Retention, Conf0, Retries],
+                            SState = update_stream_state(From, update_retention, Phase, PhaseArgs, SState0),
+                            rabbit_log:debug("rabbit_stream_coordinator: ~p entering ~p on node ~p",
+                                             [StreamId, Phase, node()]),
+                            {State#?MODULE{streams = Streams0#{StreamId => SState}}, '$ra_no_reply',
+                             [{aux, {phase, StreamId, Phase, PhaseArgs}}]};
                         false ->
                             {State, ok, [{mod_call, osiris_writer, stop, [Conf]}]}
                     end
@@ -257,6 +268,23 @@ apply(_Meta, {start_replica_failed, StreamId, Node, Retries, Reply},
                                            node => Node,
                                            from => undefined,
                                            retries => Retries + 1}}]},
+                ?RESTART_TIMEOUT * Retries}],
+              State#?MODULE{streams = Streams})
+    end;
+apply(_Meta, {update_retention_failed, StreamId, Retention, Retries, Reply},
+      #?MODULE{streams = Streams0} = State) ->
+    rabbit_log:debug("rabbit_stream_coordinator: ~p update retention failed", [StreamId]),
+    case maps:get(StreamId, Streams0, undefined) of
+        undefined ->
+            {State, {error, not_found}, []};
+        #{reply_to := From} = SState  ->
+            Streams = Streams0#{StreamId => clear_stream_state(SState)},
+            reply_and_run_pending(
+              From, StreamId, ok, Reply,
+              [{timer, {pipeline,
+                        [{policy_changed, #{stream_id => StreamId,
+                                            from => undefined,
+                                            retries => Retries + 1}}]},
                 ?RESTART_TIMEOUT * Retries}],
               State#?MODULE{streams = Streams})
     end;
@@ -783,6 +811,29 @@ phase_check_quorum(#{name := StreamId,
                           exit({not_enough_quorum, StreamId})
                   end
           end).
+
+phase_update_retention(Pids0, Retention, #{name := StreamId} = Conf0, Retries) ->
+    spawn(
+      fun() ->
+              case update_retention(Pids0, Retention) of
+                  ok ->
+                      ra:pipeline_command({?MODULE, node()}, {phase_finished, StreamId, ok});
+                  {error, Reason} ->
+                      ra:pipeline_command({?MODULE, node()},
+                                          {update_retention_failed, StreamId, Retention, Retries,
+                                           {error, Reason}})
+              end
+      end).
+
+update_retention([], _) ->
+    ok;
+update_retention([Pid | Pids], Retention) ->
+    case osiris:update_retention(Pid, Retention) of
+        ok ->
+            update_retention(Pids, Retention);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 find_replica_offsets(#{replica_nodes := Nodes,
                        leader_node := Leader} = Conf) ->

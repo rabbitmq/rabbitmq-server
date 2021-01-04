@@ -93,7 +93,8 @@ all_tests() ->
      invalid_policy,
      max_age_policy,
      max_segment_size_policy,
-     purge
+     purge,
+     update_retention_policy
     ].
 
 %% -------------------------------------------------------------------
@@ -1459,9 +1460,6 @@ max_age_policy(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    {ok, Q0} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
-                                            [rabbit_misc:r(<<"/">>, queue, Q)]),
-
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"age">>, <<"max_age_policy.*">>, <<"queues">>,
            [{<<"max-age">>, <<"1Y">>}]),
@@ -1470,17 +1468,43 @@ max_age_policy(Config) ->
                                           info_all, [<<"/">>, [policy, operator_policy,
                                                                effective_policy_definition]]),
 
-    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
-                                            [rabbit_misc:r(<<"/">>, queue, Q)]),
-
     ?assertEqual(<<"age">>, proplists:get_value(policy, Info)),
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
     ?assertEqual([{<<"max-age">>, <<"1Y">>}],
                  proplists:get_value(effective_policy_definition, Info)),
+
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"age">>).
+
+update_retention_policy(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-max-segment-size">>, long, 200}
+                                ])),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"0">>, <<"0">>, <<"0">>]]),
+    [publish(Ch, Q, <<"msg">>) || _ <- lists:seq(1, 10000)],
+    quorum_queue_utils:wait_for_min_messages(Config, Q, 10000),
+
+    {ok, Q0} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                            [rabbit_misc:r(<<"/">>, queue, Q)]),
+    timer:sleep(1000),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"retention">>, <<"update_retention_policy.*">>, <<"queues">>,
+           [{<<"max-age">>, <<"1s">>}]),
+    timer:sleep(1000),
+
+    quorum_queue_utils:wait_for_max_messages(Config, Q, 1000),
+
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                            [rabbit_misc:r(<<"/">>, queue, Q)]),
+
     %% If there are changes only in the retention policy, processes should not be restarted
     ?assertEqual(amqqueue:get_pid(Q0), amqqueue:get_pid(Q1)),
 
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"age">>).
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"retention">>).
 
 max_segment_size_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
