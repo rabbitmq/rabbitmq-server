@@ -24,7 +24,7 @@ jobs:
       with:
         path: "/home/runner/.cache/bazel"
         # use a version keyed cache, since we don't control the version of erlang/elixir within bazel yet
-        key: bazel-${{ matrix.erlang_version }}
+        key: ${{ runner.os }}-bazel-${{ matrix.erlang_version }}
     - name: INSTALL BAZELISK
       run: |
         curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.1.0/bazelisk-linux-amd64"
