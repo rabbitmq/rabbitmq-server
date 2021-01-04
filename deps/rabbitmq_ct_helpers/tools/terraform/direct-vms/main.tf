@@ -212,7 +212,7 @@ resource "aws_instance" "vm" {
   connection {
     type        = "ssh"
     user        = local.username
-    private_key = file("${var.ssh_key}")
+    private_key = file(var.ssh_key)
     agent       = false
   }
 }
